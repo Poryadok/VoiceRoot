@@ -496,6 +496,32 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('--allow-skips', step['run'])
         self.assertNotIn('--concurrency', step['run'])
 
+    def test_music_comparison_preserves_existing_proof_and_is_required(self):
+        import yaml
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [],
+                  'integration_go_services': [], 'run_go': False, 'run_pkg': False}
+        plan = planner.make_plan(planner.match_filters(rules, ['src/frontend/lib/ui/chat/music_playback.dart']), matrix)
+        self.assertIn('flutter', plan['checks'])
+        self.assertIn('flutter-music-proof', plan['checks'])
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        original = workflow['jobs']['flutter']
+        comparison = workflow['jobs']['flutter-music-proof']
+        for name in ('Capture Music inline controls', 'Verify Music codecs and E2E local playback in Chrome'):
+            self.assertTrue(any(step.get('name') == name for step in original['steps']))
+            self.assertTrue(any(step.get('name') == name for step in comparison['steps']))
+        self.assertIn('flutter-music-proof', workflow['jobs']['ci-gate']['needs'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        plan.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in plan['checks']}
+        needs['flutter-unit-receipts'] = {'result': 'success'}
+        self.assertEqual(planner.verify_gate(plan, needs, identity), [])
+        for result in ('skipped', 'cancelled', 'failure'):
+            needs['flutter-music-proof'] = {'result': result}
+            self.assertIn('flutter-music-proof', planner.verify_gate(plan, needs, identity))
+        del needs['flutter-music-proof']
+        self.assertIn('flutter-music-proof', planner.verify_gate(plan, needs, identity))
+
     def test_realtime_lifecycle_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))

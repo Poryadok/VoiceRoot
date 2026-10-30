@@ -250,7 +250,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('compose-config', broad + ('compose',))
         selected('match-squad-overlay', broad + ('match_squad_overlay',))
         for name in ('flutter', 'flutter-unit-tests', 'flutter-device-driver',
-                     'flutter-key-backup-goldens'):
+                     'flutter-key-backup-goldens', 'flutter-music-proof'):
             selected(name, broad + ('frontend', 'protos'))
         selected('flutter-windows', ('windows_desktop',))
         selected('web', broad + ('frontend',))
