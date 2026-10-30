@@ -3103,6 +3103,75 @@ jobs:
             --output "$RUNNER_TEMP/space-native51-commit-receipt.json" --reject-skips
           [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
           psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
+      - name: Run seeded Space native50 observer proofs
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_db?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          query="SELECT COALESCE((SELECT oid FROM pg_database WHERE datname='space_db'),0)"
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == 0 ]]
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'CREATE DATABASE space_db'
+          owned_oid="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")"
+          [[ "$owned_oid" =~ ^[1-9][0-9]*$ ]]
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 34
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" <<'SQL'
+          INSERT INTO spaces(id,name,owner_profile_id,member_count) VALUES
+            ('30000000-0000-0000-0000-000000000013','native observer fixture','10000000-0000-0000-0000-000000000001',2);
+          INSERT INTO space_members(space_id,profile_id) VALUES
+            ('30000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001'),
+            ('30000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003');
+          SQL
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 44
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 45
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureTrusted45Transition$' ./internal/store > "$RUNNER_TEMP/space-seeded45-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_transition45_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded45-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded45-receipt.json" --reject-skips
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 50
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureTrusted50Transition$' ./internal/store > "$RUNNER_TEMP/space-seeded50-transition-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_transition50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded50-transition-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded50-transition-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNativeCatalogConcurrentRowDrift$' ./internal/store > "$RUNNER_TEMP/space-seeded50-drift-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_seeded50_drift_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded50-drift-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded50-drift-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^(TestNativeObserverNoopTupleAndFrame|TestNativeObserverCutPredicateAlgebra)$' ./internal/store \
+            > "$RUNNER_TEMP/space-seeded50-observer-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_seeded50_observer_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded50-observer-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded50-observer-receipt.json" --reject-skips
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
       - name: Run Space account-ban capture guard
         working-directory: src/backend/space
         env:
@@ -3149,6 +3218,14 @@ jobs:
             ${{ runner.temp }}/space-trusted50-receipt.json
             ${{ runner.temp }}/space-native51-commit-events.jsonl
             ${{ runner.temp }}/space-native51-commit-receipt.json
+            ${{ runner.temp }}/space-seeded45-events.jsonl
+            ${{ runner.temp }}/space-seeded45-receipt.json
+            ${{ runner.temp }}/space-seeded50-transition-events.jsonl
+            ${{ runner.temp }}/space-seeded50-transition-receipt.json
+            ${{ runner.temp }}/space-seeded50-drift-events.jsonl
+            ${{ runner.temp }}/space-seeded50-drift-receipt.json
+            ${{ runner.temp }}/space-seeded50-observer-events.jsonl
+            ${{ runner.temp }}/space-seeded50-observer-receipt.json
             ${{ runner.temp }}/space-account-ban-provision.jsonl
             ${{ runner.temp }}/space-account-ban-events.jsonl
             ${{ runner.temp }}/space-account-ban-receipt.json

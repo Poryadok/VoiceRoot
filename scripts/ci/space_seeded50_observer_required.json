@@ -1,0 +1,4 @@
+{"space": [
+  ["voice/backend/space/internal/store", "TestNativeObserverNoopTupleAndFrame"],
+  ["voice/backend/space/internal/store", "TestNativeObserverCutPredicateAlgebra"]
+]}
