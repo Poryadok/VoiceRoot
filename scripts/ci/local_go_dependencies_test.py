@@ -1,0 +1,98 @@
+"""Tests for source-bound private Go module cache acquisition."""
+import json
+from pathlib import Path
+import sys
+import tarfile
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+import local_go_dependencies as dependencies
+
+
+class GoAcquisitionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.root = self.base / 'root'
+        self.copy = self.base / 'source'
+        self.root.mkdir()
+        (self.copy / 'module').mkdir(parents=True)
+        (self.copy / 'module/go.mod').write_text('module example.test/module\n', encoding='utf-8')
+        self.sums = self.copy / 'module/go.sum'
+        fixture_mod = self.base / 'fixture.mod'
+        fixture_mod.write_bytes(b'fixture')
+        self.mod_sum = dependencies._gomod_sum(fixture_mod)
+        self.sums.write_text('example.test/dependency v1.0.0 h1:zip\n'
+                             'example.test/dependency v1.0.0/go.mod ' + self.mod_sum + '\n', encoding='utf-8')
+        self.source = {'head': 'a' * 40}
+        self.verify_status = 0
+
+    def run_go(self, command, **kwargs):
+        if command[-1] == 'version':
+            return SimpleNamespace(returncode=0, stdout=b'go version go1.26.2 test/amd64\n')
+        if command[-1] == 'verify':
+            return SimpleNamespace(returncode=self.verify_status, stdout=b'all modules verified\n', stderr=b'')
+        self.assertEqual(command[-3:], ['download', '-json', 'all'])
+        cache = Path(kwargs['env']['GOMODCACHE']) / 'cache/download/example.test/dependency/@v'
+        cache.mkdir(parents=True)
+        info, mod, zipfile = (cache / 'v1.0.0.info', cache / 'v1.0.0.mod', cache / 'v1.0.0.zip')
+        for file in (info, mod, zipfile):
+            file.write_bytes(b'fixture')
+        Path(str(zipfile) + 'hash').write_text('h1:zip\n', encoding='utf-8')
+        record = {'Path': 'example.test/dependency', 'Version': 'v1.0.0', 'Sum': 'h1:zip',
+                  'GoModSum': self.mod_sum, 'Info': str(info), 'GoMod': str(mod), 'Zip': str(zipfile)}
+        kwargs['stdout'].write((json.dumps(record) + '\n').encode())
+        return SimpleNamespace(returncode=0)
+
+    def acquire(self):
+        with patch.object(dependencies.snapshot, 'capture', return_value=self.source), \
+             patch.object(dependencies.snapshot, 'verify_materialized'), \
+             patch.object(dependencies.subprocess, 'run', side_effect=self.run_go):
+            return dependencies.acquire(self.root, self.source, self.copy, 'module', self.base / 'output', sys.executable)
+
+    def test_archive_contains_only_sum_bound_download_artifacts(self):
+        result = self.acquire()
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['module_count'], 1)
+        with tarfile.open(self.base / 'output/download-cache.tar') as archive:
+            self.assertEqual(len(archive.getmembers()), 4)
+            self.assertTrue(all(member.name.startswith('cache/download/') for member in archive.getmembers()))
+
+    def test_rejects_download_missing_from_captured_go_sum(self):
+        self.sums.write_text('example.test/dependency v1.0.0 h1:wrong\n'
+                             'example.test/dependency v1.0.0/go.mod ' + self.mod_sum + '\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'not bound to go.sum'):
+            self.acquire()
+
+    def test_rejects_failed_module_verification(self):
+        self.verify_status = 1
+        with self.assertRaisesRegex(ValueError, 'failed verification'):
+            self.acquire()
+
+    def test_rejects_transient_cache_change_during_archival(self):
+        original_add = tarfile.TarFile.add
+        def mutate_then_restore(archive, name, *args, **kwargs):
+            path = Path(name)
+            if path.name != 'v1.0.0.mod':
+                return original_add(archive, name, *args, **kwargs)
+            original = path.read_bytes()
+            path.write_bytes(b'tampered')
+            try:
+                return original_add(archive, name, *args, **kwargs)
+            finally:
+                path.write_bytes(original)
+        with patch.object(tarfile.TarFile, 'add', mutate_then_restore):
+            with self.assertRaisesRegex(ValueError, 'archive bytes changed'):
+                self.acquire()
+
+    def test_rejects_workspace_input(self):
+        (self.copy / 'go.work').write_text('go 1.26\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'workspace'):
+            self.acquire()
+
+
+if __name__ == '__main__':
+    unittest.main()
