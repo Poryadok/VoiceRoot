@@ -235,9 +235,6 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
              head_ref.startswith('codex/voice-master-release-') or
              head_ref == 'codex/game-sdk-federation-docs')
     selected('local-docker-isolation', ('global', 'ci_global', 'local_docker_isolation'))
-    selected('voice-history-audit', ('history_audit',),
-             head_ref.startswith('codex/voice-master-release-') or
-             head_ref == 'codex/game-sdk-federation-docs', ['release branch'])
     selected('golangci', broad, matrix['run_go'])
     selected('backend-go', broad, matrix['run_go'])
     selected('backend-go-pkg', broad, matrix['run_pkg'])

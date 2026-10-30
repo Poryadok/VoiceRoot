@@ -264,16 +264,15 @@ class FastGateRoutingTests(unittest.TestCase):
             for result in ('skipped', 'failure', 'cancelled'):
                 self.assertNotEqual(policy.run_gate(values, 'current-diff-contract', result).returncode, 0)
 
-    def test_history_audit_is_not_ordinary_pr_work_but_is_release_obligation(self):
+    def test_history_audit_is_scheduled_and_excluded_from_fast_gate(self):
         values = policy.context('pull_request')
         values['github.head_ref'] = 'codex/ordinary'
         condition = policy.job_condition('voice-history-audit')
         self.assertFalse(policy.evaluate(condition, values))
         values = policy.context('push')
         values['github.head_ref'] = ''
-        self.assertTrue(policy.evaluate(condition, values))
-        for result in ('skipped', 'failure', 'cancelled'):
-            self.assertNotEqual(policy.run_gate(values, 'voice-history-audit', result).returncode, 0)
+        self.assertFalse(policy.evaluate(condition, values))
+        self.assertNotIn('      - voice-history-audit', policy.block('ci-gate'))
         for event in ('schedule', 'workflow_dispatch'):
             values = policy.context(event)
             values['github.head_ref'] = ''

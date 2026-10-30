@@ -117,13 +117,14 @@ class FullValidationGateTests(unittest.TestCase):
         import yaml
         root = Path(__file__).resolve().parents[2]
         jobs = yaml.safe_load((root / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
-        already_selected_on_master = {'changes', 'voice-history-audit', 'flutter-unit-receipts',
+        already_selected_on_master = {'changes', 'flutter-unit-receipts',
                                       'flutter-windows', 'flutter-android-smoke',
                                       'flutter-web-integration', 'flutter-ios'}
         for name in set(gate.REQUIRED_JOBS) - already_selected_on_master:
             with self.subTest(job=name):
                 self.assertIn("needs.changes.outputs.full_validation == 'true'", jobs[name]['if'])
-        self.assertIn("github.event_name == 'push'", jobs['voice-history-audit']['if'])
+        self.assertIn("github.event_name == 'schedule'", jobs['voice-history-audit']['if'])
+        self.assertNotIn('voice-history-audit', jobs['ci-gate']['needs'])
         for name in ('flutter-windows', 'flutter-android-smoke', 'flutter-web-integration', 'flutter-ios'):
             self.assertIn("github.event_name == 'push'", jobs[name]['if'])
             self.assertIn("needs.changes.outputs.run_flutter_tier2 == 'true'", jobs[name]['if'])

@@ -16,7 +16,7 @@ import go_integration_source_audit
 
 REQUIRED_JOBS = (
     'changes', 'protobuf', 'compose-config', 'ci-script-tests', 'f13-historical-replay',
-    'voice-history-audit', 'match-squad-overlay', 'local-docker-isolation',
+    'match-squad-overlay', 'local-docker-isolation',
     'flutter-unit-plan', 'flutter-unit-tests', 'flutter-unit-receipts',
     'flutter', 'flutter-music-proof', 'flutter-help-proof',
     'flutter-startup-proof', 'flutter-device-driver',

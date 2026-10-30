@@ -8,7 +8,7 @@ provenance. The policy does not change already-running PR #875 or rerun it.
 | Exact current PR parents, clean complete merge tree, immutable SQL tree entries, source-disabled regression guard | Every PR, required `current-diff-contract` | base/head/target, validator digest, changed paths, diagnostics artifact |
 | F05–F12 provisioning/docs and all original CI-script checks | Path-selected four `ci-script-tests` shards, required as a matrix | job/step logs, unchanged failure propagation |
 | Unit/widget discovery, serial isolation | Four required `flutter-unit-tests` file shards on the original Flutter selector | canonical inventory, shard receipts, test logs and per-shard failed golden artifacts |
-| F13 historical source ownership, pinned checkpoints, aliases, octopus/nested contribution fixtures | Required master gate before release/staging; nightly; every manual dispatch; PRs changing the historical validator/scope/base helpers; named release branches | full log and checkout SHA, retained 14 days even on failure |
+| F13 historical source ownership, pinned checkpoints, aliases, octopus/nested contribution fixtures | Nightly and manual full CI; production deployment reuses an unaffected successful nightly baseline or runs a fresh audit; an explicit operator override requires a reason | full log and checkout SHA, retained 14 days even on failure; override reason in deployment summary |
 | Auth/permissions, proto compatibility, affected service integration, Compose/A1 proofs | Existing selected mandatory jobs | existing logs/artifacts and runtime evidence |
 
 Historical replay is explicitly a different guarantee from current-tree checks.

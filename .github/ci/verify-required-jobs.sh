@@ -85,7 +85,6 @@ fi
 if [[ "${EVENT_NAME}" == pull_request ]]; then
   require_job current-diff-contract "${JOB_CURRENT_DIFF_CONTRACT:-skipped}"
 fi
-check_if "${RUN_HISTORY_AUDIT:-false}" voice-history-audit
 check_if "${RUN_F13_HISTORICAL_REPLAY:-false}" f13-historical-replay
 check_if "$(or_true "${GLOBAL}" "${RUN_CI_SCRIPTS:-false}")" ci-script-tests
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci

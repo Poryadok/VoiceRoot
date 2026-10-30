@@ -143,8 +143,8 @@ f13_replay:
   - .github/workflows/ci.yml
   - Makefile
 
-# Changes to the historical validator require its complete fixtures on the PR.
-# The full audit is also mandatory for release branches and master pushes.
+# Historical validator changes select the focused F13 regression replay.
+# The full audit runs on schedule and is checked at production deployment.
 history_audit:
   - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
   - scripts/ci/voice-r22-runtime-scope*

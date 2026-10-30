@@ -22,19 +22,83 @@ on:
         description: Run user/space ordered tier rollout
         required: false
         default: "false"
+      skip_voice_history_audit:
+        description: Explicitly skip the production Voice history audit
+        type: boolean
+        required: false
+        default: false
+      skip_voice_history_reason:
+        description: Required reason when skipping the Voice history audit
+        required: false
+        default: ""
 
 permissions:
+  actions: read
   contents: read
   packages: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 480
     environment: production
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.image_tag }}
+          fetch-depth: 0
+
+      - name: Validate Voice history audit override
+        env:
+          SKIP_AUDIT: ${{ inputs.skip_voice_history_audit }}
+          SKIP_REASON: ${{ inputs.skip_voice_history_reason }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          skip = os.environ['SKIP_AUDIT'] == 'true'
+          reason = os.environ['SKIP_REASON'].strip()
+          if skip and (not reason or len(reason) > 500 or any(ord(c) < 32 for c in reason)):
+              sys.exit('A single-line reason of at most 500 characters is required to skip the audit.')
+          if not skip and reason:
+              sys.exit('A skip reason requires skip_voice_history_audit to be enabled.')
+          if skip:
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
+                  out.write('### Voice history audit manually skipped\n\n' + reason + '\n')
+              print('Voice history audit explicitly skipped; reason recorded in the run summary.')
+          PY
+
+      - name: Select Voice history audit
+        id: voice_history
+        if: ${{ !inputs.skip_voice_history_audit }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin master:refs/remotes/origin/master
+          export VOICE_HISTORY_TARGET_SHA="$(git rev-parse HEAD)"
+          git show "$GITHUB_SHA:scripts/ci/voice_history_baseline.py" > "$RUNNER_TEMP/voice_history_baseline.py"
+          python3 "$RUNNER_TEMP/voice_history_baseline.py"
+
+      - name: Audit production Voice history
+        if: ${{ !inputs.skip_voice_history_audit && steps.voice_history.outputs.run_audit != 'false' }}
+        env:
+          VOICE_CI_EVENT_NAME: workflow_dispatch
+          VOICE_CONTRACT_PROFILE: full
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/production-voice-history"
+          git rev-parse HEAD > "$RUNNER_TEMP/production-voice-history/source-sha.txt"
+          export VOICE_R22_BASE_SHA="$(bash scripts/ci/resolve-voice-r22-base.sh)"
+          bash scripts/ci/voice-db-runtime-provisioning-contract_test.sh \
+            2>&1 | tee "$RUNNER_TEMP/production-voice-history/audit.log"
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && !inputs.skip_voice_history_audit && steps.voice_history.outputs.run_audit != 'false' }}
+        with:
+          name: production-voice-history-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/production-voice-history
+          if-no-files-found: error
 
       - name: Resolve image tag
         id: tag

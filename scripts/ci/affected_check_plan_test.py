@@ -120,13 +120,13 @@ class AffectedCheckPlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             planner.verify_gate(dict(plan, checks={}), needs, identity)
 
-    def test_release_branch_always_requires_history_audit(self):
+    def test_release_branch_does_not_add_nightly_history_audit_to_pr_plan(self):
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matched = planner.match_filters(rules, ['docs/TESTING.md'])
         matrix = {'go_services': [], 'docker_go_services': [],
                   'integration_go_services': [], 'run_go': False, 'run_pkg': False}
         plan = planner.make_plan(matched, matrix, 'codex/voice-master-release-example')
-        self.assertIn('voice-history-audit', plan['checks'])
+        self.assertNotIn('voice-history-audit', plan['checks'])
         self.assertNotIn('voice-history-audit', planner.make_plan(matched, matrix, 'codex/ordinary')['checks'])
 
     def test_hosted_comparison_reports_unknown_path_widening(self):
@@ -255,7 +255,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 plan = planner.build_plan(root, base, head, head)
             self.assertTrue(resolver.call_args.args[1]['ci_global'])
             self.assertTrue(plan['unresolved_filter_configuration'])
-            self.assertIn('voice-history-audit', plan['checks'])
+            self.assertNotIn('voice-history-audit', plan['checks'])
             self.assertIn('flutter-windows', plan['checks'])
 
     def test_hosted_comparison_runs_without_replacing_existing_selection(self):

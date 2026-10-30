@@ -789,7 +789,7 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 `ci-script-tests` — четыре обязательных matrix job: `policy`, `runtime`,
 `staging`, `proofs`, с `fail-fast: false`. Они сохраняют все прежние команды;
 F05–F12 проверяются в `runtime`, а полный F13 replay вынесен в
-`voice-history-audit`. Отдельный `current-diff-contract` обязателен на каждом
+`f13-historical-replay`. Отдельный `current-diff-contract` обязателен на каждом
 PR, включая docs-only: проверяет точные event base/head, два parent commit,
 полное дерево чистого merge, неизменность существующих SQL-миграций
 (blob/type/mode, включая удаление и rename) и source-disabled Voice scope
@@ -827,14 +827,18 @@ make -j4 ci-script-tests-pr
 Полный прогон — `make ci-script-tests`; отдельно replay —
 `VOICE_CONTRACT_PROFILE=full bash scripts/ci/voice-db-runtime-provisioning-contract_test.sh`.
 
-Полный аудит обязателен перед master release/staging acceptance: на каждом
-push в master `ci-gate` требует `voice-history-audit`. Также он выполняется
-ночью, при любом manual CI dispatch, в PR с изменением исторического
-валидатора/его scope/base helpers, в `codex/voice-master-release-*` и
-`codex/game-sdk-federation-docs`. Такие PR — явное исключение из быстрого
-пути, без исключения из latency-отчёта. Audit хранит SHA checkout и полный
-диагностический log на 14 дней, включая failure; текущая проверка хранит
-base/head/target, digest валидатора и diagnostics.
+The full `voice-history-audit` runs nightly at 02:00 UTC and on a manual full
+CI dispatch. It is not a dependency of `ci-gate` or staging validation.
+Production deployment checks the exact image-tag commit against the latest
+successful scheduled audit and its intervening history. The baseline is reused
+only when the source is an ancestor and every intervening change is known to
+be unrelated; a new merge, unknown inputs, a missing baseline, or an unverifiable history
+cause a fresh full audit. The currently recognized unrelated scope is limited
+to static `src/frontend/assets/` files. The deployment operator may explicitly
+select `skip_voice_history_audit` and provide a single-line reason; the reason
+is recorded in the workflow summary. A fresh audit retains the source SHA and
+diagnostic log as an artifact for 14 days, including on failure. This history
+audit does not replace the current-diff contract or the required PR checks.
 
 Методика, baseline и повторяемый сбор очереди, execution, attempts, mean/p95 —
 [CI gate policy](../.github/ci/gate-policy.md). Цель около 10 минут требует
