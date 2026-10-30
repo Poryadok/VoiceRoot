@@ -17,6 +17,7 @@ from local_docker_owned import DockerCLI, OwnedRun
 from local_docker_scheduled import ScheduledRun
 import local_go_execution
 import local_go_dependencies
+import local_go_plan
 import local_source_snapshot
 
 
@@ -116,41 +117,53 @@ def main():
             git('init', '-q')
             git('config', 'user.name', 'CI Fixture')
             git('config', 'user.email', 'ci-fixture@example.invalid')
-            (fixture / 'module').mkdir()
-            (fixture / 'module/go.mod').write_text('module example.test/module\n\ngo 1.26\n\n'
+            module = fixture / 'src/backend/chat'
+            module.mkdir(parents=True)
+            (module / 'go.mod').write_text('module example.test/module\n\ngo 1.26\n\n'
                                                    'require github.com/google/uuid v1.6.0\n', encoding='utf-8')
-            (fixture / 'module/go.sum').write_text(
+            (module / 'go.sum').write_text(
                 'github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\n'
                 'github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=\n', encoding='utf-8')
-            (fixture / 'module/probe_test.go').write_text(
+            (module / 'probe_test.go').write_text(
                 'package probe\nimport ("testing"; "github.com/google/uuid")\n'
                 'func TestOwnedGoDiagnostic(t *testing.T) { if uuid.New() == uuid.Nil { t.Fatal("nil") } }\n', encoding='utf-8')
-            (fixture / 'module/no_tests').mkdir()
-            (fixture / 'module/no_tests/probe.go').write_text('package no_tests\n', encoding='utf-8')
+            (module / 'no_tests').mkdir()
+            (module / 'no_tests/probe.go').write_text('package no_tests\n', encoding='utf-8')
             git('add', '.')
             git('commit', '-qm', 'fixture')
             head = git('rev-parse', 'HEAD').decode('ascii').strip()
-            (fixture / 'module/dirty.txt').write_bytes(b'captured dirty source\r\n')
+            (module / 'dirty.txt').write_bytes(b'captured dirty source\r\n')
             source = local_source_snapshot.capture(fixture, head)
             source_copy = local_source_snapshot.materialize(fixture, source, base / 'source-copy')
-            acquisition = local_go_dependencies.acquire(fixture, source, source_copy, 'module',
+            acquisition = local_go_dependencies.acquire(fixture, source, source_copy, 'src/backend/chat',
                 base / 'go-dependencies', os.environ.get('VOICE_LOCAL_GO_BINARY', 'go'))
             digest = local_go_execution.transfer_source(other.run, other_name, fixture, source, source_copy,
                                                         base / 'source.tar')
             local_go_execution.transfer_dependencies(other.run, other_name, fixture, source, source_copy, digest,
                 acquisition, base / 'go-dependencies/download-cache.tar')
             inventory = local_go_execution.discover_packages(other.run, other_name, fixture, source, source_copy,
-                digest, 'module', base / 'go-discovery')
+                digest, 'src/backend/chat', base / 'go-discovery')
             if (inventory['packages_with_tests'] != ['example.test/module'] or
                     inventory['packages_without_tests'] != ['example.test/module/no_tests']):
                 raise RuntimeError('Go discovery missed a fixture package')
             report = local_go_execution.run_package_diagnostic(other.run, other_name, fixture, source, source_copy,
-                digest, 'module', inventory['packages_with_tests'] + inventory['packages_without_tests'],
+                digest, 'src/backend/chat', inventory['packages_with_tests'] + inventory['packages_without_tests'],
                 base / 'go-diagnostic', inventory['packages_without_tests'])
             if report['status'] != 'incomplete' or report['tests']['passed'] != 1 or report['tests']['skipped']:
                 raise RuntimeError('unexpected owned Go diagnostic result')
+            plan = local_go_plan.run(fixture, source, ['chat'], base / 'go-plan',
+                                     os.environ.get('VOICE_LOCAL_GO_BINARY', 'go'))
+            tests = plan['services']['chat']['diagnostic']['tests']
+            if plan['status'] != 'incomplete' or tests['passed'] != 1 or tests['skipped']:
+                raise RuntimeError('unexpected planner-selected Go diagnostic')
+            journals = list((base / 'go-plan/chat/tmp/ci-local').glob('*/ownership.json'))
+            if len(journals) != 1:
+                raise RuntimeError('planner diagnostic ownership journal missing')
+            plan_records = json.loads(journals[0].read_text(encoding='utf-8'))['resources']
+            if any(engine.exists(item['kind'], item['id']) for item in plan_records):
+                raise RuntimeError('planner diagnostic left owned resources')
             with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-                if other.run.execute(other_name, ['touch', '/workspace/source/module/injected.go'], out, err, 30) != 0:
+                if other.run.execute(other_name, ['touch', '/workspace/source/src/backend/chat/injected.go'], out, err, 30) != 0:
                     raise RuntimeError('cannot inject extra source')
             try:
                 local_go_execution._verify_workspace(other.run, other_name, fixture, source, digest)

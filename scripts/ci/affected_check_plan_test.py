@@ -18,6 +18,13 @@ SPEC.loader.exec_module(planner)
 
 
 class AffectedCheckPlanTests(unittest.TestCase):
+    def test_missing_resolver_dependency_is_actionable(self):
+        error = subprocess.CalledProcessError(1, ['bash'], stderr='resolve-go-matrix: jq is required\n')
+        with mock.patch.object(planner.subprocess, 'run', side_effect=error):
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                planner.resolve_go_matrix(ROOT, {})
+        self.assertIn('jq is required', caught.exception.stderr)
+
     def test_current_filter_rules_cover_direct_shared_and_docs(self):
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         for path, expected in (
@@ -493,11 +500,12 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 self.assertIn('f13-historical-replay', checks(path))
         self.assertNotIn('f13-historical-replay', checks('scripts/ci/local_flutter_execution.py'))
         for name in ('local_go_dependencies.py', 'local_go_dependencies_test.py',
-                     'local_go_execution.py', 'local_go_execution_test.py', 'local_source_snapshot.py'):
+                     'local_go_execution.py', 'local_go_execution_test.py',
+                     'local_go_plan.py', 'local_go_plan_test.py', 'local_source_snapshot.py'):
             with self.subTest(local_go=name):
                 self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
                 self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
-        for name in ('local_go_execution.py', 'local_go_dependencies.py', 'local_source_snapshot.py'):
+        for name in ('local_go_execution.py', 'local_go_dependencies.py', 'local_go_plan.py', 'local_source_snapshot.py'):
             with self.subTest(docker_consumer=name):
                 self.assertIn('local-docker-isolation', checks('scripts/ci/' + name))
         for name in ('local_docker_owned.py', 'local_docker_owned_test.py',

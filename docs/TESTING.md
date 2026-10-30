@@ -644,12 +644,15 @@ therefore cannot authorize a PR handoff.
 
 `python3 scripts/ci/local_preflight.py --base <full-base-sha> --head
 <full-head-sha> --head-ref <branch> --output <new-directory-outside-checkout>
---flutter <flutter>`
-uses the shared local plan and runs the full Flutter diagnostic when selected.
-Its report lists all selected checks and marks unimplemented checks `not_run`.
-It exits nonzero even after a successful diagnostic: the mandatory local
-preflight, including Docker scheduling and the remaining checks, is not yet
-implemented.
+--flutter <flutter> --go <go-executable>`
+uses the shared local plan, runs selected Go service short-test diagnostics and
+the full Flutter diagnostic when selected. The Go executable must match the
+version of the digest-pinned Go image, which must already be present locally;
+the shared planner also requires `jq`. Go runs use host-wide slots, isolated
+source and Docker resources, and report individual skipped tests. The shared
+pkg non-short job, integrations, lint and other unimplemented checks remain
+`not_run`. The report remains incomplete and the command exits nonzero even
+when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
 The separate `flutter-music-proof` job retains the Music capture and playback
 artifacts. Its selector includes frontend sources, shared test support, assets,

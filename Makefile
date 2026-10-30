@@ -340,6 +340,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/local_flutter_execution_test.py"
 	python3 "$(ROOT)/scripts/ci/local_go_execution_test.py"
 	python3 "$(ROOT)/scripts/ci/local_go_dependencies_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_plan_test.py"
 	python3 "$(ROOT)/scripts/ci/local_preflight_test.py"
 	python3 "$(ROOT)/scripts/ci/local_docker_scheduled_test.py"
 	python3 "$(ROOT)/scripts/ci/go_integration_receipts_test.py"

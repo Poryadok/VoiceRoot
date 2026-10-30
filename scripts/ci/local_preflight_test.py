@@ -43,6 +43,53 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
 
+    def test_selected_go_services_run_without_claiming_pkg_or_preflight_pass(self):
+        plan = {'source': self.source, 'components': {'go': ['chat', 'voice']},
+                'checks': {'backend-go': ['affected service'], 'backend-go-pkg': ['shared package']}}
+        def service_result(name):
+            return {'acquisition': {'status': 'incomplete', 'source': self.source,
+                                    'module_dir': 'src/backend/' + name, 'archive_sha256': 'f' * 64},
+                    'transfer': {'status': 'incomplete', 'archive_sha256': 'f' * 64},
+                    'source_archive_sha256': 'e' * 64, 'slot': 0,
+                    'ownership_journal': name + '/tmp/ci-local/voiceci-fixture/ownership.json',
+                    'inventory': {'status': 'incomplete', 'packages_with_tests': ['voice/backend/' + name],
+                                  'packages_without_tests': []},
+                    'diagnostic': {'status': 'incomplete', 'exit_code': 0,
+                                   'tests': {'packages': ['voice/backend/' + name], 'passed': 1, 'skipped': []}}}
+        diagnostic = {'status': 'incomplete', 'source': self.source,
+                      'image': {'reference': local_preflight.local_go_plan.GO_IMAGE, 'id': 'sha256:' + 'a' * 64},
+                      'services': {'chat': service_result('chat'), 'voice': service_result('voice')}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_go_plan, 'run', return_value=diagnostic) as go:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output,
+                                         'flutter', 'feature/example', 'go-executable')
+        go.assert_called_once_with(self.root, self.source, ['chat', 'voice'], self.output / 'go', 'go-executable')
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-go']['status'], 'diagnostic')
+        self.assertEqual(report['checks']['backend-go-pkg']['status'], 'not_run')
+
+    def test_go_diagnostic_must_cover_every_planned_service(self):
+        plan = {'source': self.source, 'components': {'go': ['chat', 'voice']},
+                'checks': {'backend-go': ['affected service']}}
+        diagnostic = {'status': 'incomplete', 'source': self.source, 'services': {'chat': {}}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_go_plan, 'run', return_value=diagnostic):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertIn('did not match', report['error'])
+
+    def test_missing_docker_fails_selected_go_preflight(self):
+        plan = {'source': self.source, 'components': {'go': ['chat']},
+                'checks': {'backend-go': ['affected service']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_go_plan, 'run',
+                          side_effect=local_preflight.OwnershipError('Docker unavailable')):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertEqual(report['checks']['backend-go']['status'], 'not_run')
+        self.assertIn('Docker unavailable', report['error'])
+
     def test_source_change_invalidates_run(self):
         result = {'status': 'incomplete', 'source': self.source, 'full_inventory': True,
                   'tests': {'skipped': [], 'passed': 1}}
@@ -77,6 +124,15 @@ class LocalPreflightTests(unittest.TestCase):
     def test_output_in_checkout_is_rejected(self):
         with self.assertRaises(ValueError):
             local_preflight.run(self.root, 'c' * 40, self.source['head'], self.root / 'report', 'flutter')
+
+    def test_planner_failure_is_recorded_as_failed_preflight(self):
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan',
+                          side_effect=subprocess.CalledProcessError(1, ['bash'], stderr='jq is required\n')):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertIsNone(report['plan'])
+        self.assertIn('jq is required', report['error'])
+        self.assertEqual(json.loads((self.output / 'preflight.json').read_text(encoding='utf-8')), report)
 
     def test_head_ref_is_forwarded_to_shared_planner(self):
         plan = {'source': self.source, 'checks': {'voice-history-audit': ['release branch']}}

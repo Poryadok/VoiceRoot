@@ -49,6 +49,8 @@ ci_global:
   - '!scripts/ci/local_go_execution_test.py'
   - '!scripts/ci/local_go_dependencies.py'
   - '!scripts/ci/local_go_dependencies_test.py'
+  - '!scripts/ci/local_go_plan.py'
+  - '!scripts/ci/local_go_plan_test.py'
   - '!scripts/ci/local_flutter_execution.py'
   - '!scripts/ci/local_flutter_execution_test.py'
   - '!scripts/ci/flutter_test_events.py'
@@ -87,6 +89,7 @@ local_docker_isolation:
   - scripts/ci/local_source_snapshot.py
   - scripts/ci/local_go_execution.py
   - scripts/ci/local_go_dependencies.py
+  - scripts/ci/local_go_plan.py
   - scripts/ci/local_docker_owned.py
   - scripts/ci/local_docker_owned_test.py
   - scripts/ci/local_docker_owned_integration_test.py
