@@ -31,6 +31,12 @@ FLUTTER_OUTPUTS = (
     'src/frontend/sqlite3mc.x64.windows.dll', 'src/frontend/libsqlite3mc.x64.linux.so',
     'src/frontend/libsqlite3mc.arm64.linux.so', 'src/frontend/libsqlite3mc.arm64.macos.dylib',
     'src/frontend/libsqlite3mc.x64.macos.dylib',
+    # The key-backup test deliberately compares a changed image and writes
+    # these diagnostic PNGs even when the negative assertion succeeds.
+    'src/frontend/test/failures/e2e_key_backup_h_isolatedDiff.png',
+    'src/frontend/test/failures/e2e_key_backup_h_maskedDiff.png',
+    'src/frontend/test/failures/e2e_key_backup_h_masterImage.png',
+    'src/frontend/test/failures/e2e_key_backup_h_testImage.png',
 )
 
 

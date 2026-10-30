@@ -154,8 +154,8 @@ class SelectedAcceptanceGateTests(unittest.TestCase):
         for job in ('golangci', 'backend-go-pkg', 'backend-go', 'a1-e2e',
                     'nats-hub-config-renderer-image'):
             self.assertNotEqual(run_gate(values, job, 'failure').returncode, 0, job)
-        # A1 Flutter deliberately excludes ci_global-only PRs.
-        self.assertEqual(run_gate(values, 'a1-flutter-profile-handoff', 'skipped').returncode, 0)
+        # Unknown CI inputs conservatively require the profile-handoff proof.
+        self.assertNotEqual(run_gate(values, 'a1-flutter-profile-handoff', 'skipped').returncode, 0)
 
     def test_unselected_and_plain_docs_only_skips_remain_valid(self):
         for event in ('pull_request', 'push'):

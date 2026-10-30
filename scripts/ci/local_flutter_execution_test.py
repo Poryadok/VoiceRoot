@@ -85,6 +85,29 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'failed')
         self.assertIn('unexpected', result['error'])
 
+    def test_known_golden_diffs_are_outputs_but_added_test_sources_are_rejected(self):
+        def golden_outputs(command, **kwargs):
+            result = self.fake_flutter(command, **kwargs)
+            if 'test' in command:
+                failures = Path(kwargs['cwd']) / 'test/failures'
+                failures.mkdir()
+                for suffix in ('isolatedDiff', 'maskedDiff', 'masterImage', 'testImage'):
+                    (failures / ('e2e_key_backup_h_' + suffix + '.png')).write_bytes(b'generated')
+            return result
+        with mock.patch.object(execution, '_invoke', side_effect=golden_outputs):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['tests']['passed'], 1)
+        def injected_source(command, **kwargs):
+            result = golden_outputs(command, **kwargs)
+            if 'test' in command:
+                (Path(kwargs['cwd']) / 'test/failures/injected_test.dart').write_text('injected')
+            return result
+        with mock.patch.object(execution, '_invoke', side_effect=injected_source):
+            result = execution.run(self.root, self.head, self.output.parent / 'run-injected', 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('unexpected', result['error'])
+
     def test_dependency_cache_change_during_command_is_rejected(self):
         def mutate(command, **kwargs):
             result = self.fake_flutter(command, **kwargs)
