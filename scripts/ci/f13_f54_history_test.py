@@ -2617,6 +2617,48 @@ f13_retained_history_row() { return 1; }
             with self.subTest(error=error),self.assertRaises(m.Rejected):
                 m.validate_trace(self.repo,trace,digest,sealed_prefix=binding)
 
+    def test_map_preparation_preserves_fold_and_ordered_fresh_processes(self):
+        self.hidden_runtime();run,out=self.collect(partition=False)
+        self.assertEqual(run.returncode,0,run.stderr)
+        trace=out/'trace.jsonl';raw=trace.read_bytes();m=module()
+        # Reference the former pure serialization at the same fold seam. All
+        # predicates, real Git observations and mutation paths remain active.
+        tree=ast.parse(HELPER.read_text())
+        fold=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='validate_trace')
+        reference=ast.parse("def map_binding(frame):\n"
+            "    raw=''.join('\\t'.join(parts)+'\\n' for parts in maps[frame]).encode()\n"
+            "    return dict(bytes=len(raw),sha256=sha(raw))\n").body[0]
+        fold.body=[reference if isinstance(n,ast.FunctionDef) and n.name=='map_binding' else n for n in fold.body]
+        namespace=dict(m.__dict__)
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[fold],type_ignores=[])),str(HELPER),'exec'),namespace)
+        real_run=subprocess.run
+        def observe(function):
+            calls=[]
+            def fresh(*args,**kwargs):
+                result=real_run(*args,**kwargs)
+                calls.append((args,kwargs,result.returncode,result.stdout,result.stderr))
+                return result
+            with patch.object(subprocess,'run',side_effect=fresh):
+                try:value=('return',function(self.repo,trace,m.sha(trace.read_bytes())))
+                except m.Rejected as exc:value=('rejected',str(exc))
+            return value,calls
+        events=[json.loads(line) for line in raw.splitlines()]
+        self.assertTrue(any(e['kind']=='row_remove' for e in events))
+        for changed in (None,'row_committed','frame_exit'):
+            with self.subTest(changed=changed):
+                if changed is None:trace.write_bytes(raw)
+                else:
+                    forged=copy.deepcopy(events)
+                    event=next(e for e in reversed(forged) if e['kind']==changed)
+                    field='map_after' if changed=='row_committed' else 'final_map'
+                    event['payload'][field]['sha256']='0'*64
+                    m.write_events(trace,forged)
+                expected=observe(namespace['validate_trace'])
+                actual=observe(m.validate_trace)
+                self.assertEqual(actual,expected)
+                self.assertTrue(actual[1], 'must retain real subprocess observations')
+                self.assertEqual(actual[0][0],'return' if changed is None else 'rejected')
+
     def test_private_J_prior_span_requires_all_five_real_operations_and_full_map(self):
         # Actual temporary Git/collector evidence under an explicit private
         # authority boundary. This does not qualify the fixed production J.

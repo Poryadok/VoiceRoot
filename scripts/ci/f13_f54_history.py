@@ -6853,9 +6853,15 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     # never mutated. Retain only their pure canonical digest within this fold;
     # no source, capability, Git or current-head observation is reused.
     ready_digests={}
+    # Pure serialization of this fold's already reconstructed rows only. Every
+    # mutation below invalidates it; no event, Git observation or verdict is
+    # reused. Callers receive independent dictionaries as before.
+    map_bindings={}
     def map_binding(frame):
-        raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
-        return dict(bytes=len(raw),sha256=sha(raw))
+        if frame not in map_bindings:
+            raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
+            map_bindings[frame]=dict(bytes=len(raw),sha256=sha(raw))
+        return dict(map_bindings[frame])
     def map_before(frame, value):
         require(value['map_before']==map_binding(frame),'conserved_map_before')
         if 'prior_rows' in value:
@@ -7517,7 +7523,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(v['operation_reference']==op and v['reason'],'actual_disposition_reference');map_before(frame,v)
             if v['reason']=='verified_original_sync_reconciliation':
                 require(op in sync_gates,'sync_receipt_before_reconciliation')
-                if sum(x[0]==v['path'] for x in maps[frame])==1:maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
+                if sum(x[0]==v['path'] for x in maps[frame])==1:
+                    maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
+                    map_bindings.pop(frame,None)
             continue
         require(op in classified,'classification_before_row')
         key=(frame,v['path'])
@@ -7659,6 +7667,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             if kind=='row_remove':
                 require(pending[key]['prior'] is not None and not pending[key]['removed'],'actual_single_reduction')
                 pending[key]['removed']=True;maps[frame]=[x for x in maps[frame] if x[0]!=v['path']]
+                map_bindings.pop(frame,None)
             else:
                 if not pending[key]['removed']:
                     # An append keeps all prior flags/owners in the map. Its
@@ -7672,6 +7681,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(pending[key]['after']==row(v['row']),'actual_committed_row')
             frame_rows[key]=row(v['row'])
             maps[frame].append(row(v['row']))
+            map_bindings.pop(frame,None)
             require(v['map_after']==map_binding(frame) and [row(x) for x in v['retained_rows']]==[x for x in maps[frame] if x[0]==v['path']],'conserved_committed_map')
             if op in M_capabilities or op in I_ready or op in J_ready:
                 receipt=pending[key]['conservation']
