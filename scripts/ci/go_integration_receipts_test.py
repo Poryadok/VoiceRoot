@@ -192,7 +192,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         import yaml
         package = 'voice/backend/space/internal/store'
         drift = 'TestNativeCatalogConcurrentRowDrift'
-        observers = ('TestNativeObserverNoopTupleAndFrame', 'TestNativeObserverCutPredicateAlgebra')
+        observers = ('TestNativeObserverNoopTupleAndFrame', 'TestNativeObserverCutPredicateAlgebra',
+                     'TestNativeObserverPrivateClosureAndLock')
         inventories = [json.loads((ROOT / ('scripts/ci/space_seeded50_' + name + '_required.json')).read_text(encoding='utf-8'))['space']
                        for name in ('drift', 'observer')]
         self.assertEqual(inventories, [[[package, drift]], [[package, name] for name in observers]])
