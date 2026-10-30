@@ -44,9 +44,8 @@ docker create --name "$compiler" --network none --label "voice.ci.fixture=$owner
   --mount "type=bind,source=$clock_dir,target=/fixture-clock" \
   --mount "type=bind,source=$root/src/backend/space/internal/store/testdata/account_ban_wall_clock.c,target=/fixture-clock.c,readonly" \
   golang@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb \
-  cc -shared -fPIC -O2 -o /fixture-clock/fixture-clock.so /fixture-clock.c -ldl >/dev/null
+  sh -ec 'cc -shared -fPIC -O2 -o /fixture-clock/fixture-clock.so /fixture-clock.c -ldl; chmod 755 /fixture-clock/fixture-clock.so' >/dev/null
 docker start -a "$compiler"
-chmod 755 "$clock_dir/fixture-clock.so"
 clock_sha="$(sha256sum "$clock_dir/fixture-clock.so" | cut -d' ' -f1)"
 printf '%s\n' 0 > "$clock_dir/walltime-us"
 chmod 666 "$clock_dir/walltime-us"
