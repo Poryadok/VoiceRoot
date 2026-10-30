@@ -43,13 +43,18 @@ def summarize_events(events):
     return {'counts': counts, 'skipped': sorted(skipped), 'packages': dict(sorted(packages.items()))}
 
 
-def validate_test_run(events, packages):
+def validate_test_run(events, packages, no_test_packages=()):
     """Check the complete selected package stream and retain every skip."""
     if (not isinstance(events, list) or not events or not isinstance(packages, list)
             or not packages or any(not isinstance(p, str) or not p for p in packages)
             or len(set(packages)) != len(packages)):
         raise ValueError('invalid Go test inventory')
-    states = {package: {'started': False, 'terminal': None, 'tests': {}} for package in packages}
+    if (not isinstance(no_test_packages, (list, tuple)) or
+            any(not isinstance(p, str) or p not in packages for p in no_test_packages) or
+            len(set(no_test_packages)) != len(no_test_packages)):
+        raise ValueError('invalid Go no-test package inventory')
+    states = {package: {'started': False, 'terminal': None, 'tests': {}, 'no_test_markers': 0}
+              for package in packages}
     for event in events:
         if not isinstance(event, dict) or event.get('Package') not in states:
             raise ValueError('unexpected Go test package')
@@ -60,6 +65,13 @@ def validate_test_run(events, packages):
                 state['started'] = True
             elif action in ('pass', 'skip', 'fail') and state['started'] and state['terminal'] is None:
                 state['terminal'] = action
+            elif action == 'output':
+                if not state['started'] or state['terminal'] is not None:
+                    raise ValueError('invalid Go package output lifecycle')
+                output = event.get('Output')
+                if (isinstance(output, str) and
+                        re.fullmatch(r'\?\s+' + re.escape(event['Package']) + r'\s+\[no test files\]\r?\n', output)):
+                    state['no_test_markers'] += 1
             elif action != 'output':
                 raise ValueError('invalid Go package lifecycle')
         else:
@@ -75,11 +87,15 @@ def validate_test_run(events, packages):
     passed = 0
     skipped = []
     for package, state in states.items():
+        if package in no_test_packages:
+            if state['terminal'] != 'skip' or state['tests'] or state['no_test_markers'] != 1:
+                raise ValueError('invalid Go no-test package result')
+            continue
         if state['terminal'] != 'pass' or any(value not in ('pass', 'skip') for value in state['tests'].values()):
             raise ValueError('incomplete or unsuccessful Go test run')
         passed += sum(value == 'pass' for value in state['tests'].values())
         skipped.extend([package, name] for name, value in state['tests'].items() if value == 'skip')
-    if not passed:
+    if not passed and len(no_test_packages) != len(packages):
         raise ValueError('Go test run contained no passing tests')
     return {'passed': passed, 'skipped': sorted(skipped), 'packages': sorted(states)}
 

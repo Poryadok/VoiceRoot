@@ -1,5 +1,6 @@
 """Source transfer for an owned Go diagnostic; this does not issue a PASS receipt."""
 import hashlib
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -93,21 +94,89 @@ def _verify_workspace(owner, name, root, source, archive_digest):
                 raise ValueError('owned source workspace changed')
 
 
-def run_package_diagnostic(owner, name, root, source, source_copy, archive_digest, module_dir, packages, output):
+def _module_path(module_dir):
+    if (not isinstance(module_dir, str) or not re.fullmatch(r'[A-Za-z0-9_./-]+', module_dir)
+            or str(PurePosixPath(module_dir)) != module_dir
+            or any(part in ('', '.', '..', '.git') for part in module_dir.split('/'))):
+        raise ValueError('invalid module directory')
+    return '/workspace/source/' + module_dir
+
+
+def discover_packages(owner, name, root, source, source_copy, archive_digest, module_dir, output):
+    """Discover the complete current module inventory offline in the owned source."""
+    module_path = _module_path(module_dir)
+    output = Path(output).resolve()
+    root = Path(root).resolve()
+    if output == root or root in output.parents or output.exists():
+        raise ValueError('discovery output must be new and outside the source tree')
+    snapshot.verify_materialized(root, source, source_copy)
+    if snapshot.capture(root, source['head']) != source:
+        raise ValueError('source changed before Go discovery')
+    _verify_workspace(owner, name, root, source, archive_digest)
+    output.mkdir(parents=True)
+    command = ['sh', '-c', 'cd "/workspace/source/$1" && '
+               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly '
+               'GOCACHE=/workspace/go-build GOMODCACHE=/workspace/go-mod go list -json ./...',
+               'voice-go-discovery', module_dir]
+    with (output / 'packages.json').open('xb') as stdout, (output / 'stderr.log').open('xb') as stderr:
+        result = owner.execute(name, command, stdout, stderr, 1800)
+    if snapshot.capture(root, source['head']) != source:
+        raise ValueError('source changed during Go discovery')
+    snapshot.verify_materialized(root, source, source_copy)
+    _verify_workspace(owner, name, root, source, archive_digest)
+    if result != 0:
+        raise ValueError('Go package discovery failed')
+    raw = (output / 'packages.json').read_bytes()
+    contents = raw.decode('utf-8')
+    decoder = json.JSONDecoder()
+    items = []
+    while contents.strip():
+        contents = contents.lstrip()
+        item, end = decoder.raw_decode(contents)
+        items.append(item)
+        contents = contents[end:]
+    tests, no_tests = [], []
+    for item in items:
+        if not isinstance(item, dict) or item.get('Error') or item.get('Incomplete'):
+            raise ValueError('invalid Go package discovery result')
+        module = item.get('Module')
+        name_value = item.get('ImportPath')
+        directory = item.get('Dir')
+        if (not isinstance(module, dict) or module.get('Dir') != module_path or not module.get('Main')
+                or not isinstance(module.get('Path'), str) or not isinstance(name_value, str)
+                or not (name_value == module['Path'] or name_value.startswith(module['Path'] + '/'))
+                or not isinstance(directory, str) or not (directory == module_path or directory.startswith(module_path + '/'))
+                or any(part in ('.', '..') for part in directory.split('/'))):
+            raise ValueError('package lies outside the selected Go module')
+        if name_value != module['Path'] + directory[len(module_path):]:
+            raise ValueError('Go package path does not match its source directory')
+        if any(not isinstance(item.get(key, []), list) for key in ('TestGoFiles', 'XTestGoFiles')):
+            raise ValueError('invalid Go package test inventory')
+        (tests if item.get('TestGoFiles') or item.get('XTestGoFiles') else no_tests).append(name_value)
+    if not items or len(set(tests + no_tests)) != len(items):
+        raise ValueError('empty or duplicate Go package inventory')
+    return {'status': 'incomplete', 'command': command, 'exit_code': result,
+            'output_sha256': hashlib.sha256(raw).hexdigest(),
+            'packages_with_tests': sorted(tests), 'packages_without_tests': sorted(no_tests)}
+
+
+def run_package_diagnostic(owner, name, root, source, source_copy, archive_digest, module_dir, packages, output,
+                           no_test_packages=()):
     """Run explicit Go packages offline in an owned workspace; never issue PASS.
 
     Package discovery and dependency provenance are not yet bound, so this
     diagnostic must not authorize a preflight handoff.
     """
-    if (not isinstance(module_dir, str) or not re.fullmatch(r'[A-Za-z0-9_./-]+', module_dir)
-            or str(PurePosixPath(module_dir)) != module_dir
-            or any(part in ('', '.', '..', '.git') for part in module_dir.split('/'))):
-        raise ValueError('invalid module directory')
+    _module_path(module_dir)
     if (not isinstance(packages, list) or not packages
             or any(not isinstance(item, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+', item)
                    or any(part in ('.', '..', '.git') for part in item.split('/')) for item in packages)
             or len(set(packages)) != len(packages)):
         raise ValueError('invalid Go package inventory')
+    if (not isinstance(no_test_packages, (list, tuple)) or
+            any(not isinstance(item, str) or item not in packages for item in no_test_packages) or
+            len(set(no_test_packages)) != len(no_test_packages)):
+        raise ValueError('invalid Go no-test package inventory')
     output = Path(output).resolve()
     root = Path(root).resolve()
     if output == root or root in output.parents or output.exists():
@@ -121,7 +190,7 @@ def run_package_diagnostic(owner, name, root, source, source_copy, archive_diges
                'cd "/workspace/source/$1" && shift && '
                'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly '
                'GOCACHE=/workspace/go-build GOMODCACHE=/workspace/go-mod '
-               'go test -json -count=1 "$@"', 'voice-go-diagnostic', module_dir, *packages]
+               'go test -short -json -count=1 "$@"', 'voice-go-diagnostic', module_dir, *packages]
     with (output / 'events.jsonl').open('xb') as stdout, (output / 'stderr.log').open('xb') as stderr:
         result = owner.execute(name, command, stdout, stderr, 1800)
     if snapshot.capture(root, source['head']) != source:
@@ -131,6 +200,6 @@ def run_package_diagnostic(owner, name, root, source, source_copy, archive_diges
     if result != 0:
         raise ValueError('Go diagnostic command failed')
     raw = (output / 'events.jsonl').read_bytes()
-    summary = receipts.validate_test_run(receipts.read_events(raw.decode('utf-8')), packages)
+    summary = receipts.validate_test_run(receipts.read_events(raw.decode('utf-8')), packages, no_test_packages)
     return {'status': 'incomplete', 'command': command, 'exit_code': result,
             'events_sha256': hashlib.sha256(raw).hexdigest(), 'tests': summary}

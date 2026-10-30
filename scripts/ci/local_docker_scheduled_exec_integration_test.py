@@ -119,6 +119,8 @@ def main():
             (fixture / 'module/go.mod').write_text('module example.test/module\n\ngo 1.26\n', encoding='utf-8')
             (fixture / 'module/probe_test.go').write_text(
                 'package probe\nimport "testing"\nfunc TestOwnedGoDiagnostic(t *testing.T) {}\n', encoding='utf-8')
+            (fixture / 'module/no_tests').mkdir()
+            (fixture / 'module/no_tests/probe.go').write_text('package no_tests\n', encoding='utf-8')
             git('add', '.')
             git('commit', '-qm', 'fixture')
             head = git('rev-parse', 'HEAD').decode('ascii').strip()
@@ -127,8 +129,14 @@ def main():
             source_copy = local_source_snapshot.materialize(fixture, source, base / 'source-copy')
             digest = local_go_execution.transfer_source(other.run, other_name, fixture, source, source_copy,
                                                         base / 'source.tar')
+            inventory = local_go_execution.discover_packages(other.run, other_name, fixture, source, source_copy,
+                digest, 'module', base / 'go-discovery')
+            if (inventory['packages_with_tests'] != ['example.test/module'] or
+                    inventory['packages_without_tests'] != ['example.test/module/no_tests']):
+                raise RuntimeError('Go discovery missed a fixture package')
             report = local_go_execution.run_package_diagnostic(other.run, other_name, fixture, source, source_copy,
-                digest, 'module', ['example.test/module'], base / 'go-diagnostic')
+                digest, 'module', inventory['packages_with_tests'] + inventory['packages_without_tests'],
+                base / 'go-diagnostic', inventory['packages_without_tests'])
             if report['status'] != 'incomplete' or report['tests']['passed'] != 1 or report['tests']['skipped']:
                 raise RuntimeError('unexpected owned Go diagnostic result')
             with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:

@@ -32,6 +32,45 @@ class FakeOwner:
 
 
 class TransferTests(unittest.TestCase):
+    def test_go_discovery_covers_packages_with_and_without_tests(self):
+        source = {'head': 'a' * 40}
+        module = {'Dir': '/workspace/source/src/backend', 'Path': 'example.test/module', 'Main': True}
+        items = [{'Dir': '/workspace/source/src/backend', 'ImportPath': 'example.test/module',
+                  'Module': module, 'TestGoFiles': ['hello_test.go']},
+                 {'Dir': '/workspace/source/src/backend/empty', 'ImportPath': 'example.test/module/empty',
+                  'Module': module}]
+        class ListOwner:
+            def execute(self, name, command, stdout, stderr, timeout):
+                stdout.write(('\n'.join(json.dumps(item) for item in items) + '\n').encode())
+                return 0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            with patch.object(runner.snapshot, 'capture', return_value=source), \
+                 patch.object(runner.snapshot, 'verify_materialized'), \
+                 patch.object(runner, '_verify_workspace'):
+                report = runner.discover_packages(ListOwner(), 'owned', root, source, root / 'copy',
+                    'a' * 64, 'src/backend', Path(directory) / 'output')
+            self.assertEqual(report['packages_with_tests'], ['example.test/module'])
+            self.assertEqual(report['packages_without_tests'], ['example.test/module/empty'])
+            self.assertEqual(report['status'], 'incomplete')
+
+    def test_go_discovery_rejects_foreign_module(self):
+        class ListOwner:
+            def execute(self, name, command, stdout, stderr, timeout):
+                stdout.write(json.dumps({'Dir': '/workspace/source/other', 'ImportPath': 'example.test/other',
+                    'Module': {'Dir': '/workspace/source/other', 'Path': 'example.test/other', 'Main': True}}).encode())
+                return 0
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            with patch.object(runner.snapshot, 'capture', return_value=source), \
+                 patch.object(runner.snapshot, 'verify_materialized'), patch.object(runner, '_verify_workspace'):
+                with self.assertRaisesRegex(ValueError, 'outside'):
+                    runner.discover_packages(ListOwner(), 'owned', root, source, root / 'copy',
+                        'a' * 64, 'src/backend', Path(directory) / 'output')
+
     def test_go_diagnostic_records_skips_and_offline_command_without_pass(self):
         source = {'head': 'a' * 40}
         events = [{'Action': 'start', 'Package': 'example.test/module'},

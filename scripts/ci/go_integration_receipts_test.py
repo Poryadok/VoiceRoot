@@ -18,6 +18,22 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_no_test_package_requires_discovery_and_real_no_test_marker(self):
+        events = [{'Package': 'example/p', 'Action': 'start'},
+                  {'Package': 'example/p', 'Action': 'output', 'Output': '?  \texample/p\t[no test files]\n'},
+                  {'Package': 'example/p', 'Action': 'skip'}]
+        with self.assertRaises(ValueError):
+            receipts.validate_test_run(events, ['example/p'])
+        result = receipts.validate_test_run(events, ['example/p'], ['example/p'])
+        self.assertEqual(result['passed'], 0)
+        self.assertEqual(result['skipped'], [])
+        for broken in (events[:1] + events[2:], events + [events[1]],
+                       [events[0], events[1], {'Package': 'example/p', 'Action': 'pass'}],
+                       [events[0], events[1], {'Package': 'example/p', 'Test': 'TestSkip', 'Action': 'run'},
+                        {'Package': 'example/p', 'Test': 'TestSkip', 'Action': 'skip'}, events[2]]):
+            with self.subTest(events=broken), self.assertRaises(ValueError):
+                receipts.validate_test_run(broken, ['example/p'], ['example/p'])
+
     def test_full_test_stream_requires_complete_unique_results_and_reports_skips(self):
         events = [
             {'Package': 'example/p', 'Action': 'start'},
