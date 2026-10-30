@@ -17,6 +17,56 @@ from unittest.mock import patch
 import f13_release_source as release
 
 
+class BlobDigestBatchTest(unittest.TestCase):
+    def test_binary_blobs_and_missing_or_non_blob_are_checked_each_time(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder)
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+            def obj(raw, kind='blob'):
+                return subprocess.check_output(['git', '-C', str(repo), 'hash-object', '-w', '-t', kind, '--stdin'], input=raw).decode().strip()
+            first, empty = obj(b'one\x00two\n'), obj(b'')
+            self.assertEqual(release.blob_digests(repo, [first, empty, first]), [
+                hashlib.sha256(b'one\x00two\n').hexdigest(),
+                hashlib.sha256(b'').hexdigest(),
+                hashlib.sha256(b'one\x00two\n').hexdigest(),
+            ])
+            with self.assertRaises(release.Rejected):
+                release.blob_digests(repo, [first, '0' * 40])
+            tree = subprocess.check_output(['git', '-C', str(repo), 'mktree'], input=b'').decode().strip()
+            with self.assertRaises(release.Rejected):
+                release.blob_digests(repo, [tree])
+            loose = repo / '.git' / 'objects' / first[:2] / first[2:]
+            loose.chmod(0o600)
+            loose.unlink()
+            with self.assertRaises(release.Rejected):
+                release.blob_digests(repo, [first])
+
+    def test_more_than_one_batch_and_malformed_response(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = Path(folder)
+            subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+            values = [str(i).encode() for i in range(35)]
+            ids = [subprocess.check_output(['git', '-C', str(repo), 'hash-object', '-w', '--stdin'], input=value).decode().strip() for value in values]
+            self.assertEqual(release.blob_digests(repo, ids), [hashlib.sha256(value).hexdigest() for value in values])
+            def truncated(*args, **kwargs):
+                kwargs['stdout'].write((ids[0] + ' blob 5\nabc').encode())
+                return subprocess.CompletedProcess([], 0)
+            with patch.object(release.subprocess, 'run', side_effect=truncated):
+                with self.assertRaises(release.Rejected):
+                    release.blob_digests(repo, [ids[0]])
+            for payload, status in [
+                ((ids[1] + ' blob 1\n0\n').encode(), 0),
+                ((ids[0] + ' blob 1\n0\nextra').encode(), 0),
+                (b'', 1),
+            ]:
+                def bad_response(*args, **kwargs):
+                    kwargs['stdout'].write(payload)
+                    return subprocess.CompletedProcess([], status)
+                with patch.object(release.subprocess, 'run', side_effect=bad_response):
+                    with self.assertRaises(release.Rejected):
+                        release.blob_digests(repo, [ids[0]])
+
+
 class EventBoundaryTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

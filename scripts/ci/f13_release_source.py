@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import io
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -42,6 +43,38 @@ CARRIER_PATHS = frozenset(('scripts/ci/f13_release_source.py',
 
 def sha(raw):
     return hashlib.sha256(raw).hexdigest()
+
+
+def blob_digests(repo, object_ids):
+    """Read exact blobs in bounded batches, without caching across checks."""
+    ids = list(object_ids)
+    for oid in ids:
+        legacy.oid(oid)
+    digests = []
+    for start in range(0, len(ids), 32):
+        batch = ids[start:start + 32]
+        with tempfile.TemporaryFile() as stream:
+            result = subprocess.run(
+                ['git', '--no-replace-objects', '-C', str(repo), 'cat-file', '--batch'],
+                input=('\n'.join(batch) + '\n').encode(), stdout=stream,
+                stderr=subprocess.PIPE, check=False)
+            require(result.returncode == 0, 'git_cat-file')
+            stream.seek(0)
+            for oid in batch:
+                header = stream.readline(128).rstrip(b'\n').split(b' ')
+                require(len(header) == 3 and header[0] == oid.encode() and header[1] == b'blob'
+                        and header[2].isdigit(), 'release_role_batch_blob')
+                remaining = int(header[2])
+                digest = hashlib.sha256()
+                while remaining:
+                    block = stream.read(min(remaining, 65536))
+                    require(bool(block), 'release_role_batch_truncated')
+                    digest.update(block)
+                    remaining -= len(block)
+                require(stream.read(1) == b'\n', 'release_role_batch_truncated')
+                digests.append(digest.hexdigest())
+            require(stream.read(1) == b'', 'release_role_batch_trailing')
+    return digests
 
 
 def artifact(repo, proof):
@@ -346,13 +379,20 @@ def load_role(repo):
     required_names = {x['path'] for x in required}
     contexts = sorted(({x['path'] for x in old['context']} | set(compiled) | set(manifests) |
         {p for d in directories for p in current_dirs.get(d,{})}) - required_names)
-    def row(path):
-        meta = _meta(current,path)
+    required_order = [x['path'] for x in required]
+    inventory_order = sorted(required_names | set(contexts))
+    names = contexts + required_order + inventory_order
+    metadata = {p: _meta(current, p) for p in names}
+    for meta in metadata.values():
         require(meta is not None and meta['mode']=='100644' and meta['type']=='blob', 'release_role_entry')
-        return dict(path=path,entry=meta,sha256=sha(git(repo,'cat-file','blob',meta['oid'])))
-    require(r['context'] == [row(p) for p in contexts] and required == [row(x['path']) for x in required] and
+    digests = blob_digests(repo, [metadata[p]['oid'] for p in names])
+    rows = [dict(path=p, entry=metadata[p], sha256=digest) for p, digest in zip(names, digests)]
+    context_rows = rows[:len(contexts)]
+    required_rows = rows[len(contexts):len(contexts) + len(required_order)]
+    inventory_rows = rows[len(contexts) + len(required_order):]
+    require(r['context'] == context_rows and required == required_rows and
         all(current.get(p) == evidence_tree.get(p) for p in required_names | set(contexts)), 'release_role_complete_unit')
-    require(inv['entries'] == [row(p) for p in sorted(required_names | set(contexts))] and
+    require(inv['entries'] == inventory_rows and
         inv['directory_inventories'] == inventory, 'release_role_reviewed_inventory')
     require(r['closure']['path'] == ROLE_CLOSURE_PATH, 'release_role_closure_path')
     closure = read_json(artifact(repo,r['closure']))
