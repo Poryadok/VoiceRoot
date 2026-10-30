@@ -47,6 +47,12 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51ClassifierRejectsUnclassifiedMissingDatum'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureTrusted45Transition'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureTrusted50Transition'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
+        'space-native-installer-integration',
 }
 
 # This entrypoint is deliberately invoked in child processes by the required

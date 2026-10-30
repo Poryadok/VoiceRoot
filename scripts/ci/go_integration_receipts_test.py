@@ -101,7 +101,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         package = 'voice/backend/space/internal/store'
         catalog = 'TestNativeCatalog50LiteralProjectionAndDrift'
         roots = (catalog, 'TestNative51RawCompositeSessionStability',
-                 'TestNative51ClassifierRejectsUnclassifiedMissingDatum')
+                 'TestNative51ClassifierRejectsUnclassifiedMissingDatum',
+                 'TestNative50CreatorBornCurrentSchema')
         cases = ('function_cost', 'function_ACL', 'function_owner', 'escaped_Unicode_body',
                  'unexpected_function', 'private_index_attributes', 'column', 'constraint', 'trigger_disabled')
         inventory = json.loads((ROOT / 'scripts/ci/space_trusted50_required.json').read_text(encoding='utf-8'))
@@ -114,7 +115,7 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
         steps = jobs['space-native-installer-integration']['steps']
         step = next(item for item in steps if item.get('name') == 'Run trusted Space native50 catalog proofs')
-        self.assertIn('-at trusted50', step['run'])
+        self.assertIn('-at migrated50', step['run'])
         self.assertIn('controlled deployment evidence persistence failure', step['run'])
         self.assertIn('space_trusted50_required.json', step['run'])
         self.assertIn('--reject-skips', step['run'])
@@ -126,6 +127,34 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         self.assertFalse(receipts.verify_required(events, inventory['space'], 0))
         events[-2]['Action'] = 'skip'
         self.assertTrue(receipts.verify_required(events, inventory['space'], 0))
+
+    def test_space_real_native_transition_proofs_precede_current_catalog(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        names = ('TestAccountBanFixtureTrusted45Transition', 'TestAccountBanFixtureTrusted50Transition')
+        for phase, name in zip(('45', '50'), names):
+            inventory = json.loads((ROOT / ('scripts/ci/space_transition' + phase + '_required.json')).read_text(encoding='utf-8'))
+            self.assertEqual(inventory['space'], [[package, name]])
+        inventory = json.loads((ROOT / 'scripts/ci/space_trusted50_required.json').read_text(encoding='utf-8'))
+        self.assertIn([package, 'TestNative50CreatorBornCurrentSchema'], inventory['space'])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for name in (*names, 'TestNative50CreatorBornCurrentSchema'):
+            entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        steps = jobs['space-native-installer-integration']['steps']
+        step45 = next(item for item in steps if item.get('name') == 'Run Space native45 transition proof')
+        step50 = next(item for item in steps if item.get('name') == 'Run trusted Space native50 catalog proofs')
+        self.assertLess(steps.index(step45), steps.index(step50))
+        self.assertIn('-at migrated45', step45['run'])
+        self.assertIn('-at migrated50', step50['run'])
+        for name in names[:1]:
+            self.assertIn(name, step45['run'])
+        for name in (names[1], 'TestNative50CreatorBornCurrentSchema'):
+            self.assertIn(name, step50['run'])
+        for step in (step45, step50):
+            self.assertIn('--reject-skips', step['run'])
+            self.assertIn('owned_oid', step['run'])
 
     def test_file_matrix_requires_pdf_runtime_and_real_renderer(self):
         import yaml
