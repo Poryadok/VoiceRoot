@@ -1,5 +1,8 @@
 """Behavioral tests for local source snapshots used by preflight."""
 import subprocess
+import tarfile
+import hashlib
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +13,59 @@ import local_source_snapshot as snapshot
 
 
 class LocalSourceSnapshotTests(unittest.TestCase):
+    def test_archive_rejects_transient_same_size_restored_mutation(self):
+        source = snapshot.capture(self.root, self.head)
+        with tempfile.TemporaryDirectory() as external:
+            copy = snapshot.materialize(self.root, source, Path(external) / 'source')
+            target = copy / 'old.txt'
+            original = target.read_bytes()
+            info = target.stat()
+            addfile = tarfile.TarFile.addfile
+            def mutate_then_restore(tar, entry, fileobj=None):
+                if entry.name != 'old.txt':
+                    return addfile(tar, entry, fileobj)
+                target.write_bytes(b'bad\n')
+                try:
+                    return addfile(tar, entry, fileobj)
+                finally:
+                    target.write_bytes(original)
+                    os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns))
+            with mock.patch.object(tarfile.TarFile, 'addfile', mutate_then_restore):
+                with self.assertRaisesRegex(ValueError, 'archive bytes differ'):
+                    snapshot.archive(self.root, source, copy, Path(external) / 'source.tar')
+
+    def test_archive_rejects_corrupted_written_bytes(self):
+        source = snapshot.capture(self.root, self.head)
+        with tempfile.TemporaryDirectory() as external:
+            copy = snapshot.materialize(self.root, source, Path(external) / 'source')
+            real_open = tarfile.open
+            def corrupt_before_read(*args, **kwargs):
+                if kwargs.get('mode') == 'r:':
+                    raw = kwargs['fileobj']
+                    raw.seek(512)
+                    raw.write(b'X')
+                    raw.flush()
+                    raw.seek(0)
+                return real_open(*args, **kwargs)
+            with mock.patch.object(tarfile, 'open', side_effect=corrupt_before_read):
+                with self.assertRaisesRegex(ValueError, 'archive bytes differ'):
+                    snapshot.archive(self.root, source, copy, Path(external) / 'source.tar')
+
+    def test_archive_preserves_exact_snapshot_and_rejects_changed_copy(self):
+        (self.root / 'old.txt').write_bytes(b'changed\r\n')
+        source = snapshot.capture(self.root, self.head)
+        with tempfile.TemporaryDirectory() as external:
+            copy = snapshot.materialize(self.root, source, Path(external) / 'source')
+            target = Path(external) / 'source.tar'
+            digest = snapshot.archive(self.root, source, copy, target)
+            self.assertEqual(digest, hashlib.sha256(target.read_bytes()).hexdigest())
+            with tarfile.open(target) as archive:
+                self.assertEqual(archive.extractfile('old.txt').read(), b'changed\r\n')
+                self.assertEqual(set(archive.getnames()), {'.github/ci/path-filters.yml', 'old.txt', 'deleted.txt'})
+            (copy / 'old.txt').write_bytes(b'tampered')
+            with self.assertRaises(ValueError):
+                snapshot.archive(self.root, source, copy, Path(external) / 'tampered.tar')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

@@ -18,6 +18,43 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_full_test_stream_requires_complete_unique_results_and_reports_skips(self):
+        events = [
+            {'Package': 'example/p', 'Action': 'start'},
+            {'Package': 'example/p', 'Test': 'TestOne', 'Action': 'run'},
+            {'Package': 'example/p', 'Test': 'TestOne', 'Action': 'pass'},
+            {'Package': 'example/p', 'Test': 'TestOptional', 'Action': 'run'},
+            {'Package': 'example/p', 'Test': 'TestOptional', 'Action': 'skip'},
+            {'Package': 'example/p', 'Action': 'pass'},
+        ]
+        result = receipts.validate_test_run(events, ['example/p'])
+        self.assertEqual(result['passed'], 1)
+        self.assertEqual(result['skipped'], [['example/p', 'TestOptional']])
+        for broken in (events[:-1], events + [events[2]],
+                       [e for e in events if e != events[1]],
+                       events + [{'Package': 'example/other', 'Action': 'pass'}],
+                       [events[0], {'Package': 'example/p', 'Test': 'Ghost', 'Action': 'output'}, *events[1:]],
+                       [events[0], {'Package': 'example/p', 'Test': 'Ghost', 'Action': 'pause'}, *events[1:]]):
+            with self.subTest(events=broken), self.assertRaises(ValueError):
+                receipts.validate_test_run(broken, ['example/p'])
+
+    def test_complete_stream_cli_fails_on_skip_or_nonzero_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / 'go.jsonl'
+            events = [{'Package': 'example/p', 'Action': 'start'},
+                      {'Package': 'example/p', 'Test': 'TestOne', 'Action': 'run'},
+                      {'Package': 'example/p', 'Test': 'TestOne', 'Action': 'pass'},
+                      {'Package': 'example/p', 'Action': 'pass'}]
+            def run(exit_code):
+                log.write_text(''.join(json.dumps(e) + '\n' for e in events), encoding='utf-8')
+                return subprocess.run([sys.executable, str(ROOT / 'scripts/ci/go_integration_receipts.py'),
+                                       '--events', str(log), '--exit-code', str(exit_code),
+                                       '--complete-package', 'example/p'], capture_output=True, text=True)
+            self.assertEqual(run(0).returncode, 0)
+            self.assertNotEqual(run(1).returncode, 0)
+            events[2]['Action'] = 'skip'
+            self.assertNotEqual(run(0).returncode, 0)
+
     def test_space_native_installer_receipt_requires_every_failure_boundary(self):
         inventory = json.loads((ROOT / 'scripts/ci/space_native_installer_required.json').read_text(encoding='utf-8'))['space']
         package = 'voice/backend/space/internal/nativeinstaller'

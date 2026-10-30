@@ -12,6 +12,7 @@ import re
 import shutil
 import stat
 import subprocess
+import tarfile
 import tempfile
 
 from affected_check_plan import changed_paths
@@ -203,6 +204,83 @@ def materialize(root, source, destination):
     if capture(root, source['head']) != source:
         raise ValueError('source changed during materialization')
     return destination
+
+
+def archive(root, source, destination, output):
+    """Archive exactly the verified snapshot and return its SHA-256 digest."""
+    root, destination, output = Path(root).resolve(), Path(destination).resolve(), Path(output).resolve()
+    if (output == root or root in output.parents or output == destination or
+            destination in output.parents or output.exists()):
+        raise ValueError('archive must be a new file outside both source trees')
+    verify_materialized(root, source, destination)
+    content_hash = hashlib.sha256()
+
+    class HashingReader:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def read(self, size=-1):
+            data = self.stream.read(size)
+            content_hash.update(data)
+            return data
+
+    with output.open('x+b') as raw:
+        with tarfile.open(fileobj=raw, mode='w') as tar:
+            for name, parts in _snapshot_entries(root, source):
+                path = destination.joinpath(*parts)
+                before = path.lstat()
+                if not stat.S_ISREG(before.st_mode) or destination not in path.resolve().parents:
+                    raise ValueError('snapshot changed: invalid archive input')
+                with path.open('rb') as stream:
+                    current = os.fstat(stream.fileno())
+                    if (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns) != (
+                            before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns):
+                        raise ValueError('snapshot changed before archive read')
+                    content_hash.update(len(name).to_bytes(8, 'big'))
+                    content_hash.update(name)
+                    content_hash.update(stat.S_IMODE(current.st_mode).to_bytes(4, 'big'))
+                    content_hash.update(b'F' + current.st_size.to_bytes(8, 'big'))
+                    info = tarfile.TarInfo(name.decode('utf-8'))
+                    info.size = current.st_size
+                    info.mode = stat.S_IMODE(current.st_mode)
+                    tar.addfile(info, HashingReader(stream))
+                    after = os.fstat(stream.fileno())
+                    if (after.st_size, after.st_mtime_ns) != (current.st_size, current.st_mtime_ns):
+                        raise ValueError('snapshot changed during archive read')
+        if content_hash.hexdigest() != source['worktree_sha256']:
+            raise ValueError('archive bytes differ from captured source')
+        raw.flush()
+        raw.seek(0)
+        archived_hash = hashlib.sha256()
+        entries = list(_snapshot_entries(root, source))
+        with tarfile.open(fileobj=raw, mode='r:') as check:
+            members = check.getmembers()
+            if len(members) != len(entries):
+                raise ValueError('archive entries differ from captured source')
+            for member, (name, _) in zip(members, entries):
+                if not member.isfile() or member.name != name.decode('utf-8'):
+                    raise ValueError('archive entries differ from captured source')
+                archived_hash.update(len(name).to_bytes(8, 'big'))
+                archived_hash.update(name)
+                archived_hash.update(member.mode.to_bytes(4, 'big'))
+                archived_hash.update(b'F' + member.size.to_bytes(8, 'big'))
+                with check.extractfile(member) as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        archived_hash.update(block)
+        if archived_hash.hexdigest() != source['worktree_sha256']:
+            raise ValueError('archive bytes differ from captured source')
+        digest = hashlib.sha256()
+        raw.seek(0)
+        for block in iter(lambda: raw.read(1024 * 1024), b''):
+            digest.update(block)
+        opened, path_info = os.fstat(raw.fileno()), output.lstat()
+        if (not stat.S_ISREG(path_info.st_mode) or
+                (opened.st_dev, opened.st_ino) != (path_info.st_dev, path_info.st_ino)):
+            raise ValueError('archive path changed during archival')
+    verify_materialized(root, source, destination)
+    if capture(root, source['head']) != source:
+        raise ValueError('source changed during archival')
+    return digest.hexdigest()
 
 
 def main():
