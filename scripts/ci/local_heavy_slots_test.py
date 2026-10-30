@@ -5,11 +5,20 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
-from local_heavy_slots import acquire
+from local_heavy_slots import acquire, host_slot_directory
 
 
 class HeavySlotsTest(unittest.TestCase):
+    def test_host_slot_directory_is_absolute_and_not_selected_by_environment(self):
+        expected = host_slot_directory()
+        self.assertTrue(expected.is_absolute())
+        self.assertEqual(expected.name, 'voice-ci-heavy-slots-v1')
+        with mock.patch.dict(os.environ, {'TMP': 'different-tmp', 'TEMP': 'different-temp',
+                                        'PROGRAMDATA': 'different-data'}):
+            self.assertEqual(host_slot_directory(), expected)
+
     def test_capacity_is_shared_and_conflicting_configuration_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

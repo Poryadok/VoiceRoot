@@ -37,6 +37,55 @@ def crash_worker(checkout, slots, image):
         owner.close()
 
 
+def verify_host_slots(checkout, engine, image):
+    """Exercise the actual host location with two checkouts and a sentinel."""
+    first_dir, second_dir, sentinel_dir = (checkout / name for name in ('host-one', 'host-two', 'host-sentinel'))
+    for directory in (first_dir, second_dir, sentinel_dir):
+        directory.mkdir()
+    first = second = sentinel = None
+    records = []
+    try:
+        first = ScheduledRun.start_host(first_dir, engine, 0)
+        second = ScheduledRun.start_host(second_dir, engine, 0)
+        sentinel = OwnedRun.create(sentinel_dir, engine)
+        for run in (first.run, second.run, sentinel):
+            fixture(run, image)
+            verify_live(run)
+        records = [(item['kind'], item['id']) for run in (first.run, second.run, sentinel)
+                   for item in run.state['resources']]
+        try:
+            unexpected = ScheduledRun.start_host(sentinel_dir, engine, 0)
+        except TimeoutError:
+            pass
+        else:
+            unexpected.close()
+            raise RuntimeError('third host-wide fixture acquired an occupied slot')
+        first.close()
+        first = None
+        verify_live(second.run)
+        verify_live(sentinel)
+    finally:
+        errors = []
+        for owner in (first, second):
+            if owner is not None:
+                try:
+                    owner.close()
+                except Exception as error:
+                    errors.append(error)
+        if sentinel is not None:
+            try:
+                sentinel.cleanup()
+            except Exception as error:
+                errors.append(error)
+            finally:
+                sentinel.close()
+        if errors:
+            raise RuntimeError('host fixture cleanup requires reconciliation') from errors[0]
+    if any(engine.exists(kind, identifier) for kind, identifier in records):
+        raise RuntimeError('host-wide fixture left owned resources')
+    print('host-wide scheduler preserved the other checkout and sentinel; journals:', checkout)
+
+
 def main():
     if os.environ.get('VOICE_LOCAL_DOCKER_TEST') != '1':
         print('VOICE_LOCAL_DOCKER_TEST=1 is required', file=sys.stderr)
@@ -162,6 +211,7 @@ def main():
                 sentinel.close()
         if errors:
             raise RuntimeError('fixture cleanup requires reconciliation') from errors[0]
+    verify_host_slots(checkout, engine, image)
     return 0
 
 

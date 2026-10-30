@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import sys
 import time
 import uuid
 
@@ -13,6 +14,26 @@ if os.name == 'nt':
     import msvcrt
 else:
     import fcntl
+
+
+def host_slot_directory():
+    """Return one OS-wide location for cooperating local CI schedulers.
+
+    Lack of access must fail closed; there is no per-worktree fallback.
+    """
+    if os.name == 'nt':
+        import ctypes
+        buffer = ctypes.create_unicode_buffer(32768)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 0x23, None, 0, buffer) != 0 or not buffer.value:
+            raise ValueError('Windows common application data directory is unavailable')
+        base = Path(buffer.value)
+    elif sys.platform.startswith('linux'):
+        base = Path('/var/tmp')
+    else:
+        raise ValueError('host-wide CI scheduling is unsupported on this platform')
+    if not base.is_absolute() or not base.is_dir():
+        raise ValueError('host-wide CI scheduling base is unavailable')
+    return base / 'voice-ci-heavy-slots-v1'
 
 
 def _marker(descriptor):
@@ -153,7 +174,7 @@ def acquire(directory, timeout, capacity=2):
         raise ValueError('capacity must be an integer between 1 and 64')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    if not directory.is_dir() or directory.is_symlink():
+    if not directory.is_dir() or directory.is_symlink() or directory.resolve() != directory.absolute():
         raise ValueError('slot directory must be a real directory')
     deadline = time.monotonic() + timeout
     _configure(directory, capacity, deadline)
@@ -196,7 +217,7 @@ def recover_bound(directory, slot, run_id, capacity=2):
     if not isinstance(run_id, str) or not re.fullmatch(r'voiceci-[0-9a-f]{32}', run_id):
         raise ValueError('invalid recovery run identity')
     directory = Path(directory)
-    if not directory.is_dir() or directory.is_symlink():
+    if not directory.is_dir() or directory.is_symlink() or directory.resolve() != directory.absolute():
         raise ValueError('slot directory must be a real directory')
     _configure(directory, capacity, time.monotonic())
     path = directory / ('heavy-' + str(slot) + '.lock')

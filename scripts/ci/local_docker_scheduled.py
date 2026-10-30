@@ -5,7 +5,7 @@ supervise existing Testcontainers or Compose processes.
 """
 from pathlib import Path
 from local_docker_owned import OwnedRun, OwnershipError
-from local_heavy_slots import acquire, recover_bound
+from local_heavy_slots import acquire, host_slot_directory, recover_bound
 
 
 def _reconcile_execution(run):
@@ -18,6 +18,16 @@ def _reconcile_execution(run):
 
 
 class ScheduledRun:
+    @classmethod
+    def start_host(cls, checkout, engine, timeout, capacity=2):
+        """Start using the OS-wide slot directory, with no per-worktree fallback."""
+        return cls.start(checkout, host_slot_directory(), engine, timeout, capacity=capacity)
+
+    @classmethod
+    def recover_host(cls, directory, engine, slot, capacity=2):
+        """Recover an abandoned run bound to the OS-wide slot directory."""
+        return cls.recover(directory, host_slot_directory(), engine, slot, capacity=capacity)
+
     @classmethod
     def start(cls, checkout, slot_directory, engine, timeout, capacity=2):
         lease = acquire(slot_directory, timeout, capacity=capacity)

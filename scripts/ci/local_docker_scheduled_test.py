@@ -17,6 +17,22 @@ class ScheduledRunTests(unittest.TestCase):
         self.slots = self.root / 'host-slots'
         self.engine = FakeEngine()
 
+    def test_host_scheduler_shares_slots_across_checkouts_and_recovers_exact_owner(self):
+        other_checkout = self.root / 'other-checkout'
+        other_checkout.mkdir()
+        with mock.patch('local_docker_scheduled.host_slot_directory', return_value=self.slots):
+            one = ScheduledRun.start_host(self.root, self.engine, 0, capacity=1)
+            self.addCleanup(one.abandon)
+            resource = one.run.create_resource('network')
+            with self.assertRaises(TimeoutError):
+                ScheduledRun.start_host(other_checkout, self.engine, 0, capacity=1)
+            directory, slot = one.run.directory, one.slot
+            one.abandon()
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1)
+            self.assertNotIn(('network', resource), self.engine.resources)
+            later = ScheduledRun.start_host(other_checkout, self.engine, 0, capacity=1)
+            later.close()
+
     def test_two_runs_hold_slots_until_own_cleanup(self):
         one = ScheduledRun.start(self.root, self.slots, self.engine, 0)
         two = ScheduledRun.start(self.root, self.slots, self.engine, 0)
