@@ -21,6 +21,16 @@ import (
 // This fixture initializes only the seeded legacy spaces used by the
 // concurrency, delayed-capture and roster proofs, after the real native50 transition.
 func TestAccountBanFixtureConcurrencyEnrollment50(t *testing.T) {
+	accountBanFixtureEnrollment50(t, []int{8, 9, 11, 12})
+}
+
+// The clock fixture uses a separate database and enrolls only its roster space.
+func TestAccountBanFixtureRosterEnrollment50(t *testing.T) {
+	accountBanFixtureEnrollment50(t, []int{8})
+}
+
+func accountBanFixtureEnrollment50(t *testing.T, spaces []int) {
+	t.Helper()
 	ctx := context.Background()
 	dsn := os.Getenv("SPACE_BAN_TEST_DATABASE_URL")
 	require.NotEmpty(t, dsn, "owned native50 fixture required")
@@ -30,7 +40,7 @@ func TestAccountBanFixtureConcurrencyEnrollment50(t *testing.T) {
 	st := &SpaceStore{Pool: owner}
 	before, err := st.InspectNativeInstallerSource(ctx, 50)
 	require.NoError(t, err)
-	for _, n := range []int{8, 9, 11, 12} {
+	for _, n := range spaces {
 		space := nativeBanSpace(n)
 		var count int
 		require.NoError(t, owner.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, space, []uuid.UUID{nativeBanProfile(1), nativeBanProfile(2), nativeBanProfile(3)}).Scan(&count))

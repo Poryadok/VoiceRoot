@@ -67,6 +67,8 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureConcurrencyEnrollment50'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureRosterEnrollment50'):
+        'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanIntentConcurrency50'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanLockWaitExhaustsOriginalBudget50'):
@@ -74,6 +76,8 @@ DEDICATED = {
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanLateCaptureCannotCommitOrSplice50'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanGIS50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanGISExpiry50'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
         'space-native-installer-integration',

@@ -97,6 +97,18 @@ INSERT INTO community_owner_authority(space_id,application_id,environment_id,cor
   ('30000000-0000-0000-0000-000000000013','40000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000002','fixture','20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',1,'active',1,decode(repeat('aa',32),'hex'),now()+interval '1 day');
 INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at) VALUES
   ('30000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000005','member',ARRAY['membership'],1,1,now()+interval '1 day');
+INSERT INTO spaces(id,name,owner_profile_id,member_count) VALUES
+  ('30000000-0000-0000-0000-000000000008','roster fixture','10000000-0000-0000-0000-000000000001',5);
+INSERT INTO space_members(space_id,profile_id)
+  SELECT '30000000-0000-0000-0000-000000000008'::uuid,
+         format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
+  FROM (VALUES (1),(2),(3),(6)) AS profiles(p);
+INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at) VALUES
+  ('30000000-0000-0000-0000-000000000008','40000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000002','native7-fixture-8','20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',1,'active',1,decode(repeat('aa',32),'hex'),now()+interval '1 day');
+INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at)
+  SELECT '30000000-0000-0000-0000-000000000008'::uuid,
+         format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid,
+         'member',ARRAY['membership'],1,1,now()+interval '1 day' FROM (VALUES (2),(5)) AS profiles(p);
 SQL
 migrate 44
 migrate 45
@@ -105,6 +117,9 @@ migrate 50
 receipt transition50 space_transition50_required.json '^TestAccountBanFixtureTrusted50Transition$'
 receipt enrollment space_seeded50_drift_required.json '^TestNativeCatalogConcurrentRowDrift$'
 receipt observer space_clock50_observer_required.json '^(TestNativeObserverOtherProfileCommunityGap|TestNativeObserverNoopLeaseGapTuple)$'
+receipt roster-enrollment space_roster_enrollment_required.json '^TestAccountBanFixtureRosterEnrollment50$'
+receipt roster space_gis50_required.json '^TestAccountBanGIS50$'
+receipt roster-expiry space_gis_expiry_required.json '^TestAccountBanGISExpiry50$'
 [[ "$(sha256sum "$clock_dir/fixture-clock.so" | cut -d' ' -f1)" == "$clock_sha" ]]
 [[ "$(tr -d '\r\n' < "$clock_dir/walltime-us")" == 0 ]]
 [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$admin" -c "SELECT oid FROM pg_database WHERE datname='space_db'")" == "$oid" ]]

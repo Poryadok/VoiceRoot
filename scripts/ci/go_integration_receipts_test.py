@@ -225,6 +225,33 @@ class GoIntegrationReceiptTests(unittest.TestCase):
             skipped = [dict(event, Action='skip') if event.get('Test') == name and event['Action'] == 'pass' else event for event in events]
             self.assertIn((package, name), receipts.verify_required(skipped, inventory, 0))
 
+    def test_clock_roster_expiry_requires_ordered_phases_and_receipts(self):
+        package = 'voice/backend/space/internal/store'
+        cases = (('space_roster_enrollment_required.json', 'TestAccountBanFixtureRosterEnrollment50'),
+                 ('space_gis50_required.json', 'TestAccountBanGIS50'),
+                 ('space_gis_expiry_required.json', 'TestAccountBanGISExpiry50'))
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for filename, name in cases:
+            inventory = json.loads((ROOT / 'scripts/ci' / filename).read_text(encoding='utf-8'))['space']
+            self.assertEqual(inventory, [[package, name]])
+            entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+            events = [{'Package': package, 'Test': name, 'Action': 'run'},
+                      {'Package': package, 'Test': name, 'Action': 'pass'}, {'Package': package, 'Action': 'pass'}]
+            self.assertFalse(receipts.verify_required(events, inventory, 0))
+            events[1]['Action'] = 'skip'
+            self.assertIn((package, name), receipts.verify_required(events, inventory, 0))
+        script = (ROOT / 'scripts/ci/space_native_clock_proof.sh').read_text(encoding='utf-8')
+        phases = ('native7-fixture-8', 'migrate 44', 'migrate 45', 'receipt transition45',
+                  'migrate 50', 'receipt transition50', 'receipt roster-enrollment',
+                  'receipt roster space_gis50_required.json', 'receipt roster-expiry')
+        positions = [script.index(value) for value in phases]
+        self.assertEqual(positions, sorted(positions))
+        for filename, name in cases:
+            self.assertIn(filename, script)
+            self.assertIn(name, script)
+        self.assertIn('--reject-skips', script)
+
     def test_seeded_space_observers_require_real_transition_and_enrollment(self):
         import yaml
         package = 'voice/backend/space/internal/store'
