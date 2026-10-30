@@ -1,17 +1,223 @@
 """Owned process supervision tests; no foreign process is terminated."""
 import os
+import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+import uuid
 from unittest.mock import patch
 
 import local_process_supervision as supervision
 
 
 class SupervisionTest(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows named-pipe acceptance')
+    def test_pipe_timeout_partial_message_disconnect_and_wrong_pid(self):
+        import ctypes
+        from multiprocessing.connection import Listener, Client
+        address = r'\\.\pipe\voice-test-' + uuid.uuid4().hex
+        listener = Listener(address, family='AF_PIPE')
+        client = Client(address, family='AF_PIPE')
+        server = listener.accept()
+        try:
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            with self.assertRaisesRegex(supervision.SupervisionError, 'identity mismatch'):
+                supervision._require_broker_pid(kernel, server.fileno(), os.getpid() + 1)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                supervision._pipe_io(server.fileno(), None, time.monotonic() + .15, 1024)
+            supervision._pipe_io(client.fileno(), b'{', time.monotonic() + 1, 1024)
+            partial = supervision._pipe_io(server.fileno(), None, time.monotonic() + 1, 1024)
+            with self.assertRaises(json.JSONDecodeError):
+                json.loads(partial)
+            client.close()
+            with self.assertRaises(supervision.SupervisionError):
+                supervision._pipe_io(server.fileno(), None, time.monotonic() + 1, 1024)
+        finally:
+            client.close(); server.close(); listener.close()
+        address = r'\\.\pipe\voice-test-' + uuid.uuid4().hex
+        listener = Listener(address, family='AF_PIPE')
+        client = Client(address, family='AF_PIPE')
+        server = listener.accept()
+        try:
+            supervision._pipe_io(client.fileno(), b'x' * 2048, time.monotonic() + 2, 2048)
+            with self.assertRaises(supervision.SupervisionError):
+                supervision._pipe_io(server.fileno(), None, time.monotonic() + 2, 128)
+        finally:
+            client.close(); server.close(); listener.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows named-pipe acceptance')
+    def test_pipe_blocked_write_and_oversized_message_fail_bounded(self):
+        from multiprocessing.connection import Listener, Client
+        address = r'\\.\pipe\voice-test-' + uuid.uuid4().hex
+        listener = Listener(address, family='AF_PIPE')
+        client = Client(address, family='AF_PIPE')
+        server = listener.accept()
+        try:
+            start = time.monotonic()
+            with self.assertRaises(subprocess.TimeoutExpired):
+                supervision._pipe_io(server.fileno(), b'x' * (2 * 1024 * 1024), start + .2, 2 * 1024 * 1024)
+            self.assertLess(time.monotonic() - start, 3)
+        finally:
+            client.close(); server.close(); listener.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows named-pipe acceptance')
+    def test_competing_pipe_client_cannot_impersonate_broker_pid(self):
+        import ctypes
+        from multiprocessing.connection import Listener
+        address = r'\\.\pipe\voice-test-' + uuid.uuid4().hex
+        listener = Listener(address, family='AF_PIPE')
+        child = subprocess.Popen([sys.executable, '-B', '-c',
+            'import sys,time; from multiprocessing.connection import Client; c=Client(sys.argv[1],family="AF_PIPE"); time.sleep(10)', address])
+        server = None
+        try:
+            server = listener.accept()
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            with self.assertRaisesRegex(supervision.SupervisionError, 'identity mismatch'):
+                supervision._require_broker_pid(kernel, server.fileno(), os.getpid())
+        finally:
+            if server:
+                server.close()
+            listener.close()
+            child.terminate()
+            child.wait(timeout=5)
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_broker_binds_exact_output_handles_without_parent_inheritable_handles(self):
+        import msvcrt
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            handles = [msvcrt.get_osfhandle(file.fileno()) for file in (out, err)]
+            before = [os.get_handle_inheritable(handle) for handle in handles]
+            self.assertEqual(before, [False, False])
+            result = supervision._run_broker_experimental(
+                [sys.executable, '-c', 'import sys; print("owned out"); print("owned err", file=sys.stderr)'],
+                timeout=5, cwd=None, env=dict(os.environ), stdout=out, stderr=err)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual([os.get_handle_inheritable(handle) for handle in handles], before)
+            out.seek(0); err.seek(0)
+            self.assertEqual(out.read().decode().strip(), 'owned out')
+            self.assertEqual(err.read().decode().strip(), 'owned err')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_broker_runs_constrained_flutter_batch_and_rejects_metacharacters(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            batch = Path(directory) / 'flutter fixture.bat'
+            batch.write_text('@echo off\r\necho %~1 %~2 %~3\r\n', encoding='ascii')
+            command = [str(batch), 'test', '--no-pub', '--concurrency=1']
+            result = supervision._run_broker_experimental(command, timeout=5, cwd=directory,
+                                                          env=dict(os.environ), stdout=out, stderr=err)
+            self.assertEqual(result.returncode, 0)
+            out.seek(0)
+            self.assertEqual(out.read().decode().strip(), 'test --no-pub --concurrency=1')
+            with self.assertRaisesRegex(supervision.SupervisionError, 'unsafe batch'):
+                supervision._run_broker_experimental([str(batch), 'x&echo injected'], timeout=5,
+                                                      cwd=directory, env=dict(os.environ), stdout=out, stderr=err)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_broker_forwards_unicode_argv_cwd_and_environment(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            env = dict(os.environ, VOICE_PROCESS_TEST='значение', PYTHONIOENCODING='utf-8')
+            command = [sys.executable, '-c',
+                       'import os,sys; print(os.getcwd()); print(sys.argv[1]); print(os.environ["VOICE_PROCESS_TEST"], file=sys.stderr)',
+                       'аргумент with spaces']
+            result = supervision._run_broker_experimental(command, timeout=5, cwd=directory, env=env, stdout=out, stderr=err)
+            self.assertEqual(result.returncode, 0)
+            out.seek(0); err.seek(0)
+            lines = out.read().decode('utf-8').splitlines()
+            self.assertEqual(Path(lines[0]), Path(directory))
+            self.assertEqual(lines[1], 'аргумент with spaces')
+            self.assertEqual(err.read().decode('utf-8').strip(), 'значение')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_broker_timeout_kills_ready_grandchild_and_preserves_sentinel(self):
+        import ctypes
+        from ctypes import wintypes
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            ready = Path(directory) / 'ready'
+            grandchild = 'import os,pathlib,sys,time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(20)'
+            child = 'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",sys.argv[1],sys.argv[2]]); time.sleep(20)'
+            sentinel = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(20)'])
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handles = []
+            def observe():
+                deadline = time.monotonic() + 1
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                if ready.exists():
+                    handles.append(kernel.OpenProcess(0x100000, False, int(ready.read_text())))
+            observer = threading.Thread(target=observe)
+            observer.start()
+            try:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    supervision._run_broker_experimental([sys.executable, '-c', child, grandchild, str(ready)],
+                        timeout=1.5, cwd=None, env=dict(os.environ), stdout=out, stderr=err)
+                self.assertTrue(ready.exists())
+                observer.join(timeout=2)
+                self.assertEqual(len(handles), 1)
+                self.assertTrue(handles[0])
+                self.assertEqual(kernel.WaitForSingleObject(handles[0], 5000), 0)
+                self.assertIsNone(sentinel.poll())
+            finally:
+                observer.join(timeout=2)
+                for handle in handles:
+                    if handle:
+                        kernel.CloseHandle(handle)
+                sentinel.terminate()
+                sentinel.wait(timeout=5)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_supervisor_crash_terminates_live_broker_descendant(self):
+        import ctypes
+        from ctypes import wintypes
+        with tempfile.TemporaryDirectory() as directory:
+            ready = Path(directory) / 'ready'
+            child = 'import os,pathlib,sys,time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(20)'
+            harness = ('import os,sys; sys.path.insert(0,sys.argv[1]); import local_process_supervision as s; '
+                       'o=open(os.devnull,"wb"); e=open(os.devnull,"wb"); '
+                       's._run_broker_experimental([sys.executable,"-c",sys.argv[2],sys.argv[3]],'
+                       'timeout=15,cwd=None,env=dict(os.environ),stdout=o,stderr=e)')
+            owner = subprocess.Popen([sys.executable, '-B', '-c', harness, str(Path(__file__).parent), child, str(ready)])
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = None
+            try:
+                deadline = time.monotonic() + 5
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue(ready.exists())
+                handle = kernel.OpenProcess(0x100000, False, int(ready.read_text()))
+                self.assertTrue(handle)
+                owner.terminate()
+                owner.wait(timeout=5)
+                self.assertEqual(kernel.WaitForSingleObject(handle, 5000), 0)
+            finally:
+                if owner.poll() is None:
+                    owner.terminate()
+                    owner.wait(timeout=5)
+                if handle:
+                    kernel.CloseHandle(handle)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_broker_crash_fails_and_reaps_its_child(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            ready = Path(directory) / 'ready'
+            child = ('import ctypes,os,pathlib,sys,time; '
+                     'pathlib.Path(sys.argv[1]).write_text("ready"); '
+                     'h=ctypes.windll.kernel32.OpenProcess(1,False,os.getppid()); '
+                     'ctypes.windll.kernel32.TerminateProcess(h,42); time.sleep(20)')
+            with self.assertRaises((EOFError, supervision.SupervisionError)):
+                supervision._run_broker_experimental([sys.executable, '-c', child, str(ready)],
+                    timeout=5, cwd=None, env=dict(os.environ), stdout=out, stderr=err)
+            self.assertTrue(ready.exists())
     def test_invalid_timeout_refuses_before_launch(self):
         with self.assertRaises(ValueError):
             supervision.run([sys.executable, '-c', 'raise SystemExit(0)'], timeout=0)

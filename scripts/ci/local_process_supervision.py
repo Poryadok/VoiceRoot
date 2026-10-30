@@ -8,6 +8,7 @@ window is not crash-safe and the caller must not claim crash-safe execution.
 """
 import ctypes
 import math
+import json
 import os
 from pathlib import Path
 import shutil
@@ -15,6 +16,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
+import sys
 
 
 class SupervisionError(RuntimeError):
@@ -156,7 +159,7 @@ def _atomic_command_line(command, env):
     return executable, subprocess.list2cmdline(args)
 
 
-def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, stderr):
+def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, stderr, *, broker=False):
     """Experimental only: requires no concurrent handle-inheriting launchers.
 
     Python cannot prove the absence of unmanaged native threads; this must run
@@ -177,8 +180,8 @@ def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, s
         _fields_ = [('hProcess', wintypes.HANDLE), ('hThread', wintypes.HANDLE),
                     ('dwProcessId', wintypes.DWORD), ('dwThreadId', wintypes.DWORD)]
     class Process:
-        def __init__(self, handle):
-            self.handle, self.returncode = handle, None
+        def __init__(self, handle, pid):
+            self.handle, self.pid, self.returncode = handle, pid, None
         def wait(self, timeout):
             code = kernel.WaitForSingleObject(self.handle, min(int(timeout * 1000), 0xfffffffe))
             if code == 258:
@@ -192,7 +195,7 @@ def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, s
             return self.returncode
         def close(self):
             kernel.CloseHandle(self.handle)
-    if threading.active_count() != 1:
+    if not broker and threading.active_count() != 1:
         raise SupervisionError('atomic launcher requires an isolated single-threaded broker')
     exe, command_line = _atomic_command_line(command, env)
     kernel.GetCurrentProcess.restype = wintypes.HANDLE
@@ -208,44 +211,46 @@ def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, s
     kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
     kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
     size = ctypes.c_size_t()
-    kernel.InitializeProcThreadAttributeList(None, 2, 0, ctypes.byref(size))
+    attributes = 1 if broker else 2
+    kernel.InitializeProcThreadAttributeList(None, attributes, 0, ctypes.byref(size))
     if not size.value:
         raise SupervisionError('attribute list size unavailable')
     buffer = ctypes.create_string_buffer(size.value)
-    if not kernel.InitializeProcThreadAttributeList(buffer, 2, 0, ctypes.byref(size)):
+    if not kernel.InitializeProcThreadAttributeList(buffer, attributes, 0, ctypes.byref(size)):
         raise SupervisionError('attribute list initialization failed')
     handles = []
     try:
         with open(os.devnull, 'r+b') as null:
-            for file in (null, stdout or null, stderr or null):
+            for file in (() if broker else (null, stdout or null, stderr or null)):
                 handle = wintypes.HANDLE()
                 if not kernel.DuplicateHandle(kernel.GetCurrentProcess(), msvcrt.get_osfhandle(file.fileno()),
                                               kernel.GetCurrentProcess(), ctypes.byref(handle), 0, True, 2):
                     raise SupervisionError('stdio handle duplication failed')
                 handles.append(handle)
-            handle_list = (wintypes.HANDLE * 3)(*(h.value for h in handles))
+            handle_list = (wintypes.HANDLE * len(handles))(*(h.value for h in handles))
             job_list = (wintypes.HANDLE * 1)(job)
-            if not kernel.UpdateProcThreadAttribute(buffer, 0, 0x20002, handle_list, ctypes.sizeof(handle_list), None, None):
+            if not broker and not kernel.UpdateProcThreadAttribute(buffer, 0, 0x20002, handle_list, ctypes.sizeof(handle_list), None, None):
                 raise SupervisionError('stdio allowlist setup failed')
             if not kernel.UpdateProcThreadAttribute(buffer, 0, 0x2000d, job_list, ctypes.sizeof(job_list), None, None):
                 raise SupervisionError('atomic job assignment unavailable')
             startup = StartupInfoEx()
             startup.StartupInfo.cb = ctypes.sizeof(startup)
-            startup.StartupInfo.dwFlags = 0x100
-            startup.StartupInfo.hStdInput, startup.StartupInfo.hStdOutput, startup.StartupInfo.hStdError = (h.value for h in handles)
+            if not broker:
+                startup.StartupInfo.dwFlags = 0x100
+                startup.StartupInfo.hStdInput, startup.StartupInfo.hStdOutput, startup.StartupInfo.hStdError = (h.value for h in handles)
             startup.lpAttributeList = ctypes.cast(buffer, ctypes.c_void_p)
             args = ctypes.create_unicode_buffer(command_line)
             environment = None if env is None else ctypes.create_unicode_buffer(
                 '\0'.join(key + '=' + value for key, value in sorted(env.items(), key=lambda item: item[0].upper())) + '\0\0')
             info = ProcessInfo()
-            if not kernel.CreateProcessW(exe, args, None, None, True, 0x80000 | 0x400,
+            if not kernel.CreateProcessW(exe, args, None, None, not broker, 0x80000 | 0x400,
                                          environment, str(cwd) if cwd is not None else None,
                                          ctypes.byref(startup), ctypes.byref(info)):
                 raise SupervisionError('atomic process creation failed')
             try:
                 _atomic_created_hook(info)
                 kernel.CloseHandle(info.hThread)
-                return Process(info.hProcess)
+                return Process(info.hProcess, info.dwProcessId)
             except BaseException as original:
                 try:
                     _settle_windows(kernel, job, accounting, time.monotonic() + 10)
@@ -294,5 +299,152 @@ def _run_windows(command, timeout, cleanup_timeout, cwd, env, stdout, stderr, ca
         raise failure
     if process is not None:
         return _result(command, process, stdout, stderr, capture, check)
+
+
+def _broker_entry(address):
+    """Single-purpose broker: receives handles already duplicated into itself."""
+    import msvcrt
+    from multiprocessing.connection import PipeClient
+    connection = PipeClient(address)
+    try:
+        payload = json.loads(_pipe_io(connection.fileno(), None, time.monotonic() + 15, 32768))
+        if set(payload) != {'command', 'stdout', 'stderr', 'cwd'}:
+            raise ValueError('invalid broker request')
+        out = os.fdopen(msvcrt.open_osfhandle(payload['stdout'], os.O_WRONLY | os.O_BINARY), 'wb')
+        err = os.fdopen(msvcrt.open_osfhandle(payload['stderr'], os.O_WRONLY | os.O_BINARY), 'wb')
+        with out, err:
+            executable, line = _atomic_command_line(payload['command'], os.environ)
+            child = subprocess.Popen(line, executable=executable, cwd=payload['cwd'],
+                                     stdin=subprocess.DEVNULL, stdout=out, stderr=err, close_fds=True)
+            code = child.wait()
+        _pipe_io(connection.fileno(), json.dumps({'exit_code': code}).encode(), time.monotonic() + 15, 1024)
+    finally:
+        connection.close()
+
+
+def _duplicate_broker_output(kernel, process, file):
+    import msvcrt
+    from ctypes import wintypes
+    value = wintypes.HANDLE()
+    if not kernel.DuplicateHandle(kernel.GetCurrentProcess(), msvcrt.get_osfhandle(file.fileno()),
+                                  process.handle, ctypes.byref(value), 0, False, 2):
+        raise SupervisionError('cannot bind broker output handle')
+    return value.value
+
+
+def _pipe_io(handle, data, deadline, limit):
+    """Transfer one bounded named-pipe message with an overlapped deadline."""
+    import _winapi
+    if data is not None and (not isinstance(data, bytes) or not 0 < len(data) <= limit):
+        raise ValueError('invalid pipe message')
+    try:
+        ov, error = (_winapi.ReadFile(handle, limit, overlapped=True) if data is None else
+                     _winapi.WriteFile(handle, data, overlapped=True))
+        try:
+            if error == _winapi.ERROR_IO_PENDING:
+                remaining = max(0, int((deadline - time.monotonic()) * 1000))
+                if _winapi.WaitForMultipleObjects([ov.event], False, remaining) != _winapi.WAIT_OBJECT_0:
+                    raise subprocess.TimeoutExpired('broker pipe', max(0, remaining / 1000))
+            count, error = ov.GetOverlappedResult(False)
+            if error != 0 or count == 0 or (data is not None and count != len(data)):
+                raise SupervisionError('incomplete broker pipe message')
+            return bytes(ov.getbuffer()) if data is None else None
+        finally:
+            ov.cancel()
+    except OSError as error:
+        raise SupervisionError('broker pipe failed') from error
+
+
+def _require_broker_pid(kernel, pipe, expected):
+    from ctypes import wintypes
+    pid = wintypes.DWORD()
+    kernel.GetNamedPipeClientProcessId.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    if not kernel.GetNamedPipeClientProcessId(pipe, ctypes.byref(pid)) or pid.value != expected:
+        raise SupervisionError('broker pipe client identity mismatch')
+
+
+def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, cleanup_timeout=10):
+    """Experimental broker; public API stays closed pending independent review.
+
+    The first-instance random pipe checks the connected process PID before any
+    handle values are sent. Same-user processes able to debug or alter either
+    participant remain within the host trust boundary.
+    The deadline bounds pipe I/O and process waits; process creation, handle
+    duplication and filesystem operations have no independently proven bound.
+    """
+    import _winapi
+    from ctypes import wintypes
+    if os.name != 'nt' or stdout is None or stderr is None:
+        raise SupervisionError('Windows and explicit owned output files required')
+    if not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError('positive finite timeout required')
+    _atomic_command_line(command, env)
+    encoded = json.dumps({'command': list(map(str, command)), 'cwd': str(cwd) if cwd is not None else None,
+                          'stdout': 0, 'stderr': 0}).encode()
+    if len(encoded) > 16000:
+        raise ValueError('broker request too large')
+    address = r'\\.\pipe\voice-ci-' + uuid.uuid4().hex + uuid.uuid4().hex
+    pipe = _winapi.CreateNamedPipe(address, _winapi.PIPE_ACCESS_DUPLEX | _winapi.FILE_FLAG_OVERLAPPED |
+                                  _winapi.FILE_FLAG_FIRST_PIPE_INSTANCE,
+                                  _winapi.PIPE_TYPE_MESSAGE | _winapi.PIPE_READMODE_MESSAGE | _winapi.PIPE_WAIT,
+                                  1, 32768, 32768, 0, _winapi.NULL)
+    try:
+        kernel, job, accounting = _windows_job()
+    except BaseException:
+        _winapi.CloseHandle(pipe)
+        raise
+    process = None
+    failure = None
+    started = time.monotonic()
+    result = None
+    try:
+        process = _launch_atomic_windows(kernel, job, accounting,
+            [sys.executable, '-B', str(Path(__file__).resolve()), '--broker', address], None, env, None, None, broker=True)
+        ov = _winapi.ConnectNamedPipe(pipe, overlapped=True)
+        try:
+            remaining = max(0, int((timeout - (time.monotonic() - started)) * 1000))
+            if _winapi.WaitForMultipleObjects([ov.event], False, remaining) != _winapi.WAIT_OBJECT_0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            ov.GetOverlappedResult(True)
+        finally:
+            ov.cancel()
+        _require_broker_pid(kernel, pipe, process.pid)
+        remote = [_duplicate_broker_output(kernel, process, file) for file in (stdout, stderr)]
+        payload = {'command': list(map(str, command)), 'cwd': str(cwd) if cwd is not None else None,
+                   'stdout': remote[0], 'stderr': remote[1]}
+        deadline = started + timeout
+        _pipe_io(pipe, json.dumps(payload).encode(), deadline, 32768)
+        response = json.loads(_pipe_io(pipe, None, deadline, 1024))
+        if type(response) is not dict or set(response) != {'exit_code'} or type(response['exit_code']) is not int:
+            raise SupervisionError('invalid broker response')
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(command, timeout)
+        process.wait(remaining)
+        if process.returncode != 0:
+            raise SupervisionError('broker failed')
+        result = subprocess.CompletedProcess(command, response['exit_code'])
+    except BaseException as error:
+        failure = error
+    try:
+        _settle_windows(kernel, job, accounting, time.monotonic() + cleanup_timeout)
+        if process is not None:
+            process.wait(cleanup_timeout)
+    except BaseException as cleanup:
+        if failure is not None:
+            raise BaseExceptionGroup('broker execution and cleanup failed', [failure, cleanup])
+        raise SupervisionError('broker cleanup failed') from cleanup
+    finally:
+        _winapi.CloseHandle(pipe)
+        if process is not None:
+            process.close()
+        kernel.CloseHandle(job)
+    if failure is not None:
+        raise failure
+    return result
+
+
+if __name__ == '__main__' and len(sys.argv) == 3 and sys.argv[1] == '--broker':
+    _broker_entry(sys.argv[2])
 
 
