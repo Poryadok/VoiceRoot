@@ -35,7 +35,12 @@ class GoAcquisitionTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout=b'go version go1.26.2 test/amd64\n')
         if command[-1] == 'verify':
             return SimpleNamespace(returncode=self.verify_status, stdout=b'all modules verified\n', stderr=b'')
-        self.assertEqual(command[-3:], ['download', '-json', 'all'])
+        if command[-5:] == ['list', '-deps', '-test', '-json', './...']:
+            module = {'Path': 'example.test/dependency', 'Version': 'v1.0.0',
+                      'Sum': 'h1:zip', 'GoModSum': self.mod_sum}
+            kwargs['stdout'].write((json.dumps({'ImportPath': 'example.test/dependency', 'Module': module}) + '\n').encode())
+            return SimpleNamespace(returncode=0)
+        self.assertEqual(command[-3:], ['download', '-json', 'example.test/dependency@v1.0.0'])
         cache = Path(kwargs['env']['GOMODCACHE']) / 'cache/download/example.test/dependency/@v'
         cache.mkdir(parents=True)
         info, mod, zipfile = (cache / 'v1.0.0.info', cache / 'v1.0.0.mod', cache / 'v1.0.0.zip')
@@ -92,6 +97,13 @@ class GoAcquisitionTests(unittest.TestCase):
         (self.copy / 'go.work').write_text('go 1.26\n', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'workspace'):
             self.acquire()
+
+    def test_rejects_local_replacement_outside_snapshot(self):
+        item = {'ImportPath': 'example.test/foreign',
+                'Module': {'Path': 'example.test/foreign', 'Version': 'v1.0.0',
+                           'Replace': {'Path': '../foreign', 'Dir': str(self.base / 'foreign')}}}
+        with self.assertRaisesRegex(ValueError, 'outside captured source'):
+            dependencies._required_modules((json.dumps(item) + '\n').encode(), self.copy, set())
 
 
 if __name__ == '__main__':

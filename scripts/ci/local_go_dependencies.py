@@ -30,11 +30,52 @@ def _gomod_sum(path):
 def _json_stream(raw):
     text = raw.decode('utf-8')
     decoder = json.JSONDecoder()
-    while text.strip():
-        text = text.lstrip()
-        item, end = decoder.raw_decode(text)
+    position = 0
+    while position < len(text):
+        while position < len(text) and text[position].isspace():
+            position += 1
+        if position == len(text):
+            break
+        item, position = decoder.raw_decode(text, position)
         yield item
-        text = text[end:]
+
+
+def _required_modules(raw, source_copy, sums):
+    required, count = {}, 0
+    for package in _json_stream(raw):
+        count += 1
+        if (not isinstance(package, dict) or package.get('Error') or package.get('DepsErrors')
+                or package.get('Incomplete') or not isinstance(package.get('ImportPath'), str)):
+            raise ValueError('invalid Go dependency package inventory')
+        module = package.get('Module')
+        if module is None:
+            if not package.get('Standard'):
+                raise ValueError('Go dependency package has no module')
+            continue
+        if not isinstance(module, dict):
+            raise ValueError('invalid Go dependency module')
+        module = module.get('Replace') or module
+        if not isinstance(module, dict):
+            raise ValueError('invalid Go module replacement')
+        if not module.get('Version'):
+            directory = module.get('Dir')
+            if not isinstance(directory, str) or source_copy not in Path(directory).resolve().parents:
+                raise ValueError('local Go module lies outside captured source')
+            continue
+        name, version = module.get('Path'), module.get('Version')
+        if (not isinstance(name, str) or not name or name.startswith('-') or '@' in name or
+                any(char.isspace() for char in name) or not isinstance(version, str) or
+                not version.startswith('v') or '@' in version or any(char.isspace() for char in version)):
+            raise ValueError('invalid Go dependency identity')
+        value = (module.get('Sum'), module.get('GoModSum'))
+        if ((name, version, value[0]) not in sums or (name, version + '/go.mod', value[1]) not in sums):
+            raise ValueError('required Go module is not bound to go.sum')
+        if (name, version) in required and required[(name, version)] != value:
+            raise ValueError('inconsistent Go module identity')
+        required[(name, version)] = value
+    if not count:
+        raise ValueError('empty Go dependency package inventory')
+    return required
 
 
 def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
@@ -70,15 +111,37 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     environment.update(GOENV='off', GOWORK='off', GOFLAGS='-mod=readonly', GOTOOLCHAIN='local',
                        GOPROXY='https://proxy.golang.org', GOSUMDB='sum.golang.org', GOPRIVATE='',
                        GONOSUMDB='', GONOPROXY='', GOMODCACHE=str(cache), GOPATH=str(output / 'gopath'),
-                       GOCACHE=str(output / 'build-cache'))
+                       GOCACHE=str(output / 'build-cache'), GOOS='linux', GOARCH='amd64', CGO_ENABLED='0')
     version = subprocess.run([str(executable), 'version'], env=environment, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, timeout=30, check=True).stdout.decode('utf-8').strip()
-    command = [str(executable), 'mod', 'download', '-json', 'all']
-    with (output / 'download.json').open('xb') as stdout, (output / 'download.stderr').open('xb') as stderr:
+    command = [str(executable), 'list', '-deps', '-test', '-json', './...']
+    with (output / 'dependencies.json').open('xb') as stdout, (output / 'dependencies.stderr').open('xb') as stderr:
         result = subprocess.run(command, cwd=module, env=environment, stdout=stdout, stderr=stderr,
                                 timeout=1800, check=False)
     if result.returncode != 0:
-        raise ValueError('Go dependency acquisition failed')
+        raise ValueError('Go dependency package discovery failed')
+    snapshot.verify_materialized(root, source, source_copy)
+    if snapshot.capture(root, source['head']) != source:
+        raise ValueError('source changed during Go dependency discovery')
+    sum_path = module / 'go.sum'
+    sums = set()
+    if sum_path.exists():
+        for line in sum_path.read_text(encoding='utf-8').splitlines():
+            parts = line.split()
+            if len(parts) != 3:
+                raise ValueError('invalid go.sum entry')
+            sums.add(tuple(parts))
+    required = _required_modules((output / 'dependencies.json').read_bytes(), source_copy, sums)
+    module_arguments = [name + '@' + version for name, version in sorted(required)]
+    commands = [command]
+    with (output / 'download.json').open('xb') as stdout, (output / 'download.stderr').open('xb') as stderr:
+        for offset in range(0, len(module_arguments), 50):
+            download = [str(executable), 'mod', 'download', '-json', *module_arguments[offset:offset + 50]]
+            commands.append(download)
+            result = subprocess.run(download, cwd=module, env=environment, stdout=stdout, stderr=stderr,
+                                    timeout=1800, check=False)
+            if result.returncode != 0:
+                raise ValueError('Go dependency acquisition failed')
     verify = subprocess.run([str(executable), 'mod', 'verify'], cwd=module, env=environment,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800, check=False)
     if verify.returncode != 0 or verify.stdout.strip() != b'all modules verified':
@@ -88,14 +151,6 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed during dependency acquisition')
-    sum_path = module / 'go.sum'
-    sums = set()
-    if sum_path.exists():
-        for line in sum_path.read_text(encoding='utf-8').splitlines():
-            parts = line.split()
-            if len(parts) != 3:
-                raise ValueError('invalid go.sum entry')
-            sums.add(tuple(parts))
     entries, versions, mod_sums, zip_sums = {}, set(), {}, {}
     download_root = (cache / 'cache' / 'download').resolve()
     for item in _json_stream((output / 'download.json').read_bytes()):
@@ -104,6 +159,8 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
         module_name, version_name = item.get('Path'), item.get('Version')
         if (not isinstance(module_name, str) or not isinstance(version_name, str) or
                 (module_name, version_name) in versions or
+                (module_name, version_name) not in required or
+                required[(module_name, version_name)] != (item.get('Sum'), item.get('GoModSum')) or
                 (module_name, version_name, item.get('Sum')) not in sums or
                 (module_name, version_name + '/go.mod', item.get('GoModSum')) not in sums):
             raise ValueError('downloaded Go module is not bound to go.sum')
@@ -123,6 +180,8 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
             if relative in entries:
                 raise ValueError('duplicate Go module cache artifact')
             entries[relative] = path
+    if versions != set(required):
+        raise ValueError('Go dependency download inventory is incomplete')
     archive_path = output / 'download-cache.tar'
     with archive_path.open('xb') as raw, tarfile.open(fileobj=raw, mode='w') as tar:
         for relative, path in sorted(entries.items()):
@@ -151,6 +210,7 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source or _sha256(executable) != toolchain_digest:
         raise ValueError('source or Go toolchain changed during cache archival')
-    return {'status': 'incomplete', 'command': command, 'toolchain_version': version,
+    return {'status': 'incomplete', 'commands': commands, 'toolchain_version': version,
             'toolchain_sha256': toolchain_digest, 'archive_sha256': _sha256(archive_path),
-            'module_count': len(versions), 'source': source}
+            'module_count': len(versions), 'module_dir': module_dir,
+            'target': {'goos': 'linux', 'goarch': 'amd64', 'cgo_enabled': False}, 'source': source}

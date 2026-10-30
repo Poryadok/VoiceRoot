@@ -1,8 +1,10 @@
 """Source transfer into an owned Go runner must fail closed on drift."""
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
+import tarfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -32,6 +34,64 @@ class FakeOwner:
 
 
 class TransferTests(unittest.TestCase):
+    def test_dependency_transfer_checks_versions_and_archive_before_extraction(self):
+        source = {'head': 'a' * 40}
+        class DependencyOwner:
+            def __init__(self):
+                self.commands, self.payload = [], b''
+            def execute(self, name, command, stdout, stderr, timeout, stdin=None):
+                self.commands.append(command)
+                if command == ['go', 'version']:
+                    stdout.write(b'go version go1.26.10 linux/amd64\n')
+                if stdin is not None:
+                    self.payload = stdin.read()
+                if command[0] == 'sha256sum':
+                    stdout.write((hashlib.sha256(self.payload).hexdigest() + '  /workspace/dependencies.tar\n').encode())
+                return 0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            archive = Path(directory) / 'cache.tar'
+            with tarfile.open(archive, 'w') as tar:
+                info = tarfile.TarInfo('cache/download/example.test/pkg/@v/v1.0.0.mod')
+                info.size = 3
+                tar.addfile(info, io.BytesIO(b'mod'))
+            acquisition = {'status': 'incomplete', 'source': source, 'module_dir': 'src/backend',
+                           'target': {'goos': 'linux', 'goarch': 'amd64', 'cgo_enabled': False},
+                           'toolchain_version': 'go version go1.26.10 windows/amd64',
+                           'archive_sha256': hashlib.sha256(archive.read_bytes()).hexdigest()}
+            owner = DependencyOwner()
+            with patch.object(runner.snapshot, 'capture', return_value=source), \
+                 patch.object(runner.snapshot, 'verify_materialized'), \
+                 patch.object(runner, '_verify_workspace'), patch.object(runner, '_verify_modules'):
+                result = runner.transfer_dependencies(owner, 'owned', root, source, root / 'copy',
+                                                       'b' * 64, acquisition, archive)
+            self.assertEqual(result['status'], 'incomplete')
+            self.assertEqual(owner.payload, archive.read_bytes())
+            self.assertLess(next(i for i, cmd in enumerate(owner.commands) if cmd[0] == 'sha256sum'),
+                            next(i for i, cmd in enumerate(owner.commands) if cmd[:2] == ['tar', '-xf']))
+            acquisition['toolchain_version'] = 'go version go1.26.2 windows/amd64'
+            owner = DependencyOwner()
+            with patch.object(runner.snapshot, 'capture', return_value=source), \
+                 patch.object(runner.snapshot, 'verify_materialized'), patch.object(runner, '_verify_workspace'):
+                with self.assertRaisesRegex(ValueError, 'toolchains differ'):
+                    runner.transfer_dependencies(owner, 'owned', root, source, root / 'copy',
+                                                 'b' * 64, acquisition, archive)
+            self.assertFalse(any(cmd[0] == 'tar' for cmd in owner.commands))
+            with tarfile.open(archive, 'w') as tar:
+                info = tarfile.TarInfo('cache/download/../../escape')
+                info.size = 3
+                tar.addfile(info, io.BytesIO(b'bad'))
+            acquisition['archive_sha256'] = hashlib.sha256(archive.read_bytes()).hexdigest()
+            acquisition['toolchain_version'] = 'go version go1.26.10 windows/amd64'
+            owner = DependencyOwner()
+            with patch.object(runner.snapshot, 'capture', return_value=source), \
+                 patch.object(runner.snapshot, 'verify_materialized'), patch.object(runner, '_verify_workspace'):
+                with self.assertRaisesRegex(ValueError, 'archive entry'):
+                    runner.transfer_dependencies(owner, 'owned', root, source, root / 'copy',
+                                                 'b' * 64, acquisition, archive)
+            self.assertFalse(any(cmd[0] == 'tar' for cmd in owner.commands))
+
     def test_go_discovery_covers_packages_with_and_without_tests(self):
         source = {'head': 'a' * 40}
         module = {'Dir': '/workspace/source/src/backend', 'Path': 'example.test/module', 'Main': True}

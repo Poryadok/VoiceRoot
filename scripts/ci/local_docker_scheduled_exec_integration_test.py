@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / 'scripts/ci'))
 from local_docker_owned import DockerCLI, OwnedRun
 from local_docker_scheduled import ScheduledRun
 import local_go_execution
+import local_go_dependencies
 import local_source_snapshot
 
 
@@ -116,9 +117,14 @@ def main():
             git('config', 'user.name', 'CI Fixture')
             git('config', 'user.email', 'ci-fixture@example.invalid')
             (fixture / 'module').mkdir()
-            (fixture / 'module/go.mod').write_text('module example.test/module\n\ngo 1.26\n', encoding='utf-8')
+            (fixture / 'module/go.mod').write_text('module example.test/module\n\ngo 1.26\n\n'
+                                                   'require github.com/google/uuid v1.6.0\n', encoding='utf-8')
+            (fixture / 'module/go.sum').write_text(
+                'github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\n'
+                'github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=\n', encoding='utf-8')
             (fixture / 'module/probe_test.go').write_text(
-                'package probe\nimport "testing"\nfunc TestOwnedGoDiagnostic(t *testing.T) {}\n', encoding='utf-8')
+                'package probe\nimport ("testing"; "github.com/google/uuid")\n'
+                'func TestOwnedGoDiagnostic(t *testing.T) { if uuid.New() == uuid.Nil { t.Fatal("nil") } }\n', encoding='utf-8')
             (fixture / 'module/no_tests').mkdir()
             (fixture / 'module/no_tests/probe.go').write_text('package no_tests\n', encoding='utf-8')
             git('add', '.')
@@ -127,8 +133,12 @@ def main():
             (fixture / 'module/dirty.txt').write_bytes(b'captured dirty source\r\n')
             source = local_source_snapshot.capture(fixture, head)
             source_copy = local_source_snapshot.materialize(fixture, source, base / 'source-copy')
+            acquisition = local_go_dependencies.acquire(fixture, source, source_copy, 'module',
+                base / 'go-dependencies', os.environ.get('VOICE_LOCAL_GO_BINARY', 'go'))
             digest = local_go_execution.transfer_source(other.run, other_name, fixture, source, source_copy,
                                                         base / 'source.tar')
+            local_go_execution.transfer_dependencies(other.run, other_name, fixture, source, source_copy, digest,
+                acquisition, base / 'go-dependencies/download-cache.tar')
             inventory = local_go_execution.discover_packages(other.run, other_name, fixture, source, source_copy,
                 digest, 'module', base / 'go-discovery')
             if (inventory['packages_with_tests'] != ['example.test/module'] or

@@ -86,6 +86,7 @@ ci_scripts:
 local_docker_isolation:
   - scripts/ci/local_source_snapshot.py
   - scripts/ci/local_go_execution.py
+  - scripts/ci/local_go_dependencies.py
   - scripts/ci/local_docker_owned.py
   - scripts/ci/local_docker_owned_test.py
   - scripts/ci/local_docker_owned_integration_test.py
