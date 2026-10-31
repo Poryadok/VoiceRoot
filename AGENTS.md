@@ -89,25 +89,15 @@ canon and `.cursor/` as the Cursor adapter layer.
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-The local CLI is `C:\\Users\\Sergey\\AppData\\Roaming\\Python\\Python312\\Scripts\\graphify.exe`; use that path when `graphify` is not on `PATH`.
 
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
 Rules:
-- For every codebase question and before every code edit, call
-  `mcp__codegraph__codegraph_explore` first. It is a deferred Codex tool, so
-  call it directly even when it is absent from the initial tool manifest; do
-  not inspect `ALL_TOOLS`, run a CLI probe, or use raw search first. Pass the
-  concrete symbol, file path, or question and `projectPath = "D:\\Git\\Voice"`.
-- If that direct MCP call returns a tool-not-found error, use
-  `rtk codegraph explore "<question or symbols>" --path .` for the same
-  question. Do not make any other availability checks.
-- Use Graphify after CodeGraph only for broad cross-language or documentation
-  context: run `graphify query "<question>"`; use `graphify path "<A>" "<B>"`
-  for relationships and `graphify explain "<concept>"` for focused concepts.
-  These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or
-  raw grep output.
+- For every codebase question and before every code edit, call `mcp__codegraph__codegraph_explore` first. It may be deferred, so call it directly even when absent from the initial tool manifest; do not inspect `ALL_TOOLS`, run a CLI probe, or use raw search first. Pass the concrete symbol, file path, or question and `projectPath = "D:\\Git\\Voice"`.
+- If that direct call returns tool-not-found, use `rtk codegraph explore "<question or symbols>" --path .` for the same question. Do not make any other availability checks.
+- After CodeGraph, use Graphify for broad cross-language or documentation context. When `graphify-out/graph.json` exists, run `graphify query "<question>"` before raw grep/search/source reads; include that rule in subagent prompts that explore code. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
