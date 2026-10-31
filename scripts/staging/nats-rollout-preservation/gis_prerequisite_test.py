@@ -631,6 +631,8 @@ class Tests(unittest.TestCase):
         self.assertEqual(state['gis_first_install_rollback']['phase'],'ROLLED_BACK')
         self.assertTrue(state['gis_first_install_rollback']['remaining_database_prerequisite'])
 
+    # Synthetic admission isolates GIS callbacks; real admission is tested separately.
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_root_authorize_apply_finish_and_failure_rollback_callbacks(self):
         import transaction
         import apply

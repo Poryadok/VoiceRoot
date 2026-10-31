@@ -111,6 +111,8 @@ class FrontendCreateOnlyContract(unittest.TestCase):
                 {'gis_first_install': {'fixture': True}}, Mock(), Mock(), Mock())
         kube.run.assert_not_called()
 
+    # Synthetic admission isolates the frontend transaction; real admission is tested separately.
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_authorize_frontend_create_failure_never_publishes_authorization(self):
         real_datetime = dt.datetime
         now = real_datetime.now(dt.timezone.utc)

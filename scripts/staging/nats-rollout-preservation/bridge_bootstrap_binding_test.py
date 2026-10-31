@@ -51,7 +51,10 @@ class ActorBootstrapBindingTest(unittest.TestCase):
                     bridge_root.record_source_authority(session,{'source_sha':'c'*40},{'run_id':7})
                 self.assertTrue((installed/'source-authority'/('a'*12+'.json')).is_file())
 
-    def test_prepare_records_only_successful_dispatcher_and_source_outputs(self):
+    # Source capture unit coverage assumes admission; the actual gate is tested separately.
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
+    @patch('staging_prerequisites.run_prepare', return_value=None)
+    def test_prepare_records_only_successful_dispatcher_and_source_outputs(self, _prepare):
         import source_plan
         class StopAfterCapture(Exception):pass
         for fault in ('dispatcher','source','session','none'):
