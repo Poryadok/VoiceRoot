@@ -157,8 +157,8 @@ def capture_cohort_authorities(actions,request,approved,workspace,stage,contract
     if 'story' in names:
         composition=_cohort_story_composition(actions,request,approved,workspace)
         actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,
-            story_composition=composition)
-    else:actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml)
+            story_composition=composition,installation=actions.installation)
+    else:actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,installation=actions.installation)
     try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
     except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
     previous=private_json(guard.ROOT/'bootstrap-enrollment.json')
@@ -167,7 +167,7 @@ def capture_cohort_authorities(actions,request,approved,workspace,stage,contract
         or enrollment.get('previous_enrollment')!=previous
         or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous)):
         raise Blocked('enrolled_bootstrap_selection_refused')
-    nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml)
+    nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml,installation=actions.installation)
     session.check()
     return {'schema':'voice-staging-cohort-preflight-v1','operation':session.operation,
             'services':names,'actor':actor,'nats':nats,'enrollment':enrollment,'contract':contract}
@@ -660,17 +660,17 @@ class Actions:
                 if renderer_authority['descriptor']['images']['target']!=renderer_image:
                     raise Blocked('staging_prerequisites_renderer_changed')
             else:
-                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
+                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image,installation=self.installation)
         import actor_root
         if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
             raise Blocked('staging_prerequisites_capture_changed')
         if cohort_ref is None:
-            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,installation=self.installation)
         else:
             preserved_preflight=staging_cohort_preservation.load_preflight(self.tt_session)
             names=preserved_preflight['services'];actor_authority=preserved_preflight['actor']
             composition=_cohort_story_composition(self,request,approved,workspace)
-            refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,story_composition=composition)
+            refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,story_composition=composition,installation=self.installation)
             stores=staging_cohort_preservation._read(staging_cohort_preservation._base(self.tt_session)/'stores.json')
             current_secret=kube.get('secret','voice-app-secrets')
             staging_cohort_preservation._app_successor(self.tt_session,stores['app_before'],current_secret)
@@ -698,7 +698,7 @@ class Actions:
                     or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous_enrollment)):
                     raise Blocked('enrolled_bootstrap_selection_refused')
                 import nats_root_plan
-                nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
+                nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         self._report('nats-preflight','COMPLETE')
         realtime_receipt=None
@@ -712,17 +712,17 @@ class Actions:
             if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
             if realtime_receipt is not None:
                 schema=realtime_receipt.get('schema') if isinstance(realtime_receipt,dict) else None
-                if schema=='voice-staging-realtime-bootstrap-receipt-v1':
+                if schema in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2'):
                     if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     bootstrap_plan=realtime_bootstrap.load_plan(self.tt_session)
                     refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,
-                        **({'story_composition':_cohort_story_composition(self,request,approved,workspace)} if cohort_ref is not None else {}))
+                        installation=self.installation,**({'story_composition':_cohort_story_composition(self,request,approved,workspace)} if cohort_ref is not None else {}))
                     if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,bootstrap_plan['secret'],realtime_receipt['secret'])
-                elif schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
+                elif schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v3','voice-staging-realtime-bootstrap-existing-v4'):
                     if realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,
-                        **({'story_composition':_cohort_story_composition(self,request,approved,workspace)} if cohort_ref is not None else {}))
+                        installation=self.installation,**({'story_composition':_cohort_story_composition(self,request,approved,workspace)} if cohort_ref is not None else {}))
                     if refreshed!=actor_authority or realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:
                         raise Blocked('realtime_bootstrap_actor_changed')
                 else:raise Blocked('realtime_bootstrap_receipt_invalid')
@@ -735,6 +735,7 @@ class Actions:
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
+        if getattr(self,'tt_session',None) is not None:value['target']['installation_sha256']=self.installation.sha256
         if realtime_receipt is not None:
             value['target']['realtime_bootstrap_sha256']=transaction.canonical(realtime_receipt)
         if prerequisites is not None:value['target']['prerequisites_sha256']=transaction.canonical(prerequisites)
@@ -749,10 +750,10 @@ class Actions:
             if lifecycle is not None:source_authority.revalidate_ci(request['token'],approved)
             if repair is not None:
                 provisional.verify_runtime(repair,kube,self.binding,private_json(INSTALLED/'active-release.json'),require_healthy=False)
-            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority)
-            if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority)
+            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority,installation=self.installation)
+            if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority,installation=self.installation)
             if nats_authority is not None:
-                current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
+                current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
                 # Business records may advance, but config/consumer intent and
                 # dynamic subject ownership cannot change between plan/fence.
                 if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')
@@ -968,7 +969,7 @@ class Actions:
             self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None))
             import actor_root
             actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
-                transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
+                transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'],installation=self.installation)
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             if upload_record is not None:
@@ -1244,7 +1245,7 @@ class Actions:
         workspace=INSTALLED/'sources'/state['operation']
         def validate(runtime,broker,tree,row,manifest,records):
             actual=nats_root_plan.closed_copy_preflight(Kube(),workspace,state['bootstrap_enrollment'],
-                state['contract'],compiler.decode_yaml,runtime,broker,tree)
+                state['contract'],compiler.decode_yaml,runtime,broker,tree,installation=self.installation)
             if (actual['plan']!=state['nats_contract'] or actual['binding']!=state['nats_contract_binding']
                 or actual['scripts']!=state['nats_target_scripts']):
                 raise Blocked('expired_recovery_original_nats_authority_changed')

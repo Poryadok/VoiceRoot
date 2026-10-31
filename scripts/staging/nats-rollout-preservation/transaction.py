@@ -490,7 +490,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             if (preflight['nats']!=nats_authority or preflight['services']!=list(actor_services or [])
                 or preflight['contract']!=contract):raise Blocked('cohort_preserved_authority_changed')
             actor_root.revalidate(kube,guard.ROOT/'installed'/'sources'/operation,code.parent,code_capture,
-                                  stage,actor_services,compiler.decode_yaml,actor_authority)
+                                  stage,actor_services,compiler.decode_yaml,actor_authority,installation=resource_session.installation)
             staging_cohort_preservation.revalidate_paused(resource_session)
         if before_fence is not None:before_fence()
         if gis_binding is not None:
@@ -750,7 +750,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
             state['phase']='RENDERER_TEMPLATE';save(Path(base)/'checkpoint.json',state)
-            renderer_root.apply_paused(stage,state['renderer_authority'])
+            renderer_root.apply_paused(stage,state['renderer_authority'],installation=getattr(resource_session,'installation',None))
             state['renderer_applied']=True;save(Path(base)/'checkpoint.json',state)
         current_deadline()
         stage.prepared()

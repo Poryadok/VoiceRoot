@@ -1209,7 +1209,7 @@ def _closed_copy_authority(session,runtime,broker,tree):
     frozen=load_preflight(session);revalidate_paused(session)
     current=nats_root_plan.closed_copy_preflight(Kube(),
         guard.ROOT/'installed'/'sources'/session.operation,frozen['enrollment'],
-        frozen['contract'],compiler.decode_yaml,runtime,broker,tree)
+        frozen['contract'],compiler.decode_yaml,runtime,broker,tree,installation=session.installation)
     keys={'plan','binding','scripts','live_census_sha256'}
     if (set(current)!=keys or set(frozen['nats'])!=keys
         or any(current[key]!=frozen['nats'][key] for key in keys-{'live_census_sha256'})):

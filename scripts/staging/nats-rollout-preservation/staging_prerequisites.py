@@ -853,7 +853,7 @@ def prepare_inputs(actions,request,approved,execution,workspace):
     _private_write(base/'baseline.json',_bytes(baseline))
     renderer=None
     if request['mode']=='full':
-        renderer=renderer_root.prove(kube,stage,approved['source_sha'],approved['images']['nats-hub-config-renderer'])
+        renderer=renderer_root.prove(kube,stage,approved['source_sha'],approved['images']['nats-hub-config-renderer'],installation=session.installation)
         _private_write(base/'renderer-authority.json',_bytes(renderer))
     issuers=_qualify_issuer_inputs(session,source_capture_sha256,namespace_uid,kube)
     auxiliary=_collect_auxiliary(session,approved,workspace,source_capture_sha256,kube)
@@ -1187,7 +1187,7 @@ def load_renderer(session,stage):
     if wanted is None:return None
     authority=_json(_read_private(_base(session)/'renderer-authority.json',limit=8<<20))
     if digest(authority)!=wanted:raise Blocked('staging_prerequisites_renderer_changed')
-    renderer_root.revalidate(stage.kube,stage,authority)
+    renderer_root.revalidate(stage.kube,stage,authority,installation=session.installation)
     session.check()
     return authority
 
