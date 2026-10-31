@@ -10,11 +10,13 @@ import re
 import subprocess
 
 import affected_check_plan
+import local_ci_routing
 import local_current_diff
 from local_docker_owned import OwnershipError
 import local_flutter_execution
 import local_go_plan
 import local_proto_execution
+from local_process_supervision import SupervisionError
 import local_source_snapshot
 
 
@@ -29,6 +31,15 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if 'ci-script-tests' in plan['checks']:
+            diagnostic = local_ci_routing.run(root, plan['source'], output / 'ci-routing')
+            if (diagnostic.get('schema') != 'voice-local-ci-routing-diagnostic-v1' or
+                    diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
+                    not isinstance(diagnostic.get('commands'), list) or
+                    [(row.get('name'), row.get('tests')) for row in diagnostic['commands'] if isinstance(row, dict)] !=
+                    [('gate', len(local_ci_routing.GATE_CASES)), ('router', len(local_ci_routing.ROUTER_CASES))]):
+                raise ValueError('CI routing diagnostic did not match the planned source and inventory')
+            report['ci_routing_report'] = 'ci-routing/diagnostic.json'
         if 'current-diff-contract' in plan['checks']:
             diagnostic = local_current_diff.run(root, plan['source'], base, output / 'current-diff')
             if (diagnostic.get('status') != 'diagnostic' or diagnostic.get('source') != plan['source'] or
@@ -112,7 +123,7 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                 report['checks'][name] = {'status': 'diagnostic', 'report': 'flutter/diagnostic.json'}
         if local_source_snapshot.capture(root, head) != plan['source']:
             raise ValueError('source changed during local preflight')
-    except (OSError, ValueError, KeyError, TypeError, OwnershipError,
+    except (OSError, ValueError, KeyError, TypeError, OwnershipError, SupervisionError,
             subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         report['status'] = 'failed'
         if report['plan'] is None and isinstance(error, subprocess.CalledProcessError) and error.stderr:

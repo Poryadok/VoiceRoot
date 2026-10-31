@@ -10,6 +10,27 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def test_ci_routing_subset_does_not_satisfy_script_matrix(self):
+        plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
+        diagnostic = {'schema': 'voice-local-ci-routing-diagnostic-v1', 'status': 'incomplete',
+                      'source': self.source, 'commands': [{'name': 'gate', 'tests': 8}, {'name': 'router', 'tests': 4}]}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_ci_routing, 'run', return_value=diagnostic) as route:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        route.assert_called_once_with(self.root, self.source, self.output / 'ci-routing')
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['ci-script-tests']['status'], 'not_run')
+        self.assertEqual(report['ci_routing_report'], 'ci-routing/diagnostic.json')
+
+    def test_ci_routing_supervision_refusal_fails_closed(self):
+        plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_ci_routing, 'run', side_effect=local_preflight.SupervisionError('unsupported')):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertEqual(report['checks']['ci-script-tests']['status'], 'not_run')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

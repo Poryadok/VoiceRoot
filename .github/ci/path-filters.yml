@@ -47,6 +47,8 @@ ci_global:
   - '!scripts/ci/local_source_snapshot_test.py'
   - '!scripts/ci/local_current_diff.py'
   - '!scripts/ci/local_current_diff_test.py'
+  - '!scripts/ci/local_ci_routing.py'
+  - '!scripts/ci/local_ci_routing_test.py'
   - '!scripts/ci/local_go_execution.py'
   - '!scripts/ci/local_go_execution_test.py'
   - '!scripts/ci/local_chat_private.py'
