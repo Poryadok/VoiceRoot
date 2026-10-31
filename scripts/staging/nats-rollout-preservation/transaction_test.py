@@ -65,6 +65,8 @@ class TransactionFailureTest(unittest.TestCase):
             else:row['input_target']['changed_services']=[fault]
             with self.subTest(fault=fault),self.assertRaisesRegex(transaction.Blocked,'backend_candidate_unproved'):transaction.rollback_package(row)
 
+    # Synthetic admission isolates downstream sequencing; gate tests exercise real denial.
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_bot_completed_version_renderer_failure_retry_does_not_run_jobs_twice(self):
         plan=[{'database':'bot','files':{'000004_slash_interaction_outbox.up.sql':'trusted'}}]
         before={'uid':'secret','resourceVersion':'1','bot_prerequisite':{'authority':{'pg':'same'},'observation':{'database':'bot_db','version':3,'dirty':False,'duplicate_token_groups':0}}}
@@ -99,6 +101,7 @@ class TransactionFailureTest(unittest.TestCase):
             else:row.pop('renderer_authority')
             with self.subTest(change=change),self.assertRaises(transaction.Blocked):transaction.rollback_services(row)
 
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_renderer_retry_reproves_postmigration_cut_without_reexecuting_jobs(self):
         for failed in (False,True):
             with self.subTest(renderer_failed=failed):
@@ -159,6 +162,7 @@ class TransactionFailureTest(unittest.TestCase):
         self.assertEqual(saved[-1]['service_actor_services'],['social'])
         self.assertEqual(saved[-1]['phase'],'FAILED_READ_ONLY')
 
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_normal_space_gate_orders_offnode_migration_postcondition_before_prepared(self):
         import space_migration
         before={'database':'space_db','version':15,'dirty':False,'allow_guests_true':2,
@@ -247,6 +251,7 @@ class TransactionFailureTest(unittest.TestCase):
         migration.assert_called_once();self.assertEqual(order,['nats-after-offnode','cm-after-proof','db-migrations'])
         stage.restart.assert_not_called()
 
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_bot_closed_preflight_failure_blocks_nats_and_database_mutations(self):
         sql='trusted-sql';plan=[{'database':'bot','files':{'000004_slash_interaction_outbox.up.sql':sql}}]
         state={'phase':'AWAITING_OFF_NODE','status':'WAITING','operation':'123456abcdef','events':[],
