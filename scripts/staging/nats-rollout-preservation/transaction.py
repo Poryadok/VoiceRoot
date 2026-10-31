@@ -449,7 +449,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             state['space_preflight']['migration_plan_sha256']=target['migration_sha256']
         try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
         except FileNotFoundError:enrollment=None
-        state['provenance']=(capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
+        state['provenance']=(capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment,installation=getattr(resource_session,'installation',None))
                              if preserved is None else copy.deepcopy(preserved['provenance']))
         if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
         if nats_authority is not None:

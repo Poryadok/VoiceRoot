@@ -14,6 +14,15 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_capture_inputs_passes_expected_authority_before_secret_access(self):
+        import root_main, bootstrap_selection
+        installation=claim.production_installation();kube=Mock()
+        with patch.object(bootstrap_selection,'select',side_effect=RuntimeError('sentinel')) as select:
+            with self.assertRaisesRegex(RuntimeError,'sentinel'):
+                root_main.capture_inputs(kube,Path('/unused'),{},'r20261031',bootstrap_enrollment={'fixture':True},installation=installation)
+        select.assert_called_once_with(kube,{'fixture':True},'r20261031',installation=installation)
+        kube.get.assert_not_called()
+
     def test_historical_checkpoint_requires_parent_child_version_match(self):
         import realtime_bootstrap as realtime
         receipt={'schema':'receipt'};plan={'schema':'unparented'}
