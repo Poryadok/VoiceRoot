@@ -22,10 +22,12 @@ class HistoricalVerifierTests(unittest.TestCase):
             'binding':{'credential':'unchanged'},'mounts':{'story':{'uid':'original'}},
             'proofs':{'story':{'verifier_sha256':self.old_sha,'credential_sha256':'a'*64,
                 'effective_permissions_sha256':'b'*64,'signed_chain_verified':True}},
-            'source_acl_sha256':'c'*64,'story_schema':{'version':4},
+            'generation':'r20260930a4','source_acl_sha256':'c'*64,'story_schema':{'version':4},
             'compatible_story_candidate':{'image':'immutable content','root_witness_authority':{'bound':'original'}}}
         self.bind_hash(self.previous)
         self.current=copy.deepcopy(self.previous)
+        from resource_claim import production_installation
+        self.current.update(schema='voice-nats-service-actor-authority-v2',installation_sha256=production_installation().sha256)
         self.current['proofs']['story']['verifier_sha256']=self.new_sha;self.bind_hash(self.current)
     def bind_hash(self,row):
         row['compatible_story_candidate']['actor_sha256']=root.hash_bytes(json.dumps(
@@ -37,7 +39,7 @@ class HistoricalVerifierTests(unittest.TestCase):
             root.revalidate('kube','source','CURRENT',{'nats-rollout-preservation/bootstrap-renewer':self.new_sha},
                 'stage',['story'],'decoder',previous or self.previous,historical_code=Path('/preserved-v9'))
             fresh.assert_called_once_with('kube','source','CURRENT',
-                {'nats-rollout-preservation/bootstrap-renewer':self.new_sha},'stage',['story'],'decoder')
+                {'nats-rollout-preservation/bootstrap-renewer':self.new_sha},'stage',['story'],'decoder',installation=__import__('resource_claim').production_installation())
     def test_fresh_current_verification_accepts_only_bound_helper_provenance_delta(self):
         before=copy.deepcopy(self.previous);current=copy.deepcopy(self.current)
         self.run_actual(current)
