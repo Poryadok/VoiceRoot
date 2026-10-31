@@ -37,6 +37,17 @@ def fixture():
 
 
 class DomainTests(unittest.TestCase):
+    def test_initial_enrollment_normalization_versions(self):
+        from nats_contract_plan import V3_DECLARATIONS,DECLARATIONS,V6_DECLARATIONS
+        for declarations,schema in ((V3_DECLARATIONS,None),(DECLARATIONS,'voice-bootstrap-auth-v4'),(V6_DECLARATIONS,'voice-bootstrap-auth-v5')):
+            domain,receipt,kube=fixture()
+            rows=[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)} for stream,config in declarations]
+            receipt['auth_proof'].update(normalized_consumer=rows[0]['config'],normalized_consumer_sha256=digest(rows[0]['config']),
+                normalized_consumers=rows,normalized_consumers_sha256=digest(rows))
+            if schema:receipt['auth_proof']['schema']=schema
+            with self.subTest(schema=schema):
+                self.assertEqual(bootstrap_selection.select(kube,receipt,domain.generation,installation=domain),receipt['secret']['name'])
+
     def test_scoped_successor_keeps_prior_binding_and_rejects_mixed_versions(self):
         from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS
         domain,previous,kube=fixture()
@@ -53,6 +64,19 @@ class DomainTests(unittest.TestCase):
         all_rows=old_rows+[{'stream':stream,'durable':config['durable_name'],'config':dict(config,max_ack_pending=1000)}]
         current['auth_proof'].update(schema='voice-bootstrap-auth-v4',normalized_consumers=all_rows,normalized_consumers_sha256=digest(all_rows))
         self.assertEqual(bootstrap_selection.select(kube,current,domain.generation,installation=domain),selected['metadata']['name'])
+        for fault in ('schema','digest','config','legacy-link'):
+            altered=copy.deepcopy(current)
+            if fault=='schema':altered['auth_proof']['schema']='foreign'
+            elif fault=='digest':altered['auth_proof']['normalized_consumers_sha256']='0'*64
+            elif fault=='config':
+                altered['auth_proof']['normalized_consumers'][1]['durable']='foreign'
+                altered['auth_proof']['normalized_consumers_sha256']=digest(altered['auth_proof']['normalized_consumers'])
+            else:
+                altered['auth_proof']['normalized_consumers'][0]['config']['max_ack_pending']=42
+                altered['auth_proof']['normalized_consumers_sha256']=digest(altered['auth_proof']['normalized_consumers'])
+            kube.calls.clear()
+            with self.subTest(fault=fault),self.assertRaises(Blocked):bootstrap_selection.select(kube,altered,domain.generation,installation=domain)
+            self.assertEqual(kube.calls,[])
         altered=copy.deepcopy(current);altered['previous_enrollment']['schema']='voice-nats-bootstrap-enrollment-v1';altered['previous_enrollment'].pop('installation_sha256')
         altered['previous_enrollment_sha256']=digest(altered['previous_enrollment']);altered['binding']['previous_enrollment_sha256']=altered['previous_enrollment_sha256']
         kube.calls.clear()
@@ -83,6 +107,37 @@ class DomainTests(unittest.TestCase):
         with self.assertRaises(Blocked):actor_root.preflight(kube,None,None,None,Stage(),['social'],None,installation=domain)
         with self.assertRaises(Blocked):renderer_root.revalidate(kube,Stage(),{},installation=domain)
         self.assertEqual(kube.calls,[])
+
+    def test_foreign_actor_account_refused_before_story_or_sql(self):
+        domain,_,kube=fixture()
+        other=InstallationAuthority('owned-isolated-v1',str(uuid.uuid4()),domain.generation,'d'*64,domain.bootstrap_actor_sha256,domain.genesis_sha256)
+        class Stage:expected={'generation':domain.generation}
+        with patch.object(actor_root,'story_schema',side_effect=AssertionError('unexpected SQL')),patch.object(actor_root,'story_content',side_effect=AssertionError('unexpected Docker')):
+            with self.assertRaises(Blocked):actor_root.preflight(kube,None,None,None,Stage(),['story'],None,installation=other)
+        self.assertEqual(kube.calls,[('secret','voice-nats-operator-'+domain.generation)])
+
+    def test_operator_drift_refused_during_story_witness_callback(self):
+        import story_witness
+        domain,_,kube=fixture()
+        snapshot={'metadata':{'name':'voice-story','namespace':'voice-staging','uid':'story'},'spec':{}}
+        class Stage:
+            expected={'generation':domain.generation}
+            snapshots={'voice-story':snapshot}
+            old_images={'voice-story/story':'image'}
+        original_get=kube.get;operator_reads=[]
+        def get(kind,name):
+            if kind=='deployment':return copy.deepcopy(snapshot)
+            row=original_get(kind,name)
+            if kind=='secret' and name.startswith('voice-nats-operator-'):
+                operator_reads.append(True)
+                if len(operator_reads)>1:row['metadata']['resourceVersion']='drift'
+            return row
+        kube.get=get
+        with patch.object(actor_root,'story_schema',return_value={'version':4}), \
+             patch.object(actor_root,'story_content',side_effect=lambda image,automatic:automatic('a','b')), \
+             patch.object(story_witness,'ensure_content',side_effect=lambda child,config,prove,unchanged:unchanged()):
+            with self.assertRaises(Blocked):actor_root.preflight(kube,None,None,None,Stage(),['story'],None,installation=domain)
+        self.assertEqual(len(operator_reads),2)
 
     def test_renderer_checks_actual_account_on_revalidation(self):
         domain,_,kube=fixture()
