@@ -15,6 +15,19 @@ import staging_prerequisites as prereq
 from root_main import save
 
 
+def bind_fixture_prerequisites(session, plan):
+    """Exercise the real session transitions with a deliberately mocked P2 receipt."""
+    import staging_cohort_preservation as cohort
+    receipt={'fixture':'qualified-p2'}
+    p2={'actual_before':plan['actual_before'],
+        'candidate':{'commit':session.context['commit'],'images':session.context['images']}}
+    plan.update(schema='voice-staging-prerequisites-plan-v4',installation_sha256=session.installation.sha256,
+                preservation_sha256=prereq.digest(receipt))
+    with patch.object(cohort,'validate_plan'),patch.object(cohort,'load_qualified',return_value=receipt):
+        session.bind_cohort_preservation(p2,plan['actual_before'])
+        return session.bind_prerequisites(plan,plan['actual_before'])
+
+
 class PrivateCustodyTests(unittest.TestCase):
     def test_paused_gis_authority_requires_protected_prepared_hash_and_active_anchor(self):
         import staging_cohort_preservation as cohort
@@ -135,7 +148,7 @@ class PrivateCustodyTests(unittest.TestCase):
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
             session.admit(start=True)
-            source={'schema':'voice-staging-source-capture-v1','operation':session.operation,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,
                 'context':context,'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
             save(installed/'source-authority'/('a'*12+'.json'),source)
             raw=b'{"fixture":true}';payload=payloads/(hashlib.sha256(b'gis-signer').hexdigest()+'.json');payload.write_bytes(raw);payload.chmod(0o600)
@@ -151,7 +164,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None}
                 save(base/'checkpoint.json',state)
@@ -181,7 +194,7 @@ class PrivateCustodyTests(unittest.TestCase):
             session=resource_claim.Session(context,'a'*12,prereq.digest(manifest),lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{'scripts/staging/'+name:manifest[name]},'images':{'fixture':'g'}}
             execution={'fixture':'execution'}
-            source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/('a'*12+'.json'),source);save(base/'approved.json',approved);save(base/'execution.json',execution)
             plan={'schema':'voice-staging-prerequisites-plan-v1','operation':session.operation,'context':context,'helper_sha256':session.helper,
@@ -194,7 +207,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 save(base/'checkpoint.json',{'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None})
                 value=prereq.load_authority(session)
@@ -217,7 +230,7 @@ class PrivateCustodyTests(unittest.TestCase):
             base=installed/'prerequisites'/('a'*12);base.mkdir(parents=True,mode=0o700)
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
-            source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
             save(installed/'source-authority'/('a'*12+'.json'),source)
             plan={'schema':'voice-staging-prerequisites-plan-v1','operation':session.operation,'context':context,'helper_sha256':session.helper,
@@ -235,7 +248,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None};save(base/'checkpoint.json',state)
                 with self.assertRaises(prereq.Blocked):prereq.record_pending(session,'release_policy','create-policy-configmap')
@@ -266,7 +279,7 @@ class SubmitTests(unittest.TestCase):
                 context=resource_claim_test.context();card=resource_claim_test.card(context)
                 session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
                 session.admit(start=True)
-                source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+                source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
                 save(installed/'source-authority'/('a'*12+'.json'),source)
                 value=policy.staging_descriptor(context['commit']);obj=value['policy_object']
@@ -289,7 +302,7 @@ class SubmitTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':prereq.digest(plan)}
                 save(base/'checkpoint.json',state)
