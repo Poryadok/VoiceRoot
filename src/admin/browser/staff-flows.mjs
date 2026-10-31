@@ -15,6 +15,41 @@ const CHROMIUM_STARTUP_TIMEOUT_MS = 20000;
 const CHROMIUM_STARTUP_FAILURE = 'Chromium startup did not become ready';
 const SAFE_SIGNALS = new Set(['SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGILL', 'SIGINT', 'SIGKILL', 'SIGSEGV', 'SIGTERM']);
 
+export function sanitizeBrowserVersion(output) {
+  const match = /^(?:Google Chrome|Chromium) (\d{1,4}\.\d{1,4}\.\d{1,6}\.\d{1,4})(?:\s|$)/.exec(output);
+  return match?.[1] ?? 'unknown';
+}
+
+export async function browserVersion(binary, spawnProcess = spawn, timeoutMs = 1000) {
+  return new Promise(resolveVersion => {
+    let child, output = Buffer.alloc(0), finished = false;
+    const finish = value => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      child?.stdout?.destroy();
+      child?.unref();
+      resolveVersion(value);
+    };
+    const timer = setTimeout(() => {
+      try { child?.kill('SIGKILL'); } catch { /* diagnostic only */ }
+      finish('unknown');
+    }, timeoutMs);
+    try {
+      child = spawnProcess(binary, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+      child.stdout.on('data', chunk => {
+        const bytes = Buffer.from(chunk);
+        if (output.length + bytes.length > 1024) {
+          try { child.kill('SIGKILL'); } catch { /* diagnostic only */ }
+          finish('unknown');
+        } else output = Buffer.concat([output, bytes]);
+      });
+      child.on('error', () => finish('unknown'));
+      child.on('close', code => finish(code === 0 ? sanitizeBrowserVersion(output.toString('utf8')) : 'unknown'));
+    } catch { finish('unknown'); }
+  });
+}
+
 function safeSpawnError(error) {
   if (error?.code === 'ENOENT') return 'not_found';
   if (error?.code === 'EACCES' || error?.code === 'EPERM') return 'permission_denied';
@@ -49,20 +84,34 @@ export async function launchChromium(binary, args, profile, dependencies = {}) {
   const now = dependencies.now ?? Date.now;
   const sleep = dependencies.sleep ?? delay;
   const spawnProcess = dependencies.spawnProcess ?? spawn;
-  const readPort = dependencies.readPort ?? (async () => {
-    try { return (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0] || null; }
-    catch { return null; }
-  });
+  const readPort = dependencies.readPort ?? (async () => (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0] || null);
   const startedAt = now();
   let child;
   try {
-    child = spawnProcess(binary, args, { stdio: 'ignore' });
+    child = spawnProcess(binary, args, { stdio: ['ignore', 'ignore', 'pipe'] });
   } catch (error) {
     return { child: undefined, port: undefined, diagnostic: startupDiagnostic(
       'spawn_failed', startedAt, now, { signal: 'unknown', spawnError: safeSpawnError(error) }) };
   }
 
   let spawnError = 'none';
+  let portRead = 'missing', stderr = Buffer.alloc(0), stderrTruncated = false;
+  child.stderr?.on('data', chunk => {
+    const bytes = Buffer.from(chunk);
+    const available = 8192 - stderr.length;
+    if (bytes.length > available) stderrTruncated = true;
+    if (available > 0) stderr = Buffer.concat([stderr, bytes.subarray(0, available)]);
+  });
+  const diagnostic = result => {
+    const stderrSignatures = [
+    ['dbus', /(?:dbus\/bus\.cc|dbus\/object_proxy\.cc)/i],
+    ['sandbox', /(?:no usable sandbox|sandbox.*(?:failed|error))/i],
+    ['resource_exhaustion', /(?:out of memory|resource temporarily unavailable)/i],
+    ['devtools_listening', /DevTools listening on /],
+    ].filter(([, pattern]) => pattern.test(stderr.toString('utf8'))).map(([name]) => name);
+    child.stderr?.destroy();
+    return { ...result, portRead, stderrSignatures, stderrTruncated };
+  };
   let didExit = false;
   let exitCode = null;
   let signalCode = null;
@@ -84,18 +133,25 @@ export async function launchChromium(binary, args, profile, dependencies = {}) {
   const deadline = startedAt + CHROMIUM_STARTUP_TIMEOUT_MS;
   while (now() < deadline) {
     const failure = failed();
-    if (failure) return { child, port: undefined, diagnostic: failure };
-    const port = await readPort();
+    if (failure) return { child, port: undefined, diagnostic: diagnostic(failure) };
+    let port;
+    try {
+      port = await readPort();
+      if (port && (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535)) { portRead = 'invalid'; port = null; }
+    } catch (error) {
+      if (error.code === 'EACCES' || error.code === 'EPERM') portRead = 'permission_denied';
+      else if (error.code !== 'ENOENT' && portRead !== 'permission_denied') portRead = 'other';
+    }
     const afterReadFailure = failed();
-    if (afterReadFailure) return { child, port: undefined, diagnostic: afterReadFailure };
-    if (port) return { child, port, diagnostic: startupDiagnostic('ready', startedAt, now) };
+    if (afterReadFailure) return { child, port: undefined, diagnostic: diagnostic(afterReadFailure) };
+    if (port) return { child, port, diagnostic: diagnostic(startupDiagnostic('ready', startedAt, now)) };
     await sleep(Math.min(100, Math.max(0, deadline - now())));
   }
   const failure = failed();
   return {
     child,
     port: undefined,
-    diagnostic: failure ?? startupDiagnostic('port_missing', startedAt, now),
+    diagnostic: diagnostic(failure ?? startupDiagnostic('port_missing', startedAt, now)),
   };
 }
 
@@ -256,7 +312,10 @@ try {
     `--user-data-dir=${profile}`, 'about:blank'], profile);
   chrome = startup.child;
   evidence.browserStartup = startup.diagnostic;
-  if (startup.diagnostic.state !== 'ready') throw new Error(CHROMIUM_STARTUP_FAILURE);
+  if (startup.diagnostic.state !== 'ready') {
+    evidence.browserStartup.version = await browserVersion(process.env.CHROME_BIN ?? 'google-chrome');
+    throw new Error(CHROMIUM_STARTUP_FAILURE);
+  }
   const port = startup.port;
   evidence.browser = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
   const socket = new WebSocket(evidence.browser.webSocketDebuggerUrl);

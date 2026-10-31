@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from contextlib import contextmanager, ExitStack
 import copy
 from unittest.mock import patch
@@ -31,6 +32,262 @@ def module():
     spec = importlib.util.spec_from_file_location('f54', HELPER)
     value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
     return value
+
+
+class MasterHistoryFrameContract(unittest.TestCase):
+    def test_nested_132_requires_sealed_live_69_scope(self):
+        # Real disposable Git; only the outer qualification and shortened spine
+        # are mocked. This is a trace-transport test, not producer acceptance.
+        m=module()
+        with tempfile.TemporaryDirectory() as temporary,ExitStack() as patches:
+            folder=Path(temporary);repo=folder/'repo';repo.mkdir()
+            git(repo,'init','-q');git(repo,'config','user.name','fixture');git(repo,'config','user.email','fixture@example.invalid')
+            (repo/'base').write_text('base');git(repo,'add','.');git(repo,'commit','-qm','base');base=git(repo,'rev-parse','HEAD')
+            (repo/'left').write_text('left');git(repo,'add','.');git(repo,'commit','-qm','left');left=git(repo,'rev-parse','HEAD')
+            git(repo,'checkout','-q','--detach',base);(repo/'right').write_text('right');git(repo,'add','.');git(repo,'commit','-qm','right');right=git(repo,'rev-parse','HEAD')
+            source=git(repo,'commit-tree',right+'^{tree}','-p',left,'-p',right,'-m','132')
+            merge=git(repo,'commit-tree',source+'^{tree}','-p',base,'-p',source,'-m','69')
+            git(repo,'checkout','-q','--detach',merge);(repo/'carrier').write_text('carrier');git(repo,'add','.');git(repo,'commit','-qm','carrier');carrier=git(repo,'rev-parse','HEAD')
+            authority={'fixture':'not production admission'}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1',base='event',collection_base=base,source=carrier,
+                capability=m.raw_binding(m.canonical(authority)),native_binding=m.raw_binding('{}'),context={})
+            production=dict(type='F13-PRODUCTION-SOURCE-v11',base='event',collection_base=base,source=carrier,
+                admission=False,runtime_pass=False,current_or_future_path_authority=False)
+            unit=dict(merge=source,parents=[left,right],history_boundary=base,best_bases=[base])
+            real_git=m.git
+            def shortened(r,*args):
+                if args==('rev-list','--first-parent','--reverse',base+'..'+source):return (source+'\n').encode()
+                return real_git(r,*args)
+            for name,value in (('HISTORY_69_MERGE',merge),('HISTORY_69_BASE',base),('HISTORY_69_SOURCE',source),('MERGE_132',source)):
+                patches.enter_context(patch.object(m,name,value))
+            patches.enter_context(patch.object(m,'git',side_effect=shortened))
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=authority))
+            patches.enter_context(patch.object(m,'master_context',return_value=entry))
+            patches.enter_context(patch.object(m,'production_applicability',return_value=production))
+            patches.enter_context(patch.object(m,'source_132_unit',return_value=unit))
+            trace=folder/'trace';mapping=folder/'map';mapping.write_bytes(b'');ep=folder/'entry';ep.write_text(json.dumps(entry))
+            m.append(trace,'master_entry','','',repo,[str(ep)])
+            root=m.append(trace,'frame_enter','','',repo,['',base,carrier,'true','true',str(mapping),''])
+            parent=m.append(trace,'operation_attempt',root,'',repo,[merge,'2',base,source,'merge'])
+            delta=folder/'delta';delta.write_bytes(real_git(repo,'diff','--name-only',base,source))
+            m.append(trace,'operation_begin',root,parent,repo,[merge,'2',base,base,source,base,'false',str(delta)])
+            raw=trace.read_bytes();receipt=m.validate_trace(repo,trace,m.sha(raw),history69_checkpoint=True)['history69_checkpoint']
+            rp=folder/'receipt';rp.write_text(json.dumps(receipt));m.append(trace,'history_69_capability',root,parent,repo,[str(rp)])
+            childmap=folder/'child';childmap.write_bytes(b'')
+            child=m.append(trace,'frame_enter',root,'',repo,[root,base,source,'true','true',str(childmap),parent])
+            op=m.append(trace,'operation_attempt',child,'',repo,[source,'2',left,right,'merge'])
+            raw=trace.read_bytes();scope=m.validate_trace(repo,trace,m.sha(raw),history132_checkpoint=True)['history132_checkpoint']
+            self.assertEqual(scope['operation'],op);self.assertEqual(scope['prefix'],dict(bytes=len(raw),sha256=m.sha(raw)))
+            with self.assertRaisesRegex(m.Rejected,'exact132_actual_production_outer_scope'):
+                m.boundary_132_capability(repo,source,left,right,base,source)
+            cap=m.boundary_132_capability(repo,source,left,right,base,source,scope)
+            m.append(trace,'history_132_capability',child,op,repo,[json.dumps(cap)])
+            with self.assertRaisesRegex(m.Rejected,'closed_frames'):m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+            trace.write_bytes(raw);forged=copy.deepcopy(cap);forged['nested_scope']['prefix']['sha256']='0'*64
+            m.append(trace,'history_132_capability',child,op,repo,[json.dumps(forged)])
+            with self.assertRaisesRegex(m.Rejected,'exact132_independent_complete_capability'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+
+    def test_policy_uses_verified_event_base_with_distinct_history_base(self):
+        m=module();frame=dict(base='history',target='source')
+        entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1',base='event',collection_base='history',source='source',
+            context=dict(GITHUB_SHA='actual-target',VOICE_CI_PUSH_BEFORE_SHA='event'))
+        self.assertEqual(m.policy_collection_base(dict(master_entry=entry),frame),'event')
+        m.verify_policy_collection_base(dict(master_entry=entry),frame,dict(base_sha='event'),dict(entry['context']))
+        with self.assertRaisesRegex(m.Rejected,'actual_collection_policy_base'):
+            m.verify_policy_collection_base(dict(master_entry=entry),frame,dict(base_sha='history'),dict(entry['context']))
+        with self.assertRaisesRegex(m.Rejected,'actual_collection_policy_master_event'):
+            m.verify_policy_collection_base(dict(master_entry=entry),frame,dict(base_sha='event'),dict(GITHUB_SHA='forged'))
+        for changed in (dict(entry,collection_base='event'),dict(entry,source='other')):
+            with self.assertRaises(m.Rejected):m.policy_collection_base(dict(master_entry=changed),frame)
+        self.assertEqual(m.policy_collection_base(dict(master_entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1')),frame),'history')
+
+    def test_typed_nested_history_requires_actual_live_parent_prefix(self):
+        # Synthetic Git graph tests transport/fold only, never source qualification.
+        m=module()
+        with tempfile.TemporaryDirectory() as temporary,ExitStack() as patches:
+            folder=Path(temporary);repo=folder/'repo';repo.mkdir()
+            git(repo,'init','-q');git(repo,'config','user.name','fixture');git(repo,'config','user.email','fixture@example.invalid')
+            (repo/'base').write_text('base');git(repo,'add','.');git(repo,'commit','-qm','base')
+            base=git(repo,'rev-parse','HEAD')
+            (repo/'source').write_text('source');git(repo,'add','.');git(repo,'commit','-qm','source')
+            source=git(repo,'rev-parse','HEAD')
+            merge=git(repo,'commit-tree',source+'^{tree}','-p',base,'-p',source,'-m','merge')
+            git(repo,'checkout','-q','--detach',merge)
+            (repo/'carrier').write_text('carrier');git(repo,'add','.');git(repo,'commit','-qm','carrier')
+            carrier=git(repo,'rev-parse','HEAD')
+            authority={'fixture':'not production admission'}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1',base='event-base',collection_base=base,
+                source=carrier,capability=m.raw_binding(m.canonical(authority)),native_binding=m.raw_binding('{}'),context={})
+            patches.enter_context(patch.object(m,'HISTORY_69_MERGE',merge,create=True))
+            patches.enter_context(patch.object(m,'HISTORY_69_BASE',base,create=True))
+            patches.enter_context(patch.object(m,'HISTORY_69_SOURCE',source,create=True))
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=authority))
+            patches.enter_context(patch.object(m,'master_context',return_value=entry))
+            trace=folder/'trace';mapping=folder/'map';mapping.write_bytes(b''); ep=folder/'entry';ep.write_text(json.dumps(entry))
+            m.append(trace,'master_entry','','',repo,[str(ep)])
+            root=m.append(trace,'frame_enter','','',repo,['',base,carrier,'true','true',str(mapping),''])
+            op=m.append(trace,'operation_attempt',root,'',repo,[merge,'2',base,source,'merge'])
+            delta=folder/'delta';delta.write_bytes(m.git(repo,'diff','--name-only',base,source))
+            m.append(trace,'operation_begin',root,op,repo,[merge,'2',base,base,source,base,'false',str(delta)])
+            raw=trace.read_bytes()
+            receipt=m.validate_trace(repo,trace,m.sha(raw),history69_checkpoint=True)['history69_checkpoint']
+            self.assertEqual(receipt['operation'],op)
+            self.assertEqual(receipt['child_scope'],dict(base=base,target=source,allow_direct_followup='true',partition_source_history='true'))
+            self.assertEqual(receipt['prefix'],dict(bytes=len(raw),sha256=m.sha(raw)))
+            with patch.object(m,'HISTORY_69_SOURCE','0'*40),self.assertRaises(m.Rejected):
+                m.validate_trace(repo,trace,m.sha(raw),history69_checkpoint=True)
+            with patch.object(m,'HISTORY_69_MERGE','0'*40),self.assertRaises(m.Rejected):
+                m.validate_trace(repo,trace,m.sha(raw),history69_checkpoint=True)
+            real_git=m.git
+            def changed_tree(r,*args):
+                if args==('rev-parse',merge+'^{tree}'):return b'0'*40+b'\n'
+                return real_git(r,*args)
+            with patch.object(m,'git',side_effect=changed_tree),self.assertRaisesRegex(m.Rejected,'history69_exact_git_topology_and_result'):
+                m.validate_trace(repo,trace,m.sha(raw),history69_checkpoint=True)
+            receipt_path=folder/'receipt';receipt_path.write_text(json.dumps(receipt))
+            m.append(trace,'history_69_capability',root,op,repo,[str(receipt_path)])
+            before_child=trace.read_bytes()
+            child_map=folder/'child';child_map.write_bytes(b'')
+            m.append(trace,'frame_enter',root,'',repo,[root,base,carrier,'true','true',str(child_map),op])
+            with self.assertRaisesRegex(m.Rejected,'history69_exact_immediate_child'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+            trace.write_bytes(before_child)
+            m.append(trace,'frame_enter',root,'',repo,[root,base,source,'true','true',str(child_map),op])
+            with self.assertRaisesRegex(m.Rejected,'closed_frames'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+            trace.write_bytes(raw);forged=dict(receipt,prefix=dict(bytes=len(raw),sha256='0'*64))
+            receipt_path.write_text(json.dumps(forged))
+            m.append(trace,'history_69_capability',root,op,repo,[str(receipt_path)])
+            with self.assertRaisesRegex(m.Rejected,'history69_independently_reconstructed_capability'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+
+    def test_v5_j_requires_v4_historical_reconstruction(self):
+        m=module(); doc=SimpleNamespace(CONTEXT_EVENT_BASE='old-event',CONTEXT_VERSION='NATIVE-P3-SOURCE-v4',
+            CONTEXT_SOURCE='old-source',CONTEXT_RECORD_COMMIT='old-record',CONTEXT_RECORD_SHA256='old-hash')
+        old=dict(base='content',projection=[dict(path='unit')],version=doc.CONTEXT_VERSION,source=doc.CONTEXT_SOURCE)
+        verifier=SimpleNamespace(predecessor_record=lambda repo,binding:(doc,old))
+        native=SimpleNamespace(documentation=doc,verified_record=lambda repo,binding:(verifier,{}))
+        current=dict(version='NATIVE-P3-SOURCE-v5',source='carrier',snapshot='source')
+        with patch.object(m,'current_author_J_context_applicability',side_effect=m.Rejected('v4 reconstruction failed'),create=True) as reconstruct:
+            with self.assertRaisesRegex(m.Rejected,'v4 reconstruction failed'):
+                m.current_author_J_native_applicability(ROOT,native,{},current)
+            reconstruct.assert_called_once()
+
+    def test_exact132_boundary_uses_qualified_collection_scope_only_for_v11(self):
+        m=module();unit=dict(merge='merge',parents=['first','source'],history_boundary='nested',best_bases=['nested'])
+        production=dict(type='F13-PRODUCTION-SOURCE-v11',base='event',collection_base='history',source='carrier',
+            admission=False,runtime_pass=False,current_or_future_path_authority=False)
+        with patch.object(m,'source_132_unit',return_value=unit),patch.object(m,'production_applicability',return_value=production):
+            value=m.boundary_132_capability(ROOT,'merge','first','source','history','carrier')
+            self.assertEqual(value['collector_scope']['base'],'history')
+            with self.assertRaisesRegex(m.Rejected,'exact132_actual_production_outer_scope'):
+                m.boundary_132_capability(ROOT,'merge','first','source','event','carrier')
+            production['type']='F13-PRODUCTION-SOURCE-v10'
+            self.assertEqual(m.boundary_132_capability(ROOT,'merge','first','source','event','carrier')['collector_scope']['base'],'event')
+            with self.assertRaisesRegex(m.Rejected,'exact132_actual_production_outer_scope'):
+                m.boundary_132_capability(ROOT,'merge','first','source','history','carrier')
+
+    def test_shell_uses_only_verified_collection_base_and_keeps_event_parity(self):
+        functions = dict(re.findall(r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n(.*?)^\}\n',
+            SHELL.read_text(encoding='utf8')))
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary); repo = folder / 'repo'; repo.mkdir()
+            git(repo, 'init', '-q'); git(repo, 'config', 'user.name', 'fixture')
+            git(repo, 'config', 'user.email', 'fixture@example.invalid')
+            (repo/'one').write_text('one'); git(repo,'add','.'); git(repo,'commit','-qm','collection')
+            collection=git(repo,'rev-parse','HEAD')
+            (repo/'two').write_text('two'); git(repo,'add','.'); git(repo,'commit','-qm','event')
+            event=git(repo,'rev-parse','HEAD')
+            (repo/'three').write_text('three'); git(repo,'add','.'); git(repo,'commit','-qm','source')
+            source=git(repo,'rev-parse','HEAD')
+            target=git(repo,'commit-tree',source+'^{tree}','-p',event,'-p',source,'-m','result')
+            git(repo,'checkout','--detach','-q',target)
+            script=folder/'run.sh'
+            function='f13_collect_master_release_pr_contributions() {\n'+functions['f13_collect_master_release_pr_contributions']+'}\n'
+            script.write_text('set -u\n'+function+
+                'f13_collect_failure() { printf "%s\\n" "$2" > "$1"; }\n'
+                'game_checkpoint_aggregate_authorized() { return 1; }\n'
+                'f13_collect_develop_contributions() { printf "%s\\n" "$2" > "$OBSERVED"; : > "$4"; }\n'
+                'python3() { [[ "$2" == collection-base && "$4" == good ]] || return 1; printf "%s\\n" "$QUALIFIED"; }\n'
+                'f13_collect_master_release_pr_contributions "$REPO" "$EVENT" "$TARGET" "$MAP" "$CATEGORY" "$BINDING"\n')
+            env=dict(os.environ,ROOT=str(ROOT),REPO=str(repo),EVENT=event,TARGET=target,MAP=str(folder/'map'),
+                CATEGORY=str(folder/'category'),OBSERVED=str(folder/'observed'),QUALIFIED=collection,BINDING='good',
+                collection_base='0'*40)
+            result=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((folder/'observed').read_text().strip(),collection)
+            for change in ({'BINDING':'forged'}, {'EVENT':collection}):
+                with self.subTest(change=change):
+                    result=subprocess.run(['bash',str(script)],env=dict(env,**change),capture_output=True,text=True)
+                    self.assertNotEqual(result.returncode,0)
+            # An absent binding preserves the original event-base traversal even
+            # when an ambient variable tries to supply a different base.
+            result=subprocess.run(['bash',str(script)],env=dict(env,BINDING=''),capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((folder/'observed').read_text().strip(),event)
+            git(repo,'checkout','-q','--detach',event)
+            (repo/'result-only').write_text('drift');git(repo,'add','.');git(repo,'commit','-qm','drift tree')
+            drift=git(repo,'commit-tree','HEAD^{tree}','-p',event,'-p',source,'-m','drift result')
+            git(repo,'checkout','-q','--detach',drift)
+            result=subprocess.run(['bash',str(script)],env=dict(env,TARGET=drift),capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual((folder/'category').read_text().strip(),'release_pr_delta_mismatch')
+
+    def test_new_entry_requires_qualified_collection_root_and_old_entry_keeps_event_root(self):
+        m = module()
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
+            folder = Path(temporary); repo = folder / 'repo'; repo.mkdir()
+            git(repo, 'init', '-q'); git(repo, 'config', 'user.name', 'fixture')
+            git(repo, 'config', 'user.email', 'fixture@example.invalid')
+            (repo / 'one').write_text('one'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'collection base')
+            collection = git(repo, 'rev-parse', 'HEAD')
+            (repo / 'two').write_text('two'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'event base')
+            event = git(repo, 'rev-parse', 'HEAD')
+            (repo / 'three').write_text('three'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'source')
+            source = git(repo, 'rev-parse', 'HEAD')
+            authority = {'fixture': 'qualified by independent master_context'}
+            entry = dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1', base=event,
+                collection_base=collection, source=source,
+                capability=m.raw_binding(m.canonical(authority)), native_binding=m.raw_binding('{}'), context={})
+            patches.enter_context(patch.object(m, 'checked_capability_value', return_value=authority))
+            patches.enter_context(patch.object(m, 'master_context', side_effect=lambda *args: entry))
+            entry_path = folder / 'entry'; mapping = folder / 'map'; mapping.write_bytes(b'')
+            def check(frame_base, expected):
+                trace = folder / 'trace'; trace.unlink(missing_ok=True)
+                entry_path.write_text(json.dumps(entry))
+                m.append(trace, 'master_entry', '', '', repo, [str(entry_path)])
+                m.append(trace, 'frame_enter', '', '', repo,
+                         ['', frame_base, source, 'true', 'true', str(mapping), ''])
+                with self.assertRaisesRegex(m.Rejected, expected):
+                    m.validate_trace(repo, trace, m.sha(trace.read_bytes()))
+            check(event, 'genuine_original_master_source_frame')
+            check(collection, 'closed_frames')  # Real frame admitted; unfinished trace cannot pass.
+            entry.clear(); entry.update(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1', base=event,
+                source=source, capability=m.raw_binding(m.canonical(authority)),
+                native_binding=m.raw_binding('{}'), context={})
+            check(collection, 'genuine_original_master_source_frame')
+            check(event, 'closed_frames')
+
+    def test_empty_master_trace_and_forged_entry_are_rejected(self):
+        m=module()
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
+            folder=Path(temporary); repo=folder/'repo'; repo.mkdir()
+            git(repo,'init','-q'); git(repo,'config','user.name','fixture'); git(repo,'config','user.email','fixture@example.invalid')
+            (repo/'a').write_text('a'); git(repo,'add','.'); git(repo,'commit','-qm','base')
+            base=git(repo,'rev-parse','HEAD'); authority={'fixture':True}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1',base=base,collection_base=base,
+                source=base,capability=m.raw_binding(m.canonical(authority)),native_binding=m.raw_binding('{}'),context={})
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=authority))
+            patches.enter_context(patch.object(m,'master_context',return_value=copy.deepcopy(entry)))
+            trace=folder/'trace'; entry_path=folder/'entry'; entry_path.write_text(json.dumps(entry))
+            m.append(trace,'master_entry','','',repo,[str(entry_path)])
+            with self.assertRaisesRegex(m.Rejected,'nonempty_producer_frames'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+            entry['collection_base']='0'*40;entry_path.write_text(json.dumps(entry));trace.unlink()
+            m.append(trace,'master_entry','','',repo,[str(entry_path)])
+            with self.assertRaisesRegex(m.Rejected,'independent_actual_master_origin'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
 
 
 class R23Owner132Contract(unittest.TestCase):
@@ -77,7 +334,7 @@ class R23Owner132Contract(unittest.TestCase):
 
 
     @contextmanager
-    def owner_fixture(self):
+    def owner_fixture(self, nested=False):
         """Real append/fold/permission, synthetic graph and explicit authority seams.
 
         The prior whole operation is runtime-tainted while both raw R23 rows
@@ -105,7 +362,10 @@ class R23Owner132Contract(unittest.TestCase):
             unit=dict(type='F54_EXACT132_SOURCE_UNIT',source_unit_sha256='fixture',merge=merge,
                 parents=[prior,source],best_bases=bases,history_boundary=base,source_history=[],
                 automatic_tree=tree,admission=False,path_authority=False)
-            production=dict(base=base,source=merge,admission=False,runtime_pass=False,current_or_future_path_authority=False)
+            outer=git(repo,'commit-tree',tree,'-p',base,'-p',merge,'-m','69 fixture') if nested else None
+            production=dict(base='event' if nested else base,source=outer if nested else merge,
+                **(dict(type='F13-PRODUCTION-SOURCE-v11',collection_base=base) if nested else {}),
+                admission=False,runtime_pass=False,current_or_future_path_authority=False)
             original_git=m.git
             def fixture_git(repo,*args):
                 if args==('rev-list','--first-parent','--reverse',base+'..'+merge):return (prior+'\n'+merge+'\n').encode()
@@ -114,15 +374,30 @@ class R23Owner132Contract(unittest.TestCase):
             patches.enter_context(patch.object(m,'MERGE_132',merge))
             patches.enter_context(patch.object(m,'source_132_unit',return_value=unit))
             patches.enter_context(patch.object(m,'production_applicability',return_value=production))
+            if nested:
+                for key,value in (('HISTORY_69_MERGE',outer),('HISTORY_69_BASE',base),('HISTORY_69_SOURCE',merge)):
+                    patches.enter_context(patch.object(m,key,value))
             authority={'fixture':'omitted-outer-authority-prefix'}
-            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',base=base,source=merge,
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1' if nested else 'F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',
+                base='event' if nested else base,source=outer if nested else merge,
+                **(dict(collection_base=base) if nested else {}),
                 capability=m.raw_binding(m.canonical(authority)),native_binding=m.raw_binding('{"paths":[]}'),context={})
             patches.enter_context(patch.object(m,'checked_capability_value',return_value=authority))
             patches.enter_context(patch.object(m,'master_context',return_value=entry))
             trace=folder/'trace';mapping=folder/'map';mapping.write_bytes(b'')
             delta=folder/'delta';category=folder/'category';category.write_text('')
             ep=folder/'entry';ep.write_text(json.dumps(entry));m.append(trace,'master_entry','','',repo,[str(ep)])
-            root=m.append(trace,'frame_enter','','',repo,['',base,merge,'true','true',str(mapping),''])
+            root=m.append(trace,'frame_enter','','',repo,['',base,outer if nested else merge,'true','true',str(mapping),''])
+            if nested:
+                parent_root=root;parent_map=mapping
+                parent_op=m.append(trace,'operation_attempt',root,'',repo,[outer,'2',base,merge,'merge'])
+                delta.write_bytes(original_git(repo,'diff','--name-only',base,merge))
+                m.append(trace,'operation_begin',root,parent_op,repo,[outer,'2',base,base,merge,base,'false',str(delta)])
+                raw=trace.read_bytes();receipt=m.validate_trace(repo,trace,m.sha(raw),history69_checkpoint=True)['history69_checkpoint']
+                receipt_path=folder/'69-receipt';receipt_path.write_text(json.dumps(receipt))
+                m.append(trace,'history_69_capability',root,parent_op,repo,[str(receipt_path)])
+                mapping=folder/'nested-map';mapping.write_bytes(b'')
+                root=m.append(trace,'frame_enter',parent_root,'',repo,[parent_root,base,merge,'true','true',str(mapping),parent_op])
             expected_rows=[];receipt_paths=[]
             owner_unit=dict(rows=expected_rows,parents=[prior,source],prior_owner=prior)
             patches.enter_context(patch.object(m,'r23_132_source_unit',return_value=owner_unit))
@@ -130,7 +405,9 @@ class R23Owner132Contract(unittest.TestCase):
             for outer,first,head in ((prior,left,right),(merge,prior,source)):
                 op=m.append(trace,'operation_attempt',root,'',repo,[outer,'2',first,head,'merge'])
                 if outer==merge:
-                    cap=m.boundary_132_capability(repo,merge,prior,source,base,merge)
+                    raw=trace.read_bytes()
+                    scope=m.validate_trace(repo,trace,m.sha(raw),history132_checkpoint=True)['history132_checkpoint'] if nested else None
+                    cap=m.boundary_132_capability(repo,merge,prior,source,base,merge,scope)
                     m.append(trace,'history_132_capability',root,op,repo,[json.dumps(cap)])
                 paths=git(repo,'diff','--name-only',base,head).splitlines();delta.write_text('\n'.join(paths)+'\n')
                 candidate_bases=bases if outer==merge else [base]
@@ -139,15 +416,15 @@ class R23Owner132Contract(unittest.TestCase):
                 child=m.append(trace,'frame_enter',root,'',repo,[root,base,head,'true','false',str(childmap),op])
                 for owner in git(repo,'rev-list','--first-parent','--reverse',base+'..'+head).splitlines():
                     parents=git(repo,'rev-list','--parents','-n','1',owner).split()[1:]
-                    direct=len(parents)==1;parent=parents[0];nested=owner if direct else parents[1]
+                    direct=len(parents)==1;parent=parents[0];child_source=owner if direct else parents[1]
                     boundary=parent if direct else base;index='1' if direct else '2'
-                    childop=m.append(trace,'operation_attempt',child,'',repo,[owner,index,parent,nested,'direct' if direct else 'merge'])
-                    changed=git(repo,'diff','--name-only',boundary,nested).splitlines();delta.write_text('\n'.join(changed)+'\n')
-                    m.append(trace,'operation_begin',child,childop,repo,[owner,index,parent,boundary,nested,boundary,'true' if direct else 'false',str(delta)])
+                    childop=m.append(trace,'operation_attempt',child,'',repo,[owner,index,parent,child_source,'direct' if direct else 'merge'])
+                    changed=git(repo,'diff','--name-only',boundary,child_source).splitlines();delta.write_text('\n'.join(changed)+'\n')
+                    m.append(trace,'operation_begin',child,childop,repo,[owner,index,parent,boundary,child_source,boundary,'true' if direct else 'false',str(delta)])
                     for name in changed:m.append(trace,'path_gate_before',child,childop,repo,[name,str(childmap)])
                     trigger=m.classify(changed);m.append(trace,'classification',child,childop,repo,[trigger,str(delta)])
                     for name in changed:
-                        row='\t'.join([name,trigger,owner,parent,boundary,nested,parent,boundary])
+                        row='\t'.join([name,trigger,owner,parent,boundary,child_source,parent,boundary])
                         m.append(trace,'row_before',child,childop,repo,[name,str(childmap),row])
                         m.append(trace,'row_after',child,childop,repo,[name,row,'original_owner_and_row_assignment'])
                         with childmap.open('a') as stream:stream.write(row+'\n')
@@ -173,10 +450,30 @@ class R23Owner132Contract(unittest.TestCase):
                     m.append(trace,'row_after',root,op,repo,[name,row,'original_owner_and_row_assignment'])
                     with mapping.open('a') as stream:stream.write(row+'\n')
                     m.append(trace,'row_committed',root,op,repo,[name,str(mapping)])
-            category.write_text('synthetic_fixture_stop')
-            m.append(trace,'failure',root,op,repo,['synthetic_fixture_stop',str(mapping)])
-            m.append(trace,'frame_exit',root,'',repo,['1',str(mapping),str(category)])
-            yield dict(m=m,repo=repo,trace=trace,map=mapping,root=root,paths=names,receipts=receipt_paths)
+            if nested:
+                m.append(trace,'frame_exit',root,'',repo,['0',str(mapping),str(category)])
+                paths=git(repo,'diff','--name-only',base,merge).splitlines();delta.write_text('\n'.join(paths)+'\n')
+                for name in paths:m.append(trace,'path_gate_before',parent_root,parent_op,repo,[name,str(parent_map)])
+                m.append(trace,'classification',parent_root,parent_op,repo,[m.classify(paths),str(delta)])
+                nested_rows={r.split('\t')[0]:r for r in mapping.read_text().splitlines()}
+                for name in paths:
+                    parts=nested_rows[name].split('\t')
+                    row='\t'.join([name,parts[1],m.HISTORY_69_MERGE,base,parts[4],parts[5],base,base])
+                    m.append(trace,'row_before',parent_root,parent_op,repo,[name,str(parent_map),row])
+                    m.append(trace,'row_after',parent_root,parent_op,repo,[name,row,'original_owner_and_row_assignment'])
+                    with parent_map.open('a') as stream:stream.write(row+'\n')
+                    m.append(trace,'row_committed',parent_root,parent_op,repo,[name,str(parent_map)])
+                m.append(trace,'frame_exit',parent_root,'',repo,['0',str(parent_map),str(category)])
+                out=folder/'output';out.write_bytes(parent_map.read_bytes())
+                result_path=folder/'result';result_path.write_text(json.dumps(m.master_wrapper_result(ep,parent_map,out)))
+                m.append(trace,'master_wrapper_result','','',repo,[str(result_path)])
+                yield dict(m=m,repo=repo,trace=trace,map=parent_map,root=parent_root,paths=names,receipts=receipt_paths,
+                    nested_root=root,child_map=mapping)
+            else:
+                category.write_text('synthetic_fixture_stop')
+                m.append(trace,'failure',root,op,repo,['synthetic_fixture_stop',str(mapping)])
+                m.append(trace,'frame_exit',root,'',repo,['1',str(mapping),str(category)])
+                yield dict(m=m,repo=repo,trace=trace,map=mapping,root=root,paths=names,receipts=receipt_paths)
 
     def test_actual_pending_permission_and_replacement_keep_raw_false_and_true_ledger(self):
         with self.owner_fixture() as f:
@@ -187,6 +484,41 @@ class R23Owner132Contract(unittest.TestCase):
                 self.assertEqual(row.split('\t')[1],'false')
             for p in f['receipts']:
                 receipt=json.loads(p.read_text());self.assertTrue(receipt['aggregate']);self.assertFalse(receipt['runtime_pass'])
+
+    def test_nested_69_full_child_map_preserves_132_owner_and_true_taint(self):
+        with self.owner_fixture(nested=True) as f:
+            m=f['m'];result=m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+            self.assertFalse(result['failures'])
+            self.assertEqual(result['ledger'][f['root']]['rows'],f['map'].read_text().splitlines())
+            self.assertEqual(result['ledger'][f['nested_root']]['rows'],f['child_map'].read_text().splitlines())
+            for name in f['paths']:
+                self.assertTrue(result['ledger'][f['root']]['paths'][name]['aggregate'])
+                self.assertTrue(result['ledger'][f['nested_root']]['paths'][name]['aggregate'])
+                row=next(r for r in f['map'].read_text().splitlines() if r.split('\t')[0]==name)
+                self.assertEqual(row.split('\t')[2],m.HISTORY_69_MERGE)
+            for p in f['receipts']:
+                receipt=json.loads(p.read_text());self.assertTrue(receipt['aggregate']);self.assertFalse(receipt['runtime_pass'])
+
+    def test_nested_69_missing_failed_duplicate_or_substituted_child_rejects(self):
+        with self.owner_fixture(nested=True) as f:
+            m=f['m'];original=[json.loads(v) for v in f['trace'].read_text().splitlines()]
+            child=next(i for i,e in enumerate(original) if e['kind']=='frame_enter' and e['frame']==f['nested_root'])
+            end=next(i for i,e in enumerate(original) if e['kind']=='frame_exit' and e['frame']==f['nested_root'])
+            for case in ('missing','duplicate','failed','map','parent','taint'):
+                events=copy.deepcopy(original)
+                if case=='missing':del events[child:end+1]
+                elif case=='duplicate':events.insert(child+1,copy.deepcopy(events[child]))
+                elif case=='failed':events[end]['payload']['exit']=1
+                elif case=='map':events[end]['payload']['final_map']['sha256']='0'*64
+                elif case=='parent':events[child]['payload']['parent_operation']='F999/forged/2'
+                else:
+                    i=next(i for i,e in enumerate(events) if e['kind']=='r23_132_owner_permission')
+                    events[i]['payload']['receipt']['aggregate']=False
+                previous='0'*64
+                for n,e in enumerate(events,1):
+                    e.update(sequence=n,previous=previous);e.pop('digest',None);e['digest']=m.sha(m.canonical(e));previous=e['digest']
+                f['trace'].write_text(''.join(json.dumps(e,sort_keys=True)+'\n' for e in events))
+                with self.subTest(case=case),self.assertRaises(m.Rejected):m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
 
     def test_permission_replay_phase_taint_and_evidence_mutations_reject(self):
         with self.owner_fixture() as f:
@@ -1331,6 +1663,108 @@ class ReplayConservationContract(unittest.TestCase):
             with self.assertRaises(used.Rejected): used.bind_verified_replay_root(repo, source, hashes)
 
 
+
+class ConservationDigestContract(unittest.TestCase):
+    """Changed-block differential; the three complete replay calls stay required."""
+
+    def block(self, oracle=False):
+        validator=next(n for n in ast.parse(HELPER.read_text()).body
+            if isinstance(n,ast.FunctionDef) and n.name=='validate_trace')
+        branch=next(n for n in ast.walk(validator) if isinstance(n,ast.If)
+            and isinstance(n.test,ast.Compare) and isinstance(n.test.left,ast.Name)
+            and n.test.left.id=='kind' and isinstance(n.test.comparators[0],ast.Tuple)
+            and any(isinstance(x,ast.Constant) and x.value=='complete_ledger_conserved'
+                for x in n.test.comparators[0].elts))
+        body=copy.deepcopy(branch.body)
+        self.assertIsInstance(body.pop(),ast.Continue)
+        if oracle:
+            body=[n for n in body if not (
+                isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='digest_key' for t in n.targets)
+                or isinstance(n,ast.If) and isinstance(n.test,ast.Compare)
+                and isinstance(n.test.left,ast.Name) and n.test.left.id=='digest_key')]
+            class OriginalDigest(ast.NodeTransformer):
+                def visit_Subscript(self, node):
+                    if isinstance(node.value,ast.Name) and node.value.id=='ready_digests':
+                        return ast.parse('sha(canonical(ready_table[op]))',mode='eval').body
+                    return self.generic_visit(node)
+            body=[OriginalDigest().visit(n) for n in body]
+        return compile(ast.fix_missing_locations(ast.Module(body=body,type_ignores=[])),'conservation-block','exec')
+
+    def fixture(self, m, kind):
+        path='docs/preserved.md';op='frame/operation/2';frame='frame';key=(frame,path)
+        incoming=[path,'false','owner','parent','boundary','source','content','bases']
+        raw='\t'.join(incoming);binding=m.file_digest((raw+'\n').encode())
+        ready=dict(required_qualification={path:dict(aggregate=False,evidence=[dict(retained=True)])},
+            retained=dict(nested=[1,True,'full ledger bytes']))
+        receipt=dict(path=path,incoming=m.raw_binding(raw),after_gate_row=m.raw_binding(raw),
+            ledger_sha256=m.sha(m.canonical(ready)),prior_rows=[m.raw_binding(raw)],
+            obligations=ready['required_qualification'][path],admission=False,map_before=binding,
+            transition='append',aggregate=False,policy_result=None,expected_post_map=binding)
+        return dict(m.__dict__,kind=kind,op=op,frame=frame,key=key,
+            pending={key:dict(op=op,incoming=incoming,prior=incoming,removed=False)},
+            v=dict(path=path,receipt=receipt,admission=False,policy_result=None),
+            maps={frame:[incoming]},cumulative={key:False},
+            M_consumed={},I_consumed={},J_consumed={},ready_digests={},
+            map_binding=lambda frame:binding,
+            **{k:{op:copy.deepcopy(ready)} for k in ('M_ready','I_ready','J_ready')})
+
+    def outcome(self, block, state):
+        try:
+            exec(block,state);error=None
+        except Exception as e:
+            error=(type(e).__name__,str(e))
+        return error,{name:state[name] for name in ('pending','M_consumed','I_consumed','J_consumed')}
+
+    def test_full_changed_block_state_and_first_rejection_match_original(self):
+        m=module();fast=self.block();old=self.block(oracle=True)
+        for kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
+            for mutation in ('valid','missing_ready','wrong_pending','path','incoming','after_identity',
+                'raw_flag','hash','missing_hash','prior_rows','obligations','admission','map','transition',
+                'aggregate_type','aggregate_value','policy','two_faults'):
+                def setup():
+                    state=self.fixture(m,kind);r=state['v']['receipt'];v=state['v']
+                    if mutation=='missing_ready':
+                        for name in ('M_ready','I_ready','J_ready'):state[name].clear()
+                    elif mutation=='wrong_pending':state['pending'][state['key']]['op']='foreign'
+                    elif mutation=='path':r['path']='foreign'
+                    elif mutation=='incoming':r['incoming']=m.raw_binding('foreign')
+                    elif mutation in ('after_identity','raw_flag'):
+                        parts=m.row(r['after_gate_row']);parts[2 if mutation=='after_identity' else 1]='foreign' if mutation=='after_identity' else 'true'
+                        r['after_gate_row']=m.raw_binding('\t'.join(parts))
+                    elif mutation in ('hash','two_faults'):r['ledger_sha256']='0'*64
+                    elif mutation=='missing_hash':r.pop('ledger_sha256')
+                    elif mutation=='prior_rows':r['prior_rows']=[]
+                    elif mutation=='obligations':r['obligations']={}
+                    elif mutation=='admission':v['admission']=True
+                    elif mutation=='map':r['map_before']={}
+                    elif mutation=='transition':r['transition']='erase'
+                    elif mutation=='aggregate_type':r['aggregate']=0
+                    elif mutation=='aggregate_value':r['aggregate']=True
+                    elif mutation=='policy':r['policy_result']=True
+                    if mutation=='two_faults':r['map_before']={}
+                    return state
+                with self.subTest(kind=kind,mutation=mutation):
+                    self.assertEqual(self.outcome(fast,setup()),self.outcome(old,setup()))
+
+    def test_digest_stays_local_and_each_receipt_is_checked(self):
+        m=module();fast=self.block()
+        for kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
+            state=self.fixture(m,kind);calls=[]
+            def observed(value):
+                calls.append(value);return m.canonical(value)
+            state['canonical']=observed
+            self.assertIsNone(self.outcome(fast,state)[0])
+            self.assertIsNone(self.outcome(fast,state)[0])
+            self.assertEqual(len(calls),1)
+            state['v']['receipt']['ledger_sha256']='0'*64
+            self.assertEqual(self.outcome(fast,state)[0],('Rejected','complete_typed_consumer_prior_ledger'))
+            # A new fold must recompute from a different, privately parsed ledger.
+            fresh=self.fixture(m,kind)
+            for table in ('M_ready','I_ready','J_ready'):
+                fresh[table][fresh['op']]['retained']['nested'][0]=9
+            self.assertEqual(self.outcome(fast,fresh)[0],('Rejected','complete_typed_consumer_prior_ledger'))
+
+
 class ProducerTrace(unittest.TestCase):
     def current_author_J_fixture(self, native_only=False):
         # Complete private historical DAG plus genuine old/current native
@@ -2182,6 +2616,48 @@ f13_retained_history_row() { return 1; }
                 earlier=b''.join(prefix.splitlines(keepends=True)[:-1]);binding=m.file_digest(earlier);digest=binding['sha256']
             with self.subTest(error=error),self.assertRaises(m.Rejected):
                 m.validate_trace(self.repo,trace,digest,sealed_prefix=binding)
+
+    def test_map_preparation_preserves_fold_and_ordered_fresh_processes(self):
+        self.hidden_runtime();run,out=self.collect(partition=False)
+        self.assertEqual(run.returncode,0,run.stderr)
+        trace=out/'trace.jsonl';raw=trace.read_bytes();m=module()
+        # Reference the former pure serialization at the same fold seam. All
+        # predicates, real Git observations and mutation paths remain active.
+        tree=ast.parse(HELPER.read_text())
+        fold=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='validate_trace')
+        reference=ast.parse("def map_binding(frame):\n"
+            "    raw=''.join('\\t'.join(parts)+'\\n' for parts in maps[frame]).encode()\n"
+            "    return dict(bytes=len(raw),sha256=sha(raw))\n").body[0]
+        fold.body=[reference if isinstance(n,ast.FunctionDef) and n.name=='map_binding' else n for n in fold.body]
+        namespace=dict(m.__dict__)
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[fold],type_ignores=[])),str(HELPER),'exec'),namespace)
+        real_run=subprocess.run
+        def observe(function):
+            calls=[]
+            def fresh(*args,**kwargs):
+                result=real_run(*args,**kwargs)
+                calls.append((args,kwargs,result.returncode,result.stdout,result.stderr))
+                return result
+            with patch.object(subprocess,'run',side_effect=fresh):
+                try:value=('return',function(self.repo,trace,m.sha(trace.read_bytes())))
+                except m.Rejected as exc:value=('rejected',str(exc))
+            return value,calls
+        events=[json.loads(line) for line in raw.splitlines()]
+        self.assertTrue(any(e['kind']=='row_remove' for e in events))
+        for changed in (None,'row_committed','frame_exit'):
+            with self.subTest(changed=changed):
+                if changed is None:trace.write_bytes(raw)
+                else:
+                    forged=copy.deepcopy(events)
+                    event=next(e for e in reversed(forged) if e['kind']==changed)
+                    field='map_after' if changed=='row_committed' else 'final_map'
+                    event['payload'][field]['sha256']='0'*64
+                    m.write_events(trace,forged)
+                expected=observe(namespace['validate_trace'])
+                actual=observe(m.validate_trace)
+                self.assertEqual(actual,expected)
+                self.assertTrue(actual[1], 'must retain real subprocess observations')
+                self.assertEqual(actual[0][0],'return' if changed is None else 'rejected')
 
     def test_private_J_prior_span_requires_all_five_real_operations_and_full_map(self):
         # Actual temporary Git/collector evidence under an explicit private
