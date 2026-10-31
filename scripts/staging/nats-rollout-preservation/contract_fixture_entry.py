@@ -11,11 +11,13 @@ import sys
 
 _SHA256 = re.compile(r'[a-f0-9]{64}\Z')
 _ROOTS = frozenset({'nats-rollout-preservation', 'nats-known-baseline'})
+_CAPTURE_SOURCE = Path('/bundle/capture')
+_EXPECTED_CAPTURED_NAMES_SHA256 = '42a4a01270ac4e2328faa81c32dd363d19b8c4d8fe383d8b7aa46bbf97af2998'
 
 
 def _materialize_capture(base):
     base = Path(base)
-    source = Path('/bundle/capture')
+    source = _CAPTURE_SOURCE
     code = base / 'scripts/staging'
     if code.exists() or code.is_symlink():
         raise RuntimeError('captured_code_destination_exists')
@@ -24,7 +26,12 @@ def _materialize_capture(base):
         raise RuntimeError('captured_code_manifest_missing')
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
-    if not isinstance(manifest, dict) or not 1 <= len(manifest) <= 101:
+    if not isinstance(manifest, dict) or len(manifest) != 89:
+        raise RuntimeError('captured_code_manifest_invalid')
+    if any(not isinstance(relative, str) for relative in manifest):
+        raise RuntimeError('captured_code_manifest_invalid')
+    names = json.dumps(sorted(manifest), separators=(',', ':')).encode()
+    if hashlib.sha256(names).hexdigest() != _EXPECTED_CAPTURED_NAMES_SHA256:
         raise RuntimeError('captured_code_manifest_invalid')
     required = {
         'nats-rollout-preservation/contract_fixture_entry.py',

@@ -71,7 +71,11 @@ def public_code_sha(path):
 
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'),object_pairs_hook=guard.object_pairs)
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=94:raise Blocked('rollout_code_manifest_invalid')
+    # Historical captures retain their bound; admit only the exact successor inventory.
+    if (not isinstance(manifest,dict) or not (1<=len(manifest)<=89 or
+        len(manifest)==94 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+        == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20')):
+        raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')

@@ -10,6 +10,11 @@ The existing root CLI, global operation lock and TT Session remain the authority
 
 ## Scope and decisions
 
+This is a source-only checkpoint. The coordinator is not called by the staging
+bridge until the outstanding integration, recovery and runtime qualification
+below are completed. Existing full and app-only rollouts retain their original
+renderer proof and other admission checks; this checkpoint does not provision P3.
+
 Only the parent coordinator and its tests are owned here. Child material,
 cryptographic validation, auxiliary OCI and existing bridge/Session files have
 separate owners. No live operations, generic root API, arbitrary command/path,

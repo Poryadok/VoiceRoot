@@ -283,7 +283,7 @@ class Tests(unittest.TestCase):
         source_sha = 'b' * 40
         inputs = {
             'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
-            'migrations': [{'name': '000031_historical.up.sql', 'sha256': 'a' * 64}],
+            'migrations': [{'name': '000031_previous.up.sql', 'sha256': 'a' * 64}],
             'verifier_sql_sha256': prerequisite.VERIFIER_V1_SHA256,
             'configmaps': {'provision': 'cm-provision', 'migrations': 'cm-migrations', 'verify': 'cm-verify'},
             'job_images': {'provision': {'provision': 'postgres'}, 'migrate': {'migrate': 'migrate'},
@@ -367,7 +367,7 @@ class Tests(unittest.TestCase):
         created_jobs = [event[1] for event in kube.events
                         if len(event) == 2 and event[0] == 'created-job']
         self.assertEqual(created_jobs, [inputs['jobs'][role] for role in prerequisite.JOB_ROLES])
-        self.assertEqual(receipt['verifier'], gis.verifier_output(32))
+        self.assertEqual(receipt['verifier'], gis.verifier_output(prerequisite.validate_source_revision(inputs)))
         self.assertEqual(set(receipt['jobs']), {'provision', 'migrate', 'verify'})
         self.assertTrue(gis.validate_prerequisite_receipt(receipt, plan))
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
@@ -961,7 +961,7 @@ class DevReceiptProducerTests(unittest.TestCase):
         image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'a' * 64
         source_sha = 'b' * 40
         inputs = {'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
-            'migrations': [{'name': '000031_historical.up.sql', 'sha256': 'a' * 64}],
+            'migrations': [{'name': '000031_previous.up.sql', 'sha256': 'a' * 64}],
             'verifier_sql_sha256': prerequisite.VERIFIER_V1_SHA256,
             'configmaps': {'provision': 'cm-provision', 'migrations': 'cm-migrations', 'verify': 'cm-verify'},
             'job_images': {'provision': {'provision': 'postgres'}, 'migrate': {'migrate': 'migrate'},
