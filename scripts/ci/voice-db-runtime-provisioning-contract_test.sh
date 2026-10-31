@@ -394,12 +394,27 @@ if grep -Eq '^[[:space:]]+[^#].*scripts/staging/apply-migrate-jobs_test\.sh' \
     <<<"${ci_script_tests_block}"; then
   apply_contract_reachable=true
 else
-  for dependency in ${ci_script_tests_dependencies}; do
+  pending_dependencies="${ci_script_tests_dependencies}"
+  visited_dependencies=' '
+  while [[ -n "${pending_dependencies// /}" ]]; do
+    dependency="${pending_dependencies%% *}"
+    if [[ "${pending_dependencies}" == *' '* ]]; then
+      pending_dependencies="${pending_dependencies#* }"
+    else
+      pending_dependencies=''
+    fi
+    [[ -n "${dependency}" ]] || continue
+    [[ "${visited_dependencies}" != *" ${dependency} "* ]] || continue
+    visited_dependencies+="${dependency} "
     dependency_block="$(make_target_block "${dependency}")"
     if grep -Eq '^[[:space:]]+[^#].*scripts/staging/apply-migrate-jobs_test\.sh' \
         <<<"${dependency_block}"; then
       apply_contract_reachable=true
       break
+    fi
+    dependency_header="$(head -n1 <<<"${dependency_block}")"
+    if [[ "${dependency_header}" == *:* ]]; then
+      pending_dependencies+=" ${dependency_header#*:}"
     fi
   done
 fi

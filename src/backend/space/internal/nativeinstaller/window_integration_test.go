@@ -52,9 +52,13 @@ func TestMaintenanceWindowWithRealAutovacuum(t *testing.T) {
 	defer func() { require.NoError(t, target.Close(context.Background())) }()
 	_, err = target.Exec(ctx, `CREATE TABLE vacuum_probe WITH (autovacuum_vacuum_threshold=0,autovacuum_vacuum_scale_factor=0,autovacuum_analyze_threshold=1000000000) AS SELECT i,repeat(md5(i::text),32) payload FROM generate_series(1,50000) i; DELETE FROM vacuum_probe WHERE i%2=0`)
 	require.NoError(t, err)
+	var tableOID uint32
+	require.NoError(t, target.QueryRow(ctx, `SELECT 'vacuum_probe'::regclass::oid`).Scan(&tableOID))
 	var workerPID int32
 	require.Eventually(t, func() bool {
-		err := admin.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname='space_db' AND backend_type='autovacuum worker' LIMIT 1`).Scan(&workerPID)
+		// Observe the real worker while it is still in the first half of the
+		// cost-delayed probe-table scan, not an unrelated or near-finished worker.
+		err := admin.QueryRow(ctx, `SELECT a.pid FROM pg_stat_activity a JOIN pg_stat_progress_vacuum p USING(pid) WHERE a.datname='space_db' AND a.backend_type='autovacuum worker' AND p.relid=$1 AND p.heap_blks_total>1 AND p.heap_blks_scanned < p.heap_blks_total/2 LIMIT 1`, tableOID).Scan(&workerPID)
 		return err == nil
 	}, 30*time.Second, 50*time.Millisecond, "requires real PostgreSQL autovacuum, never an application_name imitation")
 	require.NoError(t, check(), "real autovacuum must preserve the drained application's maintenance window")

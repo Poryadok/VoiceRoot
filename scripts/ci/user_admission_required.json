@@ -1,0 +1,5 @@
+{
+  "user": [
+    ["voice/backend/user/internal/grpcsvc", "TestAdmissionEligibility_NativeExactPairAndRevisionWriters"]
+  ]
+}

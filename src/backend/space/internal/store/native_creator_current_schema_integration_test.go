@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	spacev1 "voice.app/voice/space/v1"
@@ -66,9 +67,14 @@ func testCreatorBornCurrentSchema(t *testing.T, version int64) {
 	err = admin.QueryRow(ctx, `SELECT count(*) FROM public.spaces WHERE owner_profile_id=$1`, profile).Scan(&count)
 	creatorBornCheck(t, "NO_REPLAY_SPACE", err == nil && count == 1)
 
+	installerTx, err := admin.Begin(ctx)
+	creatorBornCheck(t, "INSTALLER_TX", err == nil)
+	err = requireBornCreatorServingRole(ctx, installerTx)
+	creatorBornCheck(t, "INSTALLER_ROLE_DENIED", errors.Is(err, ErrMemberAuthorityUnavailable))
+	creatorBornCheck(t, "INSTALLER_TX_ROLLBACK", installerTx.Rollback(ctx) == nil)
 	denied, _, deniedProfile := signedProjectionCreator(t, &SpaceStore{Pool: admin}, &spacev1.CreateSpaceRequest{Name: "installer cannot serve"})
 	_, err = denied()
-	creatorBornCheck(t, "INSTALLER_DENIED", errors.Is(err, ErrMemberAuthorityUnavailable))
+	creatorBornCheck(t, "INSTALLER_DENIED", errors.Is(err, ErrMemberAuthorityUnavailable) || errors.Is(err, ErrAccountBanUnavailable))
 	creatorBornNoEffects(t, ctx, admin, deniedProfile)
 
 	fail, _, failedProfile := signedProjectionCreator(t, st, &spacev1.CreateSpaceRequest{Name: "constraint rollback", Visibility: "invalid"})
@@ -79,6 +85,12 @@ func testCreatorBornCurrentSchema(t *testing.T, version int64) {
 	_, err = fail()
 	creatorBornCheck(t, "ROLLED_BACK_CREDENTIAL_REPLAY_DENIED", err != nil)
 	creatorBornNoEffects(t, ctx, admin, failedProfile)
+	// The fixture creates and grants a temporary login after installation. Remove
+	// those test-only grants before requalifying the original installer catalog.
+	role := pgx.Identifier{serving.Config().ConnConfig.User}.Sanitize()
+	serving.Close()
+	_, err = admin.Exec(ctx, "DROP OWNED BY "+role+"; DROP ROLE "+role)
+	creatorBornCheck(t, "SERVING_FIXTURE_CLEANUP", err == nil)
 	_, err = (&SpaceStore{Pool: admin}).InspectNativeInstallerSource(ctx, version)
 	creatorBornCheck(t, "SOURCE_REMAINS_QUALIFIED", err == nil)
 }

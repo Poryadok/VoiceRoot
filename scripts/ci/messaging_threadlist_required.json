@@ -1,0 +1,5 @@
+{
+  "messaging": [
+    ["voice/backend/messaging/internal/threadlist", "TestPostgresImmutableNodesAndRollback"]
+  ]
+}

@@ -85,7 +85,8 @@ fi
 if [[ "${EVENT_NAME}" == pull_request ]]; then
   require_job current-diff-contract "${JOB_CURRENT_DIFF_CONTRACT:-skipped}"
 fi
-check_if "${RUN_HISTORY_AUDIT:-false}" voice-history-audit
+check_if "${RUN_F13_HISTORICAL_REPLAY:-false}" f13-historical-replay
+check_if "${RUN_CHAT_AUTH_JAVA:-false}" chat-auth-java-integration
 check_if "$(or_true "${GLOBAL}" "${RUN_CI_SCRIPTS:-false}")" ci-script-tests
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
 check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
@@ -108,12 +109,15 @@ check_if "$(or_true "${PROTOS}" "${GLOBAL}")" protobuf
 check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
 check_if "${RUN_MATCH_SQUAD_OVERLAY:-false}" match-squad-overlay
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
+check_if "$(or_true "${RUN_FLUTTER_MUSIC:-false}" "${PROTOS}" "${GLOBAL}")" flutter-music-proof
+check_if "$(or_true "${RUN_FLUTTER_HELP:-false}" "${PROTOS}" "${GLOBAL}")" flutter-help-proof
+check_if "$(or_true "${RUN_FLUTTER_STARTUP:-false}" "${PROTOS}" "${GLOBAL}")" flutter-startup-proof
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-unit-tests
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
 check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
 check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr
-check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth
+check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}" "${RUN_AUTH_TEST_IMPACT:-false}")" backend-auth
 if [[ "${EVENT_NAME}" == pull_request ]]; then
   check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth-image
 fi

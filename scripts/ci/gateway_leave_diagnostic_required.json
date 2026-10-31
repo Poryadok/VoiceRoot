@@ -1,0 +1,5 @@
+{"gateway": [
+  ["voice/backend/gateway", "TestComposeSpaceLeaveDiagnosticPreservesStrictStatus"],
+  ["voice/backend/gateway", "TestComposeSpaceLeaveDiagnosticPreservesStrictStatus/204"],
+  ["voice/backend/gateway", "TestComposeSpaceLeaveDiagnosticPreservesStrictStatus/503"]
+]}

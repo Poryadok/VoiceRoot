@@ -1,0 +1,5 @@
+{"space": [
+  ["voice/backend/space/internal/store", "TestAccountBanIntentConcurrency50"],
+  ["voice/backend/space/internal/store", "TestAccountBanLockWaitExhaustsOriginalBudget50"],
+  ["voice/backend/space/internal/store", "TestAccountBanLateCaptureCannotCommitOrSplice50"]
+]}

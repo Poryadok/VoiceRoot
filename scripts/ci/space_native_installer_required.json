@@ -1,0 +1,15 @@
+{
+  "space": [
+    ["voice/backend/space/internal/nativeinstaller", "TestProductionFreshChainAndRetainedVerify"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/created"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/migrated44"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/trusted44"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/migrated45"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/trusted45"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/migrated50"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/trusted50"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/trusted51"],
+    ["voice/backend/space/internal/nativeinstaller", "TestCommittedPhaseFailureNeverAutoResumes/complete"]
+  ]
+}
