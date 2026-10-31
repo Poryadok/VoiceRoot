@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import unittest
 import json
@@ -11,106 +12,6 @@ from unittest.mock import Mock, patch
 
 import nats_contract_integration as integration
 import contract_fixture_entry as capture_entry
-
-
-# The previous reviewed capture contained 83 Python sources. The read-only
-# source comparison records that the five staged prerequisite modules below
-# are the only additions; preserve the baseline membership separately from
-# those source-derived imports. The manifest also includes the built kernel.
-BASELINE_CAPTURED_PYTHON_SOURCES = frozenset((
-    'nats-known-baseline/commands.py',
-    'nats-known-baseline/controller.py',
-    'nats-known-baseline/docker_runtime.py',
-    'nats-known-baseline/root_main.py',
-    'nats-known-baseline/scenario.py',
-    'nats-known-baseline/stage_runtime.py',
-    'nats-rollout-preservation/actor_auth.py',
-    'nats-rollout-preservation/actor_permissions.py',
-    'nats-rollout-preservation/actor_root.py',
-    'nats-rollout-preservation/actor_verification.py',
-    'nats-rollout-preservation/apply.py',
-    'nats-rollout-preservation/bootstrap_auth.py',
-    'nats-rollout-preservation/bootstrap_enrollment.py',
-    'nats-rollout-preservation/bootstrap_renewal.py',
-    'nats-rollout-preservation/bootstrap_root.py',
-    'nats-rollout-preservation/bootstrap_selection.py',
-    'nats-rollout-preservation/bot_migration.py',
-    'nats-rollout-preservation/bridge.py',
-    'nats-rollout-preservation/bridge_root.py',
-    'nats-rollout-preservation/closed_archive.py',
-    'nats-rollout-preservation/closed_durable.py',
-    'nats-rollout-preservation/compiler.py',
-    'nats-rollout-preservation/contract_fixture_entry.py',
-    'nats-rollout-preservation/deployment_report.py',
-    'nats-rollout-preservation/encrypted_cut.py',
-    'nats-rollout-preservation/errors.py',
-    'nats-rollout-preservation/expired_admission.py',
-    'nats-rollout-preservation/expired_finish.py',
-    'nats-rollout-preservation/expired_proof.py',
-    'nats-rollout-preservation/expired_recovery.py',
-    'nats-rollout-preservation/expired_transport.py',
-    'nats-rollout-preservation/gis_existing_update.py',
-    'nats-rollout-preservation/gis_first_install.py',
-    'nats-rollout-preservation/gis_prerequisite.py',
-    'nats-rollout-preservation/github_custody.py',
-    'nats-rollout-preservation/guard.py',
-    'nats-rollout-preservation/hub_bridge_identity.py',
-    'nats-rollout-preservation/hub_bridge_unit.py',
-    'nats-rollout-preservation/installer.py',
-    'nats-rollout-preservation/migrations.py',
-    'nats-rollout-preservation/native_store.py',
-    'nats-rollout-preservation/nats_a3_roster_integration.py',
-    'nats-rollout-preservation/nats_active_contract.py',
-    'nats-rollout-preservation/nats_contract_actor.py',
-    'nats-rollout-preservation/nats_contract_custody.py',
-    'nats-rollout-preservation/nats_contract_integration.py',
-    'nats-rollout-preservation/nats_contract_plan.py',
-    'nats-rollout-preservation/nats_deliver_all.py',
-    'nats-rollout-preservation/nats_migration.py',
-    'nats-rollout-preservation/nats_root_plan.py',
-    'nats-rollout-preservation/nonnats_plan.py',
-    'nats-rollout-preservation/nonnats_runtime.py',
-    'nats-rollout-preservation/normalize.py',
-    'nats-rollout-preservation/operator_reset.py',
-    'nats-rollout-preservation/operator_retirement.py',
-    'nats-rollout-preservation/paused_recovery.py',
-    'nats-rollout-preservation/prebuild_disposition.py',
-    'nats-rollout-preservation/prebuild_v5_disposition.py',
-    'nats-rollout-preservation/preserve.py',
-    'nats-rollout-preservation/preserved_upload.py',
-    'nats-rollout-preservation/provisional.py',
-    'nats-rollout-preservation/realtime_bootstrap.py',
-    'nats-rollout-preservation/realtime_bootstrap_existing.py',
-    'nats-rollout-preservation/release_policy_wiring.py',
-    'nats-rollout-preservation/renderer_execution.py',
-    'nats-rollout-preservation/renderer_root.py',
-    'nats-rollout-preservation/renderer_transition.py',
-    'nats-rollout-preservation/resource_claim.py',
-    'nats-rollout-preservation/rollout_census.py',
-    'nats-rollout-preservation/rollout_census_integration.py',
-    'nats-rollout-preservation/root_cli.py',
-    'nats-rollout-preservation/runtime_stage.py',
-    'nats-rollout-preservation/source_authority.py',
-    'nats-rollout-preservation/source_plan.py',
-    'nats-rollout-preservation/space_authority.py',
-    'nats-rollout-preservation/space_backup.py',
-    'nats-rollout-preservation/space_migration.py',
-    'nats-rollout-preservation/space_restore.py',
-    'nats-rollout-preservation/space_safeguards.py',
-    'nats-rollout-preservation/story_fixture.py',
-    'nats-rollout-preservation/story_witness.py',
-    'nats-rollout-preservation/transaction.py',
-    'nats-rollout-preservation/v8_upgrade.py',
-))
-INTENDED_STAGED_PREREQUISITE_SOURCES = frozenset((
-    'nats-rollout-preservation/staging_prerequisites.py',
-    'nats-rollout-preservation/staging_gis_material.py',
-    'nats-rollout-preservation/staging_p3_prerequisites.py',
-    'nats-rollout-preservation/staging_p3_prerequisites_crypto.py',
-    'nats-rollout-preservation/staging_release_policy_prepare.py',
-))
-EXPECTED_CAPTURED_PYTHON_SOURCES = (
-    BASELINE_CAPTURED_PYTHON_SOURCES | INTENDED_STAGED_PREREQUISITE_SOURCES)
 
 
 class HostedTransportTests(unittest.TestCase):
@@ -257,160 +158,6 @@ class HostedTransportTests(unittest.TestCase):
             'deliver_subject': '_INBOX.voice.realtime1.friend_removed',
             'deliver_policy': 'new', 'ack_policy': 'explicit'})
 
-    def test_bundle_contains_complete_captured_import_closure_and_manifest(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            bundle = Path(temporary)
-
-            def fake_build(args, **kwargs):
-                output = Path(args[args.index('-o') + 1])
-                output.write_bytes(('synthetic:' + output.name).encode())
-                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
-
-            with patch.object(integration.fixture, 'call', side_effect=fake_build):
-                integration.build_fixture_records(bundle)
-
-            manifest_path = bundle / 'capture/capture-manifest.json'
-            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-            self.assertEqual(len(BASELINE_CAPTURED_PYTHON_SOURCES), 83)
-            self.assertEqual(len(INTENDED_STAGED_PREREQUISITE_SOURCES), 5)
-            self.assertEqual(set(manifest), EXPECTED_CAPTURED_PYTHON_SOURCES | {
-                'nats-known-baseline/kernel',
-            })
-            self.assertEqual(len(manifest), 89)
-            self.assertTrue(INTENDED_STAGED_PREREQUISITE_SOURCES <= set(manifest))
-            self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
-            for relative, wanted in manifest.items():
-                content = (bundle / 'capture' / relative).read_bytes()
-                self.assertEqual(hashlib.sha256(content).hexdigest(), wanted)
-            for relative in (
-                'nats-rollout-preservation/closed_archive.py',
-                'nats-rollout-preservation/closed_durable.py',
-                'nats-rollout-preservation/root_cli.py',
-                'nats-rollout-preservation/nats_contract_integration.py',
-                'nats-known-baseline/kernel',
-            ):
-                content = (bundle / 'capture' / relative).read_bytes()
-                self.assertEqual(hashlib.sha256(content).hexdigest(), manifest[relative])
-            helper = (bundle / 'helper.go').read_text(encoding='utf-8')
-            for source_bound_seed in (
-                'SocialMaxAge int64',
-                'SocialDuplicateWindow int64',
-                'social.Config.Duplicates=time.Duration(baseline.SocialDuplicateWindow)',
-                'js.AddConsumer(expected.Stream,&nats.ConsumerConfig',
-                'js.ConsumerInfo(expected.Stream,expected.Name)',
-            ):
-                self.assertIn(source_bound_seed, helper)
-            self.assertEqual(
-                (bundle / 'contract_fixture_entry.py').read_bytes(),
-                (bundle / 'capture/nats-rollout-preservation/contract_fixture_entry.py').read_bytes(),
-            )
-            transport = (bundle / 'rollout_census_integration.py').read_text(encoding='utf-8')
-            self.assertIn("__import__('contract_fixture_entry').inner(sys.argv[2])", transport)
-            self.assertNotIn('contract_fixture.py', manifest)
-            entry = (bundle / 'contract_fixture_entry.py').read_text(encoding='utf-8')
-            self.assertLess(entry.index('root_cli.code_binding(code)'),
-                            entry.index('from nats_contract_integration import inner'))
-
-    @unittest.skipUnless(sys.platform == 'linux' and hasattr(os, 'chown') and
-                         hasattr(os, 'geteuid') and os.geteuid() == 0,
-                         'captured-code custody integration requires Linux root')
-    def test_contract_entry_materializes_exact_capture_before_fixture_import(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            bundle = root / 'bundle'
-            bundle.mkdir()
-
-            def fake_build(args, **kwargs):
-                output = Path(args[args.index('-o') + 1])
-                output.write_bytes(('synthetic:' + output.name).encode())
-                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
-
-            with patch.object(integration.fixture, 'call', side_effect=fake_build):
-                integration.build_fixture_records(bundle)
-
-            canonical = bundle / 'capture'
-            expected_manifest = json.loads((canonical / 'capture-manifest.json').read_text(encoding='utf-8'))
-            self.assertEqual(set(expected_manifest), EXPECTED_CAPTURED_PYTHON_SOURCES | {
-                'nats-known-baseline/kernel',
-            })
-            expected_names_sha = hashlib.sha256(json.dumps(
-                sorted(expected_manifest), separators=(',', ':')).encode()).hexdigest()
-            self.assertEqual(expected_names_sha, capture_entry._EXPECTED_CAPTURED_NAMES_SHA256)
-
-            def invoke(capture, base):
-                calls = []
-                fake_fixture = SimpleNamespace(inner=lambda path: calls.append(path) or 'fixture-entered')
-                previous_root_cli = sys.modules.pop('root_cli', None)
-                try:
-                    with patch.object(capture_entry, '_CAPTURE_SOURCE', capture), \
-                            patch.dict(sys.modules, {'nats_contract_integration': fake_fixture}):
-                        result = capture_entry.inner(base)
-                finally:
-                    sys.modules.pop('root_cli', None)
-                    if previous_root_cli is not None:
-                        sys.modules['root_cli'] = previous_root_cli
-                return result, calls
-
-            result, calls = invoke(canonical, root / 'positive')
-            self.assertEqual(result, 'fixture-entered')
-            self.assertEqual(calls, [str(root / 'positive')])
-            copied = root / 'positive/scripts/staging'
-            self.assertEqual((copied / 'capture-manifest.json').read_bytes(),
-                             (canonical / 'capture-manifest.json').read_bytes())
-            self.assertEqual((copied / 'nats-rollout-preservation/contract_fixture_entry.py').stat().st_mode & 0o222, 0)
-
-            def rejected_variant(name, mutate, expected_error, destination_created=False):
-                variant = root / name
-                shutil.copytree(canonical, variant)
-                manifest_path = variant / 'capture-manifest.json'
-                manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-                mutate(variant, manifest)
-                manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
-                base = root / (name + '-base')
-                with self.assertRaisesRegex(RuntimeError, expected_error):
-                    invoke(variant, base)
-                self.assertEqual((base / 'scripts/staging').exists(), destination_created)
-
-            rejected_variant('omitted', lambda _variant, manifest: manifest.pop(next(iter(manifest))),
-                             'captured_code_manifest_invalid')
-
-            def add_extra(variant, manifest):
-                relative = 'nats-rollout-preservation/extra.py'
-                content = b'# unauthorized capture member\n'
-                (variant / relative).write_bytes(content)
-                manifest[relative] = hashlib.sha256(content).hexdigest()
-            rejected_variant('extra', add_extra, 'captured_code_manifest_invalid')
-
-            def change_hash(_variant, manifest):
-                relative = next(iter(manifest))
-                manifest[relative] = '0' * 64
-            rejected_variant('changed-hash', change_hash, 'captured_code_source_changed', destination_created=True)
-
-            def traversal(_variant, manifest):
-                relative = next(iter(manifest))
-                manifest['../escape.py'] = manifest.pop(relative)
-            rejected_variant('traversal', traversal, 'captured_code_manifest_invalid')
-
-            symlink = root / 'symlink'
-            shutil.copytree(canonical, symlink)
-            relative = next(iter(expected_manifest))
-            source_file = symlink / relative
-            source_file.unlink()
-            source_file.symlink_to(canonical / relative)
-            symlink_manifest = symlink / 'capture-manifest.json'
-            manifest = json.loads(symlink_manifest.read_text(encoding='utf-8'))
-            base = root / 'symlink-base'
-            with patch.object(capture_entry, '_CAPTURE_SOURCE', symlink):
-                with self.assertRaisesRegex(RuntimeError, 'captured_code_source_invalid'):
-                    capture_entry._materialize_capture(base)
-            self.assertTrue((base / 'scripts/staging').exists())
-
-            occupied = root / 'occupied'
-            (occupied / 'scripts/staging').mkdir(parents=True)
-            with patch.object(capture_entry, '_CAPTURE_SOURCE', canonical):
-                with self.assertRaisesRegex(RuntimeError, 'captured_code_destination_exists'):
-                    capture_entry._materialize_capture(occupied)
-
     def test_hosted_runner_rejection_precedes_docker(self):
         with patch.object(integration.sys, 'platform', 'linux'):
             with patch.dict(os.environ, {}, clear=True):
@@ -536,6 +283,77 @@ class HostedTransportTests(unittest.TestCase):
             ['docker', 'info', '--format', '{{.OSType}}'],
             ['docker', 'pull', integration.fixture._pinned_runtime_images()[0]],
         ])
+
+
+class FixtureIsolationTest(unittest.TestCase):
+    def test_capture_is_production_bundle_and_drivers_are_separate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory)
+            def build(args, **kwargs):
+                Path(args[args.index('-o') + 1]).write_bytes(b'\x7fELFfixture')
+            with patch.object(integration.fixture, 'call', side_effect=build):
+                integration.build_fixture_records(bundle)
+            manifest = json.loads((bundle / 'capture/capture-manifest.json').read_bytes())
+            self.assertEqual(len(manifest), 99)
+            for name, digest in manifest.items():
+                self.assertEqual(hashlib.sha256((bundle/'capture'/name).read_bytes()).hexdigest(), digest)
+            for name in ('contract_fixture_entry.py', 'nats_contract_integration.py',
+                         'nats_a3_roster_integration.py', 'rollout_census_integration.py'):
+                self.assertNotIn('nats-rollout-preservation/' + name, manifest)
+                self.assertTrue((bundle / name).is_file())
+
+    @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root custody')
+    def test_binding_rejects_spoof_and_corruption_before_driver(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = root / 'bundle'
+            bundle.mkdir()
+            def build(args, **kwargs):
+                Path(args[args.index('-o') + 1]).write_bytes(b'\x7fELFfixture')
+            with patch.object(integration.fixture, 'call', side_effect=build):
+                integration.build_fixture_records(bundle)
+            source = bundle / 'capture'
+            entry = Path(__file__).with_name('contract_fixture_entry.py')
+            spoof = root / 'spoof'
+            spoof.mkdir()
+            (spoof / 'root_cli.py').write_text("raise RuntimeError('spoof_executed')\r\n")
+            script = '''
+import importlib.util, pathlib, sys, types
+entry, source, base, spoof, preload = sys.argv[1:]
+spec = importlib.util.spec_from_file_location('entry', entry)
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+module._CAPTURE_SOURCE = pathlib.Path(source)
+sys.path.insert(0, spoof)
+if preload == 'yes': sys.modules['root_cli'] = types.ModuleType('root_cli')
+module._materialize_capture(base)
+import root_cli
+assert pathlib.Path(root_cli.__file__) == pathlib.Path(base)/'scripts/staging/nats-rollout-preservation/root_cli.py'
+print('REAL_BINDING_COMPLETED')
+'''
+            def run(capture, name, preload='no'):
+                return subprocess.run([sys.executable, '-I', '-c', script, str(entry), str(capture),
+                    str(root/name), str(spoof), preload], capture_output=True, text=True)
+            good = run(source, 'good')
+            self.assertEqual(good.returncode, 0, good.stderr)
+            self.assertIn('REAL_BINDING_COMPLETED', good.stdout)
+            collision = run(source, 'collision', 'yes')
+            self.assertNotEqual(collision.returncode, 0)
+            self.assertIn('captured_module_collision', collision.stderr)
+            self.assertNotIn('REAL_BINDING_COMPLETED', collision.stdout)
+            for name, mutate in (
+                ('member', lambda p: (p/'nats-rollout-preservation/root_cli.py').write_text('spoof')),
+                ('manifest', lambda p: (p/'capture-manifest.json').write_text('{}')),
+                ('duplicate', lambda p: (p/'capture-manifest.json').write_text('{"x":1,"x":2}')),
+                ('order', lambda p: (p/'capture-manifest.json').write_text(json.dumps(
+                    dict(reversed(list(json.loads((p/'capture-manifest.json').read_text()).items())))))),
+            ):
+                variant = root / name
+                shutil.copytree(source, variant)
+                mutate(variant)
+                result = run(variant, name+'-base')
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertNotIn('REAL_BINDING_COMPLETED', result.stdout)
+                self.assertNotIn('spoof_executed', result.stderr)
 
 
 if __name__ == '__main__':

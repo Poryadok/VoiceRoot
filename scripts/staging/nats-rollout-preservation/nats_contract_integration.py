@@ -3,9 +3,9 @@
 Synthetic realm only. Same-host copy is a mechanism fixture, not off-node live
 custody or accepted staging rollout. No live credentials or PVC are referenced.
 """
-import ast,base64,copy,hashlib,json,os,re,subprocess,sys
+import base64,copy,hashlib,json,os,re,subprocess,sys
 from pathlib import Path
-import shutil,tempfile,time,uuid
+import shutil,tempfile,time,uuid,tarfile
 import rollout_census_integration as fixture
 from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS
 
@@ -88,8 +88,7 @@ def _postmigration_plan_inputs(actor,stream_details):
 def inner(base):
     base=Path(base)
     code=base/'scripts/staging'
-    sys.path[:0]=[str(code/'nats-rollout-preservation'),str(code/'nats-known-baseline'),
-        '/bundle','/source/scripts/staging/nats-known-baseline']
+    # The entry point installed the captured module finder before loading us.
     from docker_runtime import DockerRuntime,NATS_IMAGE
     from scenario import ready
     from native_store import archive_closed_store,verify_archive
@@ -359,83 +358,6 @@ def inner(base):
                 assert not owned_runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}'])
     receipt['removed_container_ids']=removed;print(json.dumps(receipt,sort_keys=True))
 
-_CAPTURE_STARTS=(
-    'nats-rollout-preservation/contract_fixture_entry.py',
-    'nats-rollout-preservation/nats_contract_integration.py',
-    'nats-rollout-preservation/rollout_census.py',
-    'nats-rollout-preservation/rollout_census_integration.py',
-    'nats-rollout-preservation/nats_contract_actor.py',
-    'nats-rollout-preservation/nats_contract_plan.py',
-    'nats-rollout-preservation/nats_migration.py',
-    'nats-rollout-preservation/preserve.py',
-    'nats-rollout-preservation/native_store.py',
-    'nats-rollout-preservation/bootstrap_auth.py',
-    'nats-rollout-preservation/bootstrap_root.py',
-    'nats-rollout-preservation/bootstrap_enrollment.py',
-    'nats-rollout-preservation/bootstrap_renewal.py',
-    'nats-rollout-preservation/guard.py',
-    'nats-known-baseline/docker_runtime.py',
-    'nats-known-baseline/scenario.py',
-    'nats-known-baseline/controller.py',
-    'nats-known-baseline/commands.py',
-    'nats-known-baseline/stage_runtime.py',
-)
-
-
-def _captured_python_sources(source):
-    roots={name:Path(source)/'scripts/staging'/name for name in (
-        'nats-rollout-preservation','nats-known-baseline')}
-    pending=[Path(source)/'scripts/staging'/relative for relative in _CAPTURE_STARTS]
-    captured={}
-
-    def local_module(name):
-        parts=name.split('.')
-        for root_name,root in roots.items():
-            candidate=root.joinpath(*parts).with_suffix('.py')
-            if candidate.is_file():
-                return root_name+'/'+candidate.relative_to(root).as_posix(),candidate
-            package=root.joinpath(*parts,'__init__.py')
-            if package.is_file():
-                return root_name+'/'+package.relative_to(root).as_posix(),package
-        return None
-
-    while pending:
-        path=pending.pop().resolve()
-        relative=None
-        for root_name,root in roots.items():
-            try:
-                relative=root_name+'/'+path.relative_to(root.resolve()).as_posix()
-                break
-            except ValueError:
-                pass
-        if relative is None or relative in captured:
-            continue
-        if not path.is_file():
-            raise RuntimeError('captured_python_source_missing')
-        captured[relative]=path
-        tree=ast.parse(path.read_text(encoding='utf-8'),filename=relative)
-        imported=set()
-        for node in ast.walk(tree):
-            if isinstance(node,ast.Import):
-                imported.update(alias.name for alias in node.names)
-            elif isinstance(node,ast.ImportFrom) and node.level==0 and node.module:
-                imported.add(node.module)
-                imported.update(node.module+'.'+alias.name for alias in node.names if alias.name!='*')
-            elif (isinstance(node,ast.Call) and isinstance(node.func,ast.Name)
-                    and node.func.id=='__import__' and node.args
-                    and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str)):
-                imported.add(node.args[0].value)
-            elif (isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)
-                    and node.func.attr=='import_module' and node.args
-                    and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str)):
-                imported.add(node.args[0].value)
-        for name in sorted(imported):
-            found=local_module(name)
-            if found is not None:
-                pending.append(found[1])
-    return dict(sorted(captured.items()))
-
-
 def build_fixture_records(bundle,*,a3_roster=False):
     source=Path(__file__).resolve().parents[3];module=source/'scripts/staging/nats-known-baseline'
     helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os"; "reflect";')
@@ -532,20 +454,21 @@ func post(check bool) {
     fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
     fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
     fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
+    fixture.call(['go','build','-o',str(bundle/'story-current4-probe'),'./cmd/owned-story-probe'],cwd=source/'src/backend/story',env=env)
     if a3_roster:
         fixture.call(['go','build','-o',str(bundle/'a3-client'),str(Path(__file__).parent/'testdata/a3_roster_client.go')],cwd=module,env=env)
     records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}
     if a3_roster:records['a3-client']=base64.b64encode((bundle/'a3-client').read_bytes()).decode()
     records['nats-9ae-predecessor.json']=base64.b64encode((Path(__file__).parent/'testdata/nats-9ae-predecessor.json').read_bytes()).decode()
     records['contract_fixture_entry.py']=base64.b64encode((Path(__file__).parent/'contract_fixture_entry.py').read_bytes()).decode()
-    captured=_captured_python_sources(source)
-    captured_bytes={relative:path.read_bytes() for relative,path in captured.items()}
-    captured_bytes['nats-known-baseline/kernel']=(bundle/'kernel').read_bytes()
-    manifest={relative:hashlib.sha256(content).hexdigest() for relative,content in sorted(captured_bytes.items())}
-    records['capture/capture-manifest.json']=base64.b64encode(
-        (json.dumps(manifest,sort_keys=True,separators=(',',':'))+'\n').encode()).decode()
-    for relative,content in captured_bytes.items():
-        records['capture/'+relative]=base64.b64encode(content).decode()
+    import bundle as production_bundle
+    with tempfile.TemporaryDirectory() as output:
+        production_bundle.build(bundle/'kernel',output,bundle/'bootstrap-renewer',bundle/'story-current4-probe')
+        with tarfile.open(Path(output)/'rollout-bundle.tar') as archive:
+            for member in archive.getmembers():
+                records['capture/'+member.name]=base64.b64encode(archive.extractfile(member).read()).decode()
+    for name in ('nats_contract_integration.py','nats_a3_roster_integration.py'):
+        records[name]=base64.b64encode((Path(__file__).parent/name).read_bytes()).decode()
     # Existing bounded outer fixture invokes this entry; it owns cleanup.
     transport=(Path(__file__).parent/'rollout_census_integration.py').read_bytes().replace(b'inner(sys.argv[2])',b"__import__('contract_fixture_entry').inner(sys.argv[2])")
     records['rollout_census_integration.py']=base64.b64encode(transport).decode()
