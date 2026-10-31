@@ -22,7 +22,11 @@ class RouteGuardTest(unittest.TestCase):
         phase._dependencies=(supervisor,cut,physical,metadata,package,inventory,catalog,census)
         phase.journal=SimpleNamespace(state={'steps':{'full-cohort-backup-route':{'status':'done','route':copy.deepcopy(route)}}})
         phase._bound_journal=phase.journal;phase.cohort=phase._bound_cohort=None;phase._route=route
+        phase.auth_preparation=phase._auth_preparation=None
         self.assertEqual(phase._guard(),(row,revision))
+        phase.auth_preparation=object()
+        with self.assertRaises(backup.BackupError):phase._guard()
+        phase.auth_preparation=None
         del row['full_cohort_backup_route']
         with self.assertRaises(backup.BackupError):phase._guard()
         row['full_cohort_backup_route']=copy.deepcopy(route)
