@@ -17,12 +17,18 @@ class CohortInstallationJournalTests(unittest.TestCase):
     def test_active_release_writer_preserves_scoped_authority(self):
         import bridge_root
         installation=claim.production_installation();actions=object.__new__(bridge_root.Actions);actions._installation=installation
-        c=context();session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal());session.admit(start=True)
-        session.journal.row.update(target_sha256='c'*64);actions.tt_session=session
+        c=context();helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
+        session=claim.Session(c,'a'*12,claim.digest(helper),lambda:card(c),MemoryJournal());session.admit(start=True)
+        target={'registry':'registry','tag':c['commit'],'mode':'full','changed_services':[],
+                'source_hashes':{'source':'1'*64},'template_hashes':{'voice-user':'2'*64},
+                'input_template_hashes':{'voice-user':'3'*64},'images':c['images'],
+                'manifest_sha256':'4'*64,'migration_sha256':'5'*64,'nonnats_sha256':'6'*64,
+                'installation_sha256':installation.sha256}
+        session.journal.row.update(target_sha256=claim.digest(target));actions.tt_session=session
         state={'schema':'nats-rollout-root-v2','installation_sha256':installation.sha256,'operation':'a'*12,
-               'resource_fence':session.binding(),
+               'resource_fence':session.binding(),'code_capture':helper,
                'context':{'expected':{'namespace_uid':'ns','source_claim_uid':'pvc'}},
-               'target':{'installation_sha256':installation.sha256,'manifest_sha256':'b'*64}}
+               'target':target}
         def read(path):
             if path.name=='checkpoint.json':return copy.deepcopy(state)
             raise FileNotFoundError()
@@ -38,6 +44,9 @@ class CohortInstallationJournalTests(unittest.TestCase):
             state['resource_fence']=dict(fence,installation_sha256='f'*64)
             with self.assertRaises(RuntimeError):actions._active_release(state)
             state['resource_fence']=fence
+            state['target']['manifest_sha256']='e'*64
+            with self.assertRaises(RuntimeError):actions._active_release(state)
+            state['target']['manifest_sha256']='4'*64
             foreign=dict(row,installation_sha256='f'*64)
             with patch.object(bridge_root,'private_json',side_effect=lambda path:copy.deepcopy(state) if path.name=='checkpoint.json' else foreign):
                 with self.assertRaises(RuntimeError):actions._active_release(state)

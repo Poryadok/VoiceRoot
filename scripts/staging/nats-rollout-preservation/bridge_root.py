@@ -367,6 +367,7 @@ class Actions:
                 or session.installation!=self.installation or session.operation!=state['operation']
                 or commands.authority_guard!=session.check):raise Blocked('staging_installation_binding_changed')
             session.require_binding(state.get('resource_fence'))
+            resource_claim.historical_binding(state,installation=self.installation)
             if private_json(guard.ROOT/('rollout-'+state['operation'])/'checkpoint.json')!=state:
                 raise Blocked('staging_active_release_checkpoint_changed')
             row.update(schema='voice-active-release-v1',installation_sha256=self.installation.sha256)
