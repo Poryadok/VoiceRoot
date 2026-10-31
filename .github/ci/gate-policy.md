@@ -61,7 +61,11 @@ gate. When the event base is stale, its ancestry and the candidate's actual
 parents and merge tree are checked before using the actual base. Job-level
 success does not prove every required Go matrix case ran; the inventory and
 member receipts described below are still required. Neither the comparison nor
-this gate is a local preflight receipt or release qualification. The local
+this gate is a local preflight receipt or release qualification. When CI script
+checks are selected, local preflight runs a source-bound subset of gate/router
+cases with retained logs. Shell fixture cases that might reach a real Docker
+daemon or Go tool remain excluded until their execution environment is isolated;
+the full script matrix remains `not_run`. The local
 preflight runs the snapshot's current-diff validator against a synthetic commit
 with the captured HEAD as parent and records its output and source identity.
 That diagnostic checks the local tree against the requested base; it does not
