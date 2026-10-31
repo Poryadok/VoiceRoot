@@ -14,6 +14,28 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_cohort_checks_enrollment_before_actor_effects(self):
+        import bridge_root,actor_root,nats_root_plan,nats_contract_plan
+        installation=claim.production_installation();c=context()
+        session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal());session.admit(start=True)
+        actions=object.__new__(bridge_root.Actions);actions._installation=installation;actions.tt_session=session
+        actions.code=Path('/synthetic');actions.binding={}
+        workspace=bridge_root.INSTALLED/'sources'/session.operation
+        stage=SimpleNamespace(operation=session.operation,kube=Mock(),snapshots={'voice-story':{}},expected={})
+        previous={'schema':'fixture'}
+        enrollment={'schema':'voice-nats-bootstrap-enrollment-scoped-v4','previous_enrollment':previous,
+                    'previous_enrollment_sha256':nats_contract_plan.digest(previous),'installation_sha256':'f'*64,
+                    'binding':{},'secret':{},'credential_sha256':'a'*64,'verified':True,'auth_proof':{}}
+        def read(path):
+            if path.name=='active-contract.json':raise FileNotFoundError()
+            return enrollment if path.name=='bootstrap-enrollment-v4.json' else previous
+        with claim.command_scope(session.check),patch.object(bridge_root,'private_json',side_effect=read), \
+             patch.object(nats_root_plan,'monitor') as monitor, \
+             patch.object(actor_root,'preflight') as actor:
+            with self.assertRaises(Blocked):
+                bridge_root.capture_cohort_authorities(actions,{'mode':'full'},{'source_sha':c['commit']},workspace,stage,{'consumer_pairs':[]})
+            actor.assert_not_called();monitor.assert_not_called();stage.kube.get.assert_not_called()
+
     def test_historical_bridge_reader_uses_actions_installation(self):
         import bridge_root, paused_recovery
         installation=claim.production_installation();actions=object.__new__(bridge_root.Actions)

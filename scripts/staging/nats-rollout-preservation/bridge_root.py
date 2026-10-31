@@ -153,12 +153,6 @@ def capture_cohort_authorities(actions,request,approved,workspace,stage,contract
     except FileNotFoundError:active=None
     if active is not None:
         validate_active_contract_identity(active,stage.expected,baseline);contract=active['contract']
-    names=[name.removeprefix('voice-') for name in stage.snapshots if name!=HUB]
-    if 'story' in names:
-        composition=_cohort_story_composition(actions,request,approved,workspace)
-        actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,
-            story_composition=composition,installation=actions.installation)
-    else:actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,installation=actions.installation)
     try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
     except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
     previous=private_json(guard.ROOT/'bootstrap-enrollment.json')
@@ -168,6 +162,12 @@ def capture_cohort_authorities(actions,request,approved,workspace,stage,contract
         or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous)):
         raise Blocked('enrolled_bootstrap_selection_refused')
     nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml,installation=actions.installation)
+    names=[name.removeprefix('voice-') for name in stage.snapshots if name!=HUB]
+    if 'story' in names:
+        composition=_cohort_story_composition(actions,request,approved,workspace)
+        actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,
+            story_composition=composition,installation=actions.installation)
+    else:actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,installation=actions.installation)
     session.check()
     return {'schema':'voice-staging-cohort-preflight-v1','operation':session.operation,
             'services':names,'actor':actor,'nats':nats,'enrollment':enrollment,'contract':contract}
@@ -664,19 +664,8 @@ class Actions:
         import actor_root
         if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
             raise Blocked('staging_prerequisites_capture_changed')
-        if cohort_ref is None:
-            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,installation=self.installation)
-        else:
+        if cohort_ref is not None:
             preserved_preflight=staging_cohort_preservation.load_preflight(self.tt_session)
-            names=preserved_preflight['services'];actor_authority=preserved_preflight['actor']
-            composition=_cohort_story_composition(self,request,approved,workspace)
-            refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,story_composition=composition,installation=self.installation)
-            stores=staging_cohort_preservation._read(staging_cohort_preservation._base(self.tt_session)/'stores.json')
-            current_secret=kube.get('secret','voice-app-secrets')
-            staging_cohort_preservation._app_successor(self.tt_session,stores['app_before'],current_secret)
-            actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,
-                stores['app_before']['metadata'],current_secret['metadata'])
-            staging_cohort_preservation.revalidate_paused(self.tt_session)
         if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
             raise Blocked('staging_prerequisites_capture_changed')
         if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
@@ -684,6 +673,10 @@ class Actions:
         if cohort_ref is not None:
             enrollment=preserved_preflight['enrollment'];nats_authority=preserved_preflight['nats']
             if preserved_preflight['contract']!=parameters['contract'] or nats_authority is None:
+                raise Blocked('cohort_preserved_authority_changed')
+            import nats_root_plan
+            current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
+            if any(current[key]!=nats_authority[key] for key in ('plan','binding','scripts')):
                 raise Blocked('cohort_preserved_authority_changed')
             parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         elif not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
@@ -700,6 +693,18 @@ class Actions:
                 import nats_root_plan
                 nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
+        if cohort_ref is None:
+            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,installation=self.installation)
+        else:
+            names=preserved_preflight['services'];actor_authority=preserved_preflight['actor']
+            composition=_cohort_story_composition(self,request,approved,workspace)
+            refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,story_composition=composition,installation=self.installation)
+            stores=staging_cohort_preservation._read(staging_cohort_preservation._base(self.tt_session)/'stores.json')
+            current_secret=kube.get('secret','voice-app-secrets')
+            staging_cohort_preservation._app_successor(self.tt_session,stores['app_before'],current_secret)
+            actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,
+                stores['app_before']['metadata'],current_secret['metadata'])
+            staging_cohort_preservation.revalidate_paused(self.tt_session)
         self._report('nats-preflight','COMPLETE')
         realtime_receipt=None
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
