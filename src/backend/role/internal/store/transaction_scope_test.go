@@ -190,10 +190,18 @@ func TestWithLockedTransaction(t *testing.T) {
 			return nil
 		})
 		require.Error(t, err, "canceled callback context cannot commit")
+		// Wait for PostgreSQL to finish the canceled connection's transaction
+		// before checking either lock release or the outcome of its write.
+		barrierCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		barrier, err := pool.Begin(barrierCtx)
+		require.NoError(t, err)
+		defer func() { _ = barrier.Rollback(context.Background()) }()
+		_, err = barrier.Exec(barrierCtx, "SELECT pg_advisory_xact_lock(hashtext($1))", spaceA.String())
+		require.NoError(t, err, "canceled transaction must release its space lock")
 		var count int
-		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM scope_probe WHERE id=$1", marker).Scan(&count))
+		require.NoError(t, barrier.QueryRow(barrierCtx, "SELECT count(*) FROM scope_probe WHERE id=$1", marker).Scan(&count))
 		require.Zero(t, count)
-		assertScopeSpaceAvailable(t, ctx, pool, spaceA)
 	})
 }
 
