@@ -103,7 +103,7 @@ class PrivateCustodyTests(unittest.TestCase):
             session=resource_claim.Session(context,'a'*12,prereq.digest(binding),lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{'scripts/staging/'+name:wanted}}
             execution={'fixture':'execution'}
-            receipt={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+            receipt={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                      'helper_sha256':session.helper,'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/('a'*12+'.json'),receipt)
             actions=bridge_root.Actions(installed/'code');actions.tt_session=session
