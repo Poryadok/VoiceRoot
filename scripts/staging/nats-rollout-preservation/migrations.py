@@ -122,8 +122,14 @@ def legacy_credentials(kube,plan,operation,secret_metadata):
             'metadata':{'name':'voice-rollout-'+operation+'-database-urls','namespace':guard.NS,
                         'labels':{'voice-rollout-operation':operation}},'data':data}
 
-def execute(kube,stage,plan,mode,secret_metadata,journal):
-    require_preserving_admission(mode,plan)
+def execute(kube,stage,plan,mode,secret_metadata,journal,*,resource_session=None,qualified_admission=None,
+            authorization_base=None,authorization_state=None):
+    if mode in ("full","app-only") or plan:
+        if resource_session is None or qualified_admission is None:
+            require_preserving_admission(mode,plan)
+        import staging_cohort_preservation as cohort
+        cohort.validate_migration_admission(qualified_admission,resource_session,authorization_base,
+            authorization_state,stage,plan,mode)
     if preflight(kube,plan,mode)!=secret_metadata:raise Blocked('rollout_database_secret_changed')
     completed=[]
     copied=legacy_credentials(kube,plan,stage.operation,secret_metadata)

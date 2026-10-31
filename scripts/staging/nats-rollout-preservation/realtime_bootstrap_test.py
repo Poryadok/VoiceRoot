@@ -118,6 +118,17 @@ class CatalogTests(unittest.TestCase):
         bootstrap.validate_plan(plan, session)
         parented={**plan,'schema':'voice-staging-realtime-bootstrap-v2','prerequisites_sha256':'3'*64}
         bootstrap.validate_plan(parented,session)
+        import resource_claim
+        authority=resource_claim.InstallationAuthority('owned-isolated-v1','11111111-1111-4111-8111-111111111111',
+            'r20260930a4','a'*64,'b'*64,'c'*64)
+        scoped_session=SimpleNamespace(operation=session.operation,context=session.context,helper=session.helper,installation=authority)
+        scoped={**plan,'schema':'voice-staging-realtime-bootstrap-v3','installation_sha256':authority.sha256}
+        scoped_parented={**scoped,'schema':'voice-staging-realtime-bootstrap-v4','prerequisites_sha256':'3'*64}
+        bootstrap.validate_plan(scoped,scoped_session)
+        bootstrap.validate_plan(scoped_parented,scoped_session)
+        for invalid in (plan,{**scoped,'installation_sha256':'0'*64},{**scoped,'extra':True}):
+            with self.assertRaises(bootstrap.Blocked):bootstrap.validate_plan(invalid,scoped_session)
+        with self.assertRaises(bootstrap.Blocked):bootstrap.validate_plan(scoped,session)
         for invalid in ({**parented,'prerequisites_sha256':'bad'},
                         {**plan,'prerequisites_sha256':'3'*64},
                         {k:v for k,v in parented.items() if k!='prerequisites_sha256'}):

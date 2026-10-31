@@ -72,16 +72,43 @@ def validate_plan(plan,session):
     except (KeyError,TypeError,ValueError):raise Blocked('cohort_plan_invalid') from None
 
 
+def _validate_source_receipt(session,receipt,approved,execution):
+    try:
+        resource_claim.validate_source_capture(receipt,installation=session.installation)
+        expected={'schema':'voice-staging-source-capture-v2',
+            'installation_sha256':session.installation.sha256,'operation':session.operation,
+            'context':session.context,'helper_sha256':session.helper,
+            'approved_sha256':digest(approved),'execution_sha256':digest(execution)}
+        if receipt!=expected:raise ValueError()
+    except (AttributeError,KeyError,TypeError,ValueError,RuntimeError):
+        raise Blocked('cohort_source_changed') from None
+
+
+def _validate_historical_source_receipt(binding,receipt,approved,execution,*,installation=None):
+    try:
+        installation=resource_claim.require_installation(installation)
+        resource_claim.validate_fence_binding(binding,installation=installation)
+        resource_claim.validate_source_capture(receipt,installation=installation)
+        schema=binding['schema']
+        expected={'schema':('voice-staging-source-capture-v2' if schema=='voice-staging-resource-fence-v2'
+                            else 'voice-staging-source-capture-v1'),
+            'operation':binding['operation'],'context':binding['context'],'helper_sha256':binding['helper_sha256'],
+            'approved_sha256':digest(approved),'execution_sha256':digest(execution)}
+        if schema=='voice-staging-resource-fence-v2':expected['installation_sha256']=installation.sha256
+        if receipt!=expected:raise ValueError()
+    except (AttributeError,KeyError,TypeError,ValueError,RuntimeError):
+        raise Blocked('cohort_source_changed') from None
+
+
 def _source(session,plan):
     parent=guard.ROOT/'installed'/'prerequisites'/session.operation
     approved=_read(parent/'approved.json');execution=_read(parent/'execution.json')
     receipt=_read(guard.ROOT/'installed'/'source-authority'/(session.operation+'.json'))
     prepared=_read(parent/'prepared.json')
     if (digest(receipt)!=plan['source_capture_sha256'] or digest(prepared)!=plan['prerequisite_inputs_sha256']
-        or digest(approved)!=plan['approved_sha256'] or digest(execution)!=plan['execution_sha256']
-        or receipt!={'schema':'voice-staging-source-capture-v1','operation':session.operation,
-            'context':session.context,'helper_sha256':session.helper,'approved_sha256':digest(approved),
-            'execution_sha256':digest(execution)}):raise Blocked('cohort_source_changed')
+        or digest(approved)!=plan['approved_sha256'] or digest(execution)!=plan['execution_sha256']):
+        raise Blocked('cohort_source_changed')
+    _validate_source_receipt(session,receipt,approved,execution)
     source=guard.ROOT/'installed'/'sources'/session.operation
     private._verify_helper_source(session,approved,source)
     custody=_read(parent/'code-custody.json')
@@ -371,13 +398,25 @@ def _paused_stage(session):
     return transaction.reconstruct(Kube(),{'operation':session.operation,'context':record['context'],'events':record['events']},lambda _:None)
 
 
+def _p2_prerequisite_version(plan,installation):
+    try:
+        installation=resource_claim.require_installation(installation)
+        if type(plan) is not dict:return False
+        if plan.get('schema')=='voice-staging-prerequisites-plan-v2':
+            resource_claim.require_production(installation)
+            return 'installation_sha256' not in plan
+        return (plan.get('schema')=='voice-staging-prerequisites-plan-v4'
+                and plan.get('installation_sha256')==installation.sha256)
+    except (ValueError,RuntimeError):return False
+
+
 def _phase_continuity(session,plan):
     row=session.check()
     if row.get('phase')=='cohort-preservation' and row.get('target_sha256')==digest(plan):return
     # After the sole typed advance the root parent plan carries this receipt.
     parent=_read(guard.ROOT/'installed'/'prerequisites'/session.operation/'checkpoint.json')
     receipt=_read(_base(session)/'qualified.json')
-    if (parent['plan'].get('schema')!='voice-staging-prerequisites-plan-v2'
+    if (not _p2_prerequisite_version(parent['plan'],session.installation)
         or parent['plan'].get('preservation_sha256')!=digest(receipt)
         or parent['plan'].get('operation')!=session.operation or parent['plan'].get('context')!=session.context
         or parent['plan'].get('helper_sha256')!=session.helper):raise Blocked('cohort_successor_binding_changed')
@@ -552,6 +591,64 @@ def load_preflight(session):
     return copy.deepcopy(value)
 
 
+def _actor_dependencies(session):
+    result={}
+    for name in ('prerequisites','realtime-bootstrap'):
+        folder=guard.ROOT/'installed'/name/session.operation
+        _read_directory(folder)
+        paths=sorted(folder.rglob('*.json'))
+        if not paths or len(paths)>512:raise Blocked('cohort_actor_dependencies_changed')
+        for path in paths:
+            result[str(path.relative_to(guard.ROOT))]=hashlib.sha256(private._read_private(path,limit=128<<20)).hexdigest()
+    return result
+
+
+def record_actor_successor(session,actor,stage,realtime):
+    """Record only an actual protected additive secret successor before target.
+
+    Later final/cache reads validate this immutable record and child bytes,
+    rather than rereading the obsolete paused live schema/secret baseline.
+    """
+    import bridge_root,realtime_bootstrap
+    plan=load_plan(session);preflight=load_preflight(session);stores=_read(_base(session)/'stores.json')
+    if digest(stores)!=plan['stores_sha256']:raise Blocked('cohort_actor_stores_changed')
+    current=stage.kube.get('secret','voice-app-secrets');_app_successor(session,stores['app_before'],current)
+    actual=_load_realtime_receipt(session,realtime)
+    if actual!=realtime:raise Blocked('cohort_actor_realtime_changed')
+    before=stores['app_before']['metadata'];after=current['metadata']
+    bridge_root.actor_after_realtime_bootstrap(preflight['actor'],actor,before,after)
+    identity=lambda meta:{key:meta[key] for key in ('name','uid','resourceVersion')}
+    value={'schema':'voice-staging-cohort-actor-successor-v1','operation':session.operation,
+        'context_sha256':digest(session.context),'helper_sha256':session.helper,'plan_sha256':digest(plan),
+        'preflight_sha256':plan['preflight_sha256'],'stores_sha256':plan['stores_sha256'],
+        'before_secret':identity(before),'after_secret':identity(after),'actor':actor,
+        'realtime_sha256':digest(realtime),'dependencies':_actor_dependencies(session)}
+    _no_pending(session);session.check();path=_base(session)/'actor-successor.json'
+    if path.exists():
+        if _read(path)!=value:raise Blocked('cohort_actor_successor_changed')
+    else:_write(path,value)
+    if load_actor_successor(session,realtime)!=actor:raise Blocked('cohort_actor_successor_changed')
+    return copy.deepcopy(actor)
+
+
+def load_actor_successor(session,realtime):
+    import bridge_root
+    plan=load_plan(session);preflight=_read(_base(session)/'preflight.json');stores=_read(_base(session)/'stores.json')
+    value=_read(_base(session)/'actor-successor.json')
+    fields={'schema','operation','context_sha256','helper_sha256','plan_sha256','preflight_sha256','stores_sha256',
+        'before_secret','after_secret','actor','realtime_sha256','dependencies'}
+    if (type(value) is not dict or set(value)!=fields or value['schema']!='voice-staging-cohort-actor-successor-v1'
+        or value['operation']!=session.operation or value['context_sha256']!=digest(session.context)
+        or value['helper_sha256']!=session.helper or value['plan_sha256']!=digest(plan)
+        or value['preflight_sha256']!=plan['preflight_sha256'] or digest(preflight)!=plan['preflight_sha256']
+        or value['stores_sha256']!=plan['stores_sha256'] or digest(stores)!=plan['stores_sha256']
+        or value['before_secret']!={key:stores['app_before']['metadata'][key] for key in ('name','uid','resourceVersion')}
+        or value['realtime_sha256']!=digest(realtime) or value['dependencies']!=_actor_dependencies(session)):
+        raise Blocked('cohort_actor_successor_changed')
+    bridge_root.actor_after_realtime_bootstrap(preflight['actor'],value['actor'],value['before_secret'],value['after_secret'])
+    return copy.deepcopy(value['actor'])
+
+
 def auth_runtime(session,base,kind):
     from staging_cohort_preservation_auth import ScratchRuntime
     return ScratchRuntime(session,base,kind)
@@ -567,7 +664,7 @@ def capture_final_stage(session):
     import staging_p3_prerequisites as p3
     receipt=load_qualified(session);stage=capture_stage(session,receipt)
     state=private._completed(session);plan=state['plan'];name='voice-p3-principal-jwks';ident='Deployment/'+name
-    if (plan.get('schema')!='voice-staging-prerequisites-plan-v2'
+    if (not _p2_prerequisite_version(plan,session.installation)
         or plan.get('preservation_sha256')!=digest(receipt)):
         raise Blocked('cohort_final_capture_binding_changed')
     images=plan['auxiliary_images'];key=name+'/jwks'
@@ -806,6 +903,7 @@ def _tools(session):
     from staging_cohort_preservation_runtime import DOCKER
     constants=shared_module(session,'auth_user_adoption_runtime').QUALIFIED_TOOLS
     images={name:constants[name] for name in ('postgres','migrate')}
+    images.update(story_restore_images(session))
     _write(_base(session)/'restore-tools.json',{'images':images,'ids':{}})
     _begin_restore(session,'tooling')
     for image in images.values():restore_command(session,DOCKER+['image','inspect',image])
@@ -828,6 +926,69 @@ def _tools(session):
         return tools
     except BaseException:
         journal.uncertain('migrate',nonce);raise
+
+
+def story_restore_images(session):
+    """Exact actual selected and recovery image references, never a test seed."""
+    plan=load_plan(session);profile=(load_preflight(session).get('actor') or {}).get('story_schema')
+    if not isinstance(profile,dict) or profile.get('schema')!='voice-story-baseline4-target8-composition-v1':return {}
+    approved,_,prepared=_source(session,plan)
+    # The actual source compiler isolates GIS first installation from generic
+    # image apply while retaining its complete17DB migration plan. Story then
+    # resumes its captured image on8; an unused approved image cannot replace it.
+    selected=(profile['retained_image'] if prepared['request']['gis_first_install'] is True else approved['images']['story'])
+    images=[selected,profile['retained_image']]
+    if any(not isinstance(image,str) or not re.fullmatch(r'ghcr\.io/poryadok/voiceroot/story@sha256:[a-f0-9]{64}',image) for image in images):
+        raise Blocked('cohort_story_restore_images_invalid')
+    return {'story'+str(index):image for index,image in enumerate(dict.fromkeys(images))}
+
+
+def story_restore_inputs(session,binding,metadata,postgres):
+    """Authenticate the captured dump, profile, source and current restore clone."""
+    plan=_guard(session);record=load_backup_archive(session);nonce=restore_attempt(session)
+    if record['binding']!=binding or load_metadata(session,record['metadata_ref'])['source']!=metadata:
+        raise Blocked('cohort_story_restore_binding_changed')
+    profile=(load_preflight(session).get('actor') or {}).get('story_schema')
+    if not isinstance(profile,dict) or profile.get('schema')!='voice-story-baseline4-target8-composition-v1':return None
+    migration=metadata['migrations'].get('story_db')
+    resources=_read(_base(session)/'restore'/nonce/'resources.json')
+    clone=[row for row in resources['resources'].values() if row.get('cid')==postgres]
+    attempt=_read(_base(session)/'restore-attempt.json')
+    if (type(migration) is not dict or migration.get('from')!=4 or migration.get('to')!=8
+        or migration.get('engine')!='golang-migrate'
+        or digest(migration.get('files'))!=profile['candidate']['migration_files_sha256']
+        or len(clone)!=1 or clone[0]['kind']!='postgres' or clone[0]['status']!='ACTIVE'
+        or attempt['phase'] not in ('local','offnode')
+        or profile['binding']!={'operation':session.operation,'source_sha':session.context['commit'],
+            'source_capture_sha256':plan['source_capture_sha256'],'helper_sha256':session.helper,
+            'context_sha256':digest(session.context),'migration_plan_sha256':profile['binding'].get('migration_plan_sha256')}):
+        raise Blocked('cohort_story_restore_profile_changed')
+    import story_fixture
+    code=_read(guard.ROOT/'installed'/'prerequisites'/session.operation/'code-custody.json')
+    path=Path(code['root'])/story_fixture.PRESERVED_CALLER
+    import root_cli
+    caller=root_cli.public_code_sha(path,content=True)
+    if (code['manifest'].get(story_fixture.PRESERVED_CALLER)!=story_fixture.PRESERVED_CALLER_SHA256
+        or hashlib.sha256(caller).hexdigest()!=story_fixture.PRESERVED_CALLER_SHA256 or not caller.startswith(b'\x7fELF')):
+        raise Blocked('cohort_story_restore_caller_changed')
+    dump=_read(_base(session)/'effects'/'dump-story_db.json')
+    if (dump.get('status')!='DONE' or dump.get('binding')!=session.binding()
+        or dump.get('receipt')!=dump_receipts(session)['story_db']
+        or not re.fullmatch('[a-f0-9]{64}',str(dump.get('plaintext_sha256')))):
+        raise Blocked('cohort_story_restore_dump_changed')
+    users=[row['name'] for row in metadata['roles']['roles'] if row.get('login') is True
+        and hashlib.sha256(row['name'].encode()).hexdigest()==profile['baseline']['postgres_user_sha256']]
+    if len(users)!=1 or not re.fullmatch('[a-z_][a-z0-9_]{0,31}',users[0]):
+        raise Blocked('cohort_story_restore_runtime_identity_changed')
+    value={'schema':'voice-story-preserved-target8-input-v1','operation':session.operation,
+        'context_sha256':digest(session.context),'helper_sha256':session.helper,'plan_sha256':digest(plan),
+        'source_capture_sha256':plan['source_capture_sha256'],'profile_sha256':digest(profile),
+        'migration_plan_sha256':profile['binding']['migration_plan_sha256'],
+        'migration_files_sha256':digest(migration['files']),'archive_sha256':digest(record),
+        'binding_sha256':digest(binding),'dump_receipt_sha256':digest(dump['receipt']),
+        'dump_plaintext_sha256':dump['plaintext_sha256'],'restore_attempt':nonce,'phase':attempt['phase'],
+        'postgres':postgres,'runtime_user':users[0],'images':story_restore_images(session),'caller_sha256':story_fixture.PRESERVED_CALLER_SHA256}
+    return value,caller
 
 
 def _capture_archive(session):
@@ -1195,6 +1356,11 @@ def qualify_offnode(actions,request):
         offnode=_read(_base(session)/'offnode-restore.json');local=_read(_base(session)/'local-restore.json')
         archive=load_backup_archive(session);_no_pending(session);revalidate_paused(session)
         _offnode_records(session)
+        profile=(load_preflight(session).get('actor') or {}).get('story_schema')
+        story_target8=None
+        if isinstance(profile,dict) and profile.get('schema')=='voice-story-baseline4-target8-composition-v1':
+            import story_witness
+            story_target8=story_witness.promote_preserved_target(session)
         import staging_cohort_preservation_auxiliary as auxiliary
         successor=auxiliary.resume(session)
         receipt={'schema':'voice-staging-cohort-preservation-receipt-v1','operation':session.operation,
@@ -1207,6 +1373,8 @@ def qualify_offnode(actions,request):
             'custody_sha256':digest(custody),'decrypted_restore_sha256':digest(restored),
             'cipher_binding_sha256':digest(binding),'resource_fence':state['initial_resource_fence'],
             'auxiliary_successor_sha256':None if successor is None else digest(successor)}
+        if story_target8 is not None:
+            receipt.update(schema='voice-staging-cohort-preservation-target8-receipt-v1',story_target8=story_target8)
         _write(_base(session)/'qualified.json',receipt)
         state.update(status='QUALIFIED',phase='COHORT_QUALIFIED');_save_state(session,state)
         return load_qualified(session)
@@ -1226,6 +1394,11 @@ def load_qualified(session,*,actual=None,rollout_target=None):
         'resource_fence':state['initial_resource_fence']}
     auxiliary=_base(session)/'auxiliary-successor.json'
     fixed['auxiliary_successor_sha256']=digest(_read(auxiliary)) if auxiliary.exists() else None
+    profile=(load_preflight(session).get('actor') or {}).get('story_schema')
+    if isinstance(profile,dict) and profile.get('schema')=='voice-story-baseline4-target8-composition-v1':
+        import story_witness
+        fixed['schema']='voice-staging-cohort-preservation-target8-receipt-v1'
+        fixed['story_target8']=story_witness.lookup_preserved_target(session)
     for name,file in {'paused_sha256':'paused.json','archive_sha256':'archive-record.json',
         'native_cut_sha256':'native-cut.json','local_restore_sha256':'local-restore.json',
         'offnode_restore_sha256':'offnode-restore.json','custody_sha256':'offnode-custody.json',
@@ -1261,7 +1434,13 @@ def load_rollout_continuation(session):
 
 def _offnode_records(session):
     """No auxiliary or prerequisite effect can substitute local backup for custody."""
-    plan=load_plan(session);base=_base(session);binding=_read(base/'cipher-binding.json')
+    return _offnode_records_data(session.operation,session.context,load_plan(session))
+
+
+def _offnode_records_data(operation,context,plan):
+    """Validate immutable custody/restore bytes, without live authority or effects."""
+    base=guard.ROOT/'installed'/'cohort-preservation'/operation
+    binding=_read(base/'cipher-binding.json')
     custody=_read(base/'offnode-custody.json');restored=_read(base/'decrypted-restore.json')
     archive=_read(base/'archive-record.json');offnode=_read(base/'offnode-restore.json')
     local=_read(base/'local-restore.json')
@@ -1269,12 +1448,12 @@ def _offnode_records(session):
         **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
         'artifact_id':custody.get('artifact_id'),'verified':True}
     if (custody!=expected or type(custody['artifact_id']) is not int or custody['artifact_id']<=0
-        or binding['operation']!=session.operation or binding['head_sha']!=session.context['commit']
+        or binding['operation']!=operation or binding['head_sha']!=context['commit']
         or restored.get('schema')!='voice-nats-decrypted-restore-v1'
         or restored.get('cipher_sha256')!=binding['cipher_sha256'] or restored.get('cipher_bytes')!=binding['cipher_bytes']
         or restored.get('decrypted_members_verified') is not True
         or restored.get('remote_equivalence')!='FULL_CIPHERTEXT_SHA256_AND_SIZE'
-        or restored.get('cohort_readback')!={'schema':'voice-staging-cohort-offnode-restore-v1','operation':session.operation,
+        or restored.get('cohort_readback')!={'schema':'voice-staging-cohort-offnode-restore-v1','operation':operation,
             'restore_sha256':digest(offnode),'manifest_sha256':digest(archive['manifest']),
             'cipher_members_verified':True,'cleanup':'verified'}):raise Blocked('cohort_offnode_receipt_changed')
     for phase,value in (('local',local),('offnode',offnode)):
@@ -1288,12 +1467,12 @@ def _offnode_records(session):
         if (value['resources_sha256']!=digest(resources) or not resources['resources']
             or any(row['status']!='REMOVED' for row in resources['resources'].values())):
             raise Blocked('cohort_restore_cleanup_changed')
-    if _file_identity(_runtime_base(session)/'rollout-backup.cms')!={
+    if _file_identity(guard.ROOT/('rollout-'+operation)/'rollout-backup.cms')!={
         'sha256':binding['cipher_sha256'],'bytes':binding['cipher_bytes']}:raise Blocked('cohort_cipher_changed')
     return copy.deepcopy(custody)
 
 
-def validate_historical_capture(operation):
+def validate_historical_capture(operation,*,installation=None):
     """Validate a completed root-owned predecessor as data, never execute it."""
     if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
         raise Blocked('cohort_history_operation_invalid')
@@ -1303,11 +1482,19 @@ def validate_historical_capture(operation):
     if (rollout.get('status')!='PASS' or rollout.get('phase')!='POST_RESTART'
         or rollout.get('fence_status')!='RELEASED' or rollout.get('operation')!=operation):
         raise Blocked('cohort_history_not_pass')
-    binding=resource_claim.historical_binding(rollout)
+    installation=resource_claim.require_installation(installation)
+    binding=resource_claim.historical_binding(rollout,installation=installation)
     parent=guard.ROOT/'installed'/'prerequisites'/operation
     prepared=_read(parent/'prepared.json');successor=_read(parent/'checkpoint.json');captured=_read(parent/'capture.json')
     approved=_read(parent/'approved.json');execution=_read(parent/'execution.json')
     source=_read(guard.ROOT/'installed'/'source-authority'/(operation+'.json'))
+    try:
+        _validate_historical_source_receipt(binding,source,approved,execution,installation=installation)
+        source_valid=True
+    except Blocked:
+        source_valid=False
+    preflight=_read(root/'preflight.json');profile=(preflight.get('actor') or {}).get('story_schema')
+    target8=isinstance(profile,dict) and profile.get('schema')=='voice-story-baseline4-target8-composition-v1'
     fixed={'schema':'voice-staging-cohort-preservation-receipt-v1','operation':operation,
         'context':binding['context'],'helper_sha256':binding['helper_sha256'],'plan_sha256':digest(plan),
         'prerequisite_inputs_sha256':digest(prepared),'actual_before':plan['actual_before'],
@@ -1317,21 +1504,23 @@ def validate_historical_capture(operation):
         'custody_sha256':'offnode-custody.json','decrypted_restore_sha256':'decrypted-restore.json',
         'cipher_binding_sha256':'cipher-binding.json'}.items():fixed[key]=digest(_read(root/file))
     fixed['auxiliary_successor_sha256']=digest(_read(root/'auxiliary-successor.json')) if (root/'auxiliary-successor.json').exists() else None
-    if (state.get('status')!='QUALIFIED' or set(plan)!=PLAN_FIELDS or plan['schema']!=SCHEMA or receipt!=fixed
+    if target8:fixed['schema']='voice-staging-cohort-preservation-target8-receipt-v1'
+    receipt_base={key:value for key,value in receipt.items() if key!='story_target8'} if target8 else receipt
+    if (state.get('status')!='QUALIFIED' or set(plan)!=PLAN_FIELDS or plan['schema']!=SCHEMA or receipt_base!=fixed
+        or target8 and set(receipt)!=set(fixed)|{'story_target8'}
         or plan['operation']!=operation or plan['context']!=binding['context'] or plan['helper_sha256']!=binding['helper_sha256']
         or state['initial_resource_fence']!={**binding,'target_sha256':digest(plan)}
         or plan['prerequisite_inputs_sha256']!=digest(prepared) or plan['approved_sha256']!=digest(approved)
         or plan['execution_sha256']!=digest(execution) or plan['source_capture_sha256']!=digest(source)
         or plan['source_inventory_sha256']!=digest(approved['source_files'])
-        or source!={'schema':'voice-staging-source-capture-v1','operation':operation,'context':binding['context'],
-            'helper_sha256':binding['helper_sha256'],'approved_sha256':digest(approved),'execution_sha256':digest(execution)}
-        or successor['plan'].get('schema')!='voice-staging-prerequisites-plan-v2'
+        or not source_valid
+        or not _p2_prerequisite_version(successor['plan'],installation)
         or successor['plan'].get('preservation_sha256')!=digest(receipt)
         or captured.get('plan_sha256')!=digest(successor['plan']) or rollout.get('prerequisites')!=captured
         or rollout['target'].get('prerequisites_sha256')!=digest(captured)
         or digest(_read(root/'precut.json'))!=plan['precut_capture_sha256']
         or digest(_read(root/'stores.json'))!=plan['stores_sha256']
-        or digest(_read(root/'preflight.json'))!=plan['preflight_sha256']):raise Blocked('cohort_history_changed')
+        or digest(preflight)!=plan['preflight_sha256']):raise Blocked('cohort_history_changed')
     for phase in ('local','offnode'):
         restored=_read(root/(phase+'-restore.json'))
         nonce=restored.get('nonce')
@@ -1343,4 +1532,431 @@ def validate_historical_capture(operation):
             raise Blocked('cohort_history_restore_changed')
     if any(_read(path).get('status')!='DONE' for path in (root/'effects').iterdir()):
         raise Blocked('cohort_history_incomplete')
+    if target8:
+        import story_witness
+        auth=root/'auth'
+        if auth.exists():
+            _read_directory(auth);paths=list(auth.iterdir())
+            if len(paths)>4096:raise Blocked('cohort_history_incomplete')
+            for path in paths:
+                value=_read(path)
+                prefix={'actor':'service-actor-auth-','bootstrap':'bootstrap-auth-'}.get(value.get('kind'))
+                scratch=Path(value['base']) if isinstance(value.get('base'),str) else None
+                if (set(value)!={'schema','operation','plan_sha256','kind','base','nonce','inputs','resources','status'}
+                    or path.suffix!='.json' or value.get('status')!='COMPLETE'
+                    or value.get('schema')!='voice-staging-cohort-auth-scratch-v1'
+                    or value.get('operation')!=operation or value.get('plan_sha256')!=digest(plan)
+                    or value.get('nonce')!=path.stem or not re.fullmatch('[a-f0-9]{32}',path.stem)
+                    or prefix is None or scratch is None or scratch.parent!=guard.ROOT or not scratch.name.startswith(prefix)
+                    or not isinstance(value.get('inputs'),dict) or not isinstance(value.get('resources'),dict)
+                    or not value['resources'] or len(value['resources'])>4096
+                    or any(not isinstance(row,dict) or set(row)!={'id','status'} or row['status']!='REMOVED'
+                        or not isinstance(row['id'],str) or not re.fullmatch('[a-f0-9]{64}',row['id'])
+                        for row in value['resources'].values())):
+                    raise Blocked('cohort_history_incomplete')
+        _offnode_records_data(operation,binding['context'],plan)
+        fixed['story_target8']=story_witness._historical_preserved_target(
+            operation,plan,preflight,approved,prepared,binding,rollout)
+        if receipt!=fixed:raise Blocked('cohort_history_changed')
     return copy.deepcopy(receipt)
+
+# Identity registration is local to this execution, never a serialized permission.
+class QualifiedFinalAdmission:
+    __slots__=("__weakref__",)
+
+_final_admissions=weakref.WeakKeyDictionary()
+_continuations=weakref.WeakKeyDictionary()
+
+def _public_request(request):
+    return {key:copy.deepcopy(value) for key,value in request.items() if key!="token"}
+
+def _request_record(session):
+    return guard.ROOT/"installed"/"cohort-requests"/(session.operation+".json")
+
+def _require_session(session,phases):
+    if (type(session) is not resource_claim.Session or not session.admitted
+        or commands.authority_guard!=session.check):
+        raise Blocked("cohort_final_session_required")
+    session.authority();row=session.journal.read()
+    if not session.owned(row) or row.get("status")!="active" or row.get("phase") not in phases:
+        raise Blocked("cohort_final_session_phase_invalid")
+    session.check()
+    return row
+
+def record_prepare_request(session,request):
+    _require_session(session,{"prepare"})
+    private._private_directory(_request_record(session).parent)
+    _write(_request_record(session),_public_request(request))
+
+def prepared_replay_result(session,request):
+    row=_require_session(session,{"cohort-preservation"})
+    if _read(_request_record(session))!=_public_request(request):
+        raise Blocked("cohort_prepare_request_changed")
+    state=_state(session)
+    if state.get("status")=="AWAITING_OFF_NODE":return prepared_result(session)
+    if state.get("status")!="QUALIFIED":raise Blocked("cohort_prepare_reconciliation_required")
+    # A qualified cohort keeps its original upload reply until its successor.
+    load_qualified(session);loaded=load_prepared(session)
+    binding=_read(_base(session)/"cipher-binding.json")
+    if _file_identity(_runtime_base(session)/"rollout-backup.cms")!={"sha256":binding["cipher_sha256"],"bytes":binding["cipher_bytes"]}:
+        raise Blocked("cohort_cipher_changed")
+    if row.get("target_sha256")!=digest(load_plan(session)):raise Blocked("cohort_binding_changed")
+    saved=loaded["request"]
+    return {"operation":session.operation,"phase":"AWAITING_OFF_NODE","status":"WAITING",
+        "fence_status":"VERIFIED","cipher_path":str(_runtime_base(session)/"export"/"rollout-backup.cms"),
+        "artifact_name":"voice-nats-rollout-"+session.operation+"-"+binding["challenge"],
+        "challenge":binding["challenge"],"changed_services":",".join(saved["changed_services"]),
+        "deploy_mode":saved["mode"],"source_sha":session.context["commit"]}
+
+def begin_continuation(session,request):
+    _require_session(session,{"cohort-preservation"})
+    receipt=load_qualified(session);loaded=load_prepared(session);source_request=_read(_request_record(session))
+    if (request.get("action")!="authorize" or request.get("operation")!=session.operation
+        or request.get("resource_context")!=session.context
+        or source_request.get("nonce","")[:12]!=session.operation
+        or source_request.get("resource_context")!=session.context
+        or any(source_request.get(key)!=loaded["request"][key] for key in ("mode","changed_services"))
+        or (source_request.get("gis_first_install") is True)!=loaded["request"]["gis_first_install"]
+        or _offnode_records(session).get("artifact_id")!=request.get("artifact_id")):
+        raise Blocked("cohort_continuation_request_changed")
+    intent={"schema":"voice-staging-cohort-continuation-v1","operation":session.operation,
+        "context":session.context,"helper_sha256":session.helper,"source_request_sha256":digest(source_request),
+        "authorize_request":_public_request(request),"authorize_request_sha256":digest(_public_request(request)),
+        "qualified_sha256":digest(receipt),"prepared_sha256":load_plan(session)["prerequisite_inputs_sha256"]}
+    _write(_base(session)/"continuation.json",intent)
+    _continuations[session]=copy.deepcopy(intent)
+    return receipt,loaded
+
+def require_continuation(session,request=None):
+    if type(session) is not resource_claim.Session:raise Blocked("cohort_continuation_session_required")
+    intent=_continuations.get(session)
+    if (intent is None or _read(_base(session)/"continuation.json")!=intent
+        or request is not None and intent["authorize_request"]!=_public_request(request)):
+        raise Blocked("cohort_continuation_reconciliation_required")
+    return copy.deepcopy(intent)
+
+def _lineage_snapshot(session):
+    # Snapshot accepted child records, not live old-baseline observations.
+    result={};folders=[_base(session),guard.ROOT/"installed"/"prerequisites"/session.operation]
+    realtime=guard.ROOT/"installed"/"realtime-bootstrap"/session.operation
+    if realtime.exists():folders.append(realtime)
+    for folder in folders:
+        _read_directory(folder);paths=list(folder.rglob("*"))
+        if len(paths)>8192:raise Blocked("cohort_lineage_inventory_invalid")
+        for path in paths:
+            if path.is_symlink():raise Blocked("cohort_lineage_custody_changed")
+            if path.is_dir():_read_directory(path);continue
+            if path.parent==_base(session) and path.name in ("authorizing.json","authorization-complete.json"):continue
+            if path.suffix!=".json" and path.name not in ("credential","archive.key"):continue
+            result[str(path.relative_to(guard.ROOT))]=hashlib.sha256(private._read_private(path,limit=128<<20)).hexdigest()
+    for path in (guard.ROOT/"installed"/"source-authority"/(session.operation+".json"),_request_record(session)):
+        result[str(path.relative_to(guard.ROOT))]=hashlib.sha256(private._read_private(path)).hexdigest()
+    return result
+
+def _load_realtime_receipt(session, receipt, **kwargs):
+    import realtime_bootstrap
+    schema=receipt.get('schema') if isinstance(receipt,dict) else None
+    if schema in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2'):
+        return realtime_bootstrap.load_completed(session,**kwargs)
+    if schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2',
+                  'voice-staging-realtime-bootstrap-existing-v3','voice-staging-realtime-bootstrap-existing-v4'):
+        return realtime_bootstrap.load_existing(session,**kwargs)
+    raise Blocked('cohort_final_realtime_missing')
+
+
+def _final_target(session,base,state,phases):
+    row=_require_session(session,phases)
+    if Path(base)!=_runtime_base(session):raise Blocked("cohort_final_path_changed")
+    _read_directory(base,modes={0o700,0o750});target=state.get("target")
+    if (type(target) is not dict or target.get("mode") not in ("full","app-only")
+        or state.get("operation")!=session.operation or target.get("tag")!=session.context["commit"]
+        or target.get("images")!=session.context["images"] or row.get("target_sha256")!=digest(target)
+        or state.get("resource_fence")!=session.binding()
+        or _read(Path(base)/"checkpoint.json",limit=128<<20)!=state
+        or target.get("migration_sha256")!=digest(state.get("migrations"))):
+        raise Blocked("cohort_final_target_changed")
+    import root_cli
+    manifests=Path(base)/"apply-manifests.json"
+    if manifests.lstat().st_size>2<<20 or root_cli.public_code_sha(manifests)!=target.get("manifest_sha256"):
+        raise Blocked("cohort_final_manifests_changed")
+    plan=_read(_base(session)/"checkpoint.json")["plan"];validate_plan(plan,session);_source(session,plan)
+    if row.get("cohort_preservation_sha256")!=digest(plan):raise Blocked("cohort_final_lineage_changed")
+    preflight=_read(_base(session)/'preflight.json');_preflight_shape(preflight,session)
+    if digest(preflight)!=plan['preflight_sha256']:raise Blocked('cohort_final_lineage_changed')
+    authority=preflight.get('actor') or {}
+    profile=authority.get('story_schema')
+    if isinstance(profile,dict) and profile.get('schema')=='voice-story-baseline4-target8-composition-v1':
+        expected={'operation':session.operation,'source_sha':session.context['commit'],
+            'source_capture_sha256':plan['source_capture_sha256'],'helper_sha256':session.helper,
+            'context_sha256':digest(session.context),'migration_plan_sha256':target['migration_sha256']}
+        if (state.get('service_actor_authority')!=load_actor_successor(session,state.get('realtime_bootstrap'))
+            or profile.get('binding')!=expected):
+            raise Blocked('cohort_story_target8_lineage_changed')
+        # A source8/baseline4 descriptor and a current4 image witness cannot
+        # authorize8. Only the separately implemented backup-bound target
+        # qualifier may supply this authority, including on final/cache reads.
+        import story_witness
+        loader=getattr(story_witness,'load_preserved_target',None)
+        if not callable(loader):raise Blocked('cohort_story_target8_qualification_required')
+        loader(session,state,profile)
+    return target
+
+def issue_final_admission(session,base,state,request):
+    target=_final_target(session,base,state,{"prepare"});intent=require_continuation(session,request)
+    if state.get("phase")!="AWAITING_OFF_NODE" or state.get("status")!="WAITING":
+        raise Blocked("cohort_final_not_paused")
+    qualified=load_qualified(session,rollout_target=target);prepared=load_prepared(session)
+    preserved=load_rollout_continuation(session)
+    capture=private.load_capture(session,rollout_target=target)
+    import realtime_bootstrap
+    rt=state.get("realtime_bootstrap")
+    if not isinstance(rt,dict):raise Blocked("cohort_final_realtime_missing")
+    actual_rt=_load_realtime_receipt(session,rt,rollout_target=target)
+    if (target.get("cohort_preservation_sha256")!=digest(qualified)
+        or target.get("prerequisites_sha256")!=digest(capture)
+        or target.get("realtime_bootstrap_sha256")!=digest(actual_rt)
+        or state.get("prerequisites")!=capture or rt!=actual_rt or intent["qualified_sha256"]!=digest(qualified)
+        or state.get("cohort_preservation")!=qualified
+        or any(state.get(key)!=preserved[key] for key in ('cut','provenance','contract','events','custody'))
+        or prepared["approved"].get("source_sha")!=target["tag"] or state.get("custody")!=_offnode_records(session)):
+        raise Blocked("cohort_final_lineage_changed")
+    invariant={key:copy.deepcopy(value) for key,value in state.items() if key not in {
+        "phase","status","context","events","contract","nats_migration","active_contract","nats_deliver_all_cut",
+        "space_offnode_backup","migration_jobs","migration_completed_metadata","space_postcondition","renderer_applied","authorization"}}
+    record={"schema":"voice-staging-cohort-authorizing-v1","operation":session.operation,
+        "context":session.context,"helper_sha256":session.helper,"target_sha256":digest(target),
+        "continuation_sha256":digest(intent),"request_sha256":digest(_public_request(request)),
+        "lineage":_lineage_snapshot(session),"invariant":invariant,"contract_before":copy.deepcopy(state["contract"]),
+        "events_before":copy.deepcopy(state["events"])}
+    _write(_base(session)/"authorizing.json",record)
+    handle=QualifiedFinalAdmission()
+    _final_admissions[handle]={"session":session,"base":Path(base),"record":copy.deepcopy(record),"state":state}
+    return handle
+
+def _issued(handle,session,base,state):
+    issued=_final_admissions.get(handle) if type(handle) is QualifiedFinalAdmission else None
+    if (issued is None or issued["session"] is not session or issued["base"]!=Path(base) or issued["state"] is not state):
+        raise Blocked("cohort_final_admission_not_issued")
+    record=issued["record"];_final_target(session,base,state,{"prepare"})
+    before=record["events_before"]
+    if not isinstance(state.get("events"),list) or state["events"][:len(before)]!=before:
+        raise Blocked("cohort_final_admission_changed")
+    if (_read(_base(session)/"authorizing.json")!=record or _lineage_snapshot(session)!=record["lineage"]
+        or any(state.get(key)!=value for key,value in record["invariant"].items())):
+        raise Blocked("cohort_final_admission_changed")
+    return record
+
+def validate_migration_admission(handle,session,base,state,stage,plan,mode):
+    record=_issued(handle,session,base,state)
+    if (stage.operation!=session.operation or plan!=state.get("migrations") or mode!=state["target"]["mode"]
+        or state.get("phase") not in ("DATABASE_MIGRATIONS","NATS_CONTRACT_MIGRATION") or state.get("status")!="WAITING"):
+        raise Blocked("cohort_migration_admission_changed")
+    following=state["events"][len(record["events_before"]):]
+    allowed={"nats_contract_old_cut_verified","nats_contract_broker_opened","nats_contract_broker_closed",
+        "nats_contract_intent","nats_contract_mutation_issued","nats_contract_applied",
+        "nats_contract_cm_intent","nats_contract_cm_applied","nats_deliver_all_cut_bound"}
+    if any(not isinstance(event,dict) or event.get("kind") not in allowed for event in following):
+        raise Blocked("cohort_nats_transition_incomplete")
+    if "nats_contract" not in state:
+        if state.get("contract")!=record["contract_before"] or "nats_migration" in state or "active_contract" in state:
+            raise Blocked("cohort_nats_transition_changed")
+    else:_validate_owned_nats_transition(session,state,stage,record["contract_before"])
+    _no_pending(session);stage.owned_marker();stage.verify_final_storage();session.check()
+    return True
+
+def _validate_owned_nats_transition(session,state,stage,original):
+    _validate_owned_nats_events(state, original)
+    from nats_contract_custody import _validated_target_pairs,ANNOTATION
+    from nats_active_contract import validate_identity
+    migration=state.get("nats_migration",{});active=state.get("active_contract")
+    if (migration.get("verified") is not True or migration.get("old_record_files_verified") is not True
+        or type(active) is not dict or active.get("operation")!=session.operation
+        or active.get("plan_sha256")!=digest(state["nats_contract"]) or active.get("proof")!=migration.get("proof")
+        or _read(guard.ROOT/"installed"/"active-contract.json")!=active):
+        raise Blocked("cohort_nats_transition_incomplete")
+    expected=copy.deepcopy(original)
+    expected["consumer_pairs"]=[list(p) for p in sorted({tuple(p) for p in original["consumer_pairs"]}|
+        {tuple(p) for p in _validated_target_pairs(state["nats_contract"])})]
+    for part,wanted in state["nats_target_scripts"].items():
+        before=next(row for row in expected["scripts"] if row["part"]==part)
+        live=stage.kube.get("configmap","voice-nats-"+part+"-bootstrap")
+        if (live["metadata"]["uid"]!=before["configMapUID"] or live["data"]["bootstrap.sh"]!=wanted["script"]
+            or hashlib.sha256(wanted["script"].encode()).hexdigest()!=wanted["sha256"]
+            or live["metadata"]["resourceVersion"]!=before["configMapResourceVersion"]
+                and live["metadata"].get("annotations",{}).get(ANNOTATION)!=session.operation):
+            raise Blocked("cohort_nats_transition_changed")
+        applied=[e for e in state["events"] if e.get("kind")=="nats_contract_cm_applied" and e.get("part")==part]
+        if len(applied)!=1 or any(applied[0].get(k)!=v for k,v in {
+            "uid":live["metadata"]["uid"],"resourceVersion":live["metadata"]["resourceVersion"],"target_sha256":wanted["sha256"]}.items()):
+            raise Blocked("cohort_nats_transition_incomplete")
+        before.update(configMapResourceVersion=live["metadata"]["resourceVersion"],sha256=wanted["sha256"],bytes=len(wanted["script"].encode()))
+    if state["contract"]!=expected or active.get("contract")!=expected:raise Blocked("cohort_nats_transition_changed")
+    validate_identity(active,stage.expected,original.get("consumer_pairs"))
+
+
+def _validate_owned_nats_events(state, original):
+    """Only this uninterrupted execution's fully paired NATS effects may admit DB writes."""
+    from docker_runtime import NATS_IMAGE
+    plan = state["nats_contract"]
+    events = state.get("events")
+    if not isinstance(events, list) or len(events) > 8192:
+        raise Blocked("cohort_nats_transition_incomplete")
+    selected = [event for event in events if isinstance(event, dict)
+        and str(event.get("kind", "")).startswith("nats_contract_")]
+    allowed = {"nats_contract_old_cut_verified", "nats_contract_broker_opened",
+        "nats_contract_broker_closed", "nats_contract_intent", "nats_contract_mutation_issued",
+        "nats_contract_applied", "nats_contract_cm_intent", "nats_contract_cm_applied"}
+    shapes = {
+        "nats_contract_old_cut_verified": {"kind","plan_sha256","old_manifest_sha256","old_census_sha256","proof"},
+        "nats_contract_broker_opened": {"kind","container_id","server_image","started_at"},
+        "nats_contract_broker_closed": {"kind","container_id","server_image","started_at","finished_at"},
+        "nats_contract_intent": {"kind","object","api","before_sha256","target_sha256","migration_attempt"},
+        "nats_contract_mutation_issued": {"kind","object","api","target_sha256","migration_attempt"},
+        "nats_contract_applied": {"kind","object","config_sha256","recovered_exact_target","migration_attempt"},
+        "nats_contract_cm_intent": {"kind","part","uid","resourceVersion","target_sha256"},
+        "nats_contract_cm_applied": {"kind","part","uid","resourceVersion","target_sha256"}}
+    if any(event.get("kind") not in allowed or set(event)!=shapes[event["kind"]] for event in selected):
+        raise Blocked("cohort_nats_transition_incomplete")
+    def rows(kind):
+        return [event for event in selected if event["kind"] == kind]
+    old = rows("nats_contract_old_cut_verified")
+    cut = state.get("cut", {})
+    if (len(old) != 1 or any(old[0].get(key) != value for key, value in {
+        "plan_sha256": digest(plan), "old_manifest_sha256": cut.get("manifest_sha256"),
+        "old_census_sha256": cut.get("census_sha256")}.items())):
+        raise Blocked("cohort_nats_transition_incomplete")
+    actions = plan.get("actions")
+    if not isinstance(actions, list):
+        raise Blocked("cohort_nats_transition_incomplete")
+    opened = rows("nats_contract_broker_opened")
+    closed = rows("nats_contract_broker_closed")
+    if not actions:
+        if opened or closed or rows("nats_contract_intent") or rows("nats_contract_mutation_issued") or rows("nats_contract_applied"):
+            raise Blocked("cohort_nats_transition_incomplete")
+    else:
+        if (len(opened) != 1 or len(closed) != 1
+            or set(opened[0]) != {"kind", "container_id", "server_image", "started_at"}
+            or set(closed[0]) != {"kind", "container_id", "server_image", "started_at", "finished_at"}
+            or not re.fullmatch(r"[a-f0-9]{64}", str(opened[0].get("container_id", "")))
+            or opened[0].get("server_image") != NATS_IMAGE
+            or any(closed[0].get(key) != opened[0].get(key) for key in ("container_id", "server_image", "started_at"))
+            or events.index(opened[0]) >= events.index(closed[0])):
+            raise Blocked("cohort_nats_transition_incomplete")
+        try:
+            start = dt.datetime.fromisoformat(opened[0]["started_at"])
+            finish = dt.datetime.fromisoformat(closed[0]["finished_at"])
+            if start.tzinfo is None or finish.tzinfo is None or start > finish:
+                raise ValueError()
+        except (TypeError, ValueError):
+            raise Blocked("cohort_nats_transition_incomplete") from None
+        objects = [action.get("object") for action in actions]
+        if len(set(objects)) != len(objects):
+            raise Blocked("cohort_nats_transition_incomplete")
+        writes = rows("nats_contract_intent") + rows("nats_contract_mutation_issued") + rows("nats_contract_applied")
+        if any(event.get("object") not in objects or event.get("migration_attempt") != opened[0]["container_id"]
+            or not events.index(opened[0]) < events.index(event) < events.index(closed[0]) for event in writes):
+            raise Blocked("cohort_nats_transition_incomplete")
+        applied = []
+        for action in actions:
+            obj = action["object"]
+            target = action.get("normalized_config_sha256", digest(action["after"]))
+            done = [event for event in rows("nats_contract_applied") if event.get("object") == obj]
+            intents = [event for event in rows("nats_contract_intent") if event.get("object") == obj]
+            issued = [event for event in rows("nats_contract_mutation_issued") if event.get("object") == obj]
+            if len(done) != 1 or done[0].get("config_sha256") != target or type(done[0].get("recovered_exact_target")) is not bool:
+                raise Blocked("cohort_nats_transition_incomplete")
+            if done[0]["recovered_exact_target"]:
+                if intents or issued:
+                    raise Blocked("cohort_nats_transition_incomplete")
+            elif (len(intents) != 1 or len(issued) != 1
+                or any(event.get("api") != action["api"] or event.get("target_sha256") != target for event in intents + issued)
+                or intents[0].get("before_sha256") != digest(action["before"])
+                or not events.index(intents[0]) < events.index(issued[0]) < events.index(done[0])):
+                raise Blocked("cohort_nats_transition_incomplete")
+            applied.append({"object": obj, "config_sha256": target})
+        if state["nats_migration"].get("applied") != applied:
+            raise Blocked("cohort_nats_transition_incomplete")
+    if not actions and state["nats_migration"].get("applied") != []:
+        raise Blocked("cohort_nats_transition_incomplete")
+    parts = state["nats_target_scripts"]
+    cm_events = rows("nats_contract_cm_intent") + rows("nats_contract_cm_applied")
+    if any(event.get("part") not in parts for event in cm_events):
+        raise Blocked("cohort_nats_transition_incomplete")
+    for part, wanted in parts.items():
+        before = next(row for row in original["scripts"] if row["part"] == part)
+        intents = [event for event in rows("nats_contract_cm_intent") if event.get("part") == part]
+        applied = [event for event in rows("nats_contract_cm_applied") if event.get("part") == part]
+        if len(applied) != 1:
+            raise Blocked("cohort_nats_transition_incomplete")
+        if before["sha256"] == wanted["sha256"]:
+            if intents or applied[0].get("resourceVersion") != before["configMapResourceVersion"]:
+                raise Blocked("cohort_nats_transition_incomplete")
+        elif (len(intents) != 1 or any(intents[0].get(key) != value for key, value in {
+            "uid": before["configMapUID"], "resourceVersion": before["configMapResourceVersion"],
+            "target_sha256": wanted["sha256"]}.items())
+            or not events.index(intents[0]) < events.index(applied[0])
+            or applied[0].get("resourceVersion") == before["configMapResourceVersion"]):
+            raise Blocked("cohort_nats_transition_incomplete")
+
+def complete_authorization(handle,session,base,state):
+    record=_issued(handle,session,base,state);authorization=guard.protected_receipt(Path(base)/"apply-authorization.json",root=guard.ROOT)
+    if (state.get("phase")!="PAUSED_APPLY" or state.get("status")!="WAITING"
+        or state.get("authorization")!=authorization or authorization.get("target")!=state["target"]
+        or authorization.get("resource_fence")!=session.binding()):
+        raise Blocked("cohort_final_authorization_incomplete")
+    if "nats_contract" in state:
+        _validate_owned_nats_events(state,record["contract_before"])
+    completed={"schema":"voice-staging-cohort-authorization-complete-v1","operation":session.operation,
+        "authorizing_sha256":digest(record),"checkpoint_sha256":digest(state),"authorization_sha256":digest(authorization),
+        "request_sha256":record["request_sha256"],"target_sha256":record["target_sha256"],
+        "active_contract_sha256":_completed_contract(state)}
+    _write(_base(session)/"authorization-complete.json",completed);_final_admissions.pop(handle,None)
+    return completed
+
+def final_authorization_result(session,request):
+    _require_session(session,{"prepare","apply-ready"})
+    base=_runtime_base(session);state=_read(base/"checkpoint.json",limit=128<<20)
+    target=_final_target(session,base,state,{"prepare","apply-ready"})
+    record=_read(_base(session)/"authorizing.json");completed=_read(_base(session)/"authorization-complete.json")
+    intent=_read(_base(session)/"continuation.json");authorization=guard.protected_receipt(base/"apply-authorization.json",root=guard.ROOT)
+    if (record.get("schema")!="voice-staging-cohort-authorizing-v1"
+        or completed!={"schema":"voice-staging-cohort-authorization-complete-v1","operation":session.operation,
+            "authorizing_sha256":digest(record),"checkpoint_sha256":digest(state),"authorization_sha256":digest(authorization),
+            "request_sha256":digest(_public_request(request)),"target_sha256":digest(target),
+            "active_contract_sha256":_completed_contract(state)}
+        or record.get("context")!=session.context or record.get("helper_sha256")!=session.helper
+        or record.get("target_sha256")!=digest(target) or record.get("request_sha256")!=digest(_public_request(request))
+        or record.get("continuation_sha256")!=digest(intent) or intent.get("authorize_request")!=_public_request(request)
+        or _lineage_snapshot(session)!=record.get("lineage")
+        or any(state.get(key)!=value for key,value in record.get("invariant",{}).items())
+        or state.get("phase")!="PAUSED_APPLY" or state.get("status")!="WAITING"
+        or state.get("authorization")!=authorization or authorization.get("schema")!="nats-rollout-preservation-v1"
+        or authorization.get("operation")!=session.operation or authorization.get("target")!=target
+        or authorization.get("resource_fence")!=session.binding()):
+        raise Blocked("cohort_final_completion_changed")
+    try:expires=dt.datetime.fromisoformat(authorization["expires_at"])
+    except (KeyError,TypeError,ValueError):raise Blocked("cohort_final_authorization_expired") from None
+    if expires.tzinfo is None or dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked("cohort_final_authorization_expired")
+    if state["events"][:len(record.get("events_before",[]))]!=record.get("events_before"):
+        raise Blocked("cohort_final_completion_changed")
+    if "nats_contract" in state:
+        _validate_owned_nats_events(state,record["contract_before"])
+    session.check()
+    return {key:state[key] for key in ("operation","phase","status","fence_status","error") if key in state}|{
+        "authorization":str(base/"apply-authorization.json")}
+
+def _read_directory(path,*,modes=frozenset({0o700})):
+    import stat
+    import encrypted_cut
+    encrypted_cut.directory(path)
+    if stat.S_IMODE(path.lstat().st_mode) not in modes:
+        raise Blocked("cohort_private_directory_changed")
+
+def _completed_contract(state):
+    active=state.get("active_contract")
+    if active is None:
+        if "nats_contract" in state:raise Blocked("cohort_nats_transition_incomplete")
+        return None
+    if _read(guard.ROOT/"installed"/"active-contract.json")!=active:
+        raise Blocked("cohort_nats_transition_changed")
+    return digest(active)

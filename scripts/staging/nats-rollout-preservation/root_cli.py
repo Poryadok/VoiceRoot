@@ -34,9 +34,10 @@ def operation_path(raw):
     return base
 
 
-def public_code_sha(path):
+def public_code_sha(path,*,content=False):
     """Hash public captured code as the runner, without root-only O_NOATIME."""
     path=Path(path)
+    limit=(32 if path.parent.name=='nats-rollout-preservation' and path.name=='story-restored8-probe' else 16)<<20
     fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
         s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
     parent_before=path.parent.lstat()
@@ -52,19 +53,20 @@ def public_code_sha(path):
             opened=os.fstat(fd)
             if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0
                 or opened.st_mode&0o022 or opened.st_nlink!=1
-                or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
+                or not 0<=opened.st_size<=limit or fingerprint(before)!=fingerprint(opened)):
                 raise Blocked('rollout_code_custody_invalid')
-            digest=hashlib.sha256();count=0
+            digest=hashlib.sha256();count=0;chunks=[] if content else None
             while chunk:=os.read(fd,1<<20):
                 count+=len(chunk)
                 if count>opened.st_size:raise Blocked('rollout_captured_code_changed')
                 digest.update(chunk)
+                if chunks is not None:chunks.append(chunk)
             if (count!=opened.st_size or fingerprint(opened)!=fingerprint(os.fstat(fd))
                 or fingerprint(opened)!=fingerprint(os.stat(path.name,dir_fd=parent,follow_symlinks=False))
                 or fingerprint(parent_before)!=fingerprint(os.fstat(parent))
                 or fingerprint(parent_before)!=fingerprint(path.parent.lstat())):
                 raise Blocked('rollout_captured_code_changed')
-            return digest.hexdigest()
+            return b''.join(chunks) if chunks is not None else digest.hexdigest()
         finally:os.close(fd)
     finally:os.close(parent)
 
@@ -76,7 +78,9 @@ def code_binding(code):
         len(manifest)==94 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
         == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20' or
         len(manifest)==99 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
-        == '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4')):
+        == '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4' or
+        len(manifest)==100 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+        == '6d3ce2a5893bbb4d340a3a97daddb2e024f8ebfdb358db6641b0258e621bb002')):
         raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)

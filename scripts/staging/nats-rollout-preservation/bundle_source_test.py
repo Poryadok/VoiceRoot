@@ -263,6 +263,35 @@ class WorkflowLauncherTests(unittest.TestCase):
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
             self.launch(root)
 
+    def test_p2_exact_capture_is_admitted_by_both_ingress_readers(self):
+        import root_cli
+        binaries=Path('/fixture/qualified-binaries')
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            bundle.build(binaries/'kernel',root/'out',binaries/'bootstrap-renewer',binaries/'story-current4-probe',
+                         story_target8=binaries/'story-restored8-probe')
+            with tarfile.open(root/'out/rollout-bundle.tar') as archive:
+                members={row.name:archive.extractfile(row).read() for row in archive.getmembers() if row.isfile()}
+            for code in (root/'installed/code',root/'rollout-3340764a7d24/code'):
+                code.mkdir(parents=True,mode=0o700)
+                for name,raw in members.items():
+                    path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+                    path.write_bytes(raw);path.chmod(0o400)
+                self.assertEqual(len(root_cli.code_binding(code)),100)
+            self.launch(root)
+            self.launch(root,'render')
+            code=root/'installed/code';index=code/'capture-manifest.json'
+            manifest=json.loads(index.read_text());manifest['unreviewed.py']=manifest.pop('nats-rollout-preservation/story-restored8-probe')
+            index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            with self.assertRaises(SystemExit):self.launch(root)
+            index=root/'rollout-3340764a7d24/code/capture-manifest.json'
+            index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            with self.assertRaises(SystemExit):self.launch(root,'render')
+            invalid=root/'invalid-probe';invalid.write_bytes(b'\x7fELFwrong')
+            with self.assertRaisesRegex(ValueError,'Qualified restored8 Story probe required'):
+                bundle.build(binaries/'kernel',root/'invalid',binaries/'bootstrap-renewer',binaries/'story-current4-probe',
+                             story_target8=invalid)
+
     def test_workflow_historical_and_partial_successor_inventories(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);members=self.members(root);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)

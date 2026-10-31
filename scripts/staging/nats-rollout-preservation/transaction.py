@@ -609,8 +609,13 @@ def rollback_gis_first_install(kube,base,state,journal):
     return True
 
 
-def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
-    migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None,resource_session=None,cohort_request=None):
+    qualified_admission=None
+    if state.get("target",{}).get("mode") in ("full","app-only") or state.get("migrations"):
+        if resource_session is None or cohort_request is None:
+            migrations.require_preserving_admission(state.get("target",{}).get("mode"),state.get("migrations"))
+        import staging_cohort_preservation as cohort
+        qualified_admission=cohort.issue_final_admission(resource_session,base,state,cohort_request)
     if state.get('gis_first_install') is not None:
         import gis_first_install as gis
         gis.validate_normalized_binding(state['target'],state['gis_first_install'])
@@ -720,7 +725,9 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             state['active_contract']=active;save(Path(base)/'checkpoint.json',state)
         if not renderer_recovery:
             state['migration_jobs']=migrations.execute(kube,stage,state['migrations'],state['target']['mode'],
-                                                        state['migration_secret_metadata'],journal)
+                                                        state['migration_secret_metadata'],journal,**({
+                                                            'resource_session':resource_session,'qualified_admission':qualified_admission,
+                                                            'authorization_base':base,'authorization_state':state} if qualified_admission is not None else {}))
             if migrations.bot_migration.required(state['migrations']):
                 after=migrations.preflight(kube,state['migrations'],state['target']['mode'])
                 expected=copy.deepcopy(state['migration_secret_metadata'])
@@ -770,6 +777,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         state['authorization']=copy.deepcopy(receipt)
         state['context']=context(stage);state['phase']='PAUSED_APPLY';state['status']='WAITING'
         save(Path(base)/'checkpoint.json',state)
+        if qualified_admission is not None:cohort.complete_authorization(qualified_admission,resource_session,base,state)
         return receipt
     except Exception as error:
         import deployment_report

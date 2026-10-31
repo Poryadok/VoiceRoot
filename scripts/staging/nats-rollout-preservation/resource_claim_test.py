@@ -105,7 +105,7 @@ class ResourceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'actual_finish_required'):
                 session.complete('PASS',c['images'])
             receipt={'schema':'fixture-qualified'};adapter.load_qualified.return_value=receipt
-            parent=Mock();next_plan={'schema':'voice-staging-prerequisites-plan-v2',
+            parent=Mock();next_plan={'schema':'voice-staging-prerequisites-plan-v4','installation_sha256':session.installation.sha256,
                 'actual_before':plan['actual_before'],'preservation_sha256':claim.digest(receipt)}
             with patch.dict(sys.modules,{'staging_prerequisites':parent}):
                 altered=dict(next_plan,preservation_sha256='f'*64)
