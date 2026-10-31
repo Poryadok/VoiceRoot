@@ -213,9 +213,9 @@ def _story_database(kube,stage,hashes):
 def preflight(kube,source,code,binding,stage,services,decoder,*,story_composition=None,installation=None):
     from resource_claim import require_installation
     installation=require_installation(installation)
-    if stage.expected['generation']!=installation.generation:fail()
     roles=sorted(ROLES.intersection(services))
     if not roles:return None
+    if stage.expected['generation']!=installation.generation:fail()
     generation=stage.expected['generation']
     operator=kube.get('secret','voice-nats-operator-'+generation)
     account=secret_bytes(operator,'account.public').decode().strip()
