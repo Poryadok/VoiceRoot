@@ -63,7 +63,9 @@ class PreservationGateTests(unittest.TestCase):
                 kube=Mock();stage=Mock();journal=Mock()
                 with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
                     migrations.execute(kube,stage,[],mode,{},journal)
-                kube.assert_not_called();stage.verify_final_storage.assert_not_called();journal.assert_not_called()
+                self.assertEqual(kube.mock_calls, [])
+                self.assertEqual(stage.mock_calls, [])
+                journal.assert_not_called()
 
     @unittest.skipUnless(__import__('os').name=='posix' and __import__('os').geteuid()==0,
                          'checkpoint custody requires isolated Linux root')
