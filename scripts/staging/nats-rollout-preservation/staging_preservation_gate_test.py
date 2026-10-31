@@ -32,7 +32,9 @@ class PreservationGateTests(unittest.TestCase):
             self.assertEqual(list(path.iterdir()),[])
         with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
             migrations.execute(kube,stage,[{'database':'space'}],'full',{},journal)
-        kube.assert_not_called();stage.verify_final_storage.assert_not_called();journal.assert_not_called()
+        self.assertEqual(kube.mock_calls, [])
+        self.assertEqual(stage.mock_calls, [])
+        journal.assert_not_called()
 
     def test_bridge_authorization_paths_stop_before_custody_or_restore(self):
         actions=object.__new__(bridge_root.Actions)
