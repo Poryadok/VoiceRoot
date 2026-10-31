@@ -28,6 +28,12 @@ class CompleteBundleTests(unittest.TestCase):
                 if not name.startswith('nats-rollout-preservation/') or not name.endswith('.py'):continue
                 for node in ast.walk(ast.parse(raw)):
                     imported=[item.name.split('.')[0] for item in node.names] if isinstance(node,ast.Import) else [node.module.split('.')[0]] if isinstance(node,ast.ImportFrom) and node.module else []
+                    if (isinstance(node,ast.Call) and node.args and isinstance(node.args[0],ast.Constant)
+                        and isinstance(node.args[0].value,str) and
+                        ((isinstance(node.func,ast.Name) and node.func.id=='__import__') or
+                         (isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name)
+                          and node.func.value.id=='importlib' and node.func.attr=='import_module'))):
+                        imported.append(node.args[0].value.split('.')[0])
                     for module in imported:
                         if module in local and 'nats-rollout-preservation/'+local[module] not in members:
                             missing.add(local[module])
