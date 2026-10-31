@@ -125,8 +125,11 @@ def verified_account(args, label):
     return regular
 
 
-def sandbox_app(args, name, applicant_token, operator_token):
+def sandbox_app(args, name, applicant_token, operator_token, operator_account_id, *, include_roster=False):
     base = args.gateway_base.rstrip("/")
+    validation_status, operator_claims = api("POST", f"{base}/api/v1/auth/validate", token=operator_token)
+    if validation_status != 200 or operator_claims.get("user_id") != operator_account_id:
+        raise RuntimeError("sandbox operator token identity does not match the configured GIS operator account")
     status, created = api("POST", f"{base}/api/v1/game-integrations/applications", {"name": name},
                           applicant_token, str(uuid.uuid4()))
     if status != 201:
@@ -137,7 +140,7 @@ def sandbox_app(args, name, applicant_token, operator_token):
         operator_token, str(uuid.uuid4()),
     )
     if status != 201:
-        raise RuntimeError(f"sandbox admission failed with HTTP {status}")
+        raise RuntimeError(f"sandbox admission failed with HTTP {status} error_code={safe_error_code(environment)}")
     environment_id = environment["environment_id"]
     status, credential = api(
         "POST", f"{base}/api/v1/game-integrations/applications/{app_id}/environments/{environment_id}/credentials",
@@ -145,10 +148,42 @@ def sandbox_app(args, name, applicant_token, operator_token):
     )
     if status != 201 or credential.get("scopes") != ["game.sessions.manage"] or not credential.get("secret", "").startswith("vgi1_"):
         raise RuntimeError(f"game.sessions.manage credential issue failed with HTTP {status}")
+    roster_credential = {}
+    if include_roster:
+        roster_status, roster_credential = api(
+            "POST", f"{base}/api/v1/game-integrations/applications/{app_id}/environments/{environment_id}/credentials",
+            {"scopes": ["game.roster.write"]}, applicant_token, str(uuid.uuid4()),
+        )
+        if roster_status != 201 or roster_credential.get("scopes") != ["game.roster.write"] or not roster_credential.get("secret", "").startswith("vgi1_"):
+            raise RuntimeError(f"game.roster.write credential issue failed with HTTP {roster_status}")
     return {
         "application_id": app_id, "environment_id": environment_id,
         "credential_id": credential["credential_id"], "secret": credential["secret"],
+        "roster_credential_id": roster_credential.get("credential_id", ""), "roster_secret": roster_credential.get("secret", ""),
     }
+
+
+def seed_t40_synthetic_bindings(args, app, applicant, operator):
+    """Seed pre-bound synthetic players for the T40 consent acceptance only."""
+    rows = []
+    for index, account in enumerate((applicant, operator)):
+        account_id = str(uuid.UUID(account["account_id"]))
+        profile_id = str(uuid.UUID(account["profile_id"]))
+        characters = '["t40-character-1","t40-character-2"]' if index == 0 else '["t40-character-1"]'
+        rows.append(
+            "('{}','{}','{}','synthetic-t40','hmac-sha256-v1:t40fixture:{}','{}','{}','{}','{}','active',1,'{}'::jsonb)".format(
+                uuid.uuid4(), app["application_id"], app["environment_id"], secrets.token_hex(32),
+                account_id, account_id, profile_id, uuid.uuid4(), characters,
+            )
+        )
+    sql = (
+        "INSERT INTO player_bindings (binding_id,application_id,environment_id,provider,provider_subject_digest,"
+        "account_id,actor_id,profile_id,device_id,status,authority_revision,permitted_character_context) VALUES "
+        + ",".join(rows)
+        + " ON CONFLICT (application_id,environment_id,provider,provider_subject_digest) DO NOTHING"
+    )
+    compose(args, "exec", "-T", "postgres", "psql", "-U", "voice", "-d", "game_integration_db",
+            "-v", "ON_ERROR_STOP=1", "-c", sql, capture=True)
 
 
 def canonical_member_profile_ids(*profile_ids):
@@ -163,7 +198,8 @@ def safe_error_code(response):
     return "UNAVAILABLE"
 
 
-def write_compose_env(path, tls_dir, state_dir, operator_id, app, other, event_id="bootstrap-pending"):
+def write_compose_env(path, tls_dir, state_dir, operator_id, app, other, event_id="bootstrap-pending",
+                      applicant=None, operator=None):
     values = {
         "T31_E2E_TLS_DIR": str(tls_dir.resolve()),
         "T31_E2E_STATE_DIR": str(state_dir.resolve()),
@@ -176,6 +212,18 @@ def write_compose_env(path, tls_dir, state_dir, operator_id, app, other, event_i
         "T31_OTHER_ENVIRONMENT_ID": other["environment_id"],
         "T31_OTHER_GAME_SERVER_CREDENTIAL": other["secret"],
         "T31_EXPECTED_EVENT_ID": event_id,
+        "T40_PUBLIC_GATEWAY_BASE_URL": "http://gateway:8080",
+        "T40_GAME_SERVER_CREDENTIAL": app.get("secret", ""),
+        "T40_GAME_ROSTER_CREDENTIAL": app.get("roster_secret", ""),
+        "T40_APPLICATION_ID": app.get("application_id", ""),
+        "T40_ENVIRONMENT_ID": app.get("environment_id", ""),
+        "T40_PLAYER_ONE_TOKEN": applicant.get("access_token", "") if applicant else "",
+        "T40_PLAYER_TWO_TOKEN": operator.get("access_token", "") if operator else "",
+        "T40_PLAYER_ONE_PROFILE_ID": applicant.get("profile_id", "") if applicant else "",
+        "T40_PLAYER_TWO_PROFILE_ID": operator.get("profile_id", "") if operator else "",
+        "T40_CHAT_DATABASE_URL": "postgres://voice:voice@postgres:5432/chat_db?sslmode=disable",
+        "T40_GAME_INTEGRATION_DATABASE_URL": "postgres://voice:voice@postgres:5432/game_integration_db?sslmode=disable",
+        "T40_SPACE_DATABASE_URL": "postgres://voice:voice@postgres:5432/space_db?sslmode=disable",
     }
     path.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="ascii")
     os.chmod(path, 0o600)
@@ -191,6 +239,8 @@ def main():
     parser.add_argument("--result", type=Path, required=True)
     parser.add_argument("--gateway-base", default="http://127.0.0.1:18080")
     parser.add_argument("--mail-stub-base", default="http://127.0.0.1:14180")
+    parser.add_argument("--t40-public-sessions", action="store_true",
+                        help="prepare synthetic local player bindings and the T40 roster credential")
     args = parser.parse_args()
 
     applicant = verified_account(args, "applicant")
@@ -215,9 +265,12 @@ def main():
     else:
         raise RuntimeError("GIS did not become healthy after the targeted rebuild")
 
-    app = sandbox_app(args, f"T31 HTTPS receiver {uuid.uuid4().hex[:8]}", applicant["access_token"], operator["access_token"])
-    other = sandbox_app(args, f"T31 HTTPS isolation {uuid.uuid4().hex[:8]}", applicant["access_token"], operator["access_token"])
-    write_compose_env(args.compose_env, args.tls_dir, args.state_dir, operator["account_id"], app, other)
+    app = sandbox_app(args, f"T31 HTTPS receiver {uuid.uuid4().hex[:8]}", applicant["access_token"], operator["access_token"], operator["account_id"], include_roster=args.t40_public_sessions)
+    other = sandbox_app(args, f"T31 HTTPS isolation {uuid.uuid4().hex[:8]}", applicant["access_token"], operator["access_token"], operator["account_id"])
+    if args.t40_public_sessions:
+        seed_t40_synthetic_bindings(args, app, applicant, operator)
+    write_compose_env(args.compose_env, args.tls_dir, args.state_dir, operator["account_id"], app, other,
+                      applicant=applicant, operator=operator)
     result = {
         "applicant_account_id": applicant["account_id"], "applicant_profile_id": applicant["profile_id"],
         "operator_account_id": operator["account_id"], "operator_profile_id": operator["profile_id"],
@@ -251,7 +304,7 @@ def main():
         raise RuntimeError(f"GIS session did not become active; stage={stage}")
 
     write_compose_env(args.compose_env, args.tls_dir, args.state_dir, operator["account_id"], app, other,
-                      operation["active_event_id"])
+                      operation["active_event_id"], applicant, operator)
     result.update({
         "operation_id": operation_id, "session_id": operation["session_id"],
         "active_event_id": operation["active_event_id"], "session_status": operation["session_status"],

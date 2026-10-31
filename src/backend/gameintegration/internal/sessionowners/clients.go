@@ -132,7 +132,7 @@ func (c *Clients) Close() error {
 
 func (c *Clients) Adapters() registry.SessionOwnerAdapters {
 	return registry.SessionOwnerAdapters{
-		CreateChat: c.createChat, SyncChatRoster: c.syncChatRoster, ProvisionVoice: c.provisionVoice,
+		CreateChat: c.createChat, SyncChatRoster: c.syncChatRoster, ProvisionVoice: c.provisionVoice, ApplyVoiceRoster: c.applyVoiceRoster,
 		ApplyRoleGrants: c.applyRole, CloseVoice: c.closeVoice, RevokeRoleGrants: c.revokeRole,
 	}
 }
@@ -222,6 +222,35 @@ func (c *Clients) provisionVoice(ctx context.Context, owner registry.SessionOwne
 		return registry.SessionOwnerReceipt{}, errors.New("voice provision receipt request hash mismatch")
 	}
 	return registry.SessionOwnerReceipt{ResourceID: roomID, ReceiptID: receiptID, RequestHash: owner.RequestHash}, nil
+}
+
+func (c *Clients) applyVoiceRoster(ctx context.Context, owner registry.SessionOwnerRequest) (registry.SessionOwnerReceipt, error) {
+	request, ok := owner.Proto.(*callsv1.ApplyGameSessionRosterRequest)
+	if !ok || request.GetOperationId() != owner.OperationID.String() {
+		return registry.SessionOwnerReceipt{}, errors.New("invalid Voice roster owner request")
+	}
+	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	callCtx, err := c.authContext(callCtx, "voice", callsv1.GameSessionProvisioningService_ApplyGameSessionRoster_FullMethodName, request, request.GetOperationId())
+	if err != nil {
+		return registry.SessionOwnerReceipt{}, err
+	}
+	response, err := c.voice.ApplyGameSessionRoster(callCtx, request)
+	if err != nil {
+		return registry.SessionOwnerReceipt{}, classifyOwnerError(err, owner, gisowner.VoiceDomain, gisowner.VoiceRosterRPC)
+	}
+	receiptID, err := parseUUID(response.GetReceiptId())
+	if err != nil {
+		return registry.SessionOwnerReceipt{}, err
+	}
+	if response.GetOperationId() != request.GetOperationId() || response.GetApplicationId() != request.GetApplicationId() ||
+		response.GetEnvironmentId() != request.GetEnvironmentId() || response.GetSessionId() != request.GetSessionId() ||
+		response.GetVoiceRoomId() != request.GetVoiceRoomId() || response.GetAcceptedRevision() != request.GetRosterRevision() ||
+		response.GetLeaseExpiresAt() == nil || !response.GetLeaseExpiresAt().AsTime().Equal(request.GetLeaseExpiresAt().AsTime()) ||
+		!hashBytesMatch(response.GetRequestHash(), owner.RequestHash) {
+		return registry.SessionOwnerReceipt{}, errors.New("voice roster receipt does not match accepted request")
+	}
+	return registry.SessionOwnerReceipt{ResourceID: owner.VoiceRoomID, ReceiptID: receiptID, RequestHash: owner.RequestHash}, nil
 }
 
 func (c *Clients) applyRole(ctx context.Context, owner registry.SessionOwnerRequest) (registry.SessionOwnerReceipt, error) {

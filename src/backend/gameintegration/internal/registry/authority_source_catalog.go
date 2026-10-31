@@ -4,7 +4,7 @@ import "voice/backend/pkg/authoritysource"
 
 var gisAuthorityTables = []string{"applications", "environments", "player_bindings", "installations", "game_resource_mappings", "game_resource_binding_chats", "gis_sessions", "gis_app_notification_consents", "service_credentials"}
 var gisAuthorityCatalog = func() authoritysource.Catalog {
-	c := authoritysource.Catalog{Version: 32, Tables: append(append([]string{}, gisAuthorityTables...), "gis_authority_revision"), Triggers: []authoritysource.CatalogTrigger{
+	c := authoritysource.Catalog{Version: 33, Tables: append(append([]string{}, gisAuthorityTables...), "gis_authority_revision"), Triggers: []authoritysource.CatalogTrigger{
 		{Table: "gis_authority_revision", Name: "gis_authority_floor_change", Function: "gis_authority_floor_guard", Type: 31},
 		{Table: "gis_authority_revision", Name: "gis_authority_floor_truncate", Function: "gis_authority_floor_guard", Type: 34},
 	}, Functions: []authoritysource.CatalogFunction{

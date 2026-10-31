@@ -67,18 +67,26 @@ acceptance require their separate version-bound proof.
 
 ## Owning authority source catalog
 
-The authority source serves only exact clean `user_db` version **21**. Migrations
-20 (`profile_last_seen`) and 21 (pending organization-challenge cleanup and its
+The authority source serves exact clean `user_db` versions **21** and **22**.
+For version 21, migrations 20 (`profile_last_seen`) and 21 (pending organization-challenge cleanup and its
 unique index) preserve the source's four relations, columns, constraints,
 indexes, eleven triggers and five function bodies. The real pinned migrator
 qualification compares their DDL before/after 19→21 and verifies the unchanged
-authority revision and profile tuple. Runtime source queries and function hashes
+authority revision and profile tuple. The authority projection and function hashes
 remain unchanged; dirty, older and unknown versions still fail closed.
 
 Migration19's permanent authority floors and inactive fences remain forward-only.
 The maintenance oracle returns through the unrelated additive migrations to19,
-then proves that its DOWN is refused and retained fences survive. This exact21
-qualification grants no future schema version, identity-association activation or
+then proves that its DOWN is refused and retained fences survive. The User
+authority reader also accepts exact22 after checking the named relations,
+triggers and function bodies in the generated catalog under its read transaction.
+This check does not qualify the complete identity schema, constraints or indexes.
+Privileged DDL outside the migration protocol is outside the lock guarantee.
+A version hint does not grant authority: the locked transaction rechecks the
+exact clean version. The
+exact21 reader rejects identity-migration artifacts rather than treating a
+relabelled identity schema as 21. This reader qualification does not activate
+identity association or establish source custody, writer readiness, or
 cross-service/runtime acceptance.
 
 ## Обзор

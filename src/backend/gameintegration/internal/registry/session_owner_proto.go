@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	callsv1 "voice.app/voice/calls/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	rolev1 "voice.app/voice/role/v1"
@@ -42,6 +43,12 @@ func BuildSessionOwnerProto(stage string, request SessionOwnerRequest) (proto.Me
 		}
 		return &chatv1.SyncManagedChatMembersRequest{ApplicationId: request.ApplicationID.String(), EnvironmentId: request.EnvironmentID.String(),
 			OperationId: request.OperationID.String(), ChatId: request.ChatID.String(), ProfileIds: canonicalProfileIDs(request.Members)}, nil
+	case "chat_add_members":
+		if request.ChatID == uuid.Nil {
+			return nil, errors.New("chat ID is required for additive member sync")
+		}
+		return &chatv1.SyncManagedChatMembersRequest{ApplicationId: request.ApplicationID.String(), EnvironmentId: request.EnvironmentID.String(),
+			OperationId: request.OperationID.String(), ChatId: request.ChatID.String(), ProfileIds: canonicalProfileIDs(request.Members), AddOnly: true}, nil
 	case "voice_provision":
 		if request.ChatID == uuid.Nil || request.ChatCreateReceiptID == uuid.Nil {
 			return nil, errors.New("chat identity and receipt are required for voice")
@@ -56,6 +63,14 @@ func BuildSessionOwnerProto(stage string, request SessionOwnerRequest) (proto.Me
 		return &rolev1.ApplyGameSessionGrantsRequest{ApplicationId: request.ApplicationID.String(), EnvironmentId: request.EnvironmentID.String(),
 			SessionId: request.SessionID.String(), VoiceRoomId: request.VoiceRoomID.String(), OperationId: request.OperationID.String(),
 			RosterRevision: uint64(request.RosterRevision), ProfileIds: canonicalProfileIDs(request.Members)}, nil
+	case "voice_roster":
+		if request.VoiceRoomID == uuid.Nil || request.RosterRevision <= 0 || request.LeaseExpiresAt.IsZero() {
+			return nil, errors.New("voice room, roster revision, and GIS lease are required for roster apply")
+		}
+		return &callsv1.ApplyGameSessionRosterRequest{OperationId: request.OperationID.String(), ApplicationId: request.ApplicationID.String(),
+			EnvironmentId: request.EnvironmentID.String(), SessionId: request.SessionID.String(), VoiceRoomId: request.VoiceRoomID.String(),
+			RosterRevision: uint64(request.RosterRevision), ProfileIds: canonicalProfileIDs(request.Members),
+			LeaseExpiresAt: timestamppb.New(request.LeaseExpiresAt)}, nil
 	case "terminalize_voice_close":
 		if request.VoiceRoomID == uuid.Nil || request.ChatID == uuid.Nil || request.ChatCreateReceiptID == uuid.Nil {
 			return nil, errors.New("voice room and chat receipt are required for close")

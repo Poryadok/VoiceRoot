@@ -17,9 +17,13 @@ import (
 )
 
 var (
-	ErrInvalidApplication  = errors.New("invalid application request")
-	ErrIdempotencyConflict = errors.New("idempotency key has a different request")
-	ErrRegistryUnavailable = errors.New("registry unavailable")
+	ErrInvalidApplication         = errors.New("invalid application request")
+	ErrIdempotencyConflict        = errors.New("idempotency key has a different request")
+	ErrRegistryUnavailable        = errors.New("registry unavailable")
+	ErrCommunityBootstrapConflict = errors.New("community bootstrap operation conflicts")
+	ErrCommunityBootstrapExpired  = errors.New("community bootstrap approval expired")
+	ErrOwnerRecoveryConflict      = errors.New("community owner recovery conflicts")
+	ErrOwnerRecoveryExpired       = errors.New("community owner recovery approval expired")
 )
 
 const createApplicationRoute = "applications.create"

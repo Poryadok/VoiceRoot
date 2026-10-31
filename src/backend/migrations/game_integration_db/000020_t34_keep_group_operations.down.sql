@@ -1,0 +1,1 @@
+DROP TABLE gis_session_keep_group_operations;
