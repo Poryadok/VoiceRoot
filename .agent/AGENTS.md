@@ -20,6 +20,7 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 | Local machine setup (toolchain, hooks, compose) | `docs/DEV_SETUP.md` |
 | Repositories, monorepo, protos | `docs/REPOSITORIES.md` |
 | Existing code vs planned work | `docs/PLAN.md` (implementation status) |
+| Task tracker, WIP, ownership, evidence | TTenrec — `tt` CLI via the `ttenrec` skill |
 | Documentation gaps | `docs/TODO.md` |
 
 ## File Reading
@@ -59,6 +60,10 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
 ## Development Workflow
 
 - Before coding, read the relevant `docs/` files from the table and the user task.
+- Track implementation tasks, claims, ownership, evidence and continuations in
+  TTenrec (the `tt` CLI via the `ttenrec` skill). `docs/PLAN.md` and
+  `docs/TODO.md` document feature status and documentation gaps; do not use
+  them as a task backlog.
 - Keep the main checkout on current `master`: `git fetch origin` + `git merge origin/master` (no rebase). After creating a commit, push it promptly unless the user explicitly asks to keep it local.
 - For implementation and behavior-changing fixes, use `tdd-code-workflow` within
   the scope in `docs/TESTING.md`. Its canonical source is

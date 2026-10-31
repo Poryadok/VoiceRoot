@@ -1,13 +1,16 @@
 """Real Git fixtures for one historical Role condition; never producer admission."""
 import json
 import hashlib
+import io
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
+from contextlib import redirect_stderr
 
 import f13_role_conditional as legacy
 import f13_role_conditional_successor as successor
@@ -31,6 +34,127 @@ MULTI_OWNER_ENTRIES = dict(INVENTORY_ENTRIES, **{
 
 def git(*args,data=None,env=None):
     return subprocess.check_output(['git','--no-replace-objects','-C',str(ROOT),*args],input=data,env=env).decode().strip()
+
+
+def reviewed_current_compiled_entry(source,path):
+    """Return only a fully source-qualified v5 context entry for this fixture."""
+    try:
+        import f13_release_source as release
+    except ModuleNotFoundError as error:
+        if error.name!='f13_release_source':raise
+        return None
+    if not release.applicable(ROOT,source):return None
+    production=release.production_record(ROOT);native=release.load_native(ROOT)
+    reviewed=release.FOUNDATION_BASE
+    legacy.require(native['version']==release.NATIVE_VERSION and production['source']==native['source']==reviewed,
+        'fixture_v5_source_binding')
+    legacy.require(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',reviewed,source],
+        capture_output=True).returncode==0,'fixture_v5_source_ancestry')
+    rows=[row for row in native['context'] if row['path']==path]
+    legacy.require(path in native['compiled_closure'] and len(rows)==1,'fixture_v5_compiled_context')
+    expected=rows[0]['entry']
+    legacy.require(isinstance(expected,dict) and set(expected)=={'mode','type','oid'}
+        and expected['mode']=='100644' and expected['type']=='blob'
+        and legacy.entry(ROOT,reviewed,path)==expected and legacy.entry(ROOT,source,path)==expected,
+        'fixture_v5_compiled_entry')
+    return expected
+
+
+class ReviewedCurrentCompiledFixtureTest(unittest.TestCase):
+    def test_v5_context_requires_exact_compiled_entry_and_ancestry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo=Path(directory); path='src/backend/user/pb/voice/common/v1/reference_inventory.pb.go'
+            def g(*args,data=None):
+                return subprocess.check_output(['git','-C',str(repo),*args],input=data).decode().strip()
+            g('init','-q');g('config','user.name','fixture');g('config','user.email','fixture@example.invalid')
+            (repo/path).parent.mkdir(parents=True);(repo/path).write_text('reviewed\n')
+            g('add','.');g('commit','-qm','reviewed');h=g('rev-parse','HEAD');entry=legacy.entry(repo,h,path)
+            native=dict(version='NATIVE-P3-SOURCE-v5',source=h,compiled_closure=[path],context=[dict(path=path,entry=entry)])
+            release=SimpleNamespace(FOUNDATION_BASE=h,NATIVE_VERSION='NATIVE-P3-SOURCE-v5',
+                applicable=lambda r,s:subprocess.run(['git','-C',str(r),'merge-base','--is-ancestor',h,s],capture_output=True).returncode==0,
+                production_record=lambda r:dict(source=h),load_native=lambda r:native)
+            with patch(__name__+'.ROOT',repo),patch.dict(sys.modules,{'f13_release_source':release}):
+                self.assertEqual(reviewed_current_compiled_entry(h,path),entry)
+                for kind in ('content','mode','type','missing','disconnected'):
+                    index=repo/('index-'+kind);env=dict(os.environ,GIT_INDEX_FILE=str(index))
+                    subprocess.check_call(['git','-C',str(repo),'read-tree',h],env=env)
+                    if kind=='missing':
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--force-remove','--',path],env=env)
+                    elif kind!='disconnected':
+                        oid=entry['oid'] if kind in ('mode','type') else g('hash-object','-w','--stdin',data=b'unreviewed\n')
+                        mode='100755' if kind=='mode' else '120000' if kind=='type' else '100644'
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--cacheinfo',mode+','+oid+','+path],env=env)
+                    tree=subprocess.check_output(['git','-C',str(repo),'write-tree'],env=env).decode().strip()
+                    child=g('commit-tree',tree,*([] if kind=='disconnected' else ['-p',h]),'-m','fixture')
+                    with self.subTest(kind=kind):
+                        if kind=='disconnected':self.assertIsNone(reviewed_current_compiled_entry(child,path))
+                        else:
+                            with self.assertRaises(legacy.Rejected):reviewed_current_compiled_entry(child,path)
+                for invalid in (dict(native,version='NATIVE-P3-SOURCE-v4'),dict(native,source='0'*40),
+                                dict(native,compiled_closure=[]),dict(native,context=[]),
+                                dict(native,context=native['context']*2)):
+                    with patch.object(release,'load_native',return_value=invalid),self.assertRaises(legacy.Rejected):
+                        reviewed_current_compiled_entry(h,path)
+                with patch.object(release,'production_record',side_effect=legacy.Rejected('unreviewed')):
+                    with self.assertRaisesRegex(legacy.Rejected,'unreviewed'):reviewed_current_compiled_entry(h,path)
+
+
+class ReleaseRoleFixtureTest(unittest.TestCase):
+    """Production boundary is mocked; target tree and raw rows use real Git."""
+    def test_current_v3_rejection_does_not_fall_back_to_successful_v1(self):
+        import f13_release_source as release
+        target='a'*40
+        args=['role','--repo',str(ROOT),'--target',target,'--prior-row','prior','--incoming-row','incoming']
+        with patch.object(sys,'argv',args),patch.multiple(release,ROOT=ROOT,FOUNDATION_BASE='b'*40), \
+             patch.object(legacy,'git',return_value=(target+'\n').encode()), \
+             patch.object(successor.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
+             patch.object(legacy,'qualify',return_value={'legacy_success':True}) as old, \
+             patch.object(successor,'qualify_release',side_effect=release.Rejected('wrong_event')) as current, \
+             redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(successor.main(),1)
+            self.assertIn('wrong_event',stderr.getvalue())
+            current.assert_called_once()
+            old.assert_not_called()
+
+    def test_current_target_entries_and_both_runtime_flags_are_retained(self):
+        import f13_release_source as release
+        with tempfile.TemporaryDirectory() as folder:
+            repo=Path(folder)
+            def g(*args):
+                return subprocess.check_output(['git','-C',str(repo),*args]).decode().strip()
+            g('init','-q');g('config','user.name','fixture');g('config','user.email','fixture@example.invalid')
+            unit='src/backend/role/dep.go'
+            paths=(unit,successor.VERIFIER_PATH,legacy.VERIFIER_PATH,'scripts/ci/f13_release_source.py',
+                   release.ROLE_RECORD_PATH,release.ROLE_CLOSURE_PATH)
+            for path in paths:
+                f=repo/path;f.parent.mkdir(parents=True,exist_ok=True);f.write_text(path+'\n')
+            g('add','.');g('commit','-qm','foundation');base=g('rev-parse','HEAD')
+            (repo/'later').write_text('later\n');g('add','later');g('commit','-qm','target');target=g('rev-parse','HEAD')
+            tree=release.documentation.tree_entries(repo,base)
+            inventories=release.documentation.immediate_directory_entries(tree)
+            entry=legacy.entry(repo,base,unit)
+            record=dict(source=base,evidence_source=base,required_current_source=[dict(path=unit,entry=entry)],
+                context=[],closure={'directory_inventories':[dict(directory='src/backend/role',
+                    entries=inventories['src/backend/role'])]},evidence=[],historical_runtime_gap='HOLD')
+            raw=lambda flag:'\t'.join([legacy.ROLE_PATH,flag]+['1'*40]*6)
+            with patch.multiple(release,ROOT=repo,FOUNDATION_BASE=base,RECORD_COMMIT=base,ROLE_SHA256='a'*64), \
+                 patch.multiple(successor,ORIGINAL_CORRECTION=base,HISTORICAL_CARRIER=base), \
+                 patch.object(release,'production_qualify'),patch.object(release,'load_role',return_value=record), \
+                 patch.object(legacy,'qualify',return_value={'historical':True}):
+                for flag in ('false','true'):
+                    receipt=successor.qualify_release(repo,target,raw('false'),raw(flag))
+                    self.assertEqual(receipt['incoming_row'][1],flag)
+                    self.assertTrue(receipt['retain_runtime_and_content_taint'])
+                    self.assertEqual(receipt['historical_runtime_gap'],'HOLD')
+                    self.assertFalse(receipt['runtime_pass'])
+                with self.assertRaisesRegex(legacy.Rejected,'role_release_actual_head'):
+                    successor.qualify_release(repo,base,raw('false'),raw('true'))
+                with patch.object(release,'production_qualify',side_effect=release.Rejected('wrong_event')):
+                    with self.assertRaisesRegex(release.Rejected,'wrong_event'):
+                        successor.qualify_release(repo,target,raw('false'),raw('true'))
+                (repo/unit).write_text('drift\n');g('add',unit);g('commit','-qm','drift')
+                with self.assertRaises(legacy.Rejected):
+                    successor.qualify_release(repo,g('rev-parse','HEAD'),raw('false'),raw('true'))
 
 
 def reviewed_inventory_fixture_source(source):
@@ -185,7 +309,24 @@ class RoleSuccessorTest(unittest.TestCase):
             'src/backend/user/pb/voice/common/v1/reference_inventory.pb.go',
             'src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go',
             'src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go'})
-        self.assertEqual(reviewed_inventory_fixture_source(self.actual_head),MULTI_OWNER_SOURCE)
+        inventory_source = '0a65f54010e834fcdea5ee0d0d64844c1889f158'
+        inventory_entries = {
+            'src/backend/user/pb/voice/common/v1/reference_inventory.pb.go': '9311529c5aaf5b56e31102c4a0fb7b7c3e47ade0',
+            'src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go': 'b505d59b968af59177acd22ad5161a748d48efcc',
+            'src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go': '06656fe9cd9478cbacde07b63eacb6b32bef5035',
+        }
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        inventory_source,self.actual_head]).returncode,0)
+        current_compiled=reviewed_current_compiled_entry(self.actual_head,USER_INVENTORY_PATH)
+        if current_compiled is None:
+            self.assertEqual(reviewed_inventory_fixture_source(self.actual_head),MULTI_OWNER_SOURCE)
+        for path, oid in inventory_entries.items():
+            with self.subTest(path=path):
+                expected = {'mode':'100644','type':'blob','oid':oid}
+                self.assertEqual(legacy.entry(ROOT,inventory_source,path),expected)
+                if path=='src/backend/user/pb/voice/common/v1/reference_inventory.pb.go':
+                    expected=current_compiled or dict(mode='100644',type='blob',oid=MULTI_OWNER_ENTRIES[path])
+                self.assertEqual(legacy.entry(ROOT,self.actual_head,path),expected)
         self.assertEqual(git('rev-list','--parents','-n','1',self.target).split(),
                          [self.target,self.actual_head])
         self.assertEqual(set(git('diff','--name-only',self.actual_head,self.target).splitlines()),

@@ -78,12 +78,13 @@ class BootstrapSourceUnitTest(unittest.TestCase):
 
 class FixtureSourceUnitTest(unittest.TestCase):
     def test_current_head_never_falls_back_to_legacy_success(self):
+        historical_target=git('rev-parse',source.BOOTSTRAP_RECORD_COMMIT)
         with patch.object(source,'fixture_applicable',return_value=True),\
                 patch.object(native.legacy,'qualify',return_value={'unqualified_historical_success':True}) as old,\
                 patch.object(documentation,'qualify_context',side_effect=ValueError('current-bridge-required')) as current:
             with self.assertRaisesRegex(ValueError,'^current-bridge-required$'):
-                native.qualify(ROOT,'historical-base','historical-source','historical-target',
-                    'pull_request','refs/pull/875/merge','historical-target','','master')
+                native.qualify(ROOT,'historical-base','historical-source',historical_target,
+                    'pull_request','refs/pull/875/merge',historical_target,'','master')
             old.assert_not_called();current.assert_called_once()
 
     def test_exact_fixture_successor_retains_native_v4(self):
@@ -189,12 +190,19 @@ class ProductionSourceTest(unittest.TestCase):
         self.assertNotEqual(value['base'],value['historical_collector']['base'])
         self.assertFalse(value['admission']);self.assertFalse(value['current_or_future_path_authority'])
 
-    def test_actual_head_outside_historical_context_is_rejected(self):
+    def test_historical_carrier_with_foreign_source_is_rejected(self):
+        self.changed('docs/unreviewed-production-fixture.md')
+        with self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+            source.qualify(ROOT)
+
+    def test_actual_head_cannot_enter_legacy_historical_context(self):
         target=self.commit(git('rev-parse',self.actual_head+'^{tree}'),
                            [self.event_base,self.actual_head])
         git('update-ref','HEAD',target);os.environ['GITHUB_SHA']=target
+        # Exercise the original v10 rule directly; dispatching the v11 source
+        # through qualify() selects its separate actual-root authority instead.
         with self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
-            source.qualify(ROOT)
+            source.qualify_bootstrap_fix(ROOT)
 
     def test_foreign_repo_same_carrier_tree_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

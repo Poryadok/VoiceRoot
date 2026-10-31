@@ -1,0 +1,676 @@
+{
+  "entries": [
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "17a23ac7aaf0d1274efa2fa138d95da2c9386044",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "a611a91b479fc51b5600ec293bc1dce6bff58f1f",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "Makefile"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "00277dd8d9ddab2f0c425ed327a804f2fd1107be",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5da3a004cf01bf2b0ced9d183d2fc2d6f0f41ae1",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "deploy/nats/acl-intent.yaml"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "dcf5a3323e8548a115027a448911931a0b4663c7",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "303e938fb0ea3514b9653b4daca0346d0408a213",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "deploy/nats/jetstream-publisher-streams.yaml"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "c991ea1cf9c22894e507b4de7283e205c3253a28",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f0970ed76c483760ef662a2d66982d4353a0081b",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "docs/DATA_MODEL.md"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "af464029d432a499f58db19b6fa440fb5c0c0d7c",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "6e72b6fc07885ab44e735c806fb731849aa2b8cb",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "docs/DATA_STORES.md"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "43217ef76502773259ab12f64baf5c097c8fb84a",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ff81e287a15cd249ca3eb9605e4318e6bd5e738c",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "docs/microservices/space-service.md"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6563dc574569e8bada9f6480bfa9f34e05520f63",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "protos/voice/chat/v1/catalog_assets.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "668bdea824c20362e66e1f67a5f3f5e9da3bb3f2",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "998e7880ab0a10d52d89475a2f8219c5999e0ad9",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "protos/voice/chat/v1/chat.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fcb1615bef059331256efd98945f171a7c703946",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "protos/voice/common/v1/reference_inventory.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "57b43ba07ef2c21ab42318adc46c0fb3b6571e1e",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "protos/voice/file/v1/catalog_assets.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1878f9d0b3adb707b330b07cf854016e77de0063",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "76e1542a112d6b714cc0801f93091460268eaf34",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "protos/voice/file/v1/file.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "0062f2bcd19e102cc1a921545bb86a1327cb8261",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "232cb86886658dc271a5997db7e53194bb96631e",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "protos/voice/messaging/v1/messaging.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f4a0c852e2c668a73e0ea10ad5148c3894cb8c08",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "protos/voice/messaging/v1/reference_inventory.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "18566492bebcf9eae7f9e7580cae910c59fb78a3",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "protos/voice/story/v1/reference_inventory.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "d2b3cd27143dd8272b9290eea352e237b3a1e189",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "716f383e3faeb9746d69e9de1f890d89d4ee9010",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "protos/voice/user/v1/user.proto"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "177ba1a42bcdbbea42d85a197a3629895835a4b7",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/chat/pb/voice/chat/v1/catalog_assets.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "0c92f11dddc1269a776add9d8d25b16589c0f55b",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/chat/pb/voice/chat/v1/catalog_assets_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fc13d1d046f8768aa1dced793a917a6934fa4aca",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1f022a51c4e1a361228682d04176610cdc96c933",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0db4d24d9d4c3f4aa0b9adada64433e76fff306e",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f3d69bb739a9ba441ecd73421d37d0f61c161820",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/file/pb/voice/file/v1/catalog_assets.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1e27e62e9ba46624a0a408649eea5d269c548509",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/file/pb/voice/file/v1/catalog_assets_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "449350a315015c1a7217c0ae806a8483cf2411b0",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "3f56314c1e8eedd0e2cb73bde475b60e31927dab",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/file/pb/voice/file/v1/file.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6d88bec7977afd2364341c7a6d3073b2f5f35abe",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "569b8b5ac9f12e6e3d94f0cfe05116feecfcb1b6",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/file/pb/voice/file/v1/file_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "a6a632d712abcca5af13ff518bdb93f79d7bae79",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/authoritysource/gis_state.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "40f5f314950459c8988e8ffa8805be08a7039375",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/authoritysource/gis_state_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "2fe4d5b6a597beddfcadd8df874570802b35410c",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "3d5352419c29fd3d118aec3a75e70535752c9716",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/integrationtest/migrations.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fc2449e8437245725228050b93b650b0f7fe585e",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/catalog_actor_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "5db4e0b4607ff44701dcd4ebb02632847f1a23a5",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "ab646031b3c35a7e6c4aa686aac6681d13b44f8b",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/communication_runtime_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "15ddea4fe1f447cf32fe67e701c78f4c897fa947",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "879501f19c820540ad5d1972c5a67fdfcffacb9c",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/config.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "79075c0435faed6b547561d68d393d17f7cf5a33",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/deletion_states_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "e8b0686be7b247c8664785f34b3236f2240777b4",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f41c8431189a94d75608094afaf7c725e1cc1a25",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/interceptor.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "e33a2779e3fb411a94a5da035b0ee025c291c316",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/notification_primary_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f35cbaf2607de75709e3d067d09a08eef978ff3f",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5d9866b3fd3a5a37038037398cfaab667195ec46",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/runtime_allowlist_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "7df91cd9b14b81747775bac4d87006fd09c90b0b",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/pkg/socialprincipal/space_account_capture_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "3d8918d448ab7c7c50e798f689fdb4862944ebaa",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/user/pb/voice/common/v1/reference_inventory.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "edb4ff3361c956541704d3a8b512db9efa1731a4",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f2ad85e0f564da504024d9254bfe81867b874544",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/user/pb/voice/user/v1/user.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8eb0dc2dcda1764a26b181435c16e45b611e8418",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "af3ac2ea624a6cb4174e8358815fee29ab43a50b",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/user/pb/voice/user/v1/user_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "40eddc5f7b9f5091fb56173d0a37078b3cdb1548",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "54c87f1450650038b561dd109c034bbc78b7b6ba",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/jwks_recovery_test.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "177ba1a42bcdbbea42d85a197a3629895835a4b7",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/chat/v1/catalog_assets.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "0c92f11dddc1269a776add9d8d25b16589c0f55b",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/chat/v1/catalog_assets_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "fc13d1d046f8768aa1dced793a917a6934fa4aca",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "5808085283660a1ae4fb7c9630a848779efbfcb8",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/chat/v1/chat.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1f022a51c4e1a361228682d04176610cdc96c933",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "0db4d24d9d4c3f4aa0b9adada64433e76fff306e",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "3d8918d448ab7c7c50e798f689fdb4862944ebaa",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/common/v1/reference_inventory.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "f3d69bb739a9ba441ecd73421d37d0f61c161820",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/file/v1/catalog_assets.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "1e27e62e9ba46624a0a408649eea5d269c548509",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/file/v1/catalog_assets_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "449350a315015c1a7217c0ae806a8483cf2411b0",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "3f56314c1e8eedd0e2cb73bde475b60e31927dab",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/file/v1/file.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "6d88bec7977afd2364341c7a6d3073b2f5f35abe",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "569b8b5ac9f12e6e3d94f0cfe05116feecfcb1b6",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "73509a29c7f17c259cf0a5f5f76c394e98dece84",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "768a99de8e9de65ed3b090eb318a34d01fcb430e",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/messaging/v1/messaging.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "442c81846c236b3400a94fdcf615f53280ee91c2",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f3e2434335d1cc28b50b00256f32ff40c0edc100",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "9c80d62ca8592f302d50ba638037665d35264e07",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/messaging/v1/reference_inventory.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "ebb0f17c392ede2d83407b94deaf68495919578c",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/messaging/v1/reference_inventory_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "b505d59b968af59177acd22ad5161a748d48efcc",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "06656fe9cd9478cbacde07b63eacb6b32bef5035",
+        "type": "blob"
+      },
+      "before": null,
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "edb4ff3361c956541704d3a8b512db9efa1731a4",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "f2ad85e0f564da504024d9254bfe81867b874544",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/user/v1/user.pb.go"
+    },
+    {
+      "after": {
+        "mode": "100644",
+        "oid": "8eb0dc2dcda1764a26b181435c16e45b611e8418",
+        "type": "blob"
+      },
+      "before": {
+        "mode": "100644",
+        "oid": "af3ac2ea624a6cb4174e8358815fee29ab43a50b",
+        "type": "blob"
+      },
+      "classification": "REVIEWED",
+      "path": "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
+    }
+  ],
+  "predecessor": "ef3dd7f3888bbe2792a9dcec836b2773c4e77962",
+  "source": "a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259"
+}
