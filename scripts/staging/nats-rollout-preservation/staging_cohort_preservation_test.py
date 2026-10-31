@@ -1,6 +1,8 @@
 """Protected root preservation tests; external Kubernetes responses are fixtures."""
 import copy
+import grp
 import json
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +23,9 @@ class CutEffectTests(unittest.TestCase):
         journal=resource_claim.RootJournal(root)
         session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
         session.admit(start=True)
+        journal_stat=journal.path.stat()
+        self.assertEqual((journal_stat.st_uid,journal_stat.st_gid,stat.S_IMODE(journal_stat.st_mode)),
+                         (0,grp.getgrnam('pmd').gr_gid,0o440))
         path=root/'installed'/'cohort-preservation'/session.operation
         preservation.private._private_directory(path.parent)
         preservation.private._private_directory(path)
