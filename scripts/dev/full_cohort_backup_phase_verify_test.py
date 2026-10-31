@@ -16,7 +16,7 @@ class CompletedTest(unittest.TestCase):
         phase=object.__new__(backup.BackupPhase);cohort=object.__new__(cohort_backup_phases.CohortPhases)
         binding={'operation_id':'op','snapshot_id':'snap','source_sha':'source','databases':['voice_db'],
                  'sources':{},'restore_inputs':{},'full_catalog':{}}
-        cohort.binding=copy.deepcopy(binding);phase.cohort=cohort;phase.metadata=object()
+        cohort.binding=copy.deepcopy(binding);phase.cohort=cohort;phase.metadata=object();phase._auth_plan=None
         phase.supervisor=SimpleNamespace(namespace_uid='ns',catalog=object());cohort.catalog_phase=phase.supervisor.catalog
         plan={'engine':'golang-migrate','from':14,'to':14,'files':{'000014_test.up.sql':'x'}}
         source={'operation_id':'op','source_sha':'source','databases':['voice_db'],'sources':{},'restore_inputs':{},
@@ -40,7 +40,7 @@ class CompletedTest(unittest.TestCase):
         steps={'cohort-readback':copy.deepcopy(readback),'cohort-restore':copy.deepcopy(done),
                'cohort-restore-resource-postgres':copy.deepcopy(resources['postgres'])}
         journal=SimpleNamespace(state={'steps':steps});phase.journal=journal
-        cohort.phases=SimpleNamespace(journal=journal,invocation='inv',fence=SimpleNamespace(ledger=SimpleNamespace(read=lambda:(copy.deepcopy(row),revision))))
+        cohort.phases=SimpleNamespace(journal=journal,invocation='inv',intent={},fence=SimpleNamespace(ledger=SimpleNamespace(read=lambda:(copy.deepcopy(row),revision))))
         with patch.object(backup.BackupPhase,'_guard') as guard,patch.object(cohort_backup_phases.CohortPhases,'_guard'), \
              patch.object(metadata,'verify_completed',return_value=source), \
              patch.object(cohort_readback,'_snapshot',return_value=(binding,planned,marker,{})):
