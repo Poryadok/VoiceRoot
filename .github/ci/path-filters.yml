@@ -82,6 +82,8 @@ ci_global:
   - '!scripts/ci/local_heavy_slots_test.py'
   - '!scripts/ci/local_compose_audit.py'
   - '!scripts/ci/local_compose_audit_test.py'
+  - '!scripts/ci/local_compose_private.py'
+  - '!scripts/ci/local_compose_private_test.py'
   - '!scripts/ci/testcontainers-prune.sh'
   - '!scripts/ci/testcontainers-prune_test.sh'
   - '!scripts/ci/auth_candidate_classpath.py'
@@ -133,6 +135,8 @@ local_docker_isolation:
   - scripts/ci/local_heavy_slots.py
   - scripts/ci/local_heavy_slots_test.py
   - scripts/ci/local_compose_audit.py
+  - scripts/ci/local_compose_private.py
+  - scripts/ci/local_compose_private_test.py
   - scripts/ci/local_compose_audit_test.py
   - scripts/ci/testcontainers-prune.sh
   - scripts/ci/testcontainers-prune_test.sh

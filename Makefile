@@ -364,6 +364,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune_test.sh"
 	python3 "$(ROOT)/scripts/ci/local_heavy_slots_test.py"
 	python3 "$(ROOT)/scripts/ci/local_compose_audit_test.py"
+	python3 "$(ROOT)/scripts/ci/local_compose_private_test.py"
 	python3 "$(ROOT)/scripts/ci/local_docker_owned_test.py"
 	python3 "$(ROOT)/scripts/ci/story-media-cohort-chain-ci_test.py"
 	python3 "$(ROOT)/scripts/ci/gate-latency_test.py"
