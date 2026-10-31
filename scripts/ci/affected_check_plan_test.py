@@ -536,6 +536,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
             with self.subTest(docker_consumer=name):
                 self.assertIn('local-docker-isolation', checks('scripts/ci/' + name))
         for name in ('local_rootless_profile.py', 'local_rootless_profile_test.py',
+                     'local_chat_private.py', 'local_chat_private_test.py',
                      'local_image_archive.py', 'local_image_archive_test.py',
                      'local_docker_owned.py', 'local_docker_owned_test.py',
                      'local_docker_scheduled.py', 'local_docker_scheduled_test.py',

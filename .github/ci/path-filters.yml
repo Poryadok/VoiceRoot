@@ -49,6 +49,8 @@ ci_global:
   - '!scripts/ci/local_current_diff_test.py'
   - '!scripts/ci/local_go_execution.py'
   - '!scripts/ci/local_go_execution_test.py'
+  - '!scripts/ci/local_chat_private.py'
+  - '!scripts/ci/local_chat_private_test.py'
   - '!scripts/ci/local_go_dependencies.py'
   - '!scripts/ci/local_go_dependencies_test.py'
   - '!scripts/ci/local_go_plan.py'
@@ -108,6 +110,8 @@ local_docker_isolation:
   - scripts/ci/local_rootless_profile_test.py
   - scripts/ci/local_source_snapshot.py
   - scripts/ci/local_go_execution.py
+  - scripts/ci/local_chat_private.py
+  - scripts/ci/local_chat_private_test.py
   - scripts/ci/local_go_dependencies.py
   - scripts/ci/local_go_verify.py
   - scripts/ci/local_go_verify_test.py
