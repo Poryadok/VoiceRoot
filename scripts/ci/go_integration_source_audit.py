@@ -101,6 +101,8 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51FixtureCommitTrusted50'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNative51FreezeRequiresBoundProofAndPreservesMembership'):
+        'space-native-installer-integration',
 }
 
 # This entrypoint is deliberately invoked in child processes by the required
