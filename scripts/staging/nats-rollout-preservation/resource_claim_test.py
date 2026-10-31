@@ -42,12 +42,95 @@ class ResourceTests(unittest.TestCase):
         session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
         return session,current,journal
 
+    def test_prerequisite_phase_denies_untyped_commands_and_consumes_one_permit(self):
+        for phase in ('prerequisites','prerequisites-captured'):
+            session,current,journal=self.fixture();session.admit(start=True)
+            journal.row.update(phase=phase,target_sha256='d'*64);session.expected_target='d'*64
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','deployment','voice-web','-o','json'])
+            session.check(['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json'])
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','create','--dry-run=server','-f','/dev/stdin','-o','json'])
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','pods','-l','app=voice-nats-pvc-candidate','-o','json'])
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','--raw',
+                '/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-abc:8222/proxy/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'])
+            for args in (['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','scale','deployment','voice-web'],
+                         ['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','voice-pod','--','sh'],
+                         ['docker','run','anything'],['sh','-c','anything'],
+                         ['kubectl','--namespace','voice-staging','get','secret','voice-app-secrets','-o','json','--namespace','voice-dev'],
+                         ['kubectl','--namespace','voice-staging','get','pods','-o','json','--kubeconfig','/tmp/other'],
+                         ['kubectl','--namespace','voice-staging','get','pods','-o','json','-A'],
+                         ['kubectl','--namespace','voice-staging','get','--raw','/api/v1/namespaces/other/secrets'],
+                         ['kubectl','--namespace','voice-staging','get','pods','-l','app=other','-o','json'],
+                         ['kubectl','--namespace','voice-staging','apply','--dry-run=server','--force','-f','/dev/stdin','-o','json']):
+                with self.subTest(phase=phase,args=args),self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):
+                    session.check(args)
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+            if phase=='prerequisites':
+                effect=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','create','-f','/dev/stdin','-o','json']
+                session._prerequisite_permit=effect.copy();session.check(effect)
+                self.assertIsNone(session._prerequisite_permit)
+                with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(effect)
+            else:
+                readonly=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','-i','voice-postgres-0']
+                session._prerequisite_readonly_permit=readonly.copy();session.check(readonly)
+                self.assertIsNone(session._prerequisite_readonly_permit)
+                with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(readonly)
+
+    def test_prerequisite_binding_requires_baseline_and_durable_capture(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        actual=current['observed']['images'];plan={'actual_before':copy.deepcopy(actual)}
+        record={'schema':'fixture-capture','actual_after':copy.deepcopy(actual)}
+        module=Mock();module.capture.return_value=record;module.load_capture.return_value=record
+        with patch.dict(sys.modules,{'staging_prerequisites':module}):
+            binding=session.bind_prerequisites(plan,actual)
+            self.assertEqual(binding['target_sha256'],claim.digest(plan))
+            self.assertEqual(journal.row['phase'],'prerequisites')
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):
+                session.bind_target(context()['commit'],context()['images'],actual,'d'*64)
+            module.load_capture.return_value={'different':True}
+            with self.assertRaisesRegex(RuntimeError,'capture_changed'):session.capture_prerequisites(object())
+            self.assertEqual(journal.row['phase'],'prerequisites')
+            module.load_capture.return_value=record
+            binding=session.capture_prerequisites(object())
+            self.assertEqual(binding['target_sha256'],claim.digest(record))
+            self.assertEqual(journal.row['phase'],'prerequisites-captured')
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+
+    def test_typed_prerequisite_successors_preserve_parent_binding(self):
+        for mode in ('cold','existing'):
+            session,current,journal=self.fixture();session.admit(start=True)
+            before=copy.deepcopy(current['observed']['images']);after=dict(before,**{'voice-p3-principal-jwks/jwks':'pinned'})
+            parent={'actual_before':before,'actual_after':after};parent_hash=claim.digest(parent)
+            journal.row.update(phase='prerequisites-captured',target_sha256=parent_hash);session.expected_target=parent_hash
+            prerequisites=Mock();prerequisites.load_capture.return_value=parent
+            realtime=Mock();existing=Mock();receipt={'typed':'receipt','prerequisites_sha256':parent_hash}
+            realtime.load_completed.return_value=receipt;existing.load_existing.return_value=receipt
+            target={'tag':context()['commit'],'images':context()['images'],'prerequisites_sha256':parent_hash,
+                'realtime_bootstrap_sha256':claim.digest(receipt)}
+            with patch.dict(sys.modules,{'staging_prerequisites':prerequisites,'realtime_bootstrap':realtime,
+                                        'realtime_bootstrap_existing':existing}):
+                if mode=='cold':
+                    plan={'actual_images':after,'prerequisites_sha256':parent_hash};realtime.load_plan.return_value=plan
+                    session.bind_realtime_bootstrap(plan,after)
+                    with self.assertRaisesRegex(RuntimeError,'capture_changed'):
+                        session.advance_realtime_bootstrap({k:v for k,v in target.items() if k!='prerequisites_sha256'},after)
+                    result=session.advance_realtime_bootstrap(target,after)
+                else:
+                    with self.assertRaisesRegex(RuntimeError,'target_changed'):
+                        session.advance_prerequisites_target({k:v for k,v in target.items() if k!='prerequisites_sha256'},after)
+                    result=session.advance_prerequisites_target(target,after)
+                self.assertEqual(result['target_sha256'],claim.digest(target));self.assertEqual(journal.row['phase'],'prepare')
+
     def test_realtime_bootstrap_requires_typed_transition_and_exact_receipt(self):
         session,current,journal=self.fixture();session.admit(start=True)
         actual=current['observed']['images'];plan={'actual_images':actual,'fixture':'validated separately'}
         receipt={'fixture':'root validated'}
-        module=Mock();module.load_completed.return_value=receipt
+        module=Mock();module.load_completed.return_value=receipt;module.load_plan.return_value={}
         with patch.dict(sys.modules,{'realtime_bootstrap':module}):
+            before=copy.deepcopy(journal.row)
+            with self.assertRaisesRegex(RuntimeError,'baseline_changed'):
+                session.bind_realtime_bootstrap({'actual_images':actual,'schema':'voice-staging-realtime-bootstrap-v2',
+                    'prerequisites_sha256':'0'*64},actual)
+            self.assertEqual(journal.row,before)
             first=session.bind_realtime_bootstrap(plan,actual)
             self.assertEqual(first['target_sha256'],claim.digest(plan))
             self.assertEqual(journal.row['phase'],'realtime-bootstrap')

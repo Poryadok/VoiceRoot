@@ -51,6 +51,16 @@ class RootPackageReaderTests(unittest.TestCase):
                     path.write_bytes(archive.extractfile(row).read());path.chmod(0o400)
             captured=root_cli.code_binding(code)
             self.assertEqual(len(captured),len(bundle.KNOWN)+len(bundle.ROLLOUT)+5)
+            self.assertEqual(len(captured),94)
+            index=code/'capture-manifest.json';original=index.read_bytes()
+            for failure in ('missing','renamed','extra'):
+                changed=dict(captured)
+                if failure=='missing':del changed['nats-rollout-preservation/staging_prerequisites.py']
+                elif failure=='renamed':changed['nats-rollout-preservation/foreign.py']=changed.pop('nats-rollout-preservation/staging_prerequisites.py')
+                else:changed['extra.py']='a'*64
+                index.chmod(0o600);index.write_text(json.dumps(changed));index.chmod(0o400)
+                with self.subTest(failure=failure),self.assertRaises(Blocked):root_cli.code_binding(code)
+            index.chmod(0o600);index.write_bytes(original);index.chmod(0o400)
             profile=code/'nats-rollout-preservation/closed-seal-source-policies.json'
             raw=profile.read_bytes();profile.chmod(0o600);profile.write_bytes(raw+b' ');profile.chmod(0o400)
             with self.assertRaises(Blocked):root_cli.code_binding(code)
@@ -176,21 +186,49 @@ class WorkflowLauncherTests(unittest.TestCase):
         for name,wanted in manifest.items():self.assertEqual(hashlib.sha256(result[name]).hexdigest(),wanted)
         return result
 
-    def launch(self,root):
+    def launch(self,root,route='workflow'):
         workflow=Path(__file__).resolve().parents[3]/'.github/workflows/staging-deploy.yml'
         raw=workflow.read_text(encoding='utf-8')
         start=raw.index('          import hashlib, json, os, pathlib, re, runpy, stat, sys')
         program=ast.parse(textwrap.dedent(raw[start:raw.index('          PY',start)]))
+        if route=='render':
+            workflow=Path(__file__).resolve().parents[3]/'scripts/staging/render-and-apply.sh'
+            raw=workflow.read_text(encoding='utf-8')
+            start=raw.index('import hashlib, json, os, pathlib, re, runpy, stat, sys')
+            program=ast.parse(raw[start:raw.index('\nPY',start)])
         # Only the external installed-root location is replaced; every actual
         # custody/hash/bound/routing predicate executes unchanged.
         roots=[node for node in ast.walk(program) if isinstance(node,ast.Constant)
                and node.value=='/var/lib/voice-nats-preservation']
         self.assertEqual(len(roots),1);roots[0].value=str(root)
-        with patch.dict(os.environ,{'ROLLOUT_ACTION':'--bridge-status','VOICE_NATS_ROLLOUT_OPERATION':'3340764a7d24'},clear=True),\
+        env={'ROLLOUT_ACTION':'--bridge-status','VOICE_NATS_ROLLOUT_OPERATION':'3340764a7d24',
+             'VOICE_NATS_PRESERVATION_RECEIPT':str(root/'rollout-3340764a7d24/apply-authorization.json')}
+        with patch.dict(os.environ,env,clear=True),\
              patch.object(sys,'argv',[]),patch.object(runpy,'run_path') as run:
             exec(compile(program,str(workflow),'exec'),{})
-            run.assert_called_once_with(str(root/'installed/code/nats-rollout-preservation/bridge_client.py'),run_name='__main__')
-            self.assertEqual(sys.argv[1:],['status','3340764a7d24'])
+            entry=('rollout-3340764a7d24/code/nats-rollout-preservation/runner.py' if route=='render'
+                   else 'installed/code/nats-rollout-preservation/bridge_client.py')
+            run.assert_called_once_with(str(root/entry),run_name='__main__')
+            self.assertEqual(sys.argv[1:],[] if route=='render' else ['status','3340764a7d24'])
+
+    def test_render_ingress_accepts_only_complete_current_capture(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);members=self.members(root)
+            for failure in ('none','missing','renamed','extra'):
+                with self.subTest(failure=failure),tempfile.TemporaryDirectory(dir=root) as slot:
+                    base=Path(slot);code=base/'rollout-3340764a7d24/code';code.mkdir(parents=True,mode=0o700)
+                    for name,raw in members.items():
+                        path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+                        path.write_bytes(raw);path.chmod(0o400)
+                    manifest=json.loads(members['capture-manifest.json'])
+                    helper='nats-rollout-preservation/staging_prerequisites.py'
+                    if failure=='missing':del manifest[helper]
+                    elif failure=='renamed':manifest['foreign.py']=manifest.pop(helper)
+                    elif failure=='extra':manifest['extra.py']='a'*64
+                    index=code/'capture-manifest.json';index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+                    if failure=='none':self.launch(base,'render')
+                    else:
+                        with self.assertRaises((SystemExit,OSError)):self.launch(base,'render')
 
     def test_actual_workflow_admits_complete_shipped_bundle_before_bridge_dispatch(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -219,7 +257,7 @@ class WorkflowLauncherTests(unittest.TestCase):
     def test_actual_workflow_keeps_custody_member_and_entrypoint_vetoes(self):
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder);members=self.members(base)
-            for failure in ('hash','digest','absolute','parent','missing-entry','overbound','directory-mode',
+            for failure in ('hash','digest','absolute','parent','missing-entry','missing-helper','renamed-helper','overbound','directory-mode',
                             'member-mode','member-owner','hardlink','symlink','oversize'):
                 with self.subTest(failure=failure),tempfile.TemporaryDirectory(dir=base) as slot:
                     root=Path(slot);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
@@ -231,8 +269,10 @@ class WorkflowLauncherTests(unittest.TestCase):
                     elif failure=='absolute':manifest['/outside']='a'*64
                     elif failure=='parent':manifest['../outside']='a'*64
                     elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
+                    elif failure=='missing-helper':del manifest['nats-rollout-preservation/staging_prerequisites.py']
+                    elif failure=='renamed-helper':manifest['nats-rollout-preservation/foreign.py']=manifest.pop('nats-rollout-preservation/staging_prerequisites.py')
                     elif failure=='overbound':
-                        for index in range(90-len(manifest)):manifest['extra'+str(index)]='a'*64
+                        for index in range(95-len(manifest)):manifest['extra'+str(index)]='a'*64
                     elif failure=='directory-mode':code.chmod(0o720)
                     elif failure=='member-mode':target.chmod(0o420)
                     elif failure=='member-owner':os.chown(target,1000,0)

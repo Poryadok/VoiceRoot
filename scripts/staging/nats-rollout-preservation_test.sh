@@ -142,6 +142,14 @@ Check.request=_fixture_request
 '''
         target=code/relative;target.parent.mkdir(parents=True,exist_ok=True,mode=0o750)
         target.write_bytes(raw);target.chmod(0o440);captured[relative]=sha(raw)
+# Match the complete bundle inventory; these fixed extras are not executed in
+# this synthetic paused-apply fixture. The launcher still verifies every hash.
+for relative in ('nats-known-baseline/kernel', 'nats-rollout-preservation/bootstrap-renewer',
+                 'nats-rollout-preservation/story-current4-probe', 'configure-kubectl-ci.sh',
+                 'mail-only-patch.py'):
+    raw=b'synthetic unused bundle member'
+    target=code/relative;target.parent.mkdir(parents=True,exist_ok=True,mode=0o750)
+    target.write_bytes(raw);target.chmod(0o440);captured[relative]=sha(raw)
 (code/'capture-manifest.json').write_text(json.dumps(captured));(code/'capture-manifest.json').chmod(0o440)
 digest=lambda value:sha(json.dumps(value,sort_keys=True,separators=(',',':')).encode())
 context={'project':'voice','resource':'STAGING','actor':'fixture',

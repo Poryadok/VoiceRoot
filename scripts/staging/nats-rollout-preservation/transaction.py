@@ -82,6 +82,7 @@ def rollback_package(previous,*,story_only=False):
     target=copy.deepcopy(previous['input_target']);rows=[];images={}
     # A fresh rollback does not inherit a previous operation's bootstrap proof.
     target.pop('realtime_bootstrap_sha256',None)
+    target.pop('prerequisites_sha256',None)
     if full_story:
         target['mode']='images-only';target['changed_services']=['story']
         target['template_hashes']={'voice-story':previous['target']['template_hashes']['voice-story']}
@@ -211,16 +212,16 @@ def verify_gis_before_fence(kube,state):
         raise Blocked('gis_existing_authority_changed')
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
     try:
         return _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,
             before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,
             actor_services=actor_services,renderer_authority=renderer_authority,lifecycle=lifecycle,
             gis_first_install=gis_first_install,gis_source_root=gis_source_root,gis_source_capture=gis_source_capture,
             gis_source_authority=gis_source_authority,gis_transition=gis_transition,resource_session=resource_session,
-            gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt)
+            gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt,prerequisites_capture=prerequisites_capture)
     except Exception as error:
-        if realtime_bootstrap_receipt is not None:
+        if realtime_bootstrap_receipt is not None or prerequisites_capture is not None:
             path=Path(base)/'checkpoint.json'
             if path.exists():
                 state=private_json(path)
@@ -229,7 +230,7 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
                     save(path,state)
         raise
 
-def _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None):
+def _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -241,6 +242,16 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
            'service_actor_services':list(actor_services or [])}
     if realtime_bootstrap_receipt is None and 'realtime_bootstrap_sha256' in target:
         raise Blocked('realtime_bootstrap_receipt_missing')
+    if prerequisites_capture is None and 'prerequisites_sha256' in target:
+        raise Blocked('staging_prerequisites_capture_missing')
+    if prerequisites_capture is not None:
+        if resource_session is None or realtime_bootstrap_receipt is None:raise Blocked('staging_prerequisites_session_required')
+        import staging_prerequisites
+        if (staging_prerequisites.load_capture(resource_session)!=prerequisites_capture
+            or target.get('prerequisites_sha256')!=canonical(prerequisites_capture)):
+            raise Blocked('staging_prerequisites_capture_changed')
+        state['prerequisites']=copy.deepcopy(prerequisites_capture)
+        save(base/'checkpoint.json',state)
     if realtime_bootstrap_receipt is not None:
         state['realtime_bootstrap']=copy.deepcopy(realtime_bootstrap_receipt)
         save(base/'checkpoint.json',state)
@@ -249,7 +260,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
         bootstrap_schema=realtime_bootstrap_receipt.get('schema') if isinstance(realtime_bootstrap_receipt,dict) else None
         if bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
             live_receipt=realtime_bootstrap.load_completed(resource_session)
-        elif bootstrap_schema=='voice-staging-realtime-bootstrap-existing-v1':
+        elif bootstrap_schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
             live_receipt=realtime_bootstrap.load_existing(resource_session)
         else:raise Blocked('realtime_bootstrap_receipt_invalid')
         if (live_receipt!=realtime_bootstrap_receipt
@@ -429,7 +440,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
-        if realtime_bootstrap_receipt is not None:
+        if realtime_bootstrap_receipt is not None or prerequisites_capture is not None:
             failed=state
             failed.update(status='BLOCKED',fence_status='UNKNOWN',error=safe_error(error))
         else:
@@ -447,6 +458,8 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
         if resource_session is not None:
             if realtime_bootstrap_receipt is not None and bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
                 resource_session.advance_realtime_bootstrap(state['target'],stage.old_images)
+            elif prerequisites_capture is not None:
+                resource_session.advance_prerequisites_target(state['target'],stage.old_images)
             else:
                 resource_session.bind_target(state['target']['tag'],state['target']['images'],stage.old_images,canonical(state['target']))
             state['resource_fence']=resource_session.binding()
@@ -457,6 +470,9 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             receipt=loader(resource_session,actual=stage.old_images,rollout_target=state['target'])
             if receipt!=realtime_bootstrap_receipt or resource_session.binding()['target_sha256']!=canonical(state['target']):
                 raise Blocked('realtime_bootstrap_receipt_changed')
+        if prerequisites_capture is not None:
+            if staging_prerequisites.load_capture(resource_session,actual=stage.old_images,rollout_target=state['target'])!=prerequisites_capture:
+                raise Blocked('staging_prerequisites_capture_changed')
         if gis_binding is not None:
             verify_gis_before_fence(kube,state)
         stage.runtime_base=base

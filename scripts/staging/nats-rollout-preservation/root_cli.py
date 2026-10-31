@@ -71,7 +71,11 @@ def public_code_sha(path):
 
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'),object_pairs_hook=guard.object_pairs)
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=89:raise Blocked('rollout_code_manifest_invalid')
+    # Historical captures retain their bound; admit only the exact successor inventory.
+    if (not isinstance(manifest,dict) or not (1<=len(manifest)<=89 or
+        len(manifest)==94 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+        == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20')):
+        raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')
@@ -212,7 +216,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -234,6 +238,7 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         if resource_session is not None:lifecycle_args['resource_session']=resource_session
         if gis_binding is not None:lifecycle_args['gis_binding']=gis_binding
         if realtime_bootstrap_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_bootstrap_receipt
+        if prerequisites_capture is not None:lifecycle_args['prerequisites_capture']=prerequisites_capture
         gis_first_install=(None if 'gis_first_install' not in value else
             __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
         state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
