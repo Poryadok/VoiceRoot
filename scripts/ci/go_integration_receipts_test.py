@@ -18,6 +18,25 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_native51_freeze_requires_qualified_source_and_exact_pass(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        name = 'TestNative51FreezeRequiresBoundProofAndPreservesMembership'
+        inventory = json.loads((ROOT / 'scripts/ci/space_native51_freeze_required.json').read_text(encoding='utf-8'))['space']
+        self.assertEqual(inventory, [[package, name]])
+        job = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']['space-native-installer-integration']
+        step = next(item for item in job['steps'] if item.get('name') == 'Run trusted Space native50 catalog proofs')
+        run = step['run']
+        self.assertLess(run.index('TestNative51FixtureCommitTrusted50'), run.index(name))
+        self.assertLess(run.index(name), run.index('DROP DATABASE space_db'))
+        self.assertIn('space_native51_freeze_required.json', run)
+        self.assertIn('--output "$RUNNER_TEMP/space-native51-freeze-receipt.json" --reject-skips', run)
+        events = [{'Package': package, 'Test': name, 'Action': 'run'},
+                  {'Package': package, 'Test': name, 'Action': 'pass'}, {'Package': package, 'Action': 'pass'}]
+        self.assertFalse(receipts.verify_required(events, inventory, 0))
+        events[1]['Action'] = 'skip'
+        self.assertIn((package, name), receipts.verify_required(events, inventory, 0))
+
     def test_space_over100_requires_real_ordered_fixture_and_consumer(self):
         import yaml
         package = 'voice/backend/space/internal/store'

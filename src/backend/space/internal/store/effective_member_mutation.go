@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	commonv1 "voice.app/voice/common/v1"
 	spacev1 "voice.app/voice/space/v1"
 )
 
@@ -27,6 +28,10 @@ type effectiveMemberMutations struct {
 	dbMutation        *nativeMembershipDBMutation
 	purpose           effectiveMutationPurpose
 	scheduleOperation uuid.UUID
+	freezeGeneration  uint64
+	freezeManifest    *commonv1.ManifestBinding
+	freezeBinding     []byte
+	freezeReceipt     []byte
 	used              bool
 }
 
@@ -36,6 +41,7 @@ const (
 	effectiveMutationPositive effectiveMutationPurpose = iota
 	effectiveMutationCandidateRetirement
 	effectiveMutationLifecycleSchedule
+	effectiveMutationLifecycleFreeze
 )
 
 // Only the Creator's already verified, preallocated new identity enters here.
@@ -335,6 +341,8 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		scopeErr = s.memberAdmissionRetirementScope(ctx, capture.space)
 	case effectiveMutationLifecycleSchedule:
 		scopeErr = s.lifecycleScheduleMutationScope(ctx, capture)
+	case effectiveMutationLifecycleFreeze:
+		scopeErr = s.lifecycleFreezeMutationScope(ctx, capture)
 	default:
 		return ErrEffectiveEpisodeUnavailable
 	}

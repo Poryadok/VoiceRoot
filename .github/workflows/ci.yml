@@ -3185,6 +3185,17 @@ jobs:
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --events "$RUNNER_TEMP/space-native51-commit-events.jsonl" --exit-code "$commit_result" \
             --output "$RUNNER_TEMP/space-native51-commit-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNative51FreezeRequiresBoundProofAndPreservesMembership$' ./internal/store \
+            > "$RUNNER_TEMP/space-native51-freeze-events.jsonl"
+          freeze_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_native51_freeze_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-native51-freeze-events.jsonl" --exit-code "$freeze_result" \
+            --output "$RUNNER_TEMP/space-native51-freeze-receipt.json" --reject-skips
           [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
           psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
       - name: Run seeded Space native50 observer proofs
@@ -3350,6 +3361,8 @@ jobs:
           path: |
             ${{ runner.temp }}/space-native-installer-events.jsonl
             ${{ runner.temp }}/space-native-installer-receipt.json
+            ${{ runner.temp }}/space-native51-freeze-events.jsonl
+            ${{ runner.temp }}/space-native51-freeze-receipt.json
             ${{ runner.temp }}/space-over100-*-events.jsonl
             ${{ runner.temp }}/space-over100-*-receipt.json
             ${{ runner.temp }}/space-over100-cleanup.txt
