@@ -395,7 +395,7 @@ def _paused_stage(session):
         or record.get('events')!=state['events'] or state.get('status') not in ('PAUSED','BACKUP','AWAITING_OFF_NODE','QUALIFIED')
         or record['context']['original_snapshots']!=_precut(session)['context']['original_snapshots']
         or record['context']['old_images']!=plan['actual_before']):raise Blocked('cohort_paused_custody_changed')
-    return transaction.reconstruct(Kube(),{'operation':session.operation,'context':record['context'],'events':record['events']},lambda _:None)
+    return transaction.reconstruct(Kube(),{'operation':session.operation,'context':record['context'],'events':record['events']},lambda _:None,installation=session.installation)
 
 
 def _p2_prerequisite_version(plan,installation):

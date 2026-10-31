@@ -158,7 +158,7 @@ def require_original_live_census(stage,events):
     return validated
 
 
-def reconstruct(kube,state,journal):
+def reconstruct(kube,state,journal,*,installation=None):
     ctx=state['context'];stage=RolloutStage(kube,state['operation'],ctx['expected'],journal)
     for name in ('snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv'):
         setattr(stage,name,copy.deepcopy(ctx[name]))
@@ -179,7 +179,7 @@ def reconstruct(kube,state,journal):
         pass
     if state.get('renderer_authority') is not None:
         stage.renderer_transition=copy.deepcopy(state['renderer_authority']['descriptor'])
-        stage.renderer_post_start=lambda current:renderer_root.verify_live(current,state['renderer_authority'])
+        stage.renderer_post_start=lambda current:renderer_root.verify_live(current,state['renderer_authority'],installation=installation)
     return stage
 
 
@@ -663,7 +663,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         raise Blocked('rollout_offnode_copy_mismatch')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,installation=getattr(resource_session,'installation',None))
     if state.get('gis_transition') is not None:
         import gis_first_install as gis
         gis.validate_transition_binding(state['gis_transition'],kube)
@@ -887,13 +887,13 @@ def gis_successor_checkpoint(base,state,stage):
     return payload
 
 
-def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None):
+def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None,installation=None):
     if state.get('gis_binding') is not None and state.get('expired_recovery_authority') is not None:
         raise Blocked('gis_existing_recovery_unsupported')
     import provisional
     provisional.receipt_binding(state,receipt)
     if finish_authority is not None:
-        return finish_only(kube,base,state,receipt,contract,finish_authority,publication=publication)
+        return finish_only(kube,base,state,receipt,contract,finish_authority,publication=publication,installation=installation)
     if state['phase']!='PAUSED_APPLY' or state['status']!='WAITING':
         raise Blocked('rollout_finish_phase_invalid')
     if receipt!=state.get('authorization') or receipt.get('operation')!=state['operation'] or receipt.get('target')!=state['target']:
@@ -903,7 +903,7 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         raise Blocked('rollout_finish_authorization_expired')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,installation=installation)
     active_recovery=state.get('expired_recovery_authority')
     def resume_authority():
         if dt.datetime.now(dt.timezone.utc)>=expires:raise Blocked('rollout_finish_authorization_expired')
@@ -1057,7 +1057,7 @@ def attach_closed_preservation(base,state,stage,authority,*,nonce=None,admitted_
     return runtime
 
 
-def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
+def finish_only(kube,base,state,receipt,contract,reference,*,publication=None,installation=None):
     # Expired application permission is preserved history. A separately loaded
     # root proof permits missing resumes only; never authorize/apply/migrate.
     if state.get('gis_binding') is not None:
@@ -1066,7 +1066,7 @@ def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
         raise Blocked('rollout_finish_authorization_changed')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,installation=installation)
     import expired_finish
     engine=expired_finish.bind(base,state,reference,stage,journal)
     revalidate_inputs(kube,contract,state['provenance'])
@@ -1094,7 +1094,7 @@ def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
         raise
 
 
-def rollback(kube,base,state,receipt,claim_rv,contract):
+def rollback(kube,base,state,receipt,claim_rv,contract,*,installation=None):
     # An application which has resumed may have newer NATS/DB state. It needs
     # a fresh preservation transaction; this recovery never replays a backup.
     if state['phase'] not in ('PAUSED_APPLY','POST_APPLY_PROOF','ROLLBACK_TEMPLATES') or state['target']['mode']!='images-only':
@@ -1103,7 +1103,7 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         raise Blocked('rollout_rollback_authorization_changed')
     stage=None
     journal=checkpoint_journal(base,state,lambda:stage)
-    stage=reconstruct(kube,state,journal)
+    stage=reconstruct(kube,state,journal,installation=installation)
     revalidate_inputs(kube,contract,state['provenance'])
     def rollback_resume_authority():
         if receipt!=state.get('authorization') or receipt.get('target')!=state['target']:
@@ -1132,14 +1132,14 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
         state['phase']='ROLLBACK_TEMPLATES';save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
             if state.get('renderer_recovery_authority') is None:
-                reverse=renderer_root.recovery_authority(stage,state['renderer_authority'])
+                reverse=renderer_root.recovery_authority(stage,state['renderer_authority'],installation=installation)
                 state['renderer_recovery_authority']=copy.deepcopy(reverse)
                 state['renderer_authority']=copy.deepcopy(reverse)
                 save(Path(base)/'checkpoint.json',state)
             reverse=state['renderer_recovery_authority']
             stage.renderer_transition=copy.deepcopy(reverse['descriptor'])
-            stage.renderer_post_start=lambda current:renderer_root.verify_live(current,reverse)
-            renderer_root.apply_paused(stage,reverse)
+            stage.renderer_post_start=lambda current:renderer_root.verify_live(current,reverse,installation=installation)
+            renderer_root.apply_paused(stage,reverse,installation=installation)
         stage.restore_original_templates()
         state['phase']='ROLLBACK_PROOF';save(Path(base)/'checkpoint.json',state)
         baseline=state.get('nats_migration',{}).get('cut',state['cut'])

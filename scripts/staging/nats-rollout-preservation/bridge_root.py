@@ -163,7 +163,7 @@ def capture_cohort_authorities(actions,request,approved,workspace,stage,contract
     except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
     previous=private_json(guard.ROOT/'bootstrap-enrollment.json')
     from nats_contract_plan import digest as enrollment_digest
-    if (not isinstance(enrollment,dict) or enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
+    if (not isinstance(enrollment,dict) or enrollment.get('schema') not in ('voice-nats-bootstrap-enrollment-v4','voice-nats-bootstrap-enrollment-scoped-v4')
         or enrollment.get('previous_enrollment')!=previous
         or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous)):
         raise Blocked('enrolled_bootstrap_selection_refused')
@@ -693,7 +693,7 @@ class Actions:
             if enrollment is not None:
                 from nats_contract_plan import digest as enrollment_digest
                 previous_enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
-                if (enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
+                if (enrollment.get('schema') not in ('voice-nats-bootstrap-enrollment-v4','voice-nats-bootstrap-enrollment-scoped-v4')
                     or enrollment.get('previous_enrollment')!=previous_enrollment
                     or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous_enrollment)):
                     raise Blocked('enrolled_bootstrap_selection_refused')
@@ -882,7 +882,7 @@ class Actions:
             if current['source_files'].get('scripts/staging/'+relative)!=wanted:
                 raise Blocked('preserved_upload_current_helper_source_changed')
         source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
-        stage=transaction.reconstruct(Kube(),state,lambda event:None)
+        stage=transaction.reconstruct(Kube(),state,lambda event:None,installation=self.installation)
         stage.owned_marker();stage.verify_final_storage()
         marker=Kube().get('configmap','voice-nats-generation')
         if marker['data'].get('phase')!='rollout-capturing' or marker['metadata']['resourceVersion']!='3073024':
@@ -966,10 +966,10 @@ class Actions:
             # checkpoint byte-for-byte intact, so a failed proof is not custody.
             if upload_record is None:
                 state['custody']=receipt;save(base/'checkpoint.json',state)
-            self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None))
+            self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None,installation=self.installation))
             import actor_root
             actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
-                transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'],installation=self.installation)
+                transaction.reconstruct(Kube(),state,lambda event:None,installation=self.installation),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'],installation=self.installation)
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             if upload_record is not None:
@@ -986,7 +986,7 @@ class Actions:
             if state.get('expired_recovery_authority') is not None:
                 raise Blocked('expired_native_explicit_finish_required')
             receipt=guard.protected_receipt(base/'apply-authorization.json')
-            result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'])
+            result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'],installation=self.installation)
             self._active_release(result)
             return summary(result)
         raise Blocked('bridge_action_invalid')

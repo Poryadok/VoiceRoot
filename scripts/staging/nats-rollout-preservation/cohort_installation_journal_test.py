@@ -14,6 +14,18 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_reconstructed_renderer_callback_keeps_explicit_installation(self):
+        import transaction, renderer_root
+        installation=claim.production_installation()
+        ctx={key:{} for key in ('expected','snapshots','original_snapshots','old_images','marker','service','final_claim','final_pv')}
+        ctx['final_path']='/synthetic';authority={'descriptor':{'fixture':True}}
+        state={'context':ctx,'operation':'a'*12,'events':[],'renderer_authority':authority}
+        stage=SimpleNamespace()
+        with patch.object(transaction,'RolloutStage',return_value=stage),patch.object(renderer_root,'verify_live') as verify:
+            result=transaction.reconstruct(None,state,lambda _:None,installation=installation)
+            result.renderer_post_start('current')
+            verify.assert_called_once_with('current',authority,installation=installation)
+
     def test_active_release_writer_preserves_scoped_authority(self):
         import bridge_root
         installation=claim.production_installation();actions=object.__new__(bridge_root.Actions);actions._installation=installation
