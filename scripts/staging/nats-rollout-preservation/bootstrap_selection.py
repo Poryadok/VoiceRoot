@@ -34,6 +34,27 @@ def select(kube,receipt,generation,*,installation=None):
         or set(chosen)!={'name','uid','resourceVersion'} or type(auth) is not dict):fail()
     from nats_root_plan import _LEGACY_AUTH_KEYS,_V3_AUTH_KEYS,_V4_AUTH_KEYS
     if set(auth) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS,_V4_AUTH_KEYS):fail()
+    from nats_contract_plan import V3_DECLARATIONS,DECLARATIONS,V6_DECLARATIONS
+    normalized=auth.get('normalized_consumer')
+    if (auth.get('verified') is not True or auth.get('server_image')!=NATS_IMAGE
+        or auth.get('account_sha256')!=installation.account_sha256 or auth.get('reply_prefix')!='_INBOX.voice.bootstrap.reply'
+        or not isinstance(normalized,dict) or any(normalized.get(k)!=v for k,v in DECLARATION.items())
+        or digest(normalized)!=auth.get('normalized_consumer_sha256')):fail()
+    if set(auth)!=_LEGACY_AUTH_KEYS:
+        if set(auth)==_V3_AUTH_KEYS:declarations=V3_DECLARATIONS
+        elif auth.get('schema')=='voice-bootstrap-auth-v4':declarations=DECLARATIONS
+        elif auth.get('schema')=='voice-bootstrap-auth-v5':declarations=V6_DECLARATIONS
+        else:fail()
+        rows=auth.get('normalized_consumers')
+        if type(rows) is not list or len(rows)!=len(declarations) or digest(rows)!=auth.get('normalized_consumers_sha256'):fail()
+        for row,(stream,declaration) in zip(rows,declarations):
+            if (type(row) is not dict or set(row)!={'stream','durable','config'} or row['stream']!=stream
+                or row['durable']!=declaration['durable_name'] or type(row['config']) is not dict
+                or any(row['config'].get(k)!=v for k,v in declaration.items())):fail()
+        if rows[0]['config']!=normalized:fail()
+        if auth.get('schema')=='voice-bootstrap-auth-v5':
+            roster=rows[-1]['config']
+            if roster.get('deliver_subject','')!='' or roster.get('deliver_group','')!='' or roster.get('filter_subjects',[])!=[]:fail()
     if (type(binding['old_secret']) is not dict or set(binding['old_secret'])!={'name','uid','resourceVersion','credential_sha256'}
         or type(binding['operator_secret']) is not dict or set(binding['operator_secret'])!={'name','uid','resourceVersion'}):fail()
     if successor:
@@ -67,8 +88,4 @@ def select(kube,receipt,generation,*,installation=None):
         or current['metadata'].get('namespace')!='voice-staging'
         or current['metadata'].get('labels')!={'voice-nats-generation':generation,'voice-nats-existing-bootstrap-renewal':'true'}
         or set(current.get('data',{}))!={'bootstrap.creds'} or credential_hash(current)!=receipt['credential_sha256']):fail()
-    normalized=auth.get('normalized_consumer')
-    if (auth.get('verified') is not True or auth.get('server_image')!=NATS_IMAGE or auth.get('account_sha256')!=installation.account_sha256
-        or auth.get('reply_prefix')!='_INBOX.voice.bootstrap.reply' or not isinstance(normalized,dict)
-        or any(normalized.get(k)!=v for k,v in DECLARATION.items()) or digest(normalized)!=auth.get('normalized_consumer_sha256')):fail()
     return chosen['name']

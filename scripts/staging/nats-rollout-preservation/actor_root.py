@@ -216,6 +216,10 @@ def preflight(kube,source,code,binding,stage,services,decoder,*,story_compositio
     if stage.expected['generation']!=installation.generation:fail()
     roles=sorted(ROLES.intersection(services))
     if not roles:return None
+    generation=stage.expected['generation']
+    operator=kube.get('secret','voice-nats-operator-'+generation)
+    account=secret_bytes(operator,'account.public').decode().strip()
+    if hash_bytes(account.encode())!=installation.account_sha256:fail()
     def schema_read():
         if story_composition is None:return story_schema(kube,source,stage)
         return story_schema_p2(kube,source,stage,*story_composition)
@@ -227,7 +231,8 @@ def preflight(kube,source,code,binding,stage,services,decoder,*,story_compositio
         snapshot=stage.snapshots['voice-story'];marker=kube.get('configmap',guard.MARKER)
         def story_unchanged():
             current=kube.get('deployment','voice-story')
-            if ({k:current['metadata'].get(k) for k in ('name','namespace','uid')}!={k:snapshot['metadata'].get(k) for k in ('name','namespace','uid')}
+            if (kube.get('secret','voice-nats-operator-'+generation)!=operator
+                or {k:current['metadata'].get(k) for k in ('name','namespace','uid')}!={k:snapshot['metadata'].get(k) for k in ('name','namespace','uid')}
                 or current['spec']!=snapshot['spec'] or kube.get('configmap',guard.MARKER)!=marker
                 or schema_read()!=schema):fail()
         def automatic(child,config):
@@ -241,11 +246,9 @@ def preflight(kube,source,code,binding,stage,services,decoder,*,story_compositio
         selected=story_witness.approve_content((child,config,revision))
         if selected is not None:candidate['root_witness_authority']=selected
     raw=(Path(source)/ACL).read_bytes()
-    acl=source_grants(raw);generation=stage.expected['generation']
+    acl=source_grants(raw)
     secret_name='voice-nats-service-credentials-'+generation
-    operator=kube.get('secret','voice-nats-operator-'+generation);services_secret=kube.get('secret',secret_name)
-    account=secret_bytes(operator,'account.public').decode().strip()
-    if hash_bytes(account.encode())!=installation.account_sha256:fail()
+    services_secret=kube.get('secret',secret_name)
     binary=Path(code)/'nats-rollout-preservation/bootstrap-renewer'
     binary_sha=binding['nats-rollout-preservation/bootstrap-renewer']
     captured={'operator':identity(operator),'services':identity(services_secret),
