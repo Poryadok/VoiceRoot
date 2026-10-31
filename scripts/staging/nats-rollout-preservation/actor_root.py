@@ -210,7 +210,10 @@ def _story_database(kube,stage,hashes):
         'database_url_sha256':hash_bytes(raw),'postgres_user_sha256':hash_bytes(user.encode()),
         'database_reference_sha256':hash_bytes(json.dumps(wanted,sort_keys=True,separators=(',',':')).encode())}
 
-def preflight(kube,source,code,binding,stage,services,decoder,*,story_composition=None):
+def preflight(kube,source,code,binding,stage,services,decoder,*,story_composition=None,installation=None):
+    from resource_claim import require_installation
+    installation=require_installation(installation)
+    if stage.expected['generation']!=installation.generation:fail()
     roles=sorted(ROLES.intersection(services))
     if not roles:return None
     def schema_read():
@@ -242,7 +245,7 @@ def preflight(kube,source,code,binding,stage,services,decoder,*,story_compositio
     secret_name='voice-nats-service-credentials-'+generation
     operator=kube.get('secret','voice-nats-operator-'+generation);services_secret=kube.get('secret',secret_name)
     account=secret_bytes(operator,'account.public').decode().strip()
-    if hash_bytes(account.encode())!=ACCOUNT_SHA:fail()
+    if hash_bytes(account.encode())!=installation.account_sha256:fail()
     binary=Path(code)/'nats-rollout-preservation/bootstrap-renewer'
     binary_sha=binding['nats-rollout-preservation/bootstrap-renewer']
     captured={'operator':identity(operator),'services':identity(services_secret),
@@ -265,10 +268,21 @@ def preflight(kube,source,code,binding,stage,services,decoder,*,story_compositio
     unchanged()
     if candidate is not None:
         candidate['actor_sha256']=hash_bytes(json.dumps({'binding':captured,'mount':mounts['story'],'proof':proofs['story']},sort_keys=True,separators=(',',':')).encode())
-    return {'schema':'voice-nats-service-actor-authority-v1','generation':generation,'source_acl_sha256':hash_bytes(raw),
+    return {'schema':'voice-nats-service-actor-authority-v2','installation_sha256':installation.sha256,'generation':generation,'source_acl_sha256':hash_bytes(raw),
         'roles':roles,'binding':captured,'mounts':mounts,'proofs':proofs,'story_schema':schema,'compatible_story_candidate':candidate}
 
-def revalidate(kube,source,code,binding,stage,services,decoder,previous,*,historical_code=None):
+def revalidate(kube,source,code,binding,stage,services,decoder,previous,*,historical_code=None,installation=None):
+    from resource_claim import require_installation,production_installation,require_production
+    installation=require_installation(installation)
+    if historical_code is not None:require_production(installation)
+    if previous is not None:
+        fields={'schema','generation','source_acl_sha256','roles','binding','mounts','proofs','story_schema','compatible_story_candidate'}
+        if type(previous) is not dict:fail()
+        if previous.get('schema')=='voice-nats-service-actor-authority-v2':
+            if set(previous)!=fields|{'installation_sha256'} or previous['installation_sha256']!=installation.sha256:fail()
+        elif previous.get('schema')=='voice-nats-service-actor-authority-v1':
+            if set(previous)!=fields or installation!=production_installation():fail()
+        else:fail()
     # Fresh private signed-time/revocation evaluation and actual scratch auth,
     # not a replay of prior booleans. No signing seed or event/ACK operation.
     profile=previous.get('story_schema') if isinstance(previous,dict) else None
@@ -278,8 +292,10 @@ def revalidate(kube,source,code,binding,stage,services,decoder,previous,*,histor
         # Source is still the complete captured tree, not a filtered baseline.
         plan=compiler.compile_migrations(source,'app-only',lambda path:(Path(source)/path).read_bytes())
         current=preflight(kube,source,code,binding,stage,services,decoder,
-            story_composition=(plan,profile.get('binding')))
-    else:current=preflight(kube,source,code,binding,stage,services,decoder)
+            story_composition=(plan,profile.get('binding')),installation=installation)
+    else:current=preflight(kube,source,code,binding,stage,services,decoder,installation=installation)
+    if previous is not None and previous['schema']=='voice-nats-service-actor-authority-v1' and current is not None:
+        current=dict(current);current.pop('installation_sha256');current['schema']='voice-nats-service-actor-authority-v1'
     if historical_code is None:
         if current!=previous:fail()
         return
