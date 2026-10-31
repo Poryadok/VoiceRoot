@@ -106,7 +106,7 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('realtime_bootstrap_existing.py',bundle.ROLLOUT)
         self.assertTrue({'staging_prerequisites.py','staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
             'staging_gis_material.py','staging_release_policy_prepare.py'} <= set(bundle.ROLLOUT))
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,94)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,99)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)

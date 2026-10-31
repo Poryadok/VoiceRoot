@@ -19,6 +19,8 @@ class CompleteBundleTests(unittest.TestCase):
             import staging_prerequisites
             self.assertTrue(staging_prerequisites.REQUIRED_HELPERS <= set(manifest))
             self.assertNotIn('scripts/deploy/staging_p3_auxiliary_image.py', manifest)
+            self.assertEqual(hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest(),
+                             '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4')
             tree=ast.parse((source/'realtime_bootstrap_existing.py').read_bytes())
             assignments=[node for node in tree.body if isinstance(node,ast.Assign) and
                          len(node.targets)==1 and isinstance(node.targets[0],ast.Name) and node.targets[0].id=='SOURCE_HELPERS']
@@ -60,13 +62,23 @@ class RootPackageReaderTests(unittest.TestCase):
                     path.write_bytes(archive.extractfile(row).read());path.chmod(0o400)
             captured=root_cli.code_binding(code)
             self.assertEqual(len(captured),len(bundle.KNOWN)+len(bundle.ROLLOUT)+5)
-            self.assertEqual(len(captured),94)
+            self.assertEqual(len(captured),99)
             index=code/'capture-manifest.json';original=index.read_bytes()
-            for failure in ('missing','renamed','extra'):
+            cohort=['nats-rollout-preservation/'+name for name in bundle.ROLLOUT if name.startswith('staging_cohort_preservation')]
+            self.assertEqual(len(cohort),5)
+            historical={name:value for name,value in captured.items() if name not in cohort}
+            index.chmod(0o600);index.write_text(json.dumps(historical));index.chmod(0o400)
+            self.assertEqual(root_cli.code_binding(code),historical)
+            for count in range(1,5):
+                partial=historical|{name:captured[name] for name in cohort[:count]}
+                index.chmod(0o600);index.write_text(json.dumps(partial));index.chmod(0o400)
+                with self.subTest(count=len(partial)),self.assertRaises(Blocked):root_cli.code_binding(code)
+            for failure in ('missing','renamed','extra','digest'):
                 changed=dict(captured)
                 if failure=='missing':del changed['nats-rollout-preservation/staging_prerequisites.py']
                 elif failure=='renamed':changed['nats-rollout-preservation/foreign.py']=changed.pop('nats-rollout-preservation/staging_prerequisites.py')
-                else:changed['extra.py']='a'*64
+                elif failure=='extra':changed['extra.py']='a'*64
+                else:changed[cohort[0]]='0'*64
                 index.chmod(0o600);index.write_text(json.dumps(changed));index.chmod(0o400)
                 with self.subTest(failure=failure),self.assertRaises(Blocked):root_cli.code_binding(code)
             index.chmod(0o600);index.write_bytes(original);index.chmod(0o400)
@@ -223,7 +235,7 @@ class WorkflowLauncherTests(unittest.TestCase):
     def test_render_ingress_accepts_only_complete_current_capture(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);members=self.members(root)
-            for failure in ('none','missing','renamed','extra'):
+            for failure in ('none','historical','partial1','partial2','partial3','partial4','missing','renamed','extra','digest'):
                 with self.subTest(failure=failure),tempfile.TemporaryDirectory(dir=root) as slot:
                     base=Path(slot);code=base/'rollout-3340764a7d24/code';code.mkdir(parents=True,mode=0o700)
                     for name,raw in members.items():
@@ -231,11 +243,16 @@ class WorkflowLauncherTests(unittest.TestCase):
                         path.write_bytes(raw);path.chmod(0o400)
                     manifest=json.loads(members['capture-manifest.json'])
                     helper='nats-rollout-preservation/staging_prerequisites.py'
+                    cohort=['nats-rollout-preservation/'+name for name in bundle.ROLLOUT if name.startswith('staging_cohort_preservation')]
+                    if failure=='historical' or failure.startswith('partial'):
+                        count=int(failure[-1]) if failure.startswith('partial') else 0
+                        for name in cohort[count:]:del manifest[name]
                     if failure=='missing':del manifest[helper]
                     elif failure=='renamed':manifest['foreign.py']=manifest.pop(helper)
                     elif failure=='extra':manifest['extra.py']='a'*64
+                    elif failure=='digest':manifest[cohort[0]]='0'*64
                     index=code/'capture-manifest.json';index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
-                    if failure=='none':self.launch(base,'render')
+                    if failure in ('none','historical'):self.launch(base,'render')
                     else:
                         with self.assertRaises((SystemExit,OSError)):self.launch(base,'render')
 
@@ -246,7 +263,23 @@ class WorkflowLauncherTests(unittest.TestCase):
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
             self.launch(root)
 
-    def test_workflow_accepts_87_89_94_and_rejects_95_members(self):
+    def test_workflow_historical_and_partial_successor_inventories(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);members=self.members(root);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
+            for name,raw in members.items():
+                path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
+            full=json.loads(members['capture-manifest.json'])
+            cohort=['nats-rollout-preservation/'+name for name in bundle.ROLLOUT if name.startswith('staging_cohort_preservation')]
+            historical={name:value for name,value in full.items() if name not in cohort}
+            index=code/'capture-manifest.json'
+            for count in range(5):
+                manifest=historical|{name:full[name] for name in cohort[:count]}
+                index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+                if count==0:self.launch(root)
+                else:
+                    with self.subTest(count=len(manifest)),self.assertRaises(SystemExit):self.launch(root)
+
+    def test_workflow_accepts_87_and_89_and_rejects_90_members(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
             manifest={}
@@ -282,8 +315,7 @@ class WorkflowLauncherTests(unittest.TestCase):
                     elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
                     elif failure=='missing-helper':del manifest['nats-rollout-preservation/staging_prerequisites.py']
                     elif failure=='renamed-helper':manifest['nats-rollout-preservation/foreign.py']=manifest.pop('nats-rollout-preservation/staging_prerequisites.py')
-                    elif failure=='overbound':
-                        for index in range(95-len(manifest)):manifest['extra'+str(index)]='a'*64
+                    elif failure=='overbound':manifest['extra.py']='a'*64
                     elif failure=='directory-mode':code.chmod(0o720)
                     elif failure=='member-mode':target.chmod(0o420)
                     elif failure=='member-owner':os.chown(target,1000,0)
