@@ -246,6 +246,11 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    if resource_session is not None:
+        import resource_claim
+        installation=resource_claim.require_installation(resource_session.installation)
+        if target.get('installation_sha256')!=installation.sha256:raise Blocked('staging_installation_binding_changed')
+        state.update(schema='nats-rollout-root-v2',installation_sha256=installation.sha256)
     preserved=None
     if preservation_ref is not None:
         import staging_cohort_preservation
@@ -275,9 +280,9 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
         if resource_session is None:raise Blocked('realtime_bootstrap_session_required')
         import realtime_bootstrap
         bootstrap_schema=realtime_bootstrap_receipt.get('schema') if isinstance(realtime_bootstrap_receipt,dict) else None
-        if bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
+        if bootstrap_schema in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2'):
             live_receipt=realtime_bootstrap.load_completed(resource_session)
-        elif bootstrap_schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
+        elif bootstrap_schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v3','voice-staging-realtime-bootstrap-existing-v4'):
             live_receipt=realtime_bootstrap.load_existing(resource_session)
         else:raise Blocked('realtime_bootstrap_receipt_invalid')
         if (live_receipt!=realtime_bootstrap_receipt
@@ -492,7 +497,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             if resource_session is None:raise Blocked('gis_existing_resource_fence_required')
             verify_gis_before_fence(kube,state,paused=preserved is not None)
         if resource_session is not None:
-            if realtime_bootstrap_receipt is not None and bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
+            if realtime_bootstrap_receipt is not None and bootstrap_schema in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2'):
                 resource_session.advance_realtime_bootstrap(state['target'],stage.old_images)
             elif prerequisites_capture is not None:
                 resource_session.advance_prerequisites_target(state['target'],stage.old_images)
@@ -501,7 +506,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             state['resource_fence']=resource_session.binding()
             save(base/'checkpoint.json',state)
         if realtime_bootstrap_receipt is not None:
-            loader=(realtime_bootstrap.load_completed if bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1'
+            loader=(realtime_bootstrap.load_completed if bootstrap_schema in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2')
                     else realtime_bootstrap.load_existing)
             receipt=loader(resource_session,actual=stage.old_images,rollout_target=state['target'])
             if receipt!=realtime_bootstrap_receipt or resource_session.binding()['target_sha256']!=canonical(state['target']):

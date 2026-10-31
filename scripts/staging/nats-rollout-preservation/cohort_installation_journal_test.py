@@ -14,6 +14,23 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_transaction_scoped_capture_dispatches_c1_v2_before_effects(self):
+        import transaction, realtime_bootstrap
+        installation=claim.production_installation();session=SimpleNamespace(installation=installation)
+        receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v2'}
+        target={'installation_sha256':installation.sha256,'realtime_bootstrap_sha256':transaction.canonical(receipt)}
+        args=(None,Path('/unused'),Path('/unused'),target,{},'a'*12,{},[],[])
+        with patch.object(transaction,'save') as save,patch.object(realtime_bootstrap,'load_completed',side_effect=RuntimeError('sentinel')) as load:
+            with self.assertRaisesRegex(RuntimeError,'sentinel'):
+                transaction._prepare(*args,resource_session=session,realtime_bootstrap_receipt=receipt)
+            state=save.call_args.args[1]
+            self.assertEqual((state['schema'],state['installation_sha256']),('nats-rollout-root-v2',installation.sha256))
+            load.assert_called_once_with(session)
+        foreign=dict(target,installation_sha256='f'*64)
+        with patch.object(transaction,'save') as save, self.assertRaises(Blocked):
+            transaction._prepare(*args[:3],foreign,*args[4:],resource_session=session,realtime_bootstrap_receipt=receipt)
+        save.assert_not_called()
+
     def test_capture_inputs_passes_expected_authority_before_secret_access(self):
         import root_main, bootstrap_selection
         installation=claim.production_installation();kube=Mock()
