@@ -16,6 +16,59 @@ import local_process_supervision as supervision
 
 class SupervisionTest(unittest.TestCase):
     @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_private_input_is_exclusive_and_deleted_on_close(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(supervision.tempfile, 'gettempdir', return_value=directory):
+                with supervision._private_windows_input() as source:
+                    source.write(b'secret')
+                    source.flush()
+                    paths = list(Path(directory).iterdir())
+                    self.assertEqual(len(paths), 1)
+                    with self.assertRaises(OSError):
+                        paths[0].read_bytes()
+                self.assertEqual(list(Path(directory).iterdir()), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_private_input_is_deleted_after_creator_crashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            program = ('import os, tempfile, local_process_supervision as s; '
+                       'tempfile.tempdir = ' + repr(directory) + '; '
+                       'f = s._private_windows_input(); f.write(b"secret"); f.flush(); os._exit(7)')
+            result = subprocess.run([sys.executable, '-c', program], cwd=Path(__file__).parent,
+                                    timeout=5, capture_output=True)
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_diagnostic_binary_input_and_eof(self):
+        data = bytes(range(256)) * 1024 + b'\x00\xff'
+        result = supervision.run_diagnostic([sys.executable, '-c',
+            'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())'],
+            timeout=10, capture_output=True, input=data)
+        self.assertEqual((result.returncode, result.stdout), (0, data))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_diagnostic_input_early_exit_and_no_read_timeout(self):
+        data = b'x' * (1024 * 1024)
+        result = supervision.run_diagnostic([sys.executable, '-c', 'pass'],
+                                            timeout=5, capture_output=True, input=data)
+        self.assertEqual(result.returncode, 0)
+        start = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            supervision.run_diagnostic([sys.executable, '-c', 'import time; time.sleep(10)'],
+                                       timeout=.5, capture_output=True, input=data)
+        self.assertLess(time.monotonic() - start, 5)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_diagnostic_rejects_unsafe_input(self):
+        for value in ('text', bytearray(b'x'), b'x' * 33):
+            with self.subTest(value_type=type(value), size=len(value)):
+                with patch.object(supervision, 'MAX_INPUT_BYTES', 32, create=True):
+                    with self.assertRaises(ValueError):
+                        supervision.run_diagnostic([sys.executable], timeout=5,
+                                                   capture_output=True, input=value)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
     def test_public_diagnostic_capture_returns_bytes_and_exit_code(self):
         result = supervision.run_diagnostic([sys.executable, '-c',
             'import sys; sys.stdout.buffer.write(b"out"); sys.stderr.buffer.write(b"err"); sys.exit(7)'],
@@ -211,10 +264,11 @@ class SupervisionTest(unittest.TestCase):
             handles = []
             def observe():
                 deadline = time.monotonic() + 1
-                while not ready.exists() and time.monotonic() < deadline:
+                while time.monotonic() < deadline:
+                    if ready.exists() and ready.read_text().strip().isdigit():
+                        handles.append(kernel.OpenProcess(0x100000, False, int(ready.read_text())))
+                        return
                     time.sleep(.01)
-                if ready.exists():
-                    handles.append(kernel.OpenProcess(0x100000, False, int(ready.read_text())))
             observer = threading.Thread(target=observe)
             observer.start()
             try:
@@ -241,12 +295,15 @@ class SupervisionTest(unittest.TestCase):
         from ctypes import wintypes
         with tempfile.TemporaryDirectory() as directory:
             ready = Path(directory) / 'ready'
-            child = 'import os,pathlib,sys,time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(20)'
-            harness = ('import os,sys; sys.path.insert(0,sys.argv[1]); import local_process_supervision as s; '
-                       'o=open(os.devnull,"wb"); e=open(os.devnull,"wb"); '
-                       's._run_broker_experimental([sys.executable,"-c",sys.argv[2],sys.argv[3]],'
-                       'timeout=15,cwd=None,env=dict(os.environ),stdout=o,stderr=e)')
-            owner = subprocess.Popen([sys.executable, '-B', '-c', harness, str(Path(__file__).parent), child, str(ready)])
+            input_dir = Path(directory) / 'input'; input_dir.mkdir()
+            child = ('import os,pathlib,sys,time; assert sys.stdin.buffer.read(1)==b"x"; '
+                     'pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(20)')
+            harness = ('import os,sys,tempfile; sys.path.insert(0,sys.argv[1]); import local_process_supervision as s; '
+                       'o=tempfile.TemporaryFile(); e=tempfile.TemporaryFile(); '
+                       'tempfile.tempdir=sys.argv[4]; '
+                       's.run_diagnostic([sys.executable,"-c",sys.argv[2],sys.argv[3]],'
+                       'timeout=15,env=dict(os.environ),stdout=o,stderr=e,input=b"x"*1000)')
+            owner = subprocess.Popen([sys.executable, '-B', '-c', harness, str(Path(__file__).parent), child, str(ready), str(input_dir)])
             kernel = ctypes.WinDLL('kernel32', use_last_error=True)
             kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
             kernel.OpenProcess.restype = wintypes.HANDLE
@@ -255,14 +312,19 @@ class SupervisionTest(unittest.TestCase):
             handle = None
             try:
                 deadline = time.monotonic() + 5
-                while not ready.exists() and time.monotonic() < deadline:
+                while (not ready.exists() or not ready.read_text().strip().isdigit()) and time.monotonic() < deadline:
                     time.sleep(.02)
                 self.assertTrue(ready.exists())
                 handle = kernel.OpenProcess(0x100000, False, int(ready.read_text()))
                 self.assertTrue(handle)
+                self.assertEqual(len(list(input_dir.iterdir())), 1)
                 owner.terminate()
                 owner.wait(timeout=5)
                 self.assertEqual(kernel.WaitForSingleObject(handle, 5000), 0)
+                deadline = time.monotonic() + 5
+                while list(input_dir.iterdir()) and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual(list(input_dir.iterdir()), [])
             finally:
                 if owner.poll() is None:
                     owner.terminate()
@@ -272,16 +334,49 @@ class SupervisionTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
     def test_broker_crash_fails_and_reaps_its_child(self):
+        import ctypes
+        from ctypes import wintypes
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             ready = Path(directory) / 'ready'
+            release = Path(directory) / 'release'
+            input_dir = Path(directory) / 'input'; input_dir.mkdir()
             child = ('import ctypes,os,pathlib,sys,time; '
-                     'pathlib.Path(sys.argv[1]).write_text("ready"); '
+                     'assert sys.stdin.buffer.read(1)==b"x"; '
+                     'pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); '
+                     'p=pathlib.Path(sys.argv[2]); '
+                     'exec("while not p.exists():\\n time.sleep(.02)"); '
                      'h=ctypes.windll.kernel32.OpenProcess(1,False,os.getppid()); '
                      'ctypes.windll.kernel32.TerminateProcess(h,42); time.sleep(20)')
-            with self.assertRaises((EOFError, supervision.SupervisionError)):
-                supervision._run_broker_experimental([sys.executable, '-c', child, str(ready)],
-                    timeout=5, cwd=None, env=dict(os.environ), stdout=out, stderr=err)
-            self.assertTrue(ready.exists())
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handles = []
+            def observe():
+                deadline = time.monotonic() + 5
+                while (not ready.exists() or not ready.read_text().strip().isdigit()) and time.monotonic() < deadline:
+                    time.sleep(.02)
+                if ready.exists():
+                    handles.append(kernel.OpenProcess(0x100000, False, int(ready.read_text())))
+                    release.write_text('release')
+            observer = threading.Thread(target=observe)
+            observer.start()
+            try:
+                with patch.object(supervision.tempfile, 'gettempdir', return_value=str(input_dir)):
+                    with self.assertRaises((EOFError, supervision.SupervisionError)):
+                        supervision.run_diagnostic([sys.executable, '-c', child, str(ready), str(release)],
+                            timeout=7, stdout=out, stderr=err, input=b'x' * 1000)
+                observer.join(timeout=2)
+                self.assertEqual(len(handles), 1)
+                self.assertTrue(handles[0])
+                self.assertEqual(kernel.WaitForSingleObject(handles[0], 5000), 0)
+                self.assertEqual(list(input_dir.iterdir()), [])
+            finally:
+                observer.join(timeout=6)
+                for handle in handles:
+                    if handle:
+                        kernel.CloseHandle(handle)
     def test_invalid_timeout_refuses_before_launch(self):
         with self.assertRaises(ValueError):
             supervision.run([sys.executable, '-c', 'raise SystemExit(0)'], timeout=0)

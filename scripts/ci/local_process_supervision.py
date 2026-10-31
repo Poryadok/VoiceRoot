@@ -7,6 +7,7 @@ process creation and job assignment can leave that process uncontained; this
 window is not crash-safe and the caller must not claim crash-safe execution.
 """
 import ctypes
+from contextlib import ExitStack
 import io
 import math
 import json
@@ -27,6 +28,7 @@ class SupervisionError(RuntimeError):
 
 
 MAX_CAPTURE_BYTES = 64 * 1024 * 1024
+MAX_INPUT_BYTES = 64 * 1024 * 1024
 
 
 def _windows_job():
@@ -324,14 +326,16 @@ def _broker_entry(address):
     connection = PipeClient(address)
     try:
         payload = json.loads(_pipe_io(connection.fileno(), None, time.monotonic() + 15, 32768))
-        if set(payload) != {'command', 'stdout', 'stderr', 'cwd'}:
+        if set(payload) != {'command', 'stdin', 'stdout', 'stderr', 'cwd'}:
             raise ValueError('invalid broker request')
-        out = os.fdopen(msvcrt.open_osfhandle(payload['stdout'], os.O_WRONLY | os.O_BINARY), 'wb')
-        err = os.fdopen(msvcrt.open_osfhandle(payload['stderr'], os.O_WRONLY | os.O_BINARY), 'wb')
-        with out, err:
+        with ExitStack() as streams:
+            out = streams.enter_context(os.fdopen(msvcrt.open_osfhandle(payload['stdout'], os.O_WRONLY | os.O_BINARY), 'wb'))
+            err = streams.enter_context(os.fdopen(msvcrt.open_osfhandle(payload['stderr'], os.O_WRONLY | os.O_BINARY), 'wb'))
+            source = (subprocess.DEVNULL if payload['stdin'] is None else
+                      streams.enter_context(os.fdopen(msvcrt.open_osfhandle(payload['stdin'], os.O_RDONLY | os.O_BINARY), 'rb')))
             executable, line = _atomic_command_line(payload['command'], os.environ)
             child = subprocess.Popen(line, executable=executable, cwd=payload['cwd'],
-                                     stdin=subprocess.DEVNULL, stdout=out, stderr=err, close_fds=True)
+                                     stdin=source, stdout=out, stderr=err, close_fds=True)
             code = child.wait()
         _pipe_io(connection.fileno(), json.dumps({'exit_code': code}).encode(), time.monotonic() + 15, 1024)
     finally:
@@ -379,7 +383,7 @@ def _require_broker_pid(kernel, pipe, expected):
         raise SupervisionError('broker pipe client identity mismatch')
 
 
-def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, cleanup_timeout=10):
+def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, stdin=None, cleanup_timeout=10):
     """Experimental broker; public API stays closed pending independent review.
 
     The first-instance random pipe checks the connected process PID before any
@@ -396,7 +400,7 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, clea
         raise ValueError('positive finite timeout required')
     _atomic_command_line(command, env)
     encoded = json.dumps({'command': list(map(str, command)), 'cwd': str(cwd) if cwd is not None else None,
-                          'stdout': 0, 'stderr': 0}).encode()
+                          'stdin': 0, 'stdout': 0, 'stderr': 0}).encode()
     if len(encoded) > 16000:
         raise ValueError('broker request too large')
     address = r'\\.\pipe\voice-ci-' + uuid.uuid4().hex + uuid.uuid4().hex
@@ -426,8 +430,9 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, clea
             ov.cancel()
         _require_broker_pid(kernel, pipe, process.pid)
         remote = [_duplicate_broker_output(kernel, process, file) for file in (stdout, stderr)]
+        remote_input = _duplicate_broker_output(kernel, process, stdin) if stdin is not None else None
         payload = {'command': list(map(str, command)), 'cwd': str(cwd) if cwd is not None else None,
-                   'stdout': remote[0], 'stderr': remote[1]}
+                   'stdin': remote_input, 'stdout': remote[0], 'stderr': remote[1]}
         deadline = started + timeout
         _pipe_io(pipe, json.dumps(payload).encode(), deadline, 32768)
         response = json.loads(_pipe_io(pipe, None, deadline, 1024))
@@ -461,10 +466,11 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, clea
 
 
 def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=None,
-                   capture_output=False, check=False):
+                   capture_output=False, check=False, input=None):
     """Run a Windows-only diagnostic with caller-owned binary output streams.
 
     This does not establish complete preflight or generic daemon cancellation.
+    Input must be bytes of at most 64 MiB and is staged in a temporary file.
     Capture is limited to 64 MiB per stream. Explicit outputs must be fresh,
     distinct binary files exclusively owned by the caller for the run; external
     sharing cannot be verified. Pipe and process waits are bounded; OS process creation, handle duplication,
@@ -480,17 +486,56 @@ def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=
         raise ValueError('positive finite timeout required')
     if check is not False or type(capture_output) is not bool:
         raise ValueError('unsupported subprocess options')
+    if input is not None and (type(input) is not bytes or len(input) > MAX_INPUT_BYTES):
+        raise ValueError('input must be bounded bytes')
     if env is not None and (not isinstance(env, dict) or
                             any(not isinstance(k, str) or not isinstance(v, str) or
                                 not k or '\0' in k or '=' in k or '\0' in v for k, v in env.items())):
         raise ValueError('environment must contain valid string entries')
+    with ExitStack() as stack:
+        source = None
+        if input is not None:
+            source = stack.enter_context(_private_windows_input())
+            source.write(input)
+            source.flush()
+            source.seek(0)
+        return _run_diagnostic_with_input(command, timeout, cwd, env, stdout, stderr, capture_output, source)
+
+
+def _private_windows_input():
+    """Create an exclusive, delete-on-last-close input file or fail closed."""
+    import msvcrt
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                   ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    path = str(Path(tempfile.gettempdir()) / ('voice-ci-input-' + uuid.uuid4().hex))
+    # No sharing; CREATE_NEW; FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE.
+    handle = kernel.CreateFileW(path, 0xc0000000, 0, None, 1, 0x04000100, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise SupervisionError('cannot create private diagnostic input')
+    try:
+        fd = msvcrt.open_osfhandle(handle, os.O_RDWR | os.O_BINARY)
+    except BaseException:
+        kernel.CloseHandle(handle)
+        raise
+    try:
+        return os.fdopen(fd, 'w+b')
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _run_diagnostic_with_input(command, timeout, cwd, env, stdout, stderr, capture_output, source):
     if capture_output:
         if stdout is not None or stderr is not None:
             raise ValueError('capture_output cannot be combined with explicit streams')
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             _validate_output_files(out, err)
             result = _run_broker_experimental(command, timeout=timeout, cwd=cwd, env=env,
-                                              stdout=out, stderr=err)
+                                              stdout=out, stderr=err, stdin=source)
             out.seek(0); err.seek(0)
             output, errors = out.read(MAX_CAPTURE_BYTES + 1), err.read(MAX_CAPTURE_BYTES + 1)
             if len(output) > MAX_CAPTURE_BYTES or len(errors) > MAX_CAPTURE_BYTES:
@@ -500,7 +545,7 @@ def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=
         raise ValueError('explicit stdout and stderr are required')
     _validate_output_files(stdout, stderr)
     return _run_broker_experimental(command, timeout=timeout, cwd=cwd, env=env,
-                                    stdout=stdout, stderr=stderr)
+                                    stdout=stdout, stderr=stderr, stdin=source)
 
 
 def _validate_output_files(stdout, stderr):
