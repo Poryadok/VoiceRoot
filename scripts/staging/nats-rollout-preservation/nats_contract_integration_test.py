@@ -301,6 +301,12 @@ class FixtureIsolationTest(unittest.TestCase):
                          'nats_a3_roster_integration.py', 'rollout_census_integration.py'):
                 self.assertNotIn('nats-rollout-preservation/' + name, manifest)
                 self.assertTrue((bundle / name).is_file())
+            helper = (bundle / 'helper.go').read_text(encoding='utf-8')
+            for source_bound_seed in ('SocialMaxAge int64', 'SocialDuplicateWindow int64',
+                    'social.Config.Duplicates=time.Duration(baseline.SocialDuplicateWindow)',
+                    'js.AddConsumer(expected.Stream,&nats.ConsumerConfig',
+                    'js.ConsumerInfo(expected.Stream,expected.Name)'):
+                self.assertIn(source_bound_seed, helper)
 
     @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root custody')
     def test_binding_rejects_spoof_and_corruption_before_driver(self):
@@ -340,12 +346,31 @@ print('REAL_BINDING_COMPLETED')
             self.assertNotEqual(collision.returncode, 0)
             self.assertIn('captured_module_collision', collision.stderr)
             self.assertNotIn('REAL_BINDING_COMPLETED', collision.stdout)
+            def change_manifest(path, change):
+                index = path/'capture-manifest.json'
+                manifest = json.loads(index.read_text())
+                change(manifest)
+                index.write_text(json.dumps(manifest, sort_keys=True))
+            def remove_member(manifest):
+                manifest.pop(next(iter(manifest)))
+            def add_member(manifest):
+                manifest['nats-rollout-preservation/extra.py'] = '0'*64
+            def traverse(manifest):
+                manifest['../escape.py'] = manifest.pop(next(iter(manifest)))
+            def link_member(path):
+                member = path/'nats-rollout-preservation/root_cli.py'
+                member.unlink()
+                member.symlink_to(source/'nats-rollout-preservation/root_cli.py')
             for name, mutate in (
                 ('member', lambda p: (p/'nats-rollout-preservation/root_cli.py').write_text('spoof')),
                 ('manifest', lambda p: (p/'capture-manifest.json').write_text('{}')),
                 ('duplicate', lambda p: (p/'capture-manifest.json').write_text('{"x":1,"x":2}')),
                 ('order', lambda p: (p/'capture-manifest.json').write_text(json.dumps(
                     dict(reversed(list(json.loads((p/'capture-manifest.json').read_text()).items())))))),
+                ('omitted', lambda p: change_manifest(p, remove_member)),
+                ('extra', lambda p: change_manifest(p, add_member)),
+                ('traversal', lambda p: change_manifest(p, traverse)),
+                ('symlink', link_member),
             ):
                 variant = root / name
                 shutil.copytree(source, variant)
@@ -354,6 +379,10 @@ print('REAL_BINDING_COMPLETED')
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertNotIn('REAL_BINDING_COMPLETED', result.stdout)
                 self.assertNotIn('spoof_executed', result.stderr)
+            (root/'occupied/scripts/staging').mkdir(parents=True)
+            occupied = run(source, 'occupied')
+            self.assertNotEqual(occupied.returncode, 0)
+            self.assertIn('captured_code_destination_exists', occupied.stderr)
 
 
 if __name__ == '__main__':
