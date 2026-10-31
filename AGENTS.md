@@ -8,6 +8,10 @@ work in this repository.
 
 - `.agent/AGENTS.md` for project sources of truth, language, workflow, and
   architectural boundaries.
+- TTenrec is the primary task tracker: load the `ttenrec` skill (CLI `tt`) before
+  any tracker request or task-connected work. Task claims, statuses, ownership,
+  evidence and continuations live in TTenrec, not in `docs/PLAN.md` or
+  `docs/TODO.md`; those files record feature status and documentation gaps only.
 - `docs/PLAN.md` before judging feature status, selecting a milestone, or
   opening new product WIP. For a fully specified implementation slice, the
   dispatcher supplies the exact milestone section and relevant feature/service
