@@ -148,7 +148,7 @@ class FakeKube:
         if args[0] == 'wait':
             return copy.deepcopy(self.objects[('job', args[2].split('/', 1)[1])])
         if args[0] == 'logs':
-            return json.dumps(prerequisite.OUTPUT, separators=(',', ':')) + '\n'
+            return json.dumps(gis.verifier_output(32), separators=(',', ':')) + '\n'
         raise AssertionError(args)
 
 
@@ -283,6 +283,8 @@ class Tests(unittest.TestCase):
         source_sha = 'b' * 40
         inputs = {
             'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
+            'migrations': [{'name': '000031_previous.up.sql', 'sha256': 'a' * 64}],
+            'verifier_sql_sha256': prerequisite.VERIFIER_V1_SHA256,
             'configmaps': {'provision': 'cm-provision', 'migrations': 'cm-migrations', 'verify': 'cm-verify'},
             'job_images': {'provision': {'provision': 'postgres'}, 'migrate': {'migrate': 'migrate'},
                            'verify': {'verify': 'postgres'}},
@@ -365,7 +367,7 @@ class Tests(unittest.TestCase):
         created_jobs = [event[1] for event in kube.events
                         if len(event) == 2 and event[0] == 'created-job']
         self.assertEqual(created_jobs, [inputs['jobs'][role] for role in prerequisite.JOB_ROLES])
-        self.assertEqual(receipt['verifier'], prerequisite.OUTPUT)
+        self.assertEqual(receipt['verifier'], gis.verifier_output(prerequisite.validate_source_revision(inputs)))
         self.assertEqual(set(receipt['jobs']), {'provision', 'migrate', 'verify'})
         self.assertTrue(gis.validate_prerequisite_receipt(receipt, plan))
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
@@ -391,7 +393,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(before, [inputs['jobs']['provision']])
         self.assertEqual(after, [inputs['jobs'][role] for role in prerequisite.JOB_ROLES])
         self.assertEqual(len(after), len(set(after)))
-        self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA)
+        self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA_V2)
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
 
     def test_restart_after_job_create_before_receipt_reconciles_same_job(self):
@@ -957,6 +959,8 @@ class DevReceiptProducerTests(unittest.TestCase):
         image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'a' * 64
         source_sha = 'b' * 40
         inputs = {'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
+            'migrations': [{'name': '000031_previous.up.sql', 'sha256': 'a' * 64}],
+            'verifier_sql_sha256': prerequisite.VERIFIER_V1_SHA256,
             'configmaps': {'provision': 'cm-provision', 'migrations': 'cm-migrations', 'verify': 'cm-verify'},
             'job_images': {'provision': {'provision': 'postgres'}, 'migrate': {'migrate': 'migrate'},
                 'verify': {'verify': 'postgres'}},

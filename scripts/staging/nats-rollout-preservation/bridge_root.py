@@ -305,10 +305,6 @@ class Actions:
             if provisional_mode:lifecycle['provisional']=provisional.admission(approved,execution,self.binding)
             if repair is not None:lifecycle['repair_parent']=provisional.parent_reference(repair)
         self._report('source-capture','COMPLETE')
-        prerequisites=None
-        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
-            import staging_prerequisites
-            staging_prerequisites.run_prepare(self,request,approved,execution,workspace)
         self._report('workload-capture','STARTED')
         kube=Kube();marker=kube.get('configmap','voice-nats-generation')
         frontends=[s for s in request['changed_services'] if s in ('web','admin','developer-portal')] if request['mode']=='images-only' else ['web','admin','developer-portal']
@@ -326,9 +322,6 @@ class Actions:
         gis_capture_args={'gis_binding':gis_binding} if gis_binding is not None else {}
         stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else [])+
             ([source_plan.PRINCIPAL_PUBLISHER] if publisher_selected else [])+gis_extra,**gis_capture_args)
-        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
-            self.tt_session.capture_prerequisites(stage)
-            prerequisites=staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)
         self._report('workload-capture','COMPLETE')
         gis_transition=None
         if (gis_binding is None and request.get('gis_first_install') is not True and request['mode'] in ('full','app-only')
@@ -412,18 +405,9 @@ class Actions:
                 if current_renderer!=expected_renderer and not source_authority.same_image_content(current_renderer,expected_renderer,image_deadline):
                     raise Blocked('renderer_rollback_current_image_changed')
                 renderer_image=previous['renderer_authority']['descriptor']['images']['old']
-            if prerequisites is not None:
-                renderer_authority=staging_prerequisites.load_renderer(self.tt_session,stage)
-                if renderer_authority['descriptor']['images']['target']!=renderer_image:
-                    raise Blocked('staging_prerequisites_renderer_changed')
-            else:
-                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
+            renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
         import actor_root
-        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
-            raise Blocked('staging_prerequisites_capture_changed')
         actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
-        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
-            raise Blocked('staging_prerequisites_capture_changed')
         if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         nats_authority=None
         if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
@@ -473,7 +457,6 @@ class Actions:
         value=private_json(output)
         if realtime_receipt is not None:
             value['target']['realtime_bootstrap_sha256']=transaction.canonical(realtime_receipt)
-        if prerequisites is not None:value['target']['prerequisites_sha256']=transaction.canonical(prerequisites)
         if lifecycle is not None and (value['migrations'] or value['nonnats']['actions']
             or nats_authority is not None and nats_authority['plan']['actions']):
             raise Blocked('provisional_migration_forbidden')
@@ -496,7 +479,6 @@ class Actions:
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         if getattr(self,'tt_session',None) is not None:lifecycle_args['resource_session']=self.tt_session
         if realtime_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_receipt
-        if prerequisites is not None:lifecycle_args['prerequisites_capture']=prerequisites
         state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True or gis_binding is not None else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,gis_binding=gis_binding,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
