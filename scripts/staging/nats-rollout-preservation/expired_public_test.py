@@ -104,7 +104,7 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('gis_existing_update.py',bundle.ROLLOUT)
         self.assertIn('realtime_bootstrap.py',bundle.ROLLOUT)
         self.assertIn('realtime_bootstrap_existing.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,94)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,99)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)

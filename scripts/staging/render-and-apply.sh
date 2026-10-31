@@ -47,7 +47,9 @@ try:
     entry='nats-rollout-preservation/runner.py'
     if (not isinstance(manifest,dict) or not (1<=len(manifest)<=86 or
         len(manifest)==94 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
-        == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20')
+        == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20' or
+        len(manifest)==99 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+        == '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4')
         or entry not in manifest or 'nats-rollout-preservation/resource_claim.py' not in manifest):raise ValueError('old capture')
     for relative,wanted in manifest.items():
         part=pathlib.Path(relative)
