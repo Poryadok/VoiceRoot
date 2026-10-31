@@ -57,6 +57,14 @@ class PreservationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
             migrations.require_preserving_admission('images-only', [{'database':'space'}])
 
+    def test_empty_migration_plan_does_not_bypass_full_or_app_only_admission(self):
+        for mode in ('full', 'app-only'):
+            with self.subTest(mode=mode):
+                kube=Mock();stage=Mock();journal=Mock()
+                with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
+                    migrations.execute(kube,stage,[],mode,{},journal)
+                kube.assert_not_called();stage.verify_final_storage.assert_not_called();journal.assert_not_called()
+
     @unittest.skipUnless(__import__('os').name=='posix' and __import__('os').geteuid()==0,
                          'checkpoint custody requires isolated Linux root')
     def test_large_root_checkpoint_records_blocked_without_masking_failure(self):
