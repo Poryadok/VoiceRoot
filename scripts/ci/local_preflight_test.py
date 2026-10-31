@@ -10,6 +10,89 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def chat_inputs(self):
+        return {'helper': str(self.root / 'creator.exe'), 'helper_sha256': 'a' * 64,
+                'postgres_archive': str(self.root / 'postgres.tar'), 'postgres_archive_sha256': 'b' * 64,
+                'postgres_image_id': 'sha256:' + 'c' * 64}
+
+    def chat_result(self):
+        inputs = self.chat_inputs()
+        return {'schema': 'voice-local-chat-private-diagnostic-v1', 'status': 'incomplete', 'source': self.source,
+                'diagnostic': {'status': 'incomplete', 'source': self.source, 'exit_code': 0,
+                               'events_sha256': 'd' * 64,
+                               'tests': {'packages': ['voice/backend/chat/internal/store'], 'passed': 1, 'skipped': []}},
+                'inputs': {'creator_sha256': inputs['helper_sha256'], 'postgres_archive_sha256': inputs['postgres_archive_sha256'],
+                           'postgres_image_id': inputs['postgres_image_id']},
+                'ownership_journal': 'run/tmp/ci-local/voiceci-fixture/ownership.json', 'slot': 0}
+
+    def test_opt_in_chat_runs_only_when_affected_and_cannot_satisfy_matrix(self):
+        plan = {'source': self.source, 'components': {'go_integration': ['chat']},
+                'checks': {'backend-go-integration-pr': ['chat']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration, 'run', return_value=self.chat_result()) as run:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         chat_inputs=self.chat_inputs())
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
+        self.assertEqual(report['chat_private_report'], 'chat-private/diagnostic.json')
+        values = self.chat_inputs()
+        run.assert_called_once_with(self.root, self.source['head'], self.output / 'chat-private',
+                                    values['helper'], values['helper_sha256'], values['postgres_archive'],
+                                    values['postgres_archive_sha256'], values['postgres_image_id'], 'go')
+
+    def test_selected_chat_does_not_run_without_explicit_inputs(self):
+        plan = {'source': self.source, 'components': {'go_integration': ['chat']},
+                'checks': {'backend-go-integration-pr': ['chat']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration, 'run') as run:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        run.assert_not_called()
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
+
+    def test_chat_inputs_refuse_unselected_or_malformed_before_execution(self):
+        for plan, inputs in (({'source': self.source, 'components': {'go_integration': ['bot']},
+                               'checks': {'backend-go-integration-pr': ['bot']}}, self.chat_inputs()),
+                             ({'source': self.source, 'components': {'go_integration': ['chat']},
+                               'checks': {'backend-go-integration-pr': ['chat']}}, {'helper': 'partial'})):
+            with self.subTest(inputs=inputs), tempfile.TemporaryDirectory() as tmp:
+                output = Path(tmp) / 'result'
+                with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                     patch.object(local_preflight.local_chat_orchestration, 'run') as run:
+                    report = local_preflight.run(self.root, 'c' * 40, self.source['head'], output, 'flutter', chat_inputs=inputs)
+                self.assertEqual(report['status'], 'failed')
+                run.assert_not_called()
+
+    def test_chat_mismatch_skip_or_cleanup_uncertainty_cannot_qualify(self):
+        plan = {'source': self.source, 'components': {'go_integration': ['chat']},
+                'checks': {'backend-go-integration-pr': ['chat']}}
+        for mutation in ('source', 'skip', 'image', 'cleanup'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                result = self.chat_result()
+                if mutation == 'source': result['source'] = {'head': 'different'}
+                if mutation == 'skip': result['diagnostic']['tests']['skipped'] = ['required']
+                if mutation == 'image': result['inputs']['postgres_image_id'] = 'sha256:' + 'd' * 64
+                failure = local_preflight.OwnershipError('cleanup uncertain') if mutation == 'cleanup' else None
+                with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                     patch.object(local_preflight.local_chat_orchestration, 'run', side_effect=failure, return_value=result):
+                    report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(tmp) / 'result',
+                                                 'flutter', chat_inputs=self.chat_inputs())
+                self.assertEqual(report['status'], 'failed')
+                self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
+
+    def test_chat_combined_execution_and_cleanup_failure_is_not_swallowed(self):
+        plan = {'source': self.source, 'components': {'go_integration': ['chat']},
+                'checks': {'backend-go-integration-pr': ['chat']}}
+        failure = BaseExceptionGroup('uncertain', [KeyboardInterrupt(), local_preflight.OwnershipError('cleanup')])
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_chat_orchestration, 'run', side_effect=failure):
+            with self.assertRaises(BaseExceptionGroup):
+                local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                    chat_inputs=self.chat_inputs())
+        self.assertFalse((self.output / 'preflight.json').exists())
+
     def test_ci_routing_subset_does_not_satisfy_script_matrix(self):
         plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
         diagnostic = {'schema': 'voice-local-ci-routing-diagnostic-v1', 'status': 'incomplete',

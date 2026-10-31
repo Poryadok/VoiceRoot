@@ -78,6 +78,19 @@ python3 scripts/ci/affected_check_plan.py --base "$BASE_SHA" --head "$HEAD_SHA" 
   --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF"
 ```
 
+For a planner-selected Chat integration, Windows local preflight can optionally
+run one private Testcontainers case when all five `--chat-*` creator, archive,
+digest and image-ID arguments are supplied. It leaves the integration matrix
+`not_run` and the preflight incomplete. Cleanup uses the owned journal and
+retains uncertainty rather than touching foreign resources. The diagnostic
+assumes a trusted Docker administrator and cooperative other users; it does not
+enforce exclusive daemon/socket access or authenticate helper, image, tool and
+dependency provenance. The host Go dependency acquisition is not supervised.
+One selected case does not prove general concurrent Chat acceptance or permit
+PR handoff. The preflight consumes an in-process result; its journal path and
+digest fields are shape-checked rather than externally revalidated receipts.
+Linux remains unsupported.
+
 Compose E2E and the attachment restart proof explicitly build current Compose
 images before starting the stack with --no-build. An isolated Buildx builder
 uses per-service, per-platform content caches for build preparation; cached
