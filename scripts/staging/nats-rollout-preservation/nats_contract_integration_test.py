@@ -323,6 +323,8 @@ class FixtureIsolationTest(unittest.TestCase):
             spoof = root / 'spoof'
             spoof.mkdir()
             (spoof / 'root_cli.py').write_text("raise RuntimeError('spoof_executed')\r\n")
+            (spoof / 'guard.py').write_text("raise RuntimeError('spoof_executed')\n")
+            (spoof / 'fixture_driver.py').write_text("import guard\ndef run(): print('DRIVER_EXECUTED')\n")
             script = '''
 import importlib.util, pathlib, sys, types
 entry, source, base, spoof, preload = sys.argv[1:]
@@ -330,11 +332,14 @@ spec = importlib.util.spec_from_file_location('entry', entry)
 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 module._CAPTURE_SOURCE = pathlib.Path(source)
 sys.path.insert(0, spoof)
-if preload == 'yes': sys.modules['root_cli'] = types.ModuleType('root_cli')
+if preload != 'no': sys.modules[preload] = types.ModuleType(preload)
 module._materialize_capture(base)
-import root_cli
+import root_cli, guard
 assert pathlib.Path(root_cli.__file__) == pathlib.Path(base)/'scripts/staging/nats-rollout-preservation/root_cli.py'
+assert pathlib.Path(guard.__file__) == pathlib.Path(base)/'scripts/staging/nats-rollout-preservation/guard.py'
 print('REAL_BINDING_COMPLETED')
+import fixture_driver
+fixture_driver.run()
 '''
             def run(capture, name, preload='no'):
                 return subprocess.run([sys.executable, '-I', '-c', script, str(entry), str(capture),
@@ -342,10 +347,12 @@ print('REAL_BINDING_COMPLETED')
             good = run(source, 'good')
             self.assertEqual(good.returncode, 0, good.stderr)
             self.assertIn('REAL_BINDING_COMPLETED', good.stdout)
-            collision = run(source, 'collision', 'yes')
-            self.assertNotEqual(collision.returncode, 0)
-            self.assertIn('captured_module_collision', collision.stderr)
-            self.assertNotIn('REAL_BINDING_COMPLETED', collision.stdout)
+            self.assertIn('DRIVER_EXECUTED', good.stdout)
+            for name in ('root_cli', 'guard'):
+                collision = run(source, 'collision-'+name, name)
+                self.assertNotEqual(collision.returncode, 0)
+                self.assertIn('captured_module_collision', collision.stderr)
+                self.assertNotIn('DRIVER_EXECUTED', collision.stdout)
             def change_manifest(path, change):
                 index = path/'capture-manifest.json'
                 manifest = json.loads(index.read_text())
@@ -378,6 +385,7 @@ print('REAL_BINDING_COMPLETED')
                 result = run(variant, name+'-base')
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertNotIn('REAL_BINDING_COMPLETED', result.stdout)
+                self.assertNotIn('DRIVER_EXECUTED', result.stdout)
                 self.assertNotIn('spoof_executed', result.stderr)
             (root/'occupied/scripts/staging').mkdir(parents=True)
             occupied = run(source, 'occupied')
