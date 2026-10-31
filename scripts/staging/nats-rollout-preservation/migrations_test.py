@@ -54,14 +54,17 @@ class MigrationPlanTest(unittest.TestCase):
                 if mutation=='secret':rows[0]['secret_key']='NATS_OPERATOR_CREDS'
                 with self.assertRaises(Blocked):migrations.validate_plan(rows,'app-only')
 
+    # Synthetic admission isolates migration behavior; the real gate is tested separately.
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_metadata_secret_veto_precedes_any_job_create(self):
         kube=Mock();kube.secret_meta.return_value={'uid':'old','resourceVersion':'100'}
         kube.run.return_value=True
         stage=Mock();stage.operation='123456abcdef'
-        with self.assertRaises(Blocked):
+        with self.assertRaisesRegex(Blocked, 'rollout_database_secret_changed'):
             migrations.execute(kube,stage,plan(),'full',{'uid':'old','resourceVersion':'99'},lambda e:None)
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
 
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_bot_forward_collision_recheck_precedes_any_migration_create(self):
         import bot_migration
         sql='CREATE UNIQUE INDEX example ON bot_event_log(bot_id,interaction_token);'
@@ -78,13 +81,15 @@ class MigrationPlanTest(unittest.TestCase):
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
         stage.verify_final_storage.assert_not_called()
 
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_owned_fence_loss_precedes_any_job_create(self):
         kube=Mock();meta={'uid':'old','resourceVersion':'100'};kube.secret_meta.return_value=meta
         kube.run.return_value=True
         stage=Mock();stage.operation='123456abcdef';stage.verify_final_storage.side_effect=Blocked('ownership_changed')
-        with self.assertRaises(Blocked):migrations.execute(kube,stage,plan(),'full',meta,lambda e:None)
+        with self.assertRaisesRegex(Blocked, 'ownership_changed'):migrations.execute(kube,stage,plan(),'full',meta,lambda e:None)
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
 
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_completed_job_uid_must_match_created_job(self):
         kube=Mock();meta={'uid':'old','resourceVersion':'100'};kube.secret_meta.return_value=meta
         cm,job=migrations.documents(plan(),'123456abcdef')
