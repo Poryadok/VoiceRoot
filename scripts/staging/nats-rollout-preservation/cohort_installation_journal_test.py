@@ -14,6 +14,27 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_active_release_writer_preserves_scoped_authority(self):
+        import bridge_root
+        installation=claim.production_installation();actions=object.__new__(bridge_root.Actions);actions._installation=installation
+        state={'schema':'nats-rollout-root-v2','installation_sha256':installation.sha256,'operation':'a'*12,
+               'context':{'expected':{'namespace_uid':'ns','source_claim_uid':'pvc'}},
+               'target':{'installation_sha256':installation.sha256,'manifest_sha256':'b'*64}}
+        with patch.object(bridge_root,'private_json',side_effect=FileNotFoundError),patch.object(bridge_root,'save') as save:
+            actions._active_release(state)
+            row=save.call_args.args[1];claim.validate_active_release(row,installation=installation)
+            self.assertEqual(row['schema'],'voice-active-release-v1')
+            state['target']['installation_sha256']='f'*64
+            with self.assertRaises(Blocked):actions._active_release(state)
+            self.assertEqual(save.call_count,1)
+
+    def test_scoped_root_status_is_redacted_and_rejects_invalid_installation(self):
+        import bridge_root
+        state={'schema':'nats-rollout-root-v2','installation_sha256':'a'*64,'operation':'b'*12,'status':'WAITING','private':'secret'}
+        self.assertEqual(bridge_root.status_summary(state),{'operation':'b'*12,'status':'WAITING'})
+        state['installation_sha256']='invalid'
+        with self.assertRaises(Blocked):bridge_root.status_summary(state)
+
     def test_transaction_scoped_capture_dispatches_c1_v2_before_effects(self):
         import transaction, realtime_bootstrap
         installation=claim.production_installation();session=SimpleNamespace(installation=installation)

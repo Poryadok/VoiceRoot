@@ -33,7 +33,8 @@ def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
 def status_summary(state):
-    if (state.get("schema") not in ("nats-rollout-root-v1","voice-staging-cohort-preservation-checkpoint-v1")
+    if (state.get("schema") not in ("nats-rollout-root-v1","nats-rollout-root-v2","voice-staging-cohort-preservation-checkpoint-v1")
+        or state.get("schema")=="nats-rollout-root-v2" and (not isinstance(state.get("installation_sha256"),str) or not re.fullmatch(r"[a-f0-9]{64}",state["installation_sha256"]))
         or not isinstance(state.get("operation"),str) or not re.fullmatch(r"[a-f0-9]{12}",state["operation"])):
         raise Blocked("bridge_status_checkpoint_invalid")
     result=summary(state)
@@ -351,9 +352,18 @@ class Actions:
         return source_run,{'dispatcher_run_id':run['id'],'run_attempt':run['run_attempt'],'head_sha':run['head_sha'],'event':run['event'],'workflow_id':workflow,'path':path,'repository':source_authority.REPO}
 
     def _active_release(self,state,*,authority_guard=None):
+        import resource_claim
         if authority_guard is not None:authority_guard()
         row={'operation':state['operation'],'namespace_uid':state['context']['expected']['namespace_uid'],
             'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']}
+        if state.get('schema')=='nats-rollout-root-v2':
+            if (state.get('installation_sha256')!=self.installation.sha256
+                or state['target'].get('installation_sha256')!=self.installation.sha256):
+                raise Blocked('staging_installation_binding_changed')
+            row.update(schema='voice-active-release-v1',installation_sha256=self.installation.sha256)
+        elif state.get('schema')=='nats-rollout-root-v1':
+            resource_claim.require_production(self.installation)
+        else:raise Blocked('staging_installation_binding_changed')
         successor=state.get('gis_existing_update')
         if successor is not None:
             import gis_existing_update as existing
