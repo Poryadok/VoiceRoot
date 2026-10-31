@@ -63,6 +63,11 @@ def audit(config, project, checkout, scratch):
             reject('explicit container name or privileged Docker access')
         if value.get('devices') or value.get('cap_add') or value.get('pid') or value.get('ipc'):
             reject('host device, capability or namespace access')
+        if any(value.get(field) for field in ('userns_mode', 'uts', 'cgroup', 'cgroup_parent', 'runtime',
+                                               'security_opt', 'device_cgroup_rules',
+                                               'gpus', 'deploy', 'provider', 'pre_start',
+                                               'post_start', 'pre_stop')):
+            reject('unverified runtime, security or lifecycle configuration')
         if value.get('external_links') or value.get('volumes_from'):
             reject('external links or inherited volumes')
         mode = value.get('network_mode')
