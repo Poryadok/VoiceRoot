@@ -249,7 +249,7 @@ class Actions:
             if operation==session.operation:session.require_binding(state.get('resource_fence'))
             else:
                 import resource_claim
-                resource_claim.historical_binding(state)
+                resource_claim.historical_binding(state,installation=self.installation)
         if state.get('operator_retirement') is not None:
             from operator_retirement import verify_terminal
             verify_terminal(base,state)

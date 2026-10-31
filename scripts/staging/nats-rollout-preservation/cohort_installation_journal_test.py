@@ -14,6 +14,17 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_historical_bridge_reader_uses_actions_installation(self):
+        import bridge_root, paused_recovery
+        installation=claim.production_installation();actions=object.__new__(bridge_root.Actions)
+        actions._installation=installation;actions.binding={};actions.tt_session=SimpleNamespace(operation='a'*12)
+        state={'schema':'nats-rollout-root-v2','operation':'b'*12}
+        with patch.object(bridge_root.root_cli,'operation_path',return_value=Path('/unused')), \
+             patch.object(bridge_root,'private_json',return_value=state), \
+             patch.object(claim,'historical_binding') as historical,patch.object(paused_recovery,'verify_adopted_binding'):
+            actions.state('b'*12)
+        historical.assert_called_once_with(state,installation=installation)
+
     def test_reconstructed_renderer_callback_keeps_explicit_installation(self):
         import transaction, renderer_root
         installation=claim.production_installation()
