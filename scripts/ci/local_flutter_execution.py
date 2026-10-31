@@ -14,6 +14,7 @@ import subprocess
 
 import flutter_test_events
 import flutter_test_shards
+import local_process_supervision as supervision
 import local_source_snapshot
 
 
@@ -42,8 +43,11 @@ FLUTTER_OUTPUTS = (
 )
 
 
+FLUTTER_COMMAND_TIMEOUT = 1800
+
+
 def _invoke(command, **kwargs):
-    return subprocess.run(command, **kwargs)
+    return supervision.run_diagnostic(command, timeout=FLUTTER_COMMAND_TIMEOUT, **kwargs)
 
 
 def classify_suites(test_root, selected):
@@ -253,7 +257,8 @@ def run(root, head, output, flutter, selected=None):
         if result['tests']['skipped']:
             result['skip_classification'] = classify_skips(checkout, result['tests']['skipped'])
             raise ValueError('required Flutter tests were skipped')
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired,
+            supervision.SupervisionError, ExceptionGroup) as error:
         result['status'] = 'failed'
         result['error'] = str(error)
     (output / 'diagnostic.json').write_text(json.dumps(result, indent=2, sort_keys=True), encoding='utf-8')

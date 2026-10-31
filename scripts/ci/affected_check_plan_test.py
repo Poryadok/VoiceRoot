@@ -520,6 +520,10 @@ class AffectedCheckPlanTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn('f13-historical-replay', checks(path))
         self.assertNotIn('f13-historical-replay', checks('scripts/ci/local_flutter_execution.py'))
+        for name in ('local_process_supervision.py', 'local_process_supervision_test.py'):
+            with self.subTest(process_supervision=name):
+                self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
+                self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
         for name in ('local_go_dependencies.py', 'local_go_dependencies_test.py',
                      'local_go_execution.py', 'local_go_execution_test.py',
                      'local_go_plan.py', 'local_go_plan_test.py', 'local_source_snapshot.py',

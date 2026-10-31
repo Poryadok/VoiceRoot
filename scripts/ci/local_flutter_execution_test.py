@@ -165,6 +165,38 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'failed')
         self.assertEqual(result['commands'][-1]['exit_code'], 2)
 
+    def test_flutter_invocations_use_the_bounded_diagnostic_supervisor(self):
+        completed = subprocess.CompletedProcess(['flutter', '--version'], 0, b'{}', b'')
+        with mock.patch.object(execution.supervision, 'run_diagnostic', return_value=completed) as run:
+            self.assertIs(execution._invoke(['flutter', '--version'], cwd=self.root,
+                                            capture_output=True, check=False), completed)
+        self.assertEqual(run.call_args.kwargs['timeout'], execution.FLUTTER_COMMAND_TIMEOUT)
+        self.assertTrue(run.call_args.kwargs['capture_output'])
+
+    def test_supervisor_timeout_is_reported_as_a_failed_diagnostic(self):
+        def timeout(command, **kwargs):
+            if 'analyze' in command:
+                raise subprocess.TimeoutExpired(command, 1)
+            return self.fake_flutter(command, **kwargs)
+        with mock.patch.object(execution, '_invoke', side_effect=timeout):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('timed out', result['error'])
+
+    def test_supervisor_refusal_and_cleanup_error_fail_the_diagnostic(self):
+        errors = [execution.supervision.SupervisionError('Linux is unsupported'),
+                  ExceptionGroup('cleanup failed', [ValueError('unverified cleanup')])]
+        for index, failure in enumerate(errors):
+            with self.subTest(failure=index):
+                def refuse(command, **kwargs):
+                    if 'analyze' in command:
+                        raise failure
+                    return self.fake_flutter(command, **kwargs)
+                with mock.patch.object(execution, '_invoke', side_effect=refuse):
+                    result = execution.run(self.root, self.head, self.output.parent / ('failure-' + str(index)), 'flutter')
+                self.assertEqual(result['status'], 'failed')
+                self.assertIn('unsupported' if index == 0 else 'cleanup failed', result['error'])
+
     def test_source_change_during_command_is_rejected(self):
         def mutate(command, **kwargs):
             result = self.fake_flutter(command, **kwargs)

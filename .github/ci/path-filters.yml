@@ -55,6 +55,8 @@ ci_global:
   - '!scripts/ci/local_go_plan_test.py'
   - '!scripts/ci/local_flutter_execution.py'
   - '!scripts/ci/local_flutter_execution_test.py'
+  - '!scripts/ci/local_process_supervision.py'
+  - '!scripts/ci/local_process_supervision_test.py'
   - '!scripts/ci/flutter_test_events.py'
   - '!scripts/ci/flutter_test_events_test.py'
   # These isolated local-Docker helpers do not feed the historical F13 replay.
