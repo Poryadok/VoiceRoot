@@ -24,6 +24,7 @@ class PublicRecoveryTests(unittest.TestCase):
                 self.assertNotEqual(row['nonce'],bridge_client.request(args,{**env,'GITHUB_RUN_ATTEMPT':'2'})['nonce'])
                 self.assertNotEqual(row['nonce'],bridge_client.request(args,{**env,'GITHUB_SHA':'c'*40,'GITHUB_JOB':'other'})['nonce'])
                 actions=object.__new__(bridge_root.Actions)
+                actions.state=Mock(return_value=(None,{'target':{'mode':'images-only'},'migrations':[]}))
                 for _,name in self.rows():setattr(actions,name,Mock(side_effect=AssertionError('wrong action')))
                 expected={'status':'WAITING','operation':row['operation']};getattr(actions,method).side_effect=None
                 getattr(actions,method).return_value=expected
@@ -122,11 +123,9 @@ class PublicRecoveryTests(unittest.TestCase):
             write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest.update(last[:1]);write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest.update(last[1:3]);write();self.assertEqual(root_cli.code_binding(code),manifest)
-            manifest.update(last[3:])
-            write();self.assertEqual(root_cli.code_binding(code),manifest)
-            manifest['extra.py']='a'*64;write()
+            manifest.update(last[3:4]);write()
             with self.assertRaises(root_cli.Blocked):root_cli.code_binding(code)
-            del manifest['extra.py'];write()
+            del manifest[last[3][0]];write()
             path=code/'module0.py';path.chmod(0o460)
             with self.assertRaises(root_cli.Blocked):root_cli.code_binding(code)
             path.chmod(0o600);path.write_bytes(b'changed bytes');path.chmod(0o440)

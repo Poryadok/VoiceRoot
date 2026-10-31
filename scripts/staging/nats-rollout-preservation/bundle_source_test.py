@@ -293,9 +293,7 @@ class WorkflowLauncherTests(unittest.TestCase):
             self.launch(root)
             manifest.update(last[:2]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             self.launch(root)
-            manifest.update(last[2:]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
-            self.launch(root)
-            manifest['extra.py']='a'*64;index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            manifest.update(last[2:3]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             with self.assertRaises(SystemExit):self.launch(root)
 
     def test_actual_workflow_keeps_custody_member_and_entrypoint_vetoes(self):
