@@ -32,7 +32,7 @@ class ToolIdentityError(RuntimeError): pass
 # Reviewed semantics establish that the fixed no-network error is reached only
 # after these source-owned gates. A change requires a new semantic review.
 GATE_SOURCE_SHA256={
-    'src/backend/space/internal/nativeinstaller/runner.go':'fb216adceb399966c38284f9a4df305aac265b0a31ce25ffbc31a51cc33b3c8b',
+    'src/backend/space/internal/nativeinstaller/runner.go':'ac4de9aba8e642b46aa8ad09d1dbb70054fb7cd7bb6bf9ddfa60d3ef1c0ff15c',
     'src/backend/space/internal/store/native_catalog_rowjson_types.go':'110c2a4c5f70cdc955ba4cb9f8d7cee424ec15176a7ab70c9c863c0d4f0dbc25',
     'src/backend/space/cmd/native-migrate/main.go':'6ac8c507850e5408761253f9613df19119dcf6ba6afacb457fdd13b5c589fc6b',
 }
