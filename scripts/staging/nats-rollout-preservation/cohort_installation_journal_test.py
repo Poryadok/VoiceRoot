@@ -17,16 +17,34 @@ class CohortInstallationJournalTests(unittest.TestCase):
     def test_active_release_writer_preserves_scoped_authority(self):
         import bridge_root
         installation=claim.production_installation();actions=object.__new__(bridge_root.Actions);actions._installation=installation
+        c=context();session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal());session.admit(start=True)
+        session.journal.row.update(target_sha256='c'*64);actions.tt_session=session
         state={'schema':'nats-rollout-root-v2','installation_sha256':installation.sha256,'operation':'a'*12,
+               'resource_fence':session.binding(),
                'context':{'expected':{'namespace_uid':'ns','source_claim_uid':'pvc'}},
                'target':{'installation_sha256':installation.sha256,'manifest_sha256':'b'*64}}
-        with patch.object(bridge_root,'private_json',side_effect=FileNotFoundError),patch.object(bridge_root,'save') as save:
+        def read(path):
+            if path.name=='checkpoint.json':return copy.deepcopy(state)
+            raise FileNotFoundError()
+        with claim.command_scope(session.check),patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root,'save') as save:
             actions._active_release(state)
             row=save.call_args.args[1];claim.validate_active_release(row,installation=installation)
             self.assertEqual(row['schema'],'voice-active-release-v1')
             state['target']['installation_sha256']='f'*64
             with self.assertRaises(Blocked):actions._active_release(state)
+            state['target']['installation_sha256']=installation.sha256
+            fence=state.pop('resource_fence')
+            with self.assertRaises(RuntimeError):actions._active_release(state)
+            state['resource_fence']=dict(fence,installation_sha256='f'*64)
+            with self.assertRaises(RuntimeError):actions._active_release(state)
+            state['resource_fence']=fence
+            foreign=dict(row,installation_sha256='f'*64)
+            with patch.object(bridge_root,'private_json',side_effect=lambda path:copy.deepcopy(state) if path.name=='checkpoint.json' else foreign):
+                with self.assertRaises(RuntimeError):actions._active_release(state)
             self.assertEqual(save.call_count,1)
+            session.journal.row.update(status='complete',phase='finished',actual=copy.deepcopy(c['images']))
+            actions._active_release(state)
+            self.assertEqual(save.call_count,2)
 
     def test_scoped_root_status_is_redacted_and_rejects_invalid_installation(self):
         import bridge_root

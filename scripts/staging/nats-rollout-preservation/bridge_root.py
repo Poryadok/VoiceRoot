@@ -358,12 +358,24 @@ class Actions:
             'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']}
         if state.get('schema')=='nats-rollout-root-v2':
             if (state.get('installation_sha256')!=self.installation.sha256
-                or state['target'].get('installation_sha256')!=self.installation.sha256):
+                or state['target'].get('installation_sha256')!=self.installation.sha256
+                or not isinstance(state.get('operation'),str) or not re.fullmatch(r'[a-f0-9]{12}',state['operation'])):
                 raise Blocked('staging_installation_binding_changed')
+            import commands
+            session=getattr(self,'tt_session',None)
+            if (type(session) is not resource_claim.Session or not session.admitted
+                or session.installation!=self.installation or session.operation!=state['operation']
+                or commands.authority_guard!=session.check):raise Blocked('staging_installation_binding_changed')
+            session.require_binding(state.get('resource_fence'))
+            if private_json(guard.ROOT/('rollout-'+state['operation'])/'checkpoint.json')!=state:
+                raise Blocked('staging_active_release_checkpoint_changed')
             row.update(schema='voice-active-release-v1',installation_sha256=self.installation.sha256)
         elif state.get('schema')=='nats-rollout-root-v1':
             resource_claim.require_production(self.installation)
         else:raise Blocked('staging_installation_binding_changed')
+        try:previous=private_json(INSTALLED/'active-release.json')
+        except FileNotFoundError:previous=None
+        if previous is not None:resource_claim.validate_active_release(previous,installation=self.installation)
         successor=state.get('gis_existing_update')
         if successor is not None:
             import gis_existing_update as existing
@@ -372,7 +384,7 @@ class Actions:
             if saved!=state:raise Blocked('gis_existing_publication_checkpoint_changed')
             receipt=successor['receipt'];anchor=receipt['anchor']
             reference={'operation':state['operation'],'receipt_sha256':receipt['receipt_sha256']}
-            previous=private_json(INSTALLED/'active-release.json')
+            if previous is None:raise Blocked('gis_existing_publication_stale')
             if previous.get('operation')==state['operation']:
                 if (previous.get('gis_first_install_transition')!=anchor
                     or previous.get('gis_latest_transition')!=reference
@@ -394,8 +406,7 @@ class Actions:
         if transition is not None:
             reference={'operation':state['operation'],
                 'receipt_sha256':transition['receipt_sha256']}
-            try:previous=private_json(INSTALLED/'active-release.json')
-            except FileNotFoundError:previous={}
+            previous=previous or {}
             existing=previous.get('gis_first_install_transition')
             if existing is not None:
                 if existing!=reference or any(previous.get(key)!=value for key,value in row.items()):
@@ -403,8 +414,7 @@ class Actions:
                 return
             row['gis_first_install_transition']=reference
         else:
-            try:previous=private_json(INSTALLED/'active-release.json')
-            except FileNotFoundError:previous={}
+            previous=previous or {}
             if 'gis_first_install_transition' in previous:
                 if all(previous.get(key)==value for key,value in row.items()):return
                 raise Blocked('gis_existing_publication_stale')
