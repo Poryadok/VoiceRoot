@@ -31,6 +31,12 @@ class CompleteBundleTests(unittest.TestCase):
                 if not name.startswith('nats-rollout-preservation/') or not name.endswith('.py'):continue
                 for node in ast.walk(ast.parse(raw)):
                     imported=[item.name.split('.')[0] for item in node.names] if isinstance(node,ast.Import) else [node.module.split('.')[0]] if isinstance(node,ast.ImportFrom) and node.module else []
+                    if (isinstance(node,ast.Call) and node.args and isinstance(node.args[0],ast.Constant)
+                        and isinstance(node.args[0].value,str) and
+                        ((isinstance(node.func,ast.Name) and node.func.id=='__import__') or
+                         (isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name)
+                          and node.func.value.id=='importlib' and node.func.attr=='import_module'))):
+                        imported.append(node.args[0].value.split('.')[0])
                     for module in imported:
                         if module in local and 'nats-rollout-preservation/'+local[module] not in members:
                             missing.add(local[module])
@@ -202,21 +208,23 @@ class WorkflowLauncherTests(unittest.TestCase):
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
             self.launch(root)
 
-    def test_workflow_accepts_87_89_94_and_rejects_95_members(self):
+    def test_workflow_accepts_87_89_94_99_and_rejects_100_members(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
             manifest={}
-            names=['nats-rollout-preservation/bridge_client.py','nats-rollout-preservation/resource_claim.py']+['module%d.py'%n for n in range(92)]
+            names=['nats-rollout-preservation/bridge_client.py','nats-rollout-preservation/resource_claim.py']+['module%d.py'%n for n in range(97)]
             for name in names:
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
                 raw=('fixture '+name).encode();path.write_bytes(raw);path.chmod(0o400)
                 manifest[name]=hashlib.sha256(raw).hexdigest()
-            last=[(name,manifest.pop(name)) for name in ('module85.py','module86.py','module87.py','module88.py','module89.py','module90.py','module91.py')]
+            last=[(name,manifest.pop(name)) for name in ('module85.py','module86.py','module87.py','module88.py','module89.py','module90.py','module91.py','module92.py','module93.py','module94.py','module95.py','module96.py')]
             index=code/'capture-manifest.json';index.write_text(json.dumps(manifest));index.chmod(0o400)
             self.launch(root)
             manifest.update(last[:2]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             self.launch(root)
-            manifest.update(last[2:]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            manifest.update(last[2:7]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            self.launch(root)
+            manifest.update(last[7:]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             self.launch(root)
             manifest['extra.py']='a'*64;index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             with self.assertRaises(SystemExit):self.launch(root)
@@ -237,7 +245,7 @@ class WorkflowLauncherTests(unittest.TestCase):
                     elif failure=='parent':manifest['../outside']='a'*64
                     elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
                     elif failure=='overbound':
-                        for index in range(95-len(manifest)):manifest['extra'+str(index)]='a'*64
+                        for index in range(100-len(manifest)):manifest['extra'+str(index)]='a'*64
                     elif failure=='directory-mode':code.chmod(0o720)
                     elif failure=='member-mode':target.chmod(0o420)
                     elif failure=='member-owner':os.chown(target,1000,0)
