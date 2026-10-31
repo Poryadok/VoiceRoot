@@ -30,6 +30,8 @@ ROLLOUT+=('realtime_bootstrap.py','realtime_bootstrap_existing.py')
 # bridge_root prepares these source-bound children before capturing workloads.
 ROLLOUT+=('staging_prerequisites.py','staging_release_policy_prepare.py','staging_p3_prerequisites.py',
     'staging_p3_prerequisites_crypto.py','staging_gis_material.py')
+ROLLOUT+=('staging_cohort_preservation.py','staging_cohort_preservation_pg.py')
+ROLLOUT+=('staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_runtime.py','staging_cohort_preservation_auth.py')
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
