@@ -151,6 +151,9 @@ class RestoreTransportTests(unittest.TestCase):
                         prepared={'request':{'mode':'app-only','changed_services':['user'],'gis_first_install':False},
                                   'approved':approved,'execution':{},'workspace':str(source)}
                         with patch.object(owner,'load_prepared',return_value=prepared):
+                            with self.assertRaisesRegex(Exception,'cohort_continuation_request_changed'):
+                                owner.begin_continuation(session,dict(request,artifact_id=43))
+                            self.assertFalse((owner._base(session)/'continuation.json').exists())
                             selected,loaded=owner.begin_continuation(session,request)
                             self.assertEqual((selected,loaded),(qualified,prepared))
                             self.assertEqual(owner.require_continuation(session,request)['qualified_sha256'],owner.digest(qualified))
