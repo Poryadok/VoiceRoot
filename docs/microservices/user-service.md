@@ -101,6 +101,19 @@ admission gate, automatic fencing under monitor loss, and a complete deployed
 Ban proof remain open; do not enable this path without those controls. See
 [Backend gaps](../todo/backend.md#space).
 
+The planned supervised admission contract is not implemented by `WATCHING`.
+It requires a separately authenticated monitor to arm while the writer is
+`NOLOGIN`, using responses bound to the current leader challenge and the digest
+of the complete signed opening decision. The controller issues a fresh random
+nonce and increasing sequence for each probe; a valid response expires at the
+original local monotonic deadline and cannot be replayed to extend authority.
+Opening and permit issuance require live supervision. Loss or expiry revokes
+that controller incarnation permanently and starts bounded recovery; a later
+heartbeat cannot reopen it. A new leader requires a new challenge, monitor
+enrollment and signed opening decision. This contract provides bounded
+admission revocation, not a substitute for independent source-side fencing,
+session termination or restore and promotion custody.
+
 For an existing version-22 identity source, `quarantine-existing` first fences
 the supplied physical database. `check-existing-identity` then requires the
 independent control/source system IDs, database name/OID, source ID and epoch,
