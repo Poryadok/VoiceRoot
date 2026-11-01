@@ -93,17 +93,36 @@ class StagingIntegrationTests(unittest.TestCase):
             images = {key: {'archive': str(Path(directory) / key), 'sha256': 'd' * 64,
                             'image_id': 'sha256:' + 'e' * 64} for key in ('postgres', 'docker_cli', 'python')}
             images['postgres']['image_id'] = 'sha256:75f5a96988cdf694a215073c3e9c001b706b371e2f94df3967f2efdec2787f6b'
+            assets = {name: str(Path(directory) / name) for name in preflight.local_ci_staging_request.AGGREGATE_ASSET_NAMES}
+            def run_checked(request):
+                preflight.local_ci_staging_request.validate(request)
+                return receipts.pop(0)
             with patch.object(preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
                  patch.object(preflight.local_chat_orchestration, '_verify_file'), \
                  patch.object(preflight.local_ci_routing, 'run', return_value=routing), \
-                 patch.object(preflight.local_ci_staging_execution, 'run', side_effect=receipts) as run, \
+                 patch.object(preflight.local_ci_staging_execution, 'run', side_effect=run_checked) as run, \
                  patch.object(preflight.local_source_snapshot, 'capture', return_value=source):
                 result = preflight.run(root, 'c' * 40, source['head'], Path(directory) / 'out',
-                    'flutter', staging_assets={'helper': 'test', 'kubectl': str(Path(directory) / 'kubectl')}, runtime_images=images)
+                    'flutter', staging_assets=assets, runtime_images=images)
             self.assertEqual(result['status'], 'incomplete')
             self.assertEqual(result['checks']['ci-script-tests']['status'], 'not_run')
             self.assertEqual([call.args[0]['shard'] for call in run.call_args_list], ['staging', 'proofs', 'policy', 'runtime'])
             self.assertEqual(run.call_args_list[-1].args[0]['runtime_images'], images)
+            self.assertEqual(set(run.call_args_list[-1].args[0]['assets']), preflight.local_ci_staging_request.RUNTIME_ASSET_NAMES)
+            self.assertEqual(set(run.call_args_list[-2].args[0]['assets']), preflight.local_ci_staging_request.POLICY_ASSET_NAMES)
+
+    def test_runtime_missing_phase0_assets_fails_before_workers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'; root.mkdir()
+            images = {name: {'archive': str(Path(directory) / name), 'sha256': 'd' * 64,
+                             'image_id': 'sha256:' + 'e' * 64} for name in ('postgres', 'docker_cli', 'python')}
+            images['postgres']['image_id'] = 'sha256:75f5a96988cdf694a215073c3e9c001b706b371e2f94df3967f2efdec2787f6b'
+            assets = {name: str(Path(directory) / name) for name in preflight.local_ci_staging_request.POLICY_ASSET_NAMES}
+            with patch.object(preflight.local_ci_staging_execution, 'run') as run:
+                result = preflight.run(root, 'c' * 40, 'a' * 40, Path(directory) / 'out',
+                                       'flutter', staging_assets=assets, runtime_images=images)
+            self.assertEqual(result['status'], 'failed')
+            run.assert_not_called()
 
     def test_changed_source_and_worker_failure_fail_preflight(self):
         for failure in ('drift', 'worker'):

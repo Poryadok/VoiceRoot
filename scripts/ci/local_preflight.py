@@ -114,6 +114,12 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             if staging_assets is None:
                 raise ValueError('runtime images require staging assets')
             local_ci_staging_request.validate_runtime_images(runtime_images)
+            if not isinstance(staging_assets, dict) or set(staging_assets) != local_ci_staging_request.AGGREGATE_ASSET_NAMES:
+                raise ValueError('runtime aggregate requires exact staging, kubectl and phase0 assets')
+            local_ci_staging_request.parse_assets(json.dumps(staging_assets).encode())
+            for name, digest in (('phase0_jdk', local_ci_staging_request.PHASE0_JDK_HASH),
+                                 ('phase0_compose', local_ci_staging_request.PHASE0_COMPOSE_HASH)):
+                local_chat_orchestration._verify_file(staging_assets[name], digest)
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
@@ -169,11 +175,20 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                 source = plan['source']
                 shards = [('staging', 34), ('proofs', 15), ('policy', 69)]
                 if runtime_images is not None: shards.append(('runtime', 23))
+                requests = []
                 for shard, recipe_count in shards:
+                    assets = staging_assets
+                    if runtime_images is not None:
+                        names = (local_ci_staging_request.RUNTIME_ASSET_NAMES if shard == 'runtime'
+                                 else local_ci_staging_request.POLICY_ASSET_NAMES)
+                        assets = {name: staging_assets[name] for name in names}
                     request = {'root': str(root), 'output': str(output / ('ci-' + shard)),
                                'commit': source['head'], 'tree': source['tree'], 'base': base,
-                               'shard': shard, 'assets': staging_assets}
+                               'shard': shard, 'assets': assets}
                     if shard == 'runtime': request['runtime_images'] = runtime_images
+                    if runtime_images is not None: local_ci_staging_request.validate(request)
+                    requests.append((shard, recipe_count, request))
+                for shard, recipe_count, request in requests:
                     diagnostic = local_ci_staging_execution.run(request)
                     go_tests = diagnostic.get('hosted_go_tests')
                     policy_tests = diagnostic.get('hosted_policy_tests')
@@ -290,7 +305,7 @@ def main():
     parser.add_argument('--go', default='go', help='Go executable matching the pinned diagnostic image')
     parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
-    parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging-shard input paths')
+    parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')

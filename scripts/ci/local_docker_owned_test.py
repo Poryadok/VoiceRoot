@@ -191,6 +191,86 @@ class RootlessEndpointTests(unittest.TestCase):
 
 
 class OwnedRunTests(unittest.TestCase):
+    def test_phase0_profile_requires_owned_readonly_source_and_no_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            engine.image = lambda identifier: {'id': identifier, 'volumes': [], 'entrypoint': []}
+            def create(name, labels, image, volume, command):
+                identifier = 'c' + name.encode().hex().ljust(63, '0')[:63]
+                engine.resources[('container', name)] = {
+                    'id': identifier, 'name': name, 'kind': 'container', 'labels': dict(labels),
+                    'image': image, 'network': 'none', 'mounts': {'/workspace/repo': volume},
+                    'readonly_mounts': ['/workspace/repo'], 'ports': [], 'running': False,
+                    'command': command, 'entrypoint': [], 'user': '0', 'network_attachments': ['none']}
+                return identifier
+            engine.create_phase0_container = create
+            owner = OwnedRun.create(Path(directory), engine)
+            source = owner.create_resource('volume')
+            name = owner.create_phase0_container('sha256:' + '1' * 64, source)
+            item = next(row for row in owner.state['resources'] if row['name'] == name)
+            self.assertEqual(item['network'], 'none')
+            self.assertEqual(item['readonly_mounts'], ['/workspace/repo'])
+            owner._inspect(item)
+            engine.resources[('container', name)]['readonly_mounts'] = []
+            with self.assertRaises(OwnershipError):
+                owner._inspect(item)
+            engine.resources[('container', name)]['readonly_mounts'] = ['/workspace/repo']
+            engine.resources[('container', name)]['network_attachments'] = ['other']
+            with self.assertRaises(OwnershipError):
+                owner._inspect(item)
+            engine.resources[('container', name)]['network_attachments'] = ['none']
+            engine.resources[('container', name)]['user'] = '1000'
+            with self.assertRaises(OwnershipError):
+                owner._inspect(item)
+            engine.resources[('container', name)]['user'] = '0'
+            item['readonly_mounts'] = []
+            with self.assertRaises(OwnershipError):
+                owner._validate()
+            item['readonly_mounts'] = ['/workspace/repo']
+            item['network'] = 'host'
+            with self.assertRaises(OwnershipError):
+                owner._validate()
+            item['network'] = 'none'
+            engine.resources[('container', name)]['readonly_mounts'] = ['/workspace/repo']
+            engine.resources[('container', name)]['network'] = 'host'
+            with self.assertRaises(OwnershipError):
+                owner._inspect(item)
+            with self.assertRaises(OwnershipError):
+                owner.create_phase0_container('sha256:' + '1' * 64, 'foreign-volume')
+            owner.close()
+
+    def test_phase0_lost_create_and_failed_inspection_reconcile_only_exact_profile(self):
+        for outcome in ('lost', 'wrong_mount'):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:
+                engine = FakeEngine()
+                engine.image = lambda identifier: {'id': identifier, 'volumes': [], 'entrypoint': []}
+                def create(name, labels, image, volume, command):
+                    identifier = 'c' + name.encode().hex().ljust(63, '0')[:63]
+                    engine.resources[('container', name)] = {
+                        'id': identifier, 'name': name, 'kind': 'container', 'labels': dict(labels),
+                        'image': image, 'network': 'none', 'mounts': {'/workspace/repo': volume},
+                        'readonly_mounts': [] if outcome == 'wrong_mount' else ['/workspace/repo'],
+                        'ports': [], 'running': False, 'command': command, 'entrypoint': [],
+                        'user': '0', 'network_attachments': ['none']}
+                    if outcome == 'lost':
+                        raise OwnershipError('create outcome unknown')
+                    return identifier
+                engine.create_phase0_container = create
+                owner = OwnedRun.create(Path(directory), engine)
+                try:
+                    source = owner.create_resource('volume')
+                    with self.assertRaises(OwnershipError):
+                        owner.create_phase0_container('sha256:' + '1' * 64, source)
+                    item = owner.state['resources'][-1]
+                    self.assertEqual((item['state'], item['id']), ('creating', ''))
+                    if outcome == 'wrong_mount':
+                        with self.assertRaises(OwnershipError):
+                            owner.reconcile_creation(item['name'])
+                        engine.resources[('container', item['name'])]['readonly_mounts'] = ['/workspace/repo']
+                    owner.reconcile_creation(item['name'])
+                    self.assertEqual(item['state'], 'ready')
+                finally:
+                    owner.close()
     def test_canonical_image_load_discards_output_on_success_and_failure(self):
         from unittest.mock import patch
         from local_image_archive_test import oci_fixture

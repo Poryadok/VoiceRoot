@@ -673,7 +673,7 @@ When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
 the local inputs for experimental owned staging, proofs and policy shard executions. The JSON
 object must contain exactly the absolute paths `helper`, `jq`, `postgres_image`,
 `go_image`, `python_image`, `nats_image`, `nats_box_image`, `alpine_image`,
-`packages`, `wheel`, `preservation_go_cache`, `staging_go_proxy`, and `kubectl` for the planner-selected policy shard. Direct staging, proofs and runtime requests retain their prior asset requirements. The worker
+`packages`, `wheel`, `preservation_go_cache`, `staging_go_proxy`, and `kubectl` for the planner-selected policy shard. The runtime aggregate additionally requires `phase0_jdk` and `phase0_compose`; the preflight projects the exact assets needed by each shard before starting any worker. The worker
 requires its pinned byte hashes and image IDs, a clean checkout matching the
 planned commit and tree, and a full base SHA. Pinned client, Go, Node and Docker
 CLI images must already be present. Missing or mismatched inputs fail closed.
@@ -696,12 +696,19 @@ complete real run. Without the runtime image inputs below, these runs omit runti
 `not_run` and preflight incomplete even if the staging receipt is produced.
 
 Supplying `--ci-runtime-images <json-file>` as well requests the runtime shard
-after staging, proofs and policy. Its JSON object has exactly `postgres`, `docker_cli`
+after staging, proofs and policy. The staging-assets JSON must then also contain
+absolute paths `phase0_jdk` and `phase0_compose`: the Linux/amd64 Eclipse Temurin
+25.0.2+10 JDK archive (SHA-256 `987387933b64b9833846dee373b640440d3e1fd48a04804ec01a6dbf718e8ab8`)
+and Docker Compose v2.39.4 binary (SHA-256 `7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4`).
+The worker checks these bytes and transferred copies before use. The runtime-images JSON object has exactly `postgres`, `docker_cli`
 and `python` records; each record contains an absolute `archive` path, its
 `sha256`, and an `image_id`. PostgreSQL must match the fixture's fixed image ID;
 the caller authenticates the Docker 27 CLI and Python bookworm image identities
 and maintains custody of all archives. The owned private daemon loads and
-checks the supplied images. The pinned story-media script is adapted to use the
+checks the supplied images. Phase0 retains the hosted non-root suite and verifies
+its sole source-pinned root-only skip separately in an owned network-none client
+with a read-only source volume. The worker binds both outputs to the exact test
+inventory; no unaccounted skip is accepted. The pinned story-media script is adapted to use the
 preloaded PostgreSQL image, an offline build and an owned private socket and
 read-only source mirror. These adaptations and image provenance are not hosted
 CI parity. The runtime path has not yet passed a complete real run, and
