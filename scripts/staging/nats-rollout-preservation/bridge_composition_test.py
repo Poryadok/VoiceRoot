@@ -393,6 +393,9 @@ class CompositionTests(unittest.TestCase):
                                     handle=issue(session,base,state,request)
                                     self.assertIs(type(handle),captured.QualifiedFinalAdmission)
                                     captured._issued(handle,session,base,state)
+                                    with self.assertRaises(FileExistsError):
+                                        issue(session,base,state,request)
+                                    captured._issued(handle,session,base,state)
                                     issued.append(handle)
                                     raise ReachedFence()
                                 with patch.object(captured,'issue_final_admission',side_effect=issue_then_stop) as issuer:
