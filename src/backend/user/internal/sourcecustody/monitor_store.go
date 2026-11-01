@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"math"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -13,6 +15,30 @@ import (
 // callers must first qualify the database schema and actual role privileges.
 type postgresProbeStore struct{ pool *pgxpool.Pool }
 type postgresResponseStore struct{ pool *pgxpool.Pool }
+
+// ReadProbe observes exactly the requested sequence for a responder already bound
+// to an independently verified decision. Missing data means no new probe; a
+// conflicting digest or malformed row is a failure, not a different decision.
+func (s *postgresResponseStore) ReadProbe(ctx context.Context, challenge, decision [32]byte, sequence uint64) (supervisionProbe, bool, error) {
+	var probe supervisionProbe
+	if s == nil || s.pool == nil || ctx == nil || ctx.Err() != nil || challenge == [32]byte{} || decision == [32]byte{} || sequence == 0 || sequence > math.MaxInt64 {
+		return probe, false, ErrUnavailable
+	}
+	var digest, nonce []byte
+	err := s.pool.QueryRow(ctx, `SELECT decision_digest,nonce FROM public.user_custody_monitor_probe WHERE challenge=$1 AND sequence=$2`, challenge[:], int64(sequence)).Scan(&digest, &nonce)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return probe, false, nil
+	}
+	if err != nil || !bytes.Equal(digest, decision[:]) || len(nonce) != 32 {
+		return probe, false, ErrUnavailable
+	}
+	probe = supervisionProbe{Challenge: challenge, DecisionDigest: decision, Sequence: sequence}
+	copy(probe.Nonce[:], nonce)
+	if !validProbe(probe) {
+		return supervisionProbe{}, false, ErrUnavailable
+	}
+	return probe, true, nil
+}
 
 func validProbe(p supervisionProbe) bool {
 	return p.Challenge != [32]byte{} && p.DecisionDigest != [32]byte{} && p.Nonce != [32]byte{} && p.Sequence > 0 && p.Sequence <= math.MaxInt64
