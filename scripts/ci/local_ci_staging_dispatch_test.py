@@ -16,6 +16,18 @@ def rows():
     return [{'recipe':'$(BASH) "$(ROOT)/'+(m.PRESERVATION if i == 0 else 'scripts/ci/test%d.sh'%i)+'"'} for i in range(34)]
 
 class DispatchTests(unittest.TestCase):
+    def test_runtime_current_provisioning_marker_matches_exact_recipe(self):
+        root = Path(__file__).resolve().parents[2]
+        recipes = m.inventory(matrix.build(root)['shards']['runtime'], shard='runtime')
+        self.assertEqual(recipes[2], ('bash', 'scripts/ci/voice-db-runtime-provisioning-contract_test.sh'))
+        source = (root / recipes[2][1]).read_text(encoding='utf-8')
+        marker = 'Voice DB F05-F12 current provisioning/docs contract: PASS'
+        self.assertIn("echo '" + marker + "'", source)
+        m.validate_recipe(2, (marker + '\n').encode(), shard='runtime')
+        for bad in (b'Voice DB RED-F runtime/provisioning/docs contract: PASS\n',
+                    (marker + '\n' + marker + '\n').encode(), b''):
+            with self.subTest(output=bad), self.assertRaises(ValueError):
+                m.validate_recipe(2, bad, shard='runtime')
     def test_phase0_complementary_proof_binds_exact_source_and_tests(self):
         root = Path(__file__).resolve().parents[2]
         proof_id = '__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid'

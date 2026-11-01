@@ -317,7 +317,7 @@ def main():
             raise RuntimeError('client package output exceeded limit')
         import importlib.util
         dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        dispatch_sha = 'f8ebcfc2332f439d72ffc64c324a12af0328a8fc9d40fa96789815bcfcb4ccf3'
+        dispatch_sha = 'f47f5c3186f050cd3937522f48c6f42b3ed97b8462b9812af24357143604b365'
         chat._verify_file(dispatch_path, dispatch_sha)
         spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
         dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)

@@ -190,7 +190,7 @@ PROOFS_MARKERS = (
 
 RUNTIME_MARKERS = (
     'Voice R22 runtime scope regressions: PASS', None,
-    'Voice DB RED-F runtime/provisioning/docs contract: PASS', 'apply-migrate-jobs contract tests passed.',
+    'Voice DB F05-F12 current provisioning/docs contract: PASS', 'apply-migrate-jobs contract tests passed.',
     'A4 disposable recovery harness contract: PASS', None, None, None, None, None, None, None,
     None, None, None, None, None, None, None, None,
     'Production ClickHouse init: 7 cases passed (isolated kubectl fixture).',
