@@ -10,6 +10,128 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def test_compose_opt_in_preserves_planned_not_run_checks(self):
+        plan = {'source': self.source, 'components': {}, 'checks': {'compose-e2e': ['test.dart'],
+                                                                    'compose-config': ['docker-compose.yml']}}
+        diagnostic = {'schema': 'voice-local-compose-bridge-v1', 'status': 'incomplete',
+                      'selected_checks': ['compose-config', 'compose-e2e'], 'fixture_report': 'fixture/diagnostic.json'}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_compose_bridge, 'run', return_value=diagnostic) as bridge:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         compose_inputs=self.chat_inputs())
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['compose_private_report'], 'compose-private/bridge.json')
+        self.assertEqual(report['checks'], {'compose-e2e': {'status': 'not_run'}, 'compose-config': {'status': 'not_run'}})
+        bridge.assert_called_once_with(plan, self.chat_inputs(), self.output / 'compose-private')
+
+    def test_compose_opt_out_or_failure_never_qualifies_checks(self):
+        plan = {'source': self.source, 'components': {}, 'checks': {'compose-config': ['docker-compose.yml']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_compose_bridge, 'run') as bridge:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        bridge.assert_not_called()
+        self.assertEqual(report['checks']['compose-config']['status'], 'not_run')
+        for result in ({'status': 'incomplete'}, {'schema': 'voice-local-compose-bridge-v1', 'status': 'pass',
+                       'selected_checks': ['compose-config'], 'fixture_report': 'fixture/diagnostic.json'}):
+            with self.subTest(result=result), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                 patch.object(local_preflight.local_compose_bridge, 'run', return_value=result):
+                report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(temp) / 'out', 'flutter',
+                                             compose_inputs=self.chat_inputs())
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['checks']['compose-config']['status'], 'not_run')
+
+    def test_compose_unselected_and_partial_input_fail_before_launch(self):
+        for checks, inputs in (({'backend-auth': ['auth']}, self.chat_inputs()),
+                               ({'compose-e2e': ['test.dart']}, {'helper': 'partial'})):
+            with self.subTest(checks=checks), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(local_preflight.affected_check_plan, 'build_local_plan',
+                              return_value={'source': self.source, 'components': {}, 'checks': checks}), \
+                 patch.object(local_preflight.local_compose_bridge.supervision, 'run_diagnostic') as broker:
+                report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(temp) / 'out', 'flutter',
+                                             compose_inputs=inputs)
+            self.assertEqual(report['status'], 'failed')
+            broker.assert_not_called()
+
+    def auth_inputs(self):
+        return {'helper': str(self.root / 'creator.exe'), 'helper_sha256': 'a' * 64,
+                'postgres_archive': str(self.root / 'postgres.tar'), 'postgres_archive_sha256': 'b' * 64,
+                'postgres_image_id': 'sha256:' + 'c' * 64, 'maven_image_id': 'sha256:' + 'd' * 64,
+                'maven_cache': str(self.root / 'maven.tar'), 'maven_cache_sha256': 'e' * 64}
+
+    def auth_result(self):
+        values = self.auth_inputs()
+        return {'schema': 'voice-local-auth-private-diagnostic-v1', 'status': 'incomplete',
+                'diagnostic': {'status': 'incomplete', 'source': self.source, 'report_sha256': 'f' * 64,
+                               'maven_cache_sha256': values['maven_cache_sha256'],
+                               'source_archive_sha256': '1' * 64, 'build_archive_sha256': '2' * 64},
+                'inputs': {'creator_sha256': values['helper_sha256'], 'postgres_image_id': values['postgres_image_id'],
+                           'postgres_archive_sha256': values['postgres_archive_sha256'],
+                           'maven_image_id': values['maven_image_id']},
+                'ownership_journal': 'run/tmp/ci-local/voiceci-fixture/ownership.json', 'slot': 0}
+
+    def test_auth_bridge_is_opt_in_selected_and_never_satisfies_check(self):
+        plan = {'source': self.source, 'checks': {'backend-auth': ['auth changed']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+             patch.object(local_preflight.local_auth_orchestration, 'run', return_value=self.auth_result()) as run:
+            result = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output,
+                                         'flutter', auth_inputs=self.auth_inputs())
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['checks']['backend-auth']['status'], 'not_run')
+        self.assertEqual(result['auth_private_report'], 'auth-private/diagnostic.json')
+        values = self.auth_inputs()
+        run.assert_called_once_with(self.root, self.source['head'], self.output / 'auth-private',
+            values['helper'], values['helper_sha256'], values['postgres_archive'], values['postgres_archive_sha256'],
+            values['postgres_image_id'], values['maven_image_id'], values['maven_cache'])
+
+    def test_auth_unselected_partial_or_mismatched_never_qualifies(self):
+        selected = {'source': self.source, 'checks': {'backend-auth': ['auth']}}
+        cases = [('not-selected', {'source': self.source, 'checks': {}}, self.auth_inputs()),
+                 ('partial', selected, {'helper': 'partial'}), ('source', selected, self.auth_inputs()),
+                 ('cache', selected, self.auth_inputs()), ('journal', selected, self.auth_inputs())]
+        for mutation, plan, inputs in cases:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                result = self.auth_result()
+                if mutation == 'source': result['diagnostic']['source'] = {'head': 'different'}
+                if mutation == 'cache': result['diagnostic']['maven_cache_sha256'] = 'f' * 64
+                if mutation == 'journal': result['ownership_journal'] = '../outside/ownership.json'
+                with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                     patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+                     patch.object(local_preflight.local_auth_orchestration, 'run', return_value=result) as run:
+                    report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(tmp) / 'out',
+                                                 'flutter', auth_inputs=inputs)
+                self.assertEqual(report['status'], 'failed')
+                if mutation in ('not-selected', 'partial'): run.assert_not_called()
+
+    def test_selected_auth_without_opt_in_never_runs(self):
+        plan = {'source': self.source, 'checks': {'backend-auth': ['auth']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_auth_orchestration, 'run') as run:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        run.assert_not_called()
+        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
+
+    def test_auth_cache_change_or_cleanup_uncertainty_fails_closed(self):
+        plan = {'source': self.source, 'checks': {'backend-auth': ['auth']}}
+        for mutation in ('cache', 'cleanup'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                verify = [None, ValueError('cache changed')] if mutation == 'cache' else None
+                failure = local_preflight.OwnershipError('cleanup uncertain') if mutation == 'cleanup' else None
+                with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                     patch.object(local_preflight.local_chat_orchestration, '_verify_file', side_effect=verify), \
+                     patch.object(local_preflight.local_auth_orchestration, 'run', return_value=self.auth_result(),
+                                  side_effect=failure):
+                    report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(tmp) / 'out',
+                                                 'flutter', auth_inputs=self.auth_inputs())
+                self.assertEqual(report['status'], 'failed')
+                self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
+                self.assertNotIn('auth_private_report', report)
+
     def chat_inputs(self):
         return {'helper': str(self.root / 'creator.exe'), 'helper_sha256': 'a' * 64,
                 'postgres_archive': str(self.root / 'postgres.tar'), 'postgres_archive_sha256': 'b' * 64,

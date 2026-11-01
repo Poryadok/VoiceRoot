@@ -2,6 +2,8 @@
 
 This is an incomplete preflight foundation. Unimplemented checks and unbound
 inputs prevent PR handoff; GitHub's merge-candidate checks remain mandatory.
+The opt-in Auth case assumes trusted exclusive daemon/socket custody and does
+not authenticate images, helper or Maven cache, or establish crash coverage.
 """
 import argparse
 import json
@@ -11,7 +13,9 @@ import subprocess
 
 import affected_check_plan
 import local_ci_routing
+import local_auth_orchestration
 import local_chat_orchestration
+import local_compose_bridge
 import local_current_diff
 from local_docker_owned import OwnershipError
 import local_flutter_execution
@@ -54,7 +58,43 @@ def _validate_chat_report(result, source, inputs):
         raise ValueError('Chat diagnostic test or ownership evidence mismatch')
 
 
-def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None):
+def _validate_auth_inputs(inputs):
+    keys = {'helper', 'helper_sha256', 'postgres_archive', 'postgres_archive_sha256',
+            'postgres_image_id', 'maven_image_id', 'maven_cache', 'maven_cache_sha256'}
+    if (not isinstance(inputs, dict) or set(inputs) != keys or
+            any(not isinstance(inputs[k], str) or not inputs[k] for k in keys) or
+            any(not Path(inputs[k]).is_absolute() for k in ('helper', 'postgres_archive', 'maven_cache')) or
+            any(not re.fullmatch(r'[0-9a-f]{64}', inputs[k]) for k in
+                ('helper_sha256', 'postgres_archive_sha256', 'maven_cache_sha256')) or
+            any(not re.fullmatch(r'sha256:[0-9a-f]{64}', inputs[k]) for k in
+                ('postgres_image_id', 'maven_image_id'))):
+        raise ValueError('complete absolute-path Auth inputs and exact digests are required')
+
+
+def _validate_auth_report(result, source, inputs):
+    if not isinstance(result, dict):
+        raise ValueError('invalid Auth diagnostic report')
+    diagnostic, identities = result.get('diagnostic'), result.get('inputs')
+    if (result.get('schema') != 'voice-local-auth-private-diagnostic-v1' or result.get('status') != 'incomplete' or
+            not isinstance(diagnostic, dict) or diagnostic.get('status') != 'incomplete' or
+            diagnostic.get('source') != source or not isinstance(identities, dict) or
+            identities.get('creator_sha256') != inputs['helper_sha256'] or
+            identities.get('postgres_archive_sha256') != inputs['postgres_archive_sha256'] or
+            identities.get('postgres_image_id') != inputs['postgres_image_id'] or
+            identities.get('maven_image_id') != inputs['maven_image_id'] or
+            diagnostic.get('maven_cache_sha256') != inputs['maven_cache_sha256'] or
+            any(not isinstance(diagnostic.get(k), str) or not re.fullmatch(r'[0-9a-f]{64}', diagnostic[k])
+                for k in ('report_sha256', 'source_archive_sha256', 'build_archive_sha256'))):
+        raise ValueError('Auth diagnostic identity or status mismatch')
+    journal, slot = result.get('ownership_journal'), result.get('slot')
+    if (type(slot) is not int or not 0 <= slot < 2 or not isinstance(journal, str) or
+            Path(journal).is_absolute() or '..' in Path(journal).parts or not Path(journal).parts or
+            Path(journal).parts[0] != 'run' or Path(journal).name != 'ownership.json'):
+        raise ValueError('Auth diagnostic ownership evidence mismatch')
+
+
+def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
+        auth_inputs=None, compose_inputs=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -64,9 +104,32 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
     try:
         if chat_inputs is not None:
             _validate_chat_inputs(chat_inputs)
+        if auth_inputs is not None:
+            _validate_auth_inputs(auth_inputs)
+        if compose_inputs is not None:
+            local_compose_bridge.validate_inputs(compose_inputs)
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if compose_inputs is not None:
+            diagnostic = local_compose_bridge.run(plan, compose_inputs, output / 'compose-private')
+            expected = sorted(local_compose_bridge.CHECKS.intersection(plan['checks']))
+            if (not isinstance(diagnostic, dict) or not expected or
+                    diagnostic.get('schema') != 'voice-local-compose-bridge-v1' or
+                    diagnostic.get('status') != 'incomplete' or diagnostic.get('selected_checks') != expected or
+                    diagnostic.get('fixture_report') != 'fixture/diagnostic.json'):
+                raise ValueError('Compose fixture diagnostic did not match the selected checks')
+            report['compose_private_report'] = 'compose-private/bridge.json'
+        if auth_inputs is not None:
+            if 'backend-auth' not in plan['checks']:
+                raise ValueError('Auth diagnostic requires a planner-selected Auth integration')
+            local_chat_orchestration._verify_file(auth_inputs['maven_cache'], auth_inputs['maven_cache_sha256'])
+            diagnostic = local_auth_orchestration.run(root, head, output / 'auth-private', auth_inputs['helper'],
+                auth_inputs['helper_sha256'], auth_inputs['postgres_archive'], auth_inputs['postgres_archive_sha256'],
+                auth_inputs['postgres_image_id'], auth_inputs['maven_image_id'], auth_inputs['maven_cache'])
+            _validate_auth_report(diagnostic, plan['source'], auth_inputs)
+            local_chat_orchestration._verify_file(auth_inputs['maven_cache'], auth_inputs['maven_cache_sha256'])
+            report['auth_private_report'] = 'auth-private/diagnostic.json'
         if chat_inputs is not None:
             components = plan.get('components', {})
             if ('backend-go-integration-pr' not in plan['checks'] or not isinstance(components, dict) or
@@ -196,12 +259,27 @@ def main():
     parser.add_argument('--chat-postgres-archive')
     parser.add_argument('--chat-postgres-archive-sha256')
     parser.add_argument('--chat-postgres-image-id')
+    for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256',
+                 'postgres-image-id', 'maven-image-id', 'maven-cache', 'maven-cache-sha256'):
+        parser.add_argument('--auth-' + name, help='opt-in private Auth diagnostic input')
+    for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256', 'postgres-image-id'):
+        parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     chat = {'helper': args.chat_helper, 'helper_sha256': args.chat_helper_sha256,
             'postgres_archive': args.chat_postgres_archive, 'postgres_archive_sha256': args.chat_postgres_archive_sha256,
             'postgres_image_id': args.chat_postgres_image_id}
+    auth = {'helper': args.auth_helper, 'helper_sha256': args.auth_helper_sha256,
+            'postgres_archive': args.auth_postgres_archive, 'postgres_archive_sha256': args.auth_postgres_archive_sha256,
+            'postgres_image_id': args.auth_postgres_image_id, 'maven_image_id': args.auth_maven_image_id,
+            'maven_cache': args.auth_maven_cache, 'maven_cache_sha256': args.auth_maven_cache_sha256}
+    compose = {'helper': args.compose_helper, 'helper_sha256': args.compose_helper_sha256,
+               'postgres_archive': args.compose_postgres_archive,
+               'postgres_archive_sha256': args.compose_postgres_archive_sha256,
+               'postgres_image_id': args.compose_postgres_image_id}
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
-                 args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None)
+                 args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
+                 auth if any(value is not None for value in auth.values()) else None,
+                 compose if any(value is not None for value in compose.values()) else None)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

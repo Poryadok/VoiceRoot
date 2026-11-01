@@ -669,6 +669,28 @@ pkg non-short job, integrations, lint and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
+When the planner selects `backend-auth`, an optional private Auth diagnostic
+can run one selected Testcontainers case by supplying all of `--auth-helper`,
+`--auth-helper-sha256`, `--auth-postgres-archive`,
+`--auth-postgres-archive-sha256`, `--auth-postgres-image-id`,
+`--auth-maven-image-id`, `--auth-maven-cache`, and `--auth-maven-cache-sha256`.
+Paths must be absolute and image identities and SHA-256 values exact. The
+caller must maintain exclusive control of the Docker daemon, network and socket;
+the diagnostic does not authenticate helper, images, tools or Maven cache, or
+establish crash and concurrency acceptance. It reports `incomplete` and leaves
+the full `backend-auth` check `not_run`; it is not a preflight or PR receipt.
+
+When the plan selects `compose-config` or `compose-e2e`, the optional fixed
+private Compose fixture requires all five explicit inputs: `--compose-helper`,
+`--compose-helper-sha256`, `--compose-postgres-archive`,
+`--compose-postgres-archive-sha256`, and `--compose-postgres-image-id`.
+It runs a no-network fixture, retains the audited rendered model, and reports
+`incomplete`; the selected Compose checks remain `not_run`. It does not run
+the Voice stack. The caller must control the daemon, socket and evidence files;
+image, helper and tool provenance, concurrent failures and crash recovery are
+not established by this diagnostic. Its journal check relies on the trusted
+producer and is not an independent Docker or slot observation.
+
 When the plan selects `protobuf`, the local diagnostic runs Buf lint, format,
 breaking against the captured immutable base, verifies Go generated-code drift
 with a private Git index, checks the Auth proto copy, compiles Auth with a private Maven
