@@ -684,8 +684,20 @@ Its serial, offline Go execution and adapted preservation fixture differ from
 hosted CI, and startup, filesystem work and disk growth are not independently
 bounded. This new maintained path has not yet passed a complete real staging
 run, and the proofs shard has not yet been validated as a complete real run.
-These runs do not cover the policy and runtime shards and leave `ci-script-tests`
+Without the runtime image inputs below, these runs do not cover policy or runtime and leave `ci-script-tests`
 `not_run` and preflight incomplete even if the staging receipt is produced.
+
+Supplying `--ci-runtime-images <json-file>` as well requests the runtime shard
+after staging and proofs. Its JSON object has exactly `postgres`, `docker_cli`
+and `python` records; each record contains an absolute `archive` path, its
+`sha256`, and an `image_id`. PostgreSQL must match the fixture's fixed image ID;
+the caller authenticates the Docker 27 CLI and Python bookworm image identities
+and maintains custody of all archives. The owned private daemon loads and
+checks the supplied images. The pinned story-media script is adapted to use the
+preloaded PostgreSQL image, an offline build and an owned private socket and
+read-only source mirror. These adaptations and image provenance are not hosted
+CI parity. The runtime path has not yet passed a complete real run, the policy
+shard is not implemented, and `ci-script-tests` remains `not_run`.
 
 When the planner selects `backend-auth`, an optional private Auth diagnostic
 can run one selected Testcontainers case by supplying all of `--auth-helper`,

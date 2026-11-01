@@ -35,7 +35,7 @@ class ExecutionTests(unittest.TestCase):
         journal.write_text(json.dumps({'version': 1, 'run_id': run, 'daemon': 'daemon-1', 'resources': resources}))
         (directory / 'identity.json').write_text(json.dumps({'source': 'a' * 40, 'daemon': 'daemon-1', 'journal': str(journal), 'slot': 0}))
         (directory / 'suite-counts.json').write_text(json.dumps({'shard': self.request['shard'],
-            'recipes': 34 if self.request['shard'] == 'staging' else 15,
+            'recipes': {'staging': 34, 'proofs': 15, 'runtime': 23}[self.request['shard']],
             'hosted_go_tests': 1 if self.request['shard'] == 'staging' else 0}))
         return SimpleNamespace(returncode=rc, stdout=output, stderr=b'')
 
@@ -67,6 +67,17 @@ class ExecutionTests(unittest.TestCase):
             return result
         with patch.object(staging.supervision, 'run_diagnostic', side_effect=wrong), self.assertRaises(staging.ExecutionError):
             staging.run(self.request)
+
+    def test_runtime_receipt_binds_all_23_recipes(self):
+        self.request['shard'] = 'runtime'
+        parent = Path(self.tmp.name)
+        images = {key: {'archive': str(parent / key), 'sha256': 'd' * 64, 'image_id': 'sha256:' + 'e' * 64}
+                  for key in ('postgres', 'docker_cli', 'python')}
+        images['postgres']['image_id'] = 'sha256:75f5a96988cdf694a215073c3e9c001b706b371e2f94df3967f2efdec2787f6b'
+        self.request['runtime_images'] = images
+        with patch.object(staging.supervision, 'run_diagnostic', side_effect=lambda *a, **k: self.completed()):
+            report = staging.run(self.request)
+        self.assertEqual((report['shard'], report['recipes'], report['hosted_go_tests']), ('runtime', 23, 0))
 
     def test_failed_exit_and_bad_receipt_fail_closed(self):
         for mode in ('exit', 'source', 'zero-tests', 'missing-recipe', 'wrong-path', 'slot', 'missing-journal', 'unremoved', 'daemon'):

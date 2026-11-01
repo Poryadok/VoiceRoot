@@ -96,7 +96,7 @@ def _validate_auth_report(result, source, inputs):
 
 
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
-        auth_inputs=None, compose_inputs=None, staging_assets=None):
+        auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -110,11 +110,17 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             _validate_auth_inputs(auth_inputs)
         if compose_inputs is not None:
             local_compose_bridge.validate_inputs(compose_inputs)
+        if runtime_images is not None:
+            if staging_assets is None:
+                raise ValueError('runtime images require staging assets')
+            local_ci_staging_request.validate_runtime_images(runtime_images)
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
         if staging_assets is not None and 'ci-script-tests' not in plan['checks']:
             raise ValueError('staging assets require a planner-selected ci-script-tests check')
+        if runtime_images is not None and (staging_assets is None or 'ci-script-tests' not in plan['checks']):
+            raise ValueError('runtime images require staging assets and a planner-selected ci-script-tests check')
         if compose_inputs is not None:
             diagnostic = local_compose_bridge.run(plan, compose_inputs, output / 'compose-private')
             expected = sorted(local_compose_bridge.CHECKS.intersection(plan['checks']))
@@ -156,10 +162,13 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             report['ci_routing_report'] = 'ci-routing/diagnostic.json'
             if staging_assets is not None:
                 source = plan['source']
-                for shard, recipe_count in (('staging', 34), ('proofs', 15)):
+                shards = [('staging', 34), ('proofs', 15)]
+                if runtime_images is not None: shards.append(('runtime', 23))
+                for shard, recipe_count in shards:
                     request = {'root': str(root), 'output': str(output / ('ci-' + shard)),
                                'commit': source['head'], 'tree': source['tree'], 'base': base,
                                'shard': shard, 'assets': staging_assets}
+                    if shard == 'runtime': request['runtime_images'] = runtime_images
                     diagnostic = local_ci_staging_execution.run(request)
                     go_tests = diagnostic.get('hosted_go_tests')
                     if (diagnostic.get('schema') != 'voice-local-ci-staging-v1' or
@@ -275,6 +284,7 @@ def main():
     parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging-shard input paths')
+    parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')
     parser.add_argument('--chat-postgres-archive')
@@ -301,10 +311,14 @@ def main():
     if args.ci_staging_assets:
         with Path(args.ci_staging_assets).open('rb') as stream:
             staging_assets = local_ci_staging_request.parse_assets(stream.read(1024 * 1024 + 1))
+    runtime_images = None
+    if args.ci_runtime_images:
+        with Path(args.ci_runtime_images).open('rb') as stream:
+            runtime_images = local_ci_staging_request.parse_runtime_images(stream.read(1024 * 1024 + 1))
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
-                 compose if any(value is not None for value in compose.values()) else None, staging_assets)
+                 compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

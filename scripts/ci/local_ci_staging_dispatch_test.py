@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import local_ci_matrix_inventory as matrix
 
 spec = importlib.util.spec_from_file_location('dispatch', Path(__file__).with_name('local_ci_staging_dispatch.py'))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
@@ -12,6 +13,86 @@ def rows():
     return [{'recipe':'$(BASH) "$(ROOT)/'+(m.PRESERVATION if i == 0 else 'scripts/ci/test%d.sh'%i)+'"'} for i in range(34)]
 
 class DispatchTests(unittest.TestCase):
+    def test_story_adapter_binds_source_and_private_resources(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / 'scripts/ci/story-media-cohort-chain.sh').read_bytes()
+        dockerfile = (root / 'scripts/ci/story-media-cohort-chain.Dockerfile').read_bytes()
+        cli_id, python_id = 'sha256:' + 'a' * 64, 'sha256:' + 'b' * 64
+        adapter = m.story_media_adapter(source, dockerfile, cli_id, python_id)
+        self.assertIn(b'docker build --network none --pull=false', adapter)
+        self.assertIn(b'/run/user/1000/docker.sock:/var/run/docker.sock', adapter)
+        self.assertIn(b'/run/user/1000/source-mirror:/repo:ro', adapter)
+        self.assertNotIn(b'docker pull ', adapter)
+        self.assertNotIn(b'-v /var/run/docker.sock:', adapter)
+        self.assertIn(cli_id.encode(), adapter)
+        self.assertIn(python_id.encode(), adapter)
+        restored = adapter.decode()
+        replacements = (
+            ('ROOT="/workspace/repo"', 'ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"'),
+            ("postgres='sha256:75f5a96988cdf694a215073c3e9c001b706b371e2f94df3967f2efdec2787f6b'",
+             "postgres='postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685'\ndocker pull --platform linux/amd64 \"$postgres\""),
+            ('[[ "$(docker image inspect docker:27-cli --format \'{{.Id}}\')" == ' + cli_id + ' ]]\n'
+             '[[ "$(docker image inspect python:3.12-bookworm --format \'{{.Id}}\')" == ' + python_id + ' ]]\n'
+             'docker build --network none --pull=false --platform linux/amd64', 'docker build --platform linux/amd64'),
+            ('-v /run/user/1000/docker.sock:/var/run/docker.sock -v /run/user/1000/source-mirror:/repo:ro',
+             '-v /var/run/docker.sock:/var/run/docker.sock -v "$ROOT:/repo:ro"'),
+        )
+        for before, after in replacements:
+            self.assertEqual(restored.count(before), 1)
+            restored = restored.replace(before, after, 1)
+        self.assertEqual(restored.encode(), source)
+        with self.assertRaises(ValueError): m.story_media_adapter(source + b'\n', dockerfile, cli_id, python_id)
+        with self.assertRaises(ValueError): m.story_media_adapter(source, dockerfile + b'\n', cli_id, python_id)
+        with self.assertRaises(ValueError): m.story_media_adapter(source, dockerfile, 'unsafe', python_id)
+    def test_runtime_discovery_recipes_require_exact_arguments(self):
+        root = Path(__file__).resolve().parents[2]
+        rows = matrix.build(root)['shards']['runtime']
+        recipes = m.inventory(rows, shard='runtime')
+        self.assertEqual(len(recipes), 23)
+        discovery = [item for item in recipes if item[0] == 'discover']
+        self.assertEqual(len(discovery), 3)
+        self.assertEqual(discovery[0][1], ('scripts/release', 'capability_manifest_test.py'))
+        self.assertEqual(m.command(discovery[0]), ['python3', '-m', 'unittest', 'discover', '-s',
+                         '/workspace/repo/scripts/release', '-p', 'capability_manifest_test.py'])
+        script = m.wrappers(recipes, shard='runtime')['python']
+        self.assertIn(b'capability_manifest_test.py', script)
+        self.assertNotIn(b'--owned-temp-root', script)
+        self.assertIn(b'/run/user/1000/adapter-root/story-media.sh', m.wrappers(recipes, shard='runtime')['bash'])
+        malformed = list(rows); malformed[12] = dict(malformed[12], recipe='python3 -m unittest discover -s "$(ROOT)/scripts/release" -p ../unsafe')
+        with self.assertRaises(ValueError): m.inventory(malformed, shard='runtime')
+
+    def test_runtime_discovery_wrapper_routes_only_exact_invocation(self):
+        root = Path(__file__).resolve().parents[2]
+        recipes = m.inventory(matrix.build(root)['shards']['runtime'], shard='runtime')
+        bash = r'C:\Program Files\Git\bin\bash.exe' if Path(r'C:\Program Files\Git\bin\bash.exe').exists() else shutil.which('bash')
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory); events = temp / 'events'
+            wrapper = m.wrappers(recipes, shard='runtime')['python'].decode()
+            wrapper = wrapper.replace('/usr/local/bin/python3', '/bin/true')
+            wrapper = wrapper.replace('/run/user/1000/recipe-events', events.as_posix())
+            wrapper = wrapper.replace('/run/user/1000/recipe-${idx}.log', (temp/'recipe-${idx}.log').as_posix())
+            exact = m.command(recipes[12])[1:]
+            result = subprocess.run([bash, '-c', wrapper, 'wrapper', *exact], capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(events.read_text().splitlines(), ['12\tstart', '12\texit\t0'])
+            events.unlink()
+            result = subprocess.run([bash, '-c', wrapper, 'wrapper', *exact[:-1], 'different_test.py'], capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(events.exists())
+
+    def test_runtime_story_dispatches_only_the_pinned_adapter(self):
+        root = Path(__file__).resolve().parents[2]
+        recipes = m.inventory(matrix.build(root)['shards']['runtime'], shard='runtime')
+        bash = r'C:\Program Files\Git\bin\bash.exe' if Path(r'C:\Program Files\Git\bin\bash.exe').exists() else shutil.which('bash')
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory); events = temp / 'events'
+            wrapper = m.wrappers(recipes, shard='runtime')['bash'].decode().replace('/bin/bash', '/bin/echo')
+            wrapper = wrapper.replace('/run/user/1000/recipe-events', events.as_posix())
+            wrapper = wrapper.replace('/run/user/1000/recipe-${idx}.log', (temp/'recipe-${idx}.log').as_posix())
+            result = subprocess.run([bash, '-c', wrapper, 'wrapper', m.command(recipes[11])[1]], capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(events.read_text().splitlines(), ['11\tstart', '11\texit\t0'])
+            self.assertIn(b'/run/user/1000/adapter-root/story-media.sh', result.stdout)
     def test_proofs_inventory_and_receipts_are_exact(self):
         entries = [{'recipe': '$(BASH) "$(ROOT)/scripts/ci/proof%d.sh"' % i} for i in range(15)]
         recipes = m.inventory(entries, shard='proofs')
