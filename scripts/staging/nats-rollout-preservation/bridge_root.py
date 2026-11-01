@@ -1011,9 +1011,9 @@ class Actions:
                 preserved_upload.verify_deadline(upload_record,dt.datetime.now(dt.timezone.utc))
                 state['custody']=receipt
                 transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'],
-                    authorization_deadline=dt.datetime.fromisoformat(upload_record['deadline']))
+                    authorization_deadline=dt.datetime.fromisoformat(upload_record['deadline']),resource_session=session)
             else:
-                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'])
+                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'],resource_session=session)
             gid=grp.getgrnam('pmd').gr_gid
             for name in ('apply-authorization.json','apply-manifests.json'):os.chown(base/name,0,gid);(base/name).chmod(0o440)
             return summary(state)|{'authorization':str(base/'apply-authorization.json')}
@@ -1350,7 +1350,8 @@ class Actions:
         actual,proof=expired_recovery.runtime_authority(base,state,authority,now=dt.datetime.now(dt.timezone.utc))
         transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],
             state['cut']['manifest_sha256'],state['contract'],
-            authorization_deadline=dt.datetime.fromisoformat(actual['expires_at']),expired_authority=actual)
+            authorization_deadline=dt.datetime.fromisoformat(actual['expires_at']),expired_authority=actual,
+            resource_session=getattr(self,'tt_session',None))
         gid=grp.getgrnam('pmd').gr_gid
         for name in ('apply-authorization.json','apply-manifests.json'):
             os.chown(base/name,0,gid);(base/name).chmod(0o440)
