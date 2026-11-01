@@ -692,15 +692,19 @@ class CompositionTests(unittest.TestCase):
         return kube,p,targets,renderer_repo,old,stage
 
     def test_compiler_catalog_stage_with_real_prerequisite_session(self):
-        """Join the synthetic full inventory to the real resource session."""
+        """Unit boundary for P2, NATS, actor, Realtime and the compiler entry."""
         import staging_prerequisites_test as fixtures, staging_prerequisites as prereq
         import staging_cohort_preservation as cohort
-        class ReachedPolicy(Exception):pass
+        import source_plan_test as source, actor_root, realtime_bootstrap, resource_claim_test
+        class ReachedCompiler(Exception):pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
-            _,_,_,_,old,catalog=self._compiler_catalog_stage('app-only')
+            _,parameters,targets,renderer_repo,old,catalog=self._compiler_catalog_stage('app-only')
             stage.snapshots=copy.deepcopy(catalog.snapshots)
             stage.snapshots.pop('voice-p3-principal-jwks')
+            stage.snapshots.pop('voice-gameintegration')
             old.pop('voice-p3-principal-jwks/jwks')
+            for key in list(old):
+                if key.startswith('voice-gameintegration/'):del old[key]
             for name,row in stage.snapshots.items():
                 row['metadata'].setdefault('generation',1)
                 live[('deployment',name)]=copy.deepcopy(row)
@@ -709,6 +713,12 @@ class CompositionTests(unittest.TestCase):
             stage.expected['deployment_uids']={name:row['metadata']['uid'] for name,row in stage.snapshots.items()}
             card['observed']['images']=copy.deepcopy(old)
             self.assertEqual(actions.tt_session.check()['phase'],'prepare')
+            approved['images']={name.removeprefix('voice-'):bridge_root.source_authority.REGISTRY+'/'+name.removeprefix('voice-')+'@sha256:'+'a'*64
+                for name in targets if name!='voice-p3-principal-jwks'}
+            approved['images']['nats-hub-config-renderer']=renderer_repo+'@sha256:'+'d'*64
+            source_record=workspace.parents[1]/'source-authority'/(actions.tt_session.operation+'.json')
+            source_value=json.loads(source_record.read_bytes());source_value['approved_sha256']=prereq.digest(approved)
+            bridge_root.save(source_record,source_value)
             prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
             session=actions.tt_session
             qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
@@ -735,9 +745,9 @@ class CompositionTests(unittest.TestCase):
                 source_request=dict(request,nonce=session.operation+'a'*52)
                 real_read=cohort._read
                 def read(path,*args,**kwargs):
-                    return source_request if path==cohort._request_record(session) else real_read(path,*args,**kwargs)
-                def report(name,status):
-                    if (name,status)==('policy-validation','STARTED'):raise ReachedPolicy()
+                    if path==cohort._request_record(session):return source_request
+                    if path.name=='stores.json':return {'app_before':{'metadata':{}}}
+                    return real_read(path,*args,**kwargs)
                 stack.enter_context(patch.object(bridge_root,'INSTALLED',workspace.parents[1]))
                 stack.enter_context(patch.object(cohort,'qualify_offnode'))
                 stack.enter_context(patch.object(cohort,'begin_continuation',return_value=(qualified,loaded)))
@@ -745,11 +755,34 @@ class CompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(cohort,'require_continuation'))
                 stack.enter_context(patch.object(cohort,'_read',side_effect=read))
                 stack.enter_context(patch.object(cohort,'capture_final_stage',side_effect=final_stage))
-                stack.enter_context(patch.object(actions,'_report',side_effect=report))
-                with self.assertRaises(ReachedPolicy):actions.execute(public)
+                contract={'scripts':[]}
+                for part in ('realtime','notification','search','analytics-chat'):
+                    raw=(source.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')).read_bytes().split(b'---')[0]
+                    contract['scripts'].append({'part':part,'sha256':hashlib.sha256(source.decoder(raw)['data']['bootstrap.sh'].encode()).hexdigest()})
+                contract_path=actions.code/'nats-known-baseline'/'deployed-contract.json'
+                contract_path.parent.mkdir(parents=True,exist_ok=True);contract_path.write_text(json.dumps(contract));contract_path.chmod(0o600)
+                policy={key:value for key,value in parameters.items() if key in {'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}}
+                policy['release_policy']['source_sha']=approved['source_sha']
+                private_read=bridge_root.private_json
+                stack.enter_context(patch.object(bridge_root,'private_json',side_effect=lambda path:policy if path==workspace.parents[1]/'policy.json' else private_read(path)))
+                stack.enter_context(patch.object(cohort,'load_preflight',return_value={'enrollment':{},'nats':{'scripts':{},'plan':{},'binding':{}},'contract':contract,'services':[],'actor':None}))
+                stack.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
+                stack.enter_context(patch.object(bridge_root,'_cohort_story_composition',return_value={}))
+                stack.enter_context(patch.object(actor_root,'preflight',return_value=None))
+                stack.enter_context(patch.object(cohort,'_base',return_value=workspace))
+                stack.enter_context(patch.object(cohort,'_app_successor'))
+                stack.enter_context(patch.object(cohort,'record_actor_successor'))
+                bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
+                stack.enter_context(patch.object(realtime_bootstrap,'run_prepare',return_value=bootstrap))
+                stack.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap))
+                stack.enter_context(patch.object(bridge_root.compiler,'main',side_effect=ReachedCompiler))
+                with self.assertRaises(ReachedCompiler):actions.execute(public)
                 self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
                 self.assertEqual(session.check()['phase'],'prerequisites-captured')
-        fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run)
+        context=resource_claim_test.context()
+        context['images']={'voice-gameintegration/gameintegration':bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64}
+        with patch.object(resource_claim_test,'context',return_value=context):
+            fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run,full_source=True,context_commit=source.TAG)
 
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
         import compiler, source_plan_test as fixtures
