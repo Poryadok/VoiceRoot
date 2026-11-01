@@ -108,6 +108,19 @@ class ResourceTests(unittest.TestCase):
                 session.check(prefix+[kind,'voice-test','-o','json'])
             for kind in ('pods','hpa,jobs,deployments'):
                 session.check(prefix+[kind,'-o','json'])
+            from runtime_stage import IMAGE_TEMPLATE
+            from stage_runtime import FENCE_TEMPLATE
+            for template in (IMAGE_TEMPLATE,FENCE_TEMPLATE):
+                session.check(prefix+['pods,replicasets','-o','go-template='+template])
+            raw='/api/v1/namespaces/voice-staging/secrets?fieldSelector=metadata.name%3Dvoice-app-secrets&limit=2'
+            session.check(prefix+['--raw',raw])
+            for bad in (prefix+['pods,replicasets','-o','go-template={{.}}'],
+                        prefix+['--raw',raw.replace('limit=2','limit=200')],
+                        prefix+['--raw',raw.replace('voice-staging','other')]):
+                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            saved=copy.deepcopy(journal.row);journal.row['target_sha256']=None
+            with self.assertRaises(RuntimeError):session.check(prefix+['secret','voice-test','-o','json'])
+            journal.row=saved
             import source_plan
             ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
             session.check(ch)
