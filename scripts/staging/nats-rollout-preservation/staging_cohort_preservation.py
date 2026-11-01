@@ -1909,7 +1909,8 @@ def complete_authorization(handle,session,base,state):
         or state.get("authorization")!=authorization or authorization.get("target")!=state["target"]
         or authorization.get("resource_fence")!=binding
         or authorization.get('schema')!=('nats-rollout-preservation-v2' if scoped else 'nats-rollout-preservation-v1')
-        or scoped and authorization.get('installation_sha256')!=session.installation.sha256):
+        or scoped and authorization.get('installation_sha256')!=session.installation.sha256
+        or not scoped and 'installation_sha256' in authorization):
         raise Blocked("cohort_final_authorization_incomplete")
     if "nats_contract" in state:
         _validate_owned_nats_events(state,record["contract_before"])
@@ -1940,6 +1941,7 @@ def final_authorization_result(session,request):
         or state.get("authorization")!=authorization
         or authorization.get("schema")!=('nats-rollout-preservation-v2' if session.binding()['schema']=='voice-staging-resource-fence-v2' else 'nats-rollout-preservation-v1')
         or authorization.get("schema")=='nats-rollout-preservation-v2' and authorization.get('installation_sha256')!=session.installation.sha256
+        or authorization.get("schema")=='nats-rollout-preservation-v1' and 'installation_sha256' in authorization
         or authorization.get("operation")!=session.operation or authorization.get("target")!=target
         or authorization.get("resource_fence")!=session.binding()):
         raise Blocked("cohort_final_completion_changed")
