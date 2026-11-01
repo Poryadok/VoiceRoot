@@ -19,7 +19,7 @@ import native_store
 class CompositionTests(unittest.TestCase):
     def test_actor_drift_after_offnode_readback_prevents_transaction_authorization(self):
         import actor_root
-        actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'}
+        actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'};actions._installation=None
         state={'operation':'123456abcdef','cipher_binding':{},'service_actor_services':['social'],
             'service_actor_authority':{'binding':'root-produced'}}
         order=[]
