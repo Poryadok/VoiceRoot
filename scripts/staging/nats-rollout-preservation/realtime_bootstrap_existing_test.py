@@ -147,7 +147,7 @@ class ExistingFactsTests(unittest.TestCase):
             receipt_path = root / 'installed/source-authority' / (session.operation + '.json')
             receipt_path.parent.mkdir(parents=True, mode=0o700)
             def save_provenance():
-                value = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+                value = {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256, 'operation': session.operation,
                          'context': ctx, 'helper_sha256': session.helper,
                          'approved_sha256': existing.digest(approved), 'execution_sha256': existing.digest(execution)}
                 receipt_path.write_text(json.dumps(value)); receipt_path.chmod(0o600)
@@ -360,7 +360,7 @@ class ProtectedAnchorTests(unittest.TestCase):
             with self.assertRaises(existing.Blocked):existing._validate_record(invalid)
         target = {'tag': self.ctx['commit'], 'images': self.ctx['images'], 'manifest_sha256': 'e' * 64,
                   'realtime_bootstrap_sha256': existing.digest(record)}
-        state = {'operation': op2, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
+        state = {'schema': 'nats-rollout-root-v1', 'operation': op2, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
                  'context': self.state['context'], 'target': target,
                  'code_capture': self.state['code_capture'], 'realtime_bootstrap': record,
                  'resource_fence': {'schema': 'voice-staging-resource-fence-v1', 'operation': op2,
@@ -384,7 +384,7 @@ class ProtectedAnchorTests(unittest.TestCase):
         self._write(self.root / 'installed/realtime-bootstrap' / op2 / 'existing.json', parented)
         with patch.dict(sys.modules,{'staging_prerequisites':loader}):
             self.assertEqual(existing._anchor()[0]['anchor'],ancestry['anchor'])
-            loader.validate_historical_capture.assert_called_with(op2)
+            loader.validate_historical_capture.assert_called_with(op2,installation=__import__('resource_claim').production_installation())
             loader.validate_historical_capture.return_value={'changed':True}
             with self.assertRaisesRegex(existing.Blocked,'anchor_changed'):existing._anchor()
         self._write(self.root / ('rollout-' + op2) / 'checkpoint.json', state)
@@ -488,7 +488,7 @@ class ProtectedAnchorTests(unittest.TestCase):
         binding = {'nats-rollout-preservation/realtime_bootstrap_existing.py':
                    hashes['scripts/staging/nats-rollout-preservation/realtime_bootstrap_existing.py']}
         session = resource_claim.Session(self.ctx, operation, existing.digest(binding), lambda: copy.deepcopy(state), journal)
-        actions = object.__new__(bridge_root.Actions); actions.tt_session = session; actions.binding = binding
+        actions = object.__new__(bridge_root.Actions); actions.tt_session = session; actions.binding = binding; actions._installation = session.installation
         marker = {'metadata': {'name': 'voice-nats-generation', 'uid': 'marker'}}
         deploy = {'metadata': {'uid': 'deploy', 'generation': 1}, 'spec': {'replicas': 1}}
         stage = object.__new__(runtime_stage.RolloutStage)
@@ -498,7 +498,7 @@ class ProtectedAnchorTests(unittest.TestCase):
         approved = {'schema': 'voice-source-authority-v1', 'verified': True, 'source_sha': self.ctx['commit'], 'source_files': hashes}
         execution = {'head_sha': self.ctx['commit']}
         self._write(self.root / 'installed/source-authority' / (operation + '.json'),
-                    {'schema': 'voice-staging-source-capture-v1', 'operation': operation, 'context': self.ctx,
+                    {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256, 'operation': operation, 'context': self.ctx,
                      'helper_sha256': session.helper, 'approved_sha256': existing.digest(approved),
                      'execution_sha256': existing.digest(execution)})
         _, plan, receipt, _ = existing._anchor()

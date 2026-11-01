@@ -57,12 +57,14 @@ class CatalogTests(unittest.TestCase):
         from unittest.mock import Mock
         context=resource_claim_test.context();card=resource_claim_test.card(context)
         session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
-        session.admit(start=True);session.journal.row.update(phase='prerequisites-captured',target_sha256='d'*64)
-        session.expected_target='d'*64
+        parent={'protected':'fixture'}
+        session.admit(start=True);session.journal.row.update(phase='prerequisites-captured',target_sha256=bootstrap.digest(parent))
+        session.expected_target=bootstrap.digest(parent)
         calls=[]
         def capture(argv,*,body,**kwargs):
-            session.check(argv);calls.append((argv,body));return b'42\n'
-        module=Mock();module.load_capture.return_value={'protected':'fixture'}
+            session.check(argv,launch=commands.launch_snapshot(argv,body,kwargs['timeout'],kwargs['limit'],kwargs['env'],()))
+            calls.append((argv,body));return b'42\n'
+        module=Mock();module.load_capture.return_value=parent
         with patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(commands,'authority_guard',session.check), \
              patch.object(commands,'capture',side_effect=capture):
             self.assertEqual(bootstrap._capture_readonly('system_identifier'),b'42\n')
@@ -74,7 +76,7 @@ class CatalogTests(unittest.TestCase):
             commands.capture.side_effect=RuntimeError('lost')
             with self.assertRaisesRegex(RuntimeError,'lost'):bootstrap._capture_readonly('catalog')
             self.assertIsNone(session._prerequisite_readonly_permit)
-            self.assertEqual(module.load_capture.call_count,3)
+            self.assertEqual(module.load_capture.call_count,4)
             module.load_capture.side_effect=[{'protected':'fixture'},bootstrap.Blocked('parent_changed')]
             commands.capture.side_effect=capture
             with self.assertRaisesRegex(bootstrap.Blocked,'parent_changed'):bootstrap._capture_readonly('catalog')
@@ -306,7 +308,7 @@ class CatalogTests(unittest.TestCase):
         import resource_claim_test as fixtures
         session, _, _ = fixtures.ResourceTests().fixture(); session.admit(start=True)
         approved = {'source': 'captured'}; execution = {'run': 7}
-        receipt = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+        receipt = {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256, 'operation': session.operation,
                    'context': session.context, 'helper_sha256': session.helper,
                    'approved_sha256': bootstrap.digest(approved), 'execution_sha256': bootstrap.digest(execution)}
         with patch('resource_claim.trusted_json', return_value=receipt):

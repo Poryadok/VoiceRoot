@@ -70,9 +70,11 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('ROLLOUT_ORIGINAL_ARTIFACT_ID',raw);self.assertIn('ROLLOUT_OBSERVATION_ARTIFACT_ID',raw)
 
     def test_real_active_release_feeds_new_latest_rollback_and_ordinary_finish_cannot_bypass(self):
+        import resource_claim
         with tempfile.TemporaryDirectory() as folder:
             actions=object.__new__(bridge_root.Actions)
-            state={'operation':'3340764a7d24','status':'PASS','input_target':{'mode':'images-only','changed_services':['story']},'target':{'manifest_sha256':'a'*64},
+            actions._installation=resource_claim.production_installation()
+            state={'schema':'nats-rollout-root-v1','operation':'3340764a7d24','status':'PASS','input_target':{'mode':'images-only','changed_services':['story']},'target':{'manifest_sha256':'a'*64},
                    'context':{'expected':{'namespace_uid':'ns','source_claim_uid':'pvc'}},
                    'expired_recovery_authority':{'purpose':'native-migration'}}
             actions.state=Mock(return_value=(Path(folder),state));actions._prepare=Mock(return_value={'new':'closed capture'})
@@ -133,6 +135,8 @@ class PublicRecoveryTests(unittest.TestCase):
 
     def test_actual_bootstrap_prove_optional_get_census_and_cleanup_composition(self):
         import bootstrap_auth as auth,hashlib
+        from dataclasses import replace
+        from bootstrap_selection_test import owned_fixture
         from nats_contract_actor import Actor
         from nats_contract_plan import DECLARATIONS,digest
         from rollout_census_test import stream,consumer,ACCOUNT
@@ -178,11 +182,12 @@ class PublicRecoveryTests(unittest.TestCase):
                     def info_config(self,name):return copy.deepcopy(configs['consumer' if '/' in name else name])
                 tokens={name:(ACCOUNT if name=='account.public' else 'synthetic-'+name).encode() for name in
                     ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
-                with patch.object(auth.guard,'ROOT',Path(folder)),patch.object(auth,'DockerRuntime',Runtime),patch.object(auth,'Actor',FixtureActor),patch.object(auth,'ready'),patch.object(auth,'secret_bytes',side_effect=lambda operator,key:tokens[key]),patch.object(auth,'ACCOUNT_SHA',hashlib.sha256(ACCOUNT.encode()).hexdigest()):
+                installation=replace(owned_fixture()[3],account_sha256=hashlib.sha256(ACCOUNT.encode()).hexdigest())
+                with patch.object(auth.guard,'ROOT',Path(folder)),patch.object(auth,'DockerRuntime',Runtime),patch.object(auth,'Actor',FixtureActor),patch.object(auth,'ready'),patch.object(auth,'secret_bytes',side_effect=lambda operator,key:tokens[key]):
                     if mode in ('denied','census-drift'):
-                        with self.assertRaises(auth.Blocked):auth.prove(b'synthetic retained identity',{},lambda:None,['chat_events','absent_events','social_events'])
+                        with self.assertRaises(auth.Blocked):auth.prove(b'synthetic retained identity',{},lambda:None,['chat_events','absent_events','social_events'],installation=installation)
                     else:
-                        result=auth.prove(b'synthetic retained identity',{},lambda:None,None if mode=='ordinary' else ['chat_events','absent_events','social_events'])
+                        result=auth.prove(b'synthetic retained identity',{},lambda:None,None if mode=='ordinary' else ['chat_events','absent_events','social_events'],installation=installation)
                         self.assertEqual('get_permissions' in result,mode=='get')
                         if mode=='get':self.assertEqual(result['get_permissions']['streams'],3)
                     self.assertEqual(runs[-2:], [['rm','-f','d'*64],['ps','-a','--filter','id='+'d'*64,'--format','{{.ID}}']])
