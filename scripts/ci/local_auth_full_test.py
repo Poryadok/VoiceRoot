@@ -46,6 +46,7 @@ class FullAuthTests(unittest.TestCase):
     def test_canonical_full_command_has_no_case_selector_and_is_offline(self):
         command = subject.full_command('172.18.0.2')
         self.assertIn('make --no-print-directory auth-test-ci', command[2])
+        self.assertIn('PATH="/workspace/tools:$PATH"', command[2])
         self.assertIn('MAVEN_ARGS="-o -ntp"', command[2])
         self.assertIn('ulimit -f 8192', command[2])
         self.assertNotIn('-Dtest=', command[2])

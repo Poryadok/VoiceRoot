@@ -24,6 +24,44 @@ import local_process_supervision as supervision
 
 IMAGE_TAGS = ('postgres:16-alpine', 'redis:7-alpine', 'redis:7.4-alpine',
               'nats:2.11-alpine', 'migrate/migrate:v4.18.1')
+MAKE_IMAGE = 'sha256:a9daab691df2dfe118e5c6d3d6bd8fd6767ea2c9bf8fa3c9356161055dd7b97d'
+
+
+def _verify_make(owner, client, expected):
+    check = ('set -eu; test -f /workspace/tools/make; test ! -L /workspace/tools/make; '
+             'for tool in bash mvn java curl tar sha256sum; do command -v "$tool" >/dev/null; done; '
+             'ldd /workspace/tools/make > /workspace/make-ldd.txt; '
+             '! grep -q "not found" /workspace/make-ldd.txt; '
+             'sha256sum /workspace/tools/make; /workspace/tools/make --version | head -n 1')
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        if owner.execute(client, ['sh', '-ec', check], out, err, 60):
+            raise ValueError('GNU Make provisioning or client compatibility check failed')
+        out.seek(0); actual = out.read(4097)
+    if actual != expected:
+        raise ValueError('GNU Make copy identity or version differs in client')
+
+
+def provision_make(owner, engine, network, workspace, client):
+    """Copy and compare GNU Make from a pinned image inside the owned workspace."""
+    if engine._call('image', 'inspect', MAKE_IMAGE, '--format', '{{.Id}} {{.Os}}/{{.Architecture}}') != MAKE_IMAGE + ' linux/amd64':
+        raise ValueError('pinned GNU Make source image is unavailable or has the wrong platform')
+    tools = owner.create_container(MAKE_IMAGE, network, {'/workspace': workspace}, [],
+                                   command=['sleep', 'infinity'], clear_entrypoint=True)
+    owner.start_container(tools)
+    copy = ('set -eu; test -f /usr/bin/make; test ! -L /usr/bin/make; '
+            'test ! -e /workspace/tools; mkdir /workspace/tools; '
+            'cp /usr/bin/make /workspace/tools/make; chmod 755 /workspace/tools/make; '
+            'cmp /usr/bin/make /workspace/tools/make; '
+            'sha256sum /workspace/tools/make; /workspace/tools/make --version | head -n 1')
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        if owner.execute(tools, ['sh', '-ec', copy], out, err, 60):
+            raise ValueError('GNU Make provisioning or client compatibility check failed')
+        out.seek(0); expected = out.read(4097)
+    match = re.fullmatch(rb'([0-9a-f]{64})  /workspace/tools/make\n(GNU Make [0-9][^\r\n]*)\n', expected)
+    if not match:
+        raise ValueError('GNU Make identity or version is invalid')
+    _verify_make(owner, client, expected)
+    return {'image_id': MAKE_IMAGE, 'sha256': match.group(1).decode(), 'version': match.group(2).decode('ascii')}
 
 
 def validate_images(images):
@@ -93,6 +131,7 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
             {'/socket': mounts['/run/user/1000'], '/workspace': mounts['/workspace']}, [],
             command=['sleep', 'infinity'], clear_entrypoint=True)
         owner.start_container(client)
+        make_tool = provision_make(owner, engine, network, mounts['/workspace'], client)
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             if owner.execute(client, ['chown', '1000:1000', '/socket'], out, err, 30):
                 raise ValueError('socket initialization failed')
@@ -103,13 +142,16 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
         local_auth_full.wait_daemon(owner, daemon, client)
         image_inputs = load_images(owner, daemon, images, output)
         diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache, output / 'full')
+        _verify_make(owner, client, (make_tool['sha256'] + '  /workspace/tools/make\n' +
+                                     make_tool['version'] + '\n').encode('ascii'))
         if diagnostic['maven_cache_sha256'] != cache_digest:
             raise ValueError('Maven cache changed during diagnostic')
         result = {'schema': 'voice-local-auth-full-orchestration-v1', 'status': 'incomplete',
                   'diagnostic': diagnostic, 'slot': scheduled.slot,
                   'ownership_journal': str((owner.directory / 'ownership.json').relative_to(output)),
                   'inputs': {'creator_sha256': helper_digest, 'client_image_id': client_image_id,
-                             'maven_cache_sha256': cache_digest, 'images': image_inputs}}
+                             'maven_cache_sha256': cache_digest, 'images': image_inputs,
+                             'make_tool': make_tool}}
     except BaseException as error:
         failure = error
     common._finish(scheduled, failure)

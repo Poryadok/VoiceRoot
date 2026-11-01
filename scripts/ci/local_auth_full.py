@@ -58,7 +58,7 @@ def wait_daemon(owner, daemon, client, timeout=60):
 
 def full_command(address):
     return ['bash', '-c', 'set -eu; ulimit -f 8192; cd /workspace/build; exec env '
-            'DOCKER_HOST=unix:///socket/docker.sock TESTCONTAINERS_RYUK_DISABLED=true '
+            'PATH="/workspace/tools:$PATH" DOCKER_HOST=unix:///socket/docker.sock TESTCONTAINERS_RYUK_DISABLED=true '
             'TESTCONTAINERS_HOST_OVERRIDE="$1" VOICE_RELEASE_PROFILE=development '
             'MAVEN_ARGS="-o -ntp" MAVEN_OPTS="-Xmx512m -XX:ActiveProcessorCount=2 -Dmaven.repo.local=/workspace/m2" '
             'make --no-print-directory auth-test-ci > /workspace/auth-make.stdout 2> /workspace/auth-make.stderr',
