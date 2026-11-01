@@ -638,6 +638,37 @@ class CompositionTests(unittest.TestCase):
                     self.assertEqual(identity.call_args.args[:2],(actual,expected))
                     self.assertEqual(contract.call_count,1 if matches else 0)
 
+    def test_cohort_preflight_rejects_malformed_v4_enrollment_before_effects(self):
+        """Use the real pre-cut guard; Kubernetes and TT authority are fixtures."""
+        import actor_root, commands, compiler, nats_root_plan, resource_claim
+        import resource_claim_test, staging_prerequisites
+        from types import SimpleNamespace
+
+        context=resource_claim_test.context()
+        session=resource_claim.Session(context,'a'*12,'b'*64,
+            lambda:resource_claim_test.card(context),resource_claim_test.MemoryJournal())
+        session.admit(start=True)
+        actions=object.__new__(bridge_root.Actions);actions.tt_session=session
+        actions._installation=session.installation;actions.code=Path('/synthetic');actions.binding={}
+        workspace=bridge_root.INSTALLED/'sources'/session.operation
+        stage=SimpleNamespace(operation=session.operation,kube=Mock(),snapshots={'voice-user':{}},expected={})
+        def read(path):
+            if path.name=='active-contract.json':raise FileNotFoundError()
+            if path.name=='bootstrap-enrollment-v4.json':return invalid
+            return {'fixture':'prior-enrollment'}
+        with resource_claim.command_scope(session.check),patch.object(bridge_root,'private_json',side_effect=read),\
+             patch.object(nats_root_plan,'preflight') as nats,patch.object(actor_root,'preflight') as actor,\
+             patch.object(compiler,'main') as build,patch.object(bridge_root.root_cli,'prepare_preserved_value') as prepare,\
+             patch.object(staging_prerequisites,'run_prepare') as coordinator:
+            for mode,invalid in ((mode,invalid) for mode in ('full','app-only') for invalid in (None,[],'invalid')):
+                with self.subTest(mode=mode,enrollment=invalid):
+                    with self.assertRaisesRegex(bridge_root.Blocked,'enrolled_bootstrap_selection_refused'):
+                        bridge_root.capture_cohort_authorities(actions,{'mode':mode},
+                            {'source_sha':context['commit']},workspace,stage,{'consumer_pairs':[]})
+                    nats.assert_not_called();actor.assert_not_called();build.assert_not_called()
+                    prepare.assert_not_called();coordinator.assert_not_called();stage.kube.get.assert_not_called()
+                    self.assertEqual(session.check()['phase'],'prepare')
+
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
         import compiler, source_plan_test as fixtures, runtime_stage
         from types import SimpleNamespace
