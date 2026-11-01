@@ -4,6 +4,7 @@ Run as root on a disposable Linux host, via sudo from a passwordless runner.
 No Docker daemon, production paths, or credentials are used.
 """
 import os
+import grp
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +16,23 @@ WORKFLOW=ROOT/'.github/workflows/nats-owned-enrollment-proof.yml'
 
 
 class Tests(unittest.TestCase):
+    def test_actual_group_provision_is_idempotent_for_unprivileged_runner(self):
+        self.assertEqual(os.geteuid(),0)
+        runner=os.environ.get('SUDO_USER','voice-runner')
+        owned=WORKFLOW.read_text(encoding='utf8').split('  owned-enrollment:',1)[1]
+        lines=[line.strip() for line in owned.splitlines()]
+        commands=[line for line in lines if line=='sudo -n groupadd --force --system pmd']
+        self.assertEqual(len(commands),1)
+        test_line=next(i for i,line in enumerate(lines) if 'test_public_prepare_to_qualified_continuation_with_external_boundaries' in line)
+        self.assertLess(lines.index(commands[0]),test_line)
+        identities=[]
+        for _ in range(2):
+            result=subprocess.run(['runuser','-u',runner,'--','bash','-eu','-c',commands[0]],
+                                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
+            self.assertEqual(result.returncode,0,result.stderr.decode('utf8',errors='replace')[-1000:])
+            row=grp.getgrnam('pmd');identities.append((row.gr_gid,tuple(row.gr_mem)))
+        self.assertEqual(identities[0],identities[1])
+
     def test_actual_workflow_commands_cross_root_boundary_and_check_cleanup(self):
         self.assertEqual(os.geteuid(),0)
         runner=os.environ.get('SUDO_USER','voice-runner')

@@ -149,6 +149,8 @@ jobs:
           docker pull "$pg_image"
           migrate_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
           docker pull "$migrate_image"
+          # These custody tests require the staging-named group, local to this disposable VM.
+          sudo -n groupadd --force --system pmd
           sudo -n --preserve-env=RUNNER_ENVIRONMENT sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
             env \
             PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \
