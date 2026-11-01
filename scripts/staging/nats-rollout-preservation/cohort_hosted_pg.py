@@ -22,7 +22,7 @@ class HostedPostgres:
         if sys.platform!='linux' or os.geteuid()!=0 or os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted':
             raise RuntimeError('disposable_hosted_linux_required')
         self.namespace_uid=namespace_uid;self.name='voice-cohort-source-'+secrets.token_hex(12)
-        self.cid=None;self.original_popen=subprocess.Popen
+        self.cid=None;self.observed_cid=None;self.original_popen=subprocess.Popen
         self.rows,self.slices=self._objects()
 
     def _docker(self,*args,body=None):
@@ -47,6 +47,7 @@ class HostedPostgres:
     def _find(self):
         ids=self._ids('name=^/'+self.name+'$')
         if not ids:return None
+        self.observed_cid=ids[0]
         self._verify(ids[0])
         return ids[0]
 
@@ -63,12 +64,12 @@ class HostedPostgres:
             try:self._docker('rm','-f','-v',self.cid)
             except BaseException:
                 if not self._ids('id='+self.cid) and self._find() is None:
-                    self.cid=None
+                    self.cid=None;self.observed_cid=None
                     return
                 raise
         if ((self.cid is not None and self._ids('id='+self.cid)) or self._find() is not None):
             raise RuntimeError('isolated_postgres_cleanup_unconfirmed')
-        self.cid=None
+        self.cid=None;self.observed_cid=None
 
     def __enter__(self):
         from auth_user_adoption_runtime import QUALIFIED_TOOLS
@@ -94,7 +95,7 @@ class HostedPostgres:
         except BaseException:
             try:self._cleanup()
             except BaseException as cleanup:
-                raise RuntimeError('isolated_postgres_reconciliation_required:'+self.name) from cleanup
+                raise RuntimeError('isolated_postgres_reconciliation_required:'+self.name+':'+str(self.observed_cid)) from cleanup
             raise
 
     def __exit__(self,*_args):
