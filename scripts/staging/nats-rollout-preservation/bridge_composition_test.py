@@ -149,11 +149,34 @@ class CompositionTests(unittest.TestCase):
         kube,_,_=canonical_stores()
         stage=SimpleNamespace(snapshots={},old_images={},expected={'deployment_uids':{}})
         live={};card={'observed':{'images':{}}}
+        gis=bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64
+        approved={'source_sha':'c'*40,'images':{'gameintegration':gis,
+            'realtime':bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'d'*64}}
         capture_public_realtime(stage,kube,live,card)
         realtime=stage.snapshots['voice-realtime']
         self.assertEqual(stage.expected['deployment_uids']['voice-realtime'],realtime['metadata']['uid'])
         self.assertEqual(live[('deployment','voice-realtime')],realtime)
         self.assertTrue(any(key.startswith('voice-realtime/') for key in stage.old_images))
+        target=approved['images']['realtime']
+        self.assertEqual(target.split('@',1)[0],bridge_root.source_authority.REGISTRY+'/realtime')
+        self.assertNotEqual(target,stage.old_images['voice-realtime/realtime'])
+        images={'voice-gameintegration/gameintegration':gis,'voice-realtime/realtime':target}
+        session=SimpleNamespace(context={'images':{'voice-gameintegration/gameintegration':gis}})
+        bridge_root.verify_bootstrap_candidate_images(session,images,None,True)
+        import staging_prerequisites
+        stage.marker={'data':{'generation':'fixture','dataPVC':'fixture'}};stage.kube=kube
+        request={'gis_first_install':True,'mode':'app-only','changed_services':['gameintegration']}
+        with tempfile.TemporaryDirectory() as folder:
+            code=Path(folder);(code/'nats-known-baseline').mkdir()
+            (code/'nats-known-baseline'/'deployed-contract.json').write_text('{}')
+            incomplete=copy.deepcopy(approved);del incomplete['images']['realtime']
+            args=(session,request,incomplete,code,stage,{}, {'image_ref':'fixture'},None,code,{})
+            with self.assertRaisesRegex(KeyError,'realtime'):staging_prerequisites._candidate_images(*args)
+            staging_prerequisites._candidate_images(session,request,approved,code,stage,{},
+                {'image_ref':'fixture'},None,code,{})
+        session.context['images']['voice-realtime/realtime']=target
+        with self.assertRaisesRegex(bridge_root.Blocked,'realtime_bootstrap_candidate_changed'):
+            bridge_root.verify_bootstrap_candidate_images(session,images,None,True)
         paused=copy.deepcopy(realtime);paused['spec']['replicas']=0
         view={'snapshots':{'voice-realtime':{'uid':paused['metadata']['uid'],'spec':paused['spec']}}}
         observed=Mock();observed.get.return_value=paused;observed.run.return_value={'items':[]}
@@ -595,6 +618,9 @@ class CompositionTests(unittest.TestCase):
                             return json.dumps([meta['uid'],meta['resourceVersion']]).encode()
                         return transport(argv,body=body,**kwargs)
             saved=workspace.with_name(workspace.name+'-source-fixture');workspace.rename(saved)
+            if qualify:
+                original=cohort._read(installed/'source-authority'/(actions.tt_session.operation+'.json'))
+                self.assertEqual(original['approved_sha256'],cohort.digest(approved))
             (installed/'source-authority'/(actions.tt_session.operation+'.json')).unlink()
             execution={**execution,'head_sha':actions.tt_session.context['commit']}
             request={**request,'action':'prepare','nonce':actions.tt_session.operation+'a'*52,
@@ -678,6 +704,8 @@ class CompositionTests(unittest.TestCase):
                             nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
                             prepared=actions.execute(request)
                             self.assertIsInstance(prepared,dict)
+                            source_receipt=captured._read(installed/'source-authority'/(actions.tt_session.operation+'.json'))
+                            self.assertEqual(source_receipt['approved_sha256'],captured.digest(approved))
                             authorize={'action':'authorize','operation':actions.tt_session.operation,'token':'fixture',
                                 'artifact_id':42,'resource_context':actions.tt_session.context}
                             if final_admission:
