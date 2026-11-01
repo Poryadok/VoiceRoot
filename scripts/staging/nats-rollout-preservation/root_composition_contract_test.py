@@ -80,6 +80,7 @@ class RootCompositionContract(unittest.TestCase):
                 'secret': dict(first_receipt['secret'], realtime_value_sha256='f' * 64)}
         actions = object.__new__(bridge_root.Actions)
         actions.tt_session = session
+        actions._installation = session.installation
         actions.binding = binding
         request = {'action': 'prepare', 'mode': 'app-only', 'nonce': session.operation + 'c' * 52}
         approved = {'fixture': 'controlled-source'}
