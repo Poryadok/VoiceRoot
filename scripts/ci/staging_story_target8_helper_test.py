@@ -209,10 +209,11 @@ class PublicationTests(unittest.TestCase):
                 self.assertFalse(list(self.work.glob('voice-target8-build-*')))
 
     def test_root_owned_elf_publishes_under_ordinary_uid(self):
-        # Suite runs as1000. The image's existing interpreter supplies a real
+        # The image's existing interpreter supplies a real
         # root-owned read-only ELF; it is read, never executed by this check.
         original = Path(sys.executable).resolve()
-        self.assertEqual(1000, os.getuid())
+        uid = os.getuid()
+        self.assertNotEqual(0, uid)
         self.assertEqual(0, original.stat().st_uid)
         before = original.stat()
         (self.built / helper.NAME).unlink()
@@ -220,7 +221,7 @@ class PublicationTests(unittest.TestCase):
         self.raw = original.read_bytes()
         self.publish()
         for item in self.output.iterdir():
-            self.assertEqual(1000, item.stat().st_uid)
+            self.assertEqual(uid, item.stat().st_uid)
             self.assertEqual(0o400, item.stat().st_mode & 0o777)
         self.assertEqual(before, original.stat())
 
