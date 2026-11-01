@@ -63,7 +63,8 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
         adapter,cid,state,docker=self.fixture(create_lost=True)
         with patch.object(adapter,'_docker',side_effect=docker):
             with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required'):adapter.__enter__()
-            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_create_terminality_unknown'):adapter.__exit__(None,None,None)
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as caught:adapter.__exit__(None,None,None)
+            self.assertIn('isolated_postgres_create_terminality_unknown',str(caught.exception.__cause__))
         self.assertTrue(state['exists']);self.assertEqual(state['removed'],0)
         self.assertIsNone(adapter.cid);self.assertEqual(adapter.observed_cid,cid)
 
@@ -73,7 +74,8 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required'):adapter.__enter__()
             self.assertIsNone(adapter.observed_cid)
             state['exists']=True
-            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_create_terminality_unknown'):adapter.__exit__(None,None,None)
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as caught:adapter.__exit__(None,None,None)
+            self.assertIn('isolated_postgres_create_terminality_unknown',str(caught.exception.__cause__))
         self.assertTrue(state['exists']);self.assertEqual(state['removed'],0)
 
     def test_remove_failure_retains_identity_and_lost_success_is_reconciled(self):
@@ -82,7 +84,8 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
                 adapter,cid,state,docker=self.fixture(remove_lost=fault);adapter.cid=cid
                 with patch.object(adapter,'_docker',side_effect=docker):
                     if fault=='before':
-                        with self.assertRaisesRegex(RuntimeError,'synthetic_remove_failed'):adapter.__exit__(None,None,None)
+                        with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as caught:adapter.__exit__(None,None,None)
+                        self.assertIn('synthetic_remove_failed',str(caught.exception.__cause__))
                         self.assertEqual((adapter.cid,adapter.observed_cid),(cid,cid));self.assertTrue(state['exists'])
                     else:
                         adapter.__exit__(None,None,None)
@@ -91,8 +94,22 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
     def test_foreign_label_is_never_removed(self):
         adapter,cid,state,docker=self.fixture(foreign=True);adapter.cid=cid
         with patch.object(adapter,'_docker',side_effect=docker):
-            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_identity_changed'):adapter.__exit__(None,None,None)
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as caught:adapter.__exit__(None,None,None)
+            self.assertIn('isolated_postgres_identity_changed',str(caught.exception.__cause__))
         self.assertTrue(state['exists']);self.assertEqual(state['removed'],0);self.assertEqual((adapter.cid,adapter.observed_cid),(cid,cid))
+
+    def test_inventory_failure_reports_known_custody_during_enter_and_exit(self):
+        adapter,cid,state,_=self.fixture()
+        def docker(*args,body=None):
+            if args[0]=='create':return cid.encode()
+            raise RuntimeError('synthetic_inventory_unavailable')
+        with patch.object(adapter,'_docker',side_effect=docker):
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as entered:adapter.__enter__()
+            self.assertIn(adapter.name,str(entered.exception));self.assertIn('cid='+cid,str(entered.exception))
+            self.assertEqual(adapter.cid,cid)
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as exited:adapter.__exit__(None,None,None)
+            self.assertIn(adapter.name,str(exited.exception));self.assertIn('cid='+cid,str(exited.exception))
+            self.assertEqual(adapter.cid,cid)
 
 
 @unittest.skipUnless(os.environ.get('VOICE_COHORT_DOCKER')=='1','isolated Docker fixture opt-in')

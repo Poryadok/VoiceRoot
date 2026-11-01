@@ -31,6 +31,10 @@ class HostedPostgres:
         if result.returncode:raise RuntimeError('isolated_postgres_command_failed')
         return result.stdout
 
+    def _reconciliation_required(self):
+        return RuntimeError('isolated_postgres_reconciliation_required:'
+            f'name={self.name}:cid={self.cid}:observed_cid={self.observed_cid}')
+
     def _ids(self,selector):
         raw=self._docker('ps','-a','--no-trunc','--filter',selector,'--format','{{.ID}}')
         ids=raw.decode('ascii').splitlines()
@@ -85,7 +89,7 @@ class HostedPostgres:
             self.create_uncertain=True
             try:self._find()
             except BaseException as scan_error:self.reconciliation_error=scan_error
-            raise RuntimeError('isolated_postgres_reconciliation_required:'+self.name+':'+str(self.observed_cid)) from error
+            raise self._reconciliation_required() from error
         try:
             if not re.fullmatch('[a-f0-9]{64}',created):
                 raise RuntimeError('isolated_postgres_create_identity_invalid')
@@ -106,11 +110,13 @@ class HostedPostgres:
         except BaseException:
             try:self._cleanup()
             except BaseException as cleanup:
-                raise RuntimeError('isolated_postgres_reconciliation_required:'+self.name+':'+str(self.observed_cid)) from cleanup
+                raise self._reconciliation_required() from cleanup
             raise
 
     def __exit__(self,*_args):
-        self._cleanup()
+        try:self._cleanup()
+        except BaseException as cleanup:
+            raise self._reconciliation_required() from cleanup
 
     def _objects(self):
         def metadata(name,uid):return {'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1'}
