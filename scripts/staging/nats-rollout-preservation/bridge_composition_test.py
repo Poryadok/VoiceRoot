@@ -43,11 +43,17 @@ class CompositionTests(unittest.TestCase):
         """The broker response remains an external fixture boundary."""
         self._exercise_public_precut(enrolled=True)
 
-    def _exercise_public_precut(self,*,enrolled):
+    def test_public_prepare_validates_nats_plan_before_captured_inputs(self):
+        """NATS transport is synthetic; bootstrap and planner checks execute."""
+        self._exercise_public_precut(enrolled=True,through_nats=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False):
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
         class ReachedBroker(Exception):
+            pass
+        class ReachedInput(Exception):
             pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get):
             kube,params,policy=canonical_stores()
@@ -59,7 +65,7 @@ class CompositionTests(unittest.TestCase):
                 import base64, bootstrap_selection, bootstrap_selection_test, nats_contract_plan as plan
                 _,previous,rows,installation=bootstrap_selection_test.owned_fixture()
                 self.assertEqual(actions.tt_session.installation,installation)
-                old_rows=[{'stream':stream,'durable':config['durable_name'],'config':dict(config,max_ack_pending=1000)}
+                old_rows=[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)}
                     for stream,config in plan.V3_DECLARATIONS]
                 previous['auth_proof'].update(normalized_consumer=old_rows[0]['config'],
                     normalized_consumer_sha256=plan.digest(old_rows[0]['config']),normalized_consumers=old_rows,
@@ -74,7 +80,7 @@ class CompositionTests(unittest.TestCase):
                     credential_sha256=bootstrap_selection.credential_hash(secret))
                 current['binding']['previous_enrollment_sha256']=plan.digest(previous)
                 stream,config=plan.DECLARATIONS[-1]
-                normalized=old_rows+[{'stream':stream,'durable':config['durable_name'],'config':dict(config,max_ack_pending=1000)}]
+                normalized=old_rows+[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)}]
                 current['auth_proof'].update(schema='voice-bootstrap-auth-v4',normalized_consumers=normalized,
                     normalized_consumers_sha256=plan.digest(normalized))
                 cohort._write(guard.ROOT/'bootstrap-enrollment.json',previous)
@@ -89,7 +95,7 @@ class CompositionTests(unittest.TestCase):
             stage.expected['deployment_uids']['voice-user']=stage.snapshots['voice-user']['metadata']['uid']
             live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             live[('deployment','voice-user')]=copy.deepcopy(stage.snapshots['voice-user'])
-            if enrolled:
+            if enrolled and not through_nats:
                 old_get=kube.get
                 def broker_boundary(kind,name):
                     if (kind,name)==('deployment',bridge_root.HUB):raise ReachedBroker()
@@ -99,6 +105,35 @@ class CompositionTests(unittest.TestCase):
             pod={'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]}}
             kube.run=lambda args,body=None,timeout=30: ({'items':[pod]} if args==['get','pods','-o','json']
                 else original_run(args,body=body,timeout=timeout))
+            if through_nats:
+                import bootstrap_auth, nats_a3_roster_test, rollout_census_test
+                import cohort_fake_nats
+                stream_rows=nats_a3_roster_test.Planner().inputs(voice=10)[0]
+                detail=[]
+                for name,value in stream_rows.items():
+                    state={**value['state'],'bytes':100,'consumer_count':0}
+                    detail.append({'name':name,'created':rollout_census_test.CREATED,
+                        'config':value['config'],'state':state,'consumer_detail':[]})
+                tree={'streams':len(detail),'consumers':0,'messages':sum(x['state']['messages'] for x in detail),
+                    'bytes':sum(x['state']['bytes'] for x in detail),'total':1,
+                    'account_details':[{'id':'A'+'A'*55,'stream_detail':detail}]}
+                hub={'metadata':{'name':bridge_root.HUB,'uid':'hub'}}
+                replica={'metadata':{'uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'hub'}]}}
+                monitor_pod={'metadata':{'name':bridge_root.HUB+'-fixture','ownerReferences':[{'kind':'ReplicaSet','name':'rs','uid':'rs'}]},
+                    'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}
+                old_get=kube.get
+                def get_nats(kind,name):
+                    if (kind,name)==('deployment',bridge_root.HUB):return copy.deepcopy(hub)
+                    if (kind,name)==('replicaset','rs'):return copy.deepcopy(replica)
+                    if kind=='configmap' and name.startswith('voice-nats-') and name!='voice-nats-generation':raise ReachedInput()
+                    return old_get(kind,name)
+                kube.get=get_nats
+                old_run=kube.run
+                def run_nats(args,body=None,timeout=30):
+                    if args==['get','pods','-l','app='+bridge_root.HUB,'-o','json']:return {'items':[monitor_pod]}
+                    if args[:2]==['get','--raw']:return copy.deepcopy(tree)
+                    return old_run(args,body=body,timeout=timeout)
+                kube.run=run_nats
             saved=workspace.with_name(workspace.name+'-source-fixture');workspace.rename(saved)
             (installed/'source-authority'/(actions.tt_session.operation+'.json')).unlink()
             execution={**execution,'head_sha':actions.tt_session.context['commit']}
@@ -109,8 +144,19 @@ class CompositionTests(unittest.TestCase):
                 return copy.deepcopy(approved)
             with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder),\
                  patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)),\
-                 patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source):
-                if enrolled:
+                 patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source),ExitStack() as nats_patches:
+                if through_nats:
+                    import importlib.util, sys
+                    captured=actions.code/'nats-rollout-preservation'/'staging_cohort_preservation.py'
+                    spec=importlib.util.spec_from_file_location('staging_cohort_preservation',captured)
+                    module=importlib.util.module_from_spec(spec)
+                    nats_patches.enter_context(patch.dict(sys.modules,{'staging_cohort_preservation':module}))
+                    spec.loader.exec_module(module)
+                    nats_patches.enter_context(patch.object(bootstrap_auth,'DockerRuntime',
+                        side_effect=lambda base,operation:cohort_fake_nats.ScratchBroker(base,operation,'A'+'A'*55)))
+                    nats_patches.enter_context(patch.object(bootstrap_auth,'Actor',cohort_fake_nats.ScratchActor))
+                    with self.assertRaises(ReachedInput):actions.execute(request)
+                elif enrolled:
                     with self.assertRaises(ReachedBroker):actions.execute(request)
                 else:
                     with self.assertRaisesRegex(cohort.Blocked,'enrolled_bootstrap_selection_refused'):
@@ -120,9 +166,16 @@ class CompositionTests(unittest.TestCase):
             stores=cohort._read(base/'stores.json')
             self.assertEqual(stores['projection']['schema'],'voice-staging-store-projection-v1')
             self.assertTrue(stores['claims'])
+            if through_nats:
+                self.assertIn('plan',cohort._read(base/'preflight.json')['nats'])
             self.assertEqual(actions.tt_session.check()['phase'],'prepare')
+        overrides=None
+        if through_nats:
+            source=Path(__file__).parent/'testdata'/'a3-roster-source'
+            overrides={f'deploy/templates/nats-{part}-bootstrap.yaml':source/f'deploy/templates/nats-{part}-bootstrap.yaml'
+                for part in ('realtime','analytics-chat','search','notification')}
         prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
-            full_source=True,strict_helpers=True)
+            full_source=True,strict_helpers=True,source_overrides=overrides)
 
     def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
         """Source rendering and store binding are real; Kubernetes is synthetic."""

@@ -372,7 +372,7 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare('c2-new-candidate')
 
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
-                      context_commit=None,full_source=False,strict_helpers=False):
+                      context_commit=None,full_source=False,strict_helpers=False,source_overrides=None):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -399,6 +399,9 @@ class PrepareCompositionTests(unittest.TestCase):
                 relative=list(dict.fromkeys(relative))
             for name in relative:
                 dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)
+            for name,path in (source_overrides or {}).items():
+                if name not in relative:raise ValueError('override outside captured source')
+                shutil.copyfile(path,workspace/name)
             helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
             if not strict_helpers:
                 for path in (code/helper,workspace/'scripts/staging'/helper):
