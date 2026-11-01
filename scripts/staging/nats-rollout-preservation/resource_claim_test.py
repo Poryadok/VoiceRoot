@@ -134,10 +134,16 @@ class ResourceTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):session.check(unbound)
             journal.row=saved
             import source_plan
-            ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
-            session.check(ch)
-            for bad in (ch[:-1]+['DROP DATABASE voice'],ch[:5]+['other-pod']+ch[6:],ch+['--context=other']):
-                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            for ch_prefix in (['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'],
+                              ['kubectl','--namespace','voice-staging']):
+                ch=ch_prefix+list(source_plan.CLICKHOUSE_READ_ARGS)
+                session.check(ch)
+                for index in range(len(ch)):
+                    bad=ch.copy();bad[index]+='-altered'
+                    with self.subTest(argv=ch,index=index),self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                        session.check(bad)
+                for bad in (ch+['--context=other'],ch[:-1],ch_prefix+['exec','other-pod','--','sh']):
+                    with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             for pg_prefix in (['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'],
                               ['kubectl','--namespace','voice-staging']):
                 for database in ('postgres','gateway_db'):
