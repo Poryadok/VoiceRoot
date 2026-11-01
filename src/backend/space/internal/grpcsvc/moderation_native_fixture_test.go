@@ -104,6 +104,7 @@ type nativeModerationFixture struct {
 	client                                            spacev1.SpaceServiceClient
 	ordinary                                          spacev1.SpaceServiceClient
 	issuer                                            *principal.Issuer
+	roles                                             rolev1.RoleServiceClient
 	space, owner, ownerAccount, target, targetAccount uuid.UUID
 }
 
@@ -125,6 +126,7 @@ func newNativeModerationFixtureWithProfiles(t *testing.T, owner, ownerAccount, t
 	f.space = row.ID
 	f.st = &store.SpaceStore{Pool: pool, AccountCaptures: moderationCaptureFixture{f.owner: f.ownerAccount, f.target: f.targetAccount}}
 	roles, closeRoles := startSharedRoleClient(t)
+	f.roles = roles
 	t.Cleanup(closeRoles)
 	_, err := roles.BootstrapSpaceRoles(ctx, &rolev1.BootstrapSpaceRolesRequest{SpaceId: row.ID.String(), OwnerProfileId: f.owner.String()})
 	require.NoError(t, err)

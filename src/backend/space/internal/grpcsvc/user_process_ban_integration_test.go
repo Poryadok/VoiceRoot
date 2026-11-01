@@ -6,11 +6,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,12 +22,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/usercapture"
 )
 
-// The protected Space gRPC receiver, native Ban transaction, signed capture
-// client and User process are real. Gateway and Auth remain controlled inputs.
+// Gateway's HTTP handler, the protected Space receiver and the User capture
+// process are real. Login claims and Auth's parent authority are fixtures.
 func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires disposable PostgreSQL and User process")
@@ -120,7 +126,32 @@ func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 	defer conn.Close()
 	f := newNativeModerationFixtureWithProfiles(t, owner, ownerAccount, profile, account)
 	f.st.AccountCaptures = capture
-	require.NoError(t, f.ban(t, account, nil))
+	tlsDir := t.TempDir()
+	serverCert, caFile, _, _, clientCert, clientKey := be041TLSFixture(t, tlsDir)
+	clientCA, err := os.ReadFile(caFile)
+	require.NoError(t, err)
+	clientRoots := x509.NewCertPool()
+	require.True(t, clientRoots.AppendCertsFromPEM(clientCA))
+	gatewayKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	signingKey := filepath.Join(tlsDir, "gateway-signing.pem")
+	require.NoError(t, os.WriteFile(signingKey, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(gatewayKey)}), 0600))
+	verifier := lifecycleprincipal.Verifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &gatewayKey.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }, Epoch: func(context.Context, string, int64) error { return nil }}
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})), grpc.UnaryInterceptor(verifier.Unary()))
+	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: f.roles}})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	gatewayBinary := filepath.Join(t.TempDir(), "gateway-fixture.exe")
+	compile := exec.CommandContext(ctx, "go", "test", "-tags=spacebanintegration", "-p=1", "-c", "-o", gatewayBinary, ".")
+	compile.Dir = filepath.Join(repoRoot(t), "src/backend/gateway")
+	output, err = compile.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+	gateway := exec.CommandContext(ctx, gatewayBinary, "-test.run=^TestSpaceUserBanGatewayProcess$", "-test.timeout=2m")
+	gateway.Env = append(os.Environ(), "VOICE_BAN_SPACE_ADDR="+listener.Addr().String(), "VOICE_BAN_CA="+caFile, "VOICE_BAN_CLIENT_CERT="+clientCert, "VOICE_BAN_CLIENT_KEY="+clientKey, "VOICE_BAN_SIGNING_KEY="+signingKey, "VOICE_BAN_ACTOR_ACCOUNT="+ownerAccount.String(), "VOICE_BAN_ACTOR_PROFILE="+owner.String(), "VOICE_BAN_SPACE="+f.space.String(), "VOICE_BAN_TARGET_ACCOUNT="+account.String())
+	output, err = gateway.CombinedOutput()
+	require.NoError(t, err, "%s", output)
 	var bans, members, audit int
 	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_bans WHERE space_id=$1 AND account_id=$2`, f.space, account).Scan(&bans))
 	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2`, f.space, profile).Scan(&members))
