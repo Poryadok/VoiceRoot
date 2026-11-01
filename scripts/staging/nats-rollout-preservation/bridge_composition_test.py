@@ -17,6 +17,39 @@ import native_store
 
 
 class CompositionTests(unittest.TestCase):
+    def test_cohort_cut_uses_fenced_resource_version_cas(self):
+        """Exercise the real cut journal against an in-memory Kubernetes API.
+
+        This is a Kubernetes boundary fixture, not a P2 qualification proof.
+        """
+        import commands, guard, resource_claim, staging_cohort_preservation as cohort
+        import staging_cohort_preservation_test as fixtures
+        from types import SimpleNamespace
+        before={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user',
+            'namespace':'voice-staging','uid':'user','resourceVersion':'3','generation':1},
+            'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'user','image':'old'}]}}}}
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)),\
+                 patch.object(guard,'ROOT',root),patch.object(cohort,'_source'):
+                session,_=fixtures.CutEffectTests().fixture(root,before)
+                live=copy.deepcopy(before);calls=[]
+                def capture(argv,*,body,**kwargs):
+                    commands.authority_guard(argv)
+                    changes=json.loads(body);calls.append(changes)
+                    self.assertEqual(changes[:2],[{'op':'test','path':'/metadata/uid','value':live['metadata']['uid']},
+                        {'op':'test','path':'/metadata/resourceVersion','value':live['metadata']['resourceVersion']}])
+                    self.assertEqual(changes[2:], [{'op':'replace','path':'/spec/replicas','value':0}])
+                    live['spec']['replicas']=0
+                    live['metadata'].update(resourceVersion='4',generation=2)
+                    return json.dumps(live).encode()
+                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=capture):
+                    result=cohort.cut_cas(session,'deployment',before,[{'op':'replace','path':'/spec/replicas','value':0}])
+                    self.assertEqual(result,live)
+                    with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                        cohort.cut_cas(session,'deployment',before,[{'op':'replace','path':'/spec/replicas','value':0}])
+                self.assertEqual(len(calls),1)
+
     def test_actor_drift_after_offnode_readback_prevents_transaction_authorization(self):
         import actor_root
         actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'};actions._installation=None
