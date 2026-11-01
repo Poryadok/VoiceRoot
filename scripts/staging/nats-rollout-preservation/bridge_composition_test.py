@@ -669,29 +669,37 @@ class CompositionTests(unittest.TestCase):
                     prepare.assert_not_called();coordinator.assert_not_called();stage.kube.get.assert_not_called()
                     self.assertEqual(session.check()['phase'],'prepare')
 
+    def _compiler_catalog_stage(self,mode):
+        """Complete compiler inventory; Kubernetes observations are synthetic."""
+        import source_plan_test as fixtures, runtime_stage
+        from types import SimpleNamespace
+        kube,p=fixtures.SourceTests().canonical_fixture(mode)
+        p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b')
+        targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration','voice-p3-principal-jwks'}
+        snapshots={name:copy.deepcopy(obj) for (kind,name),obj in kube.objects.items() if kind=='Deployment' and name in targets}
+        renderer_repo=bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer'
+        snapshots[bridge_root.HUB]={'apiVersion':'apps/v1','kind':'Deployment',
+            'metadata':{'name':bridge_root.HUB,'namespace':'voice-staging','uid':'hub','resourceVersion':'9'},
+            'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'nats','image':'nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb'}],
+                'initContainers':[{'name':'nats-config-renderer','image':renderer_repo+':captured-old'}],
+                'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':p['dataPVC']}}]}}}}
+        old={name+'/'+c['name']:'example.invalid/'+c['name']+'@sha256:'+'a'*64 for name,obj in snapshots.items() if name!=bridge_root.HUB for c in obj['spec']['template']['spec'].get('initContainers',[])+obj['spec']['template']['spec']['containers']}
+        old[bridge_root.HUB+'/nats-config-renderer']=renderer_repo+'@sha256:'+'b'*64
+        old[bridge_root.HUB+'/nats']='docker.io/library/nats@sha256:'+'c'*64
+        old['voice-p3-principal-jwks/jwks']='docker.io/library/nginx@sha256:'+'e'*64
+        stage=SimpleNamespace(snapshots=snapshots,original_snapshots=copy.deepcopy(snapshots),old_images=old,
+            expected={'generation':p['generation'],'source_claim':p['dataPVC'],'source_claim_uid':'pvc','source_pv_uid':'pv'})
+        return kube,p,targets,renderer_repo,old,stage
+
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
-        import compiler, source_plan_test as fixtures, runtime_stage
+        import compiler, source_plan_test as fixtures
         from types import SimpleNamespace
         root=Path('/var/lib/voice-nats-preservation');root.mkdir(exist_ok=True,mode=0o750)
         for mode in ('full','app-only'):
             with self.subTest(mode=mode),tempfile.TemporaryDirectory(dir=root) as directory:
                 base=Path(directory);installed=base/'installed';(installed/'sources').mkdir(parents=True)
-                kube,p=fixtures.SourceTests().canonical_fixture(mode)
-                p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b')
-                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration','voice-p3-principal-jwks'}
-                snapshots={name:copy.deepcopy(obj) for (kind,name),obj in kube.objects.items() if kind=='Deployment' and name in targets}
-                renderer_repo=bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer'
-                snapshots[bridge_root.HUB]={'apiVersion':'apps/v1','kind':'Deployment',
-                    'metadata':{'name':bridge_root.HUB,'namespace':'voice-staging','uid':'hub','resourceVersion':'9'},
-                    'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'nats','image':'nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb'}],
-                        'initContainers':[{'name':'nats-config-renderer','image':renderer_repo+':captured-old'}],
-                        'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':p['dataPVC']}}]}}}}
-                old={name+'/'+c['name']:'example.invalid/'+c['name']+'@sha256:'+'a'*64 for name,obj in snapshots.items() if name!=bridge_root.HUB for c in obj['spec']['template']['spec'].get('initContainers',[])+obj['spec']['template']['spec']['containers']}
-                old[bridge_root.HUB+'/nats-config-renderer']=renderer_repo+'@sha256:'+'b'*64
-                old[bridge_root.HUB+'/nats']='docker.io/library/nats@sha256:'+'c'*64
-                old['voice-p3-principal-jwks/jwks']='docker.io/library/nginx@sha256:'+'e'*64
-                stage=SimpleNamespace(snapshots=snapshots,original_snapshots=copy.deepcopy(snapshots),old_images=old,
-                    expected={'generation':p['generation'],'source_claim':p['dataPVC'],'source_claim_uid':'pvc','source_pv_uid':'pv'})
+                kube,p,targets,renderer_repo,old,stage=self._compiler_catalog_stage(mode)
+                snapshots=stage.snapshots
                 code=base/'code';(code/'nats-known-baseline').mkdir(parents=True)
                 contract={'scripts':[]}
                 for part in ('realtime','notification','search','analytics-chat'):
