@@ -1262,13 +1262,27 @@ def _native_readback(session,archive):
         'ephemeral_recovery_observations':ephemeral,'server_image':NATS_IMAGE}
 
 
+def _copy_checkpoint(operation,cut,installation,scoped):
+    installation=resource_claim.require_installation(installation)
+    if not scoped:resource_claim.require_production(installation)
+    row={'schema':'nats-rollout-copy-v2' if scoped else 'nats-rollout-copy-v1',
+        'operation':operation,'archive_sha256':cut['manifest']['archive_sha256'],
+        'manifest_sha256':cut['manifest_sha256'],'census_sha256':cut['census_sha256']}
+    if scoped:row['installation_sha256']=installation.sha256
+    return row
+
+
+def _validate_copy_checkpoint(row,operation,cut,installation,scoped):
+    if row!=_copy_checkpoint(operation,cut,installation,scoped):
+        raise Blocked('cohort_copy_checkpoint_changed')
+
+
 def _encrypt(session,execution,cut):
     import encrypted_cut
     import grp
     base=_runtime_base(session)
-    _write(base/'copy-checkpoint.json',{'schema':'nats-rollout-copy-v1','operation':session.operation,
-        'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-        'census_sha256':cut['census_sha256']})
+    scoped=session.binding()['schema']=='voice-staging-resource-fence-v2'
+    _write(base/'copy-checkpoint.json',_copy_checkpoint(session.operation,cut,session.installation,scoped))
     _seal_capsule(session)
     revalidate_paused(session);session.check()
     cipher=encrypted_cut.encrypt_cut(base,guard.ROOT/'installed'/'recovery',cohort_session=session)
@@ -1344,6 +1358,9 @@ def qualify_offnode(actions,request):
     if state.get('status')!='AWAITING_OFF_NODE':raise Blocked('cohort_continuation_not_ready')
     binding=_read(_base(session)/'cipher-binding.json')
     if state.get('cipher_binding')!=binding:raise Blocked('cohort_cipher_changed')
+    _validate_copy_checkpoint(_read(base/'copy-checkpoint.json'),session.operation,
+        _read(_base(session)/'native-cut.json'),session.installation,
+        session.binding()['schema']=='voice-staging-resource-fence-v2')
     revalidate_paused(session)
     try:
         public_binding={key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes','created_at')}
@@ -1438,16 +1455,21 @@ def load_rollout_continuation(session):
 
 def _offnode_records(session):
     """No auxiliary or prerequisite effect can substitute local backup for custody."""
-    return _offnode_records_data(session.operation,session.context,load_plan(session))
+    return _offnode_records_data(session.operation,session.context,load_plan(session),
+        installation=session.installation,scoped=session.binding()['schema']=='voice-staging-resource-fence-v2')
 
 
-def _offnode_records_data(operation,context,plan):
+def _offnode_records_data(operation,context,plan,*,installation,scoped):
     """Validate immutable custody/restore bytes, without live authority or effects."""
     base=guard.ROOT/'installed'/'cohort-preservation'/operation
     binding=_read(base/'cipher-binding.json')
     custody=_read(base/'offnode-custody.json');restored=_read(base/'decrypted-restore.json')
     archive=_read(base/'archive-record.json');offnode=_read(base/'offnode-restore.json')
     local=_read(base/'local-restore.json')
+    copy_path=guard.ROOT/('rollout-'+operation)/'copy-checkpoint.json'
+    _validate_copy_checkpoint(_read(copy_path),operation,_read(base/'native-cut.json'),installation,scoped)
+    if restored.get('members',{}).get('copy-checkpoint.json')!=_file_identity(copy_path)['sha256']:
+        raise Blocked('cohort_copy_checkpoint_changed')
     expected={'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
         **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
         'artifact_id':custody.get('artifact_id'),'verified':True}
@@ -1488,6 +1510,8 @@ def validate_historical_capture(operation,*,installation=None):
         raise Blocked('cohort_history_not_pass')
     installation=resource_claim.require_installation(installation)
     binding=resource_claim.historical_binding(rollout,installation=installation)
+    _offnode_records_data(operation,binding['context'],plan,installation=installation,
+        scoped=binding['schema']=='voice-staging-resource-fence-v2')
     parent=guard.ROOT/'installed'/'prerequisites'/operation
     prepared=_read(parent/'prepared.json');successor=_read(parent/'checkpoint.json');captured=_read(parent/'capture.json')
     approved=_read(parent/'approved.json');execution=_read(parent/'execution.json')
@@ -1558,7 +1582,6 @@ def validate_historical_capture(operation,*,installation=None):
                         or not isinstance(row['id'],str) or not re.fullmatch('[a-f0-9]{64}',row['id'])
                         for row in value['resources'].values())):
                     raise Blocked('cohort_history_incomplete')
-        _offnode_records_data(operation,binding['context'],plan)
         fixed['story_target8']=story_witness._historical_preserved_target(
             operation,plan,preflight,approved,prepared,binding,rollout)
         if receipt!=fixed:raise Blocked('cohort_history_changed')
