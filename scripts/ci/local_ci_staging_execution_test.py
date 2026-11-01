@@ -17,7 +17,7 @@ class ExecutionTests(unittest.TestCase):
         root = parent / 'root'
         root.mkdir()
         self.request = {'root': str(root), 'output': str(parent / 'output'),
-                        'commit': 'a' * 40, 'tree': 'b' * 40, 'base': 'c' * 40,
+                        'commit': 'a' * 40, 'tree': 'b' * 40, 'base': 'c' * 40, 'shard': 'staging',
                         'assets': {name: str(parent / name) for name in contract.ASSET_NAMES}}
 
     def completed(self, output=b'STAGING_SHARD_DIAGNOSTIC_OK\nOWNED_RESOURCES_CLEANED\n', rc=0):
@@ -34,7 +34,9 @@ class ExecutionTests(unittest.TestCase):
                               'id': name if kind == 'volume' else f'{index + 1:064x}', 'state': 'removed'})
         journal.write_text(json.dumps({'version': 1, 'run_id': run, 'daemon': 'daemon-1', 'resources': resources}))
         (directory / 'identity.json').write_text(json.dumps({'source': 'a' * 40, 'daemon': 'daemon-1', 'journal': str(journal), 'slot': 0}))
-        (directory / 'suite-counts.json').write_text(json.dumps({'recipes': 34, 'hosted_go_tests': 1}))
+        (directory / 'suite-counts.json').write_text(json.dumps({'shard': self.request['shard'],
+            'recipes': 34 if self.request['shard'] == 'staging' else 15,
+            'hosted_go_tests': 1 if self.request['shard'] == 'staging' else 0}))
         return SimpleNamespace(returncode=rc, stdout=output, stderr=b'')
 
     def test_supervised_result_remains_incomplete(self):
@@ -48,6 +50,22 @@ class ExecutionTests(unittest.TestCase):
 
     def test_failure_and_missing_cleanup_cannot_produce_report(self):
         with patch.object(staging.supervision, 'run_diagnostic', side_effect=lambda *a, **k: self.completed(output=b'STAGING_SHARD_DIAGNOSTIC_OK\n')), self.assertRaises(staging.ExecutionError):
+            staging.run(self.request)
+
+    def test_proofs_receipt_is_bound_to_proofs_inventory(self):
+        self.request['shard'] = 'proofs'
+        with patch.object(staging.supervision, 'run_diagnostic', side_effect=lambda *a, **k: self.completed()):
+            report = staging.run(self.request)
+        self.assertEqual((report['shard'], report['recipes'], report['hosted_go_tests']), ('proofs', 15, 0))
+
+    def test_proofs_cannot_accept_staging_counts(self):
+        self.request['shard'] = 'proofs'
+        def wrong(*args, **kwargs):
+            self.request['shard'] = 'staging'
+            result = self.completed()
+            self.request['shard'] = 'proofs'
+            return result
+        with patch.object(staging.supervision, 'run_diagnostic', side_effect=wrong), self.assertRaises(staging.ExecutionError):
             staging.run(self.request)
 
     def test_failed_exit_and_bad_receipt_fail_closed(self):
@@ -74,7 +92,7 @@ class ExecutionTests(unittest.TestCase):
                     identity = {'source': 'd' * 40 if mode == 'source' else request['commit'],
                         'journal': str(parent / 'forged.json') if mode == 'wrong-path' else str(journal),
                         'daemon': 'daemon-2' if mode == 'daemon' else 'daemon-1', 'slot': 2 if mode == 'slot' else 0}
-                    counts = {'recipes': 33 if mode == 'missing-recipe' else 34,
+                    counts = {'shard': 'staging', 'recipes': 33 if mode == 'missing-recipe' else 34,
                               'hosted_go_tests': 0 if mode == 'zero-tests' else 1}
                     (output / 'identity.json').write_text(json.dumps(identity))
                     (output / 'suite-counts.json').write_text(json.dumps(counts))

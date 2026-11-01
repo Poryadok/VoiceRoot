@@ -670,7 +670,7 @@ pkg non-short job, integrations, lint and other unimplemented checks remain
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
 When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
-the local inputs for an experimental owned staging-shard execution. The JSON
+the local inputs for experimental owned staging and proofs shard executions. The JSON
 object must contain exactly the absolute paths `helper`, `jq`, `postgres_image`,
 `go_image`, `python_image`, `nats_image`, `nats_box_image`, `alpine_image`,
 `packages`, `wheel`, `preservation_go_cache`, and `staging_go_proxy`. The worker
@@ -683,7 +683,8 @@ daemon; uncertain operations retain the journal and slot for reconciliation.
 Its serial, offline Go execution and adapted preservation fixture differ from
 hosted CI, and startup, filesystem work and disk growth are not independently
 bounded. This new maintained path has not yet passed a complete real staging
-run. It does not cover the other CI-script shards, and leaves `ci-script-tests`
+run, and the proofs shard has not yet been validated as a complete real run.
+These runs do not cover the policy and runtime shards and leave `ci-script-tests`
 `not_run` and preflight incomplete even if the staging receipt is produced.
 
 When the planner selects `backend-auth`, an optional private Auth diagnostic

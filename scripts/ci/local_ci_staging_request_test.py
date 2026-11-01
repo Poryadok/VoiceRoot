@@ -15,7 +15,7 @@ class RequestTests(unittest.TestCase):
         self.root.mkdir()
         self.request = {
             'root': str(self.root), 'output': str(parent / 'output'),
-            'commit': 'a' * 40, 'tree': 'b' * 40, 'base': 'c' * 40,
+            'commit': 'a' * 40, 'tree': 'b' * 40, 'base': 'c' * 40, 'shard': 'staging',
             'assets': {name: str(parent / name) for name in staging.ASSET_NAMES},
         }
 
@@ -23,7 +23,7 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(staging.validate(self.request), self.request)
 
     def test_rejects_missing_extra_and_invalid_identity(self):
-        for change in ({'commit': 'a' * 39}, {'base': 'X' * 40}, {'extra': 1}, {'tree': None}):
+        for change in ({'commit': 'a' * 39}, {'base': 'X' * 40}, {'extra': 1}, {'tree': None}, {'shard': 'runtime'}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 staging.validate(dict(self.request, **change))
         with self.assertRaises(ValueError):

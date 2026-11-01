@@ -58,7 +58,7 @@ def _validate_journal(output, identity):
 def _worker_command():
     command = bootstrap._worker_command(Path(__file__).with_name('local_ci_staging_worker.py'))
     original = repr(sorted(bootstrap.PROJECT_MODULES))
-    modules = bootstrap.PROJECT_MODULES | {'local_ci_staging_request'}
+    modules = bootstrap.PROJECT_MODULES | {'local_ci_staging_request', 'local_ci_matrix_inventory'}
     if command[5].count(original) != 1:
         raise ExecutionError('worker import allowlist changed')
     command[5] = command[5].replace(original, repr(sorted(modules)), 1)
@@ -88,15 +88,16 @@ def run(request, *, timeout=7200):
     try:
         identity = json.loads((output / 'identity.json').read_text(encoding='utf-8'))
         counts = json.loads((output / 'suite-counts.json').read_text(encoding='utf-8'))
-        if (identity['source'] != request['commit'] or
-                type(counts['recipes']) is not int or counts['recipes'] != 34 or type(counts['hosted_go_tests']) is not int or
-                counts['hosted_go_tests'] < 1):
+        if (identity['source'] != request['commit'] or counts['shard'] != request['shard'] or
+                type(counts['recipes']) is not int or counts['recipes'] != {'staging': 34, 'proofs': 15}[request['shard']] or
+                type(counts['hosted_go_tests']) is not int or
+                (counts['hosted_go_tests'] < 1 if request['shard'] == 'staging' else counts['hosted_go_tests'] != 0)):
             raise ValueError('invalid staging receipt')
         _validate_journal(output.resolve(), identity)
     except (OSError, ValueError, TypeError, KeyError):
         raise ExecutionError('staging worker returned invalid receipt') from None
     report = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete',
-              'source': request['commit'], 'base': request['base'], 'recipes': 34,
+              'source': request['commit'], 'base': request['base'], 'shard': request['shard'], 'recipes': counts['recipes'],
               'hosted_go_tests': counts['hosted_go_tests'], 'journal': identity['journal'],
               'slot': identity['slot']}
     with (output / 'diagnostic.json').open('x', encoding='utf-8') as stream:
