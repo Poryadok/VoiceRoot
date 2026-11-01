@@ -314,11 +314,12 @@ class CatalogTests(unittest.TestCase):
         original={'plan':{'source':'exact'},'binding':{'source':'exact'},'scripts':{},'live_census_sha256':'precut'}
         frozen={'nats':original,'enrollment':{},'contract':{}}
         current={**copy.deepcopy(original),'live_census_sha256':'closed-copy'}
-        session=SimpleNamespace(operation='a'*12)
+        session=SimpleNamespace(operation='a'*12,installation=resource_claim.production_installation())
         with patch.object(preservation,'load_preflight',return_value=frozen),patch.object(preservation,'revalidate_paused'),\
             patch.object(nats_root_plan,'closed_copy_preflight',return_value=current) as qualify:
             self.assertEqual(preservation._closed_copy_authority(session,'runtime','broker',{'tree':1}),current)
             self.assertEqual(qualify.call_args.args[-3:],('runtime','broker',{'tree':1}))
+            self.assertEqual(qualify.call_args.kwargs['installation'],session.installation)
             current['binding']={'source':'foreign'}
             with self.assertRaisesRegex(Exception,'cohort_closed_copy_authority_changed'):
                 preservation._closed_copy_authority(session,'runtime','broker',{'tree':1})
