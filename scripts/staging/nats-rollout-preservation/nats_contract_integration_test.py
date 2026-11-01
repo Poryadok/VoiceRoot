@@ -1,4 +1,5 @@
 import os
+import base64
 import subprocess
 import sys
 import unittest
@@ -15,6 +16,61 @@ import contract_fixture_entry as capture_entry
 
 
 class HostedTransportTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root custody')
+    def test_real_bootstrap_prove_checks_fixture_account_before_runtime(self):
+        sys.path.insert(0, str(Path(__file__).parent.parent/'nats-known-baseline'))
+        self.addCleanup(sys.path.pop, 0)
+        import bootstrap_auth
+        keys = ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')
+        raw = {key: ('generated-' + key).encode() for key in keys}
+        operator = {'data': {key: base64.b64encode(value).decode() for key,value in raw.items()}}
+        account = hashlib.sha256(raw['account.public']).hexdigest()
+        actor = hashlib.sha256(b'generated-actor-public').hexdigest()
+        installation = integration.fixture_installation(account, actor, operator)
+        foreign = integration.fixture_installation(hashlib.sha256(b'foreign').hexdigest(), actor, operator)
+        with tempfile.TemporaryDirectory() as directory, patch.object(bootstrap_auth.guard, 'ROOT', Path(directory)):
+            with patch.object(bootstrap_auth, 'DockerRuntime', side_effect=RuntimeError('fixture_reached_runtime')):
+                with self.assertRaisesRegex(RuntimeError, 'fixture_reached_runtime'):
+                    bootstrap_auth.prove(b'generated-credentials', operator, lambda:None, installation=installation)
+                with self.assertRaisesRegex(bootstrap_auth.Blocked, 'bootstrap_auth_account_changed'):
+                    bootstrap_auth.prove(b'generated-credentials', operator, lambda:None, installation=foreign)
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux custody modules')
+    def test_fixture_authority_binds_generated_identities_and_negative_reaches_music(self):
+        sys.path.insert(0, str(Path(__file__).parent.parent/'nats-known-baseline'))
+        self.addCleanup(sys.path.pop, 0)
+        import resource_claim
+        import bootstrap_auth
+        from nats_contract_actor import Actor
+        from nats_contract_plan import ContractError
+        operator = {'data': {'account.jwt': 'fixture-account-jwt', 'operator.jwt': 'fixture-operator-jwt'}}
+        account = hashlib.sha256(b'generated fixture account public key').hexdigest()
+        actor = hashlib.sha256(b'generated fixture actor public key').hexdigest()
+        installation = integration.fixture_installation(account, actor, operator)
+        self.assertIs(type(installation), resource_claim.InstallationAuthority)
+        self.assertEqual(installation.profile, 'owned-isolated-v1')
+        self.assertEqual((installation.account_sha256, installation.bootstrap_actor_sha256), (account, actor))
+        self.assertNotEqual(installation.genesis_sha256, '0'*64)
+        seen = []
+        def prover(credentials, operator_arg, unchanged, *, installation):
+            seen.append((credentials, installation))
+            if credentials == b'old':
+                Actor.mutate(None, '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata', {})
+            return {'verified': True}
+        def denied(self, api, payload): raise ContractError('nats_contract_actor_refused')
+        with patch.object(bootstrap_auth, 'prove', side_effect=prover), patch.object(Actor, 'mutate', denied):
+            self.assertTrue(integration.prove_fixture_bootstrap(b'old', b'new', operator, installation)['verified'])
+        self.assertEqual(seen, [(b'old', installation), (b'new', installation)])
+        def wrong_failure(*args, **kwargs): raise bootstrap_auth.Blocked('bootstrap_auth_account_changed')
+        with patch.object(bootstrap_auth, 'prove', side_effect=wrong_failure):
+            with self.assertRaisesRegex(bootstrap_auth.Blocked, 'bootstrap_auth_account_changed'):
+                integration.prove_fixture_bootstrap(b'old', b'new', operator, installation)
+        def other_api(credentials, operator_arg, unchanged, *, installation):
+            Actor.mutate(None, '$JS.API.CONSUMER.CREATE.social_events.other', {})
+        with patch.object(bootstrap_auth, 'prove', side_effect=other_api), patch.object(Actor, 'mutate', denied):
+            with self.assertRaisesRegex(ContractError, 'nats_contract_actor_refused'):
+                integration.prove_fixture_bootstrap(b'old', b'new', operator, installation)
+
     def test_existing_fixture_credentials_do_not_already_grant_music_consumer(self):
         contract=json.loads((Path(__file__).parents[1]/'nats-known-baseline/deployed-contract.json').read_text())
         grants=integration.fixture_bootstrap_grants(contract)

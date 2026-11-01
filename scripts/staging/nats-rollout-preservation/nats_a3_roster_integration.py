@@ -64,9 +64,9 @@ def prepare(base):
     operator={'data':{k:base64.b64encode((base/'inputs'/k).read_bytes()).decode() for k in (
         'operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}}
     guard.ROOT=base/'root-custody';guard.ROOT.mkdir(mode=0o700)
-    bootstrap_auth.ACCOUNT_SHA=request['account_sha256']
-    enrolled=bootstrap_auth.prove(renewed,operator,lambda:None)
-    fresh=bootstrap_auth.prove(renewed,operator,lambda:None,version='voice-bootstrap-auth-v5')
+    installation=legacy.fixture_installation(request['account_sha256'],request['actor_sha256'],operator)
+    enrolled=bootstrap_auth.prove(renewed,operator,lambda:None,installation=installation)
+    fresh=bootstrap_auth.prove(renewed,operator,lambda:None,version='voice-bootstrap-auth-v5',installation=installation)
     from nats_root_plan import _validated_normalized_consumers
     normalized=_validated_normalized_consumers(fresh,enrolled,version=V6_SCHEMA)
     return enrolled,fresh,normalized
