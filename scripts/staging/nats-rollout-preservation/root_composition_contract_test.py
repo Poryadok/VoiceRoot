@@ -48,6 +48,90 @@ def with_gis_server_defaults(kube):
 
 
 class RootCompositionContract(unittest.TestCase):
+    def test_scoped_final_admission_rejects_changed_continuation(self):
+        """Real journal and admission; qualified P2 and external custody are fixtures."""
+        import staging_cohort_preservation as cohort
+        import staging_prerequisites as prereq
+        import realtime_bootstrap_existing as existing
+        with tempfile.TemporaryDirectory(dir='/root') as directory, contextlib.ExitStack() as stack:
+            root = Path(directory)
+            (root / 'installed').mkdir(mode=0o700)
+            stack.enter_context(patch.object(bridge_root.guard, 'ROOT', root))
+            context = resource_claim_test.context()
+            card = resource_claim_test.card(context)
+            old = copy.deepcopy(card['observed']['images'])
+            session = resource_claim.Session(context, 'a' * 12, 'b' * 64,
+                lambda: copy.deepcopy(card), resource_claim.RootJournal(root))
+            session.admit(start=True)
+            stack.enter_context(resource_claim.command_scope(session.check))
+            qualified = {'fixture': 'synthetic-qualified-p2'}
+            preflight = {'fixture': 'synthetic-p2-preflight'}
+            plan = {'actual_before': old, 'candidate': {'commit': context['commit'], 'images': context['images']},
+                'preflight_sha256': cohort.digest(preflight), 'prerequisite_inputs_sha256': 'c' * 64}
+            capture = {'actual_before': old, 'fixture': 'prerequisites-capture'}
+            receipt = {'schema': 'voice-staging-realtime-bootstrap-existing-v1',
+                'prerequisites_sha256': cohort.digest(capture), 'fixture': 'c2-receipt'}
+            source_request = {'action': 'prepare', 'nonce': session.operation + 'a' * 52,
+                'resource_context': context, 'mode': 'app-only', 'changed_services': []}
+            request = {'action': 'authorize', 'operation': session.operation,
+                'resource_context': context, 'token': 'fixture', 'artifact_id': 42}
+            loaded = {'request': {'mode': 'app-only', 'changed_services': [], 'gis_first_install': False},
+                'approved': {'source_sha': context['commit']}}
+            custody = {'artifact_id': 42, 'fixture': 'synthetic-offnode-custody'}
+            for seam in (patch.object(cohort, 'validate_plan'), patch.object(cohort, '_source'),
+                patch.object(cohort, '_preflight_shape'), patch.object(cohort, 'load_qualified', return_value=qualified),
+                patch.object(cohort, 'load_prepared', return_value=loaded),
+                patch.object(cohort, '_offnode_records', return_value=custody),
+                patch.object(prereq, 'validate_plan'), patch.object(prereq, 'capture', return_value=capture),
+                patch.object(prereq, 'load_capture', return_value=capture),
+                patch.object(existing, 'load_existing', return_value=receipt)):
+                stack.enter_context(seam)
+            base = cohort._base(session)
+            base.mkdir(mode=0o700, parents=True)
+            cohort._write(base / 'checkpoint.json',
+                {'schema': 'voice-staging-cohort-preservation-checkpoint-v1', 'plan': plan})
+            cohort._write(base / 'preflight.json', preflight)
+            cohort.record_prepare_request(session, source_request)
+            session.bind_cohort_preservation(plan, old)
+            cohort.begin_continuation(session, request)
+            prereq_plan = {'schema': 'voice-staging-prerequisites-plan-v4',
+                'preservation_sha256': cohort.digest(qualified), 'actual_before': old}
+            session.bind_prerequisites(prereq_plan, old)
+            session.capture_prerequisites(object())
+            runtime = cohort._runtime_base(session)
+            runtime.mkdir(mode=0o700)
+            manifests = runtime / 'apply-manifests.json'
+            cohort._write(manifests, [])
+            target = {'tag': context['commit'], 'images': context['images'], 'mode': 'app-only',
+                'installation_sha256': session.installation.sha256, 'migration_sha256': cohort.digest([]),
+                'manifest_sha256': root_cli.public_code_sha(manifests),
+                'cohort_preservation_sha256': cohort.digest(qualified),
+                'prerequisites_sha256': cohort.digest(capture), 'realtime_bootstrap_sha256': cohort.digest(receipt)}
+            session.advance_prerequisites_target(target, old)
+            preserved = {'cut': {}, 'provenance': {}, 'contract': {}, 'events': [], 'custody': custody}
+            state = {**copy.deepcopy(preserved), 'target': target, 'operation': session.operation,
+                'resource_fence': session.binding(), 'migrations': [], 'phase': 'AWAITING_OFF_NODE',
+                'status': 'WAITING', 'prerequisites': capture, 'realtime_bootstrap': receipt,
+                'cohort_preservation': qualified}
+            cohort._write(runtime / 'checkpoint.json', state)
+            stack.enter_context(patch.object(cohort, 'load_rollout_continuation', return_value=preserved))
+            # Source record is external to this unit; actual directory inventory is checked.
+            source_record = root / 'installed' / 'source-authority' / (session.operation + '.json')
+            source_record.parent.mkdir(mode=0o700)
+            cohort._write(source_record, {'fixture': 'source-authority'})
+            prereq_dir = root / 'installed' / 'prerequisites' / session.operation
+            prereq_dir.mkdir(mode=0o700, parents=True)
+            handle = cohort.issue_final_admission(session, runtime, state, request)
+            self.assertIs(type(handle), cohort.QualifiedFinalAdmission)
+            self.assertEqual(session.binding()['target_sha256'], cohort.digest(target))
+            continuation = base / 'continuation.json'
+            changed = cohort._read(continuation)
+            changed['qualified_sha256'] = '0' * 64
+            continuation.unlink()
+            cohort._write(continuation, changed)
+            with self.assertRaisesRegex(cohort.Blocked, 'cohort_continuation_reconciliation_required'):
+                cohort.issue_final_admission(session, runtime, state, request)
+
     def test_c2_protected_anchor_revalidates_actual_compiler_target_after_tt_bind(self):
         # Author fixture models a historical PASS; live PG/Kubernetes
         # observations and current source attestation are controlled seams.
