@@ -10,9 +10,12 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,10 +23,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	spacev1 "voice.app/voice/space/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/lifecycleprincipal"
@@ -127,17 +130,32 @@ func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 	f := newNativeModerationFixtureWithProfiles(t, owner, ownerAccount, profile, account)
 	f.st.AccountCaptures = capture
 	tlsDir := t.TempDir()
-	serverCert, caFile, _, _, clientCert, clientKey := be041TLSFixture(t, tlsDir)
-	clientCA, err := os.ReadFile(caFile)
-	require.NoError(t, err)
-	clientRoots := x509.NewCertPool()
-	require.True(t, clientRoots.AppendCertsFromPEM(clientCA))
+	serverCert, caFile, certFile, keyFile, clientCert, clientKey := be041TLSFixture(t, tlsDir)
 	gatewayKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	nextGatewayKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	signingKey := filepath.Join(tlsDir, "gateway-signing.pem")
 	require.NoError(t, os.WriteFile(signingKey, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(gatewayKey)}), 0600))
-	verifier := lifecycleprincipal.Verifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &gatewayKey.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }, Epoch: func(context.Context, string, int64) error { return nil }}
-	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientRoots})), grpc.UnaryInterceptor(verifier.Unary()))
+	jwks := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{
+			{"kty": "RSA", "kid": "current", "alg": "RS256", "use": "sig", "n": base64.RawURLEncoding.EncodeToString(gatewayKey.N.Bytes()), "e": "AQAB"},
+			{"kty": "RSA", "kid": "next", "alg": "RS256", "use": "sig", "n": base64.RawURLEncoding.EncodeToString(nextGatewayKey.N.Bytes()), "e": "AQAB"},
+		}})
+	}))
+	jwks.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}}
+	jwks.StartTLS()
+	t.Cleanup(jwks.Close)
+	redis := miniredis.RunT(t)
+	redis.Set("auth:session:min_epoch:"+ownerAccount.String(), "7")
+	runtime, err := lifecycleprincipal.New(ctx, lifecycleprincipal.Config{Listen: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, JWKSURL: jwks.URL, JWKSCAFile: caFile, RedisAddr: redis.Addr()})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
+	server := grpc.NewServer(runtime.ServerOptions()...)
 	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: f.roles}})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
