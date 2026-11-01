@@ -1386,7 +1386,11 @@ def qualify_offnode(actions,request):
 
 def load_qualified(session,*,actual=None,rollout_target=None):
     plan=load_plan(session);_phase_continuity(session,plan);_no_pending(session)
-    state=_state(session);receipt=_read(_base(session)/'qualified.json')
+    state=_state(session)
+    expected_fence={**session.binding(),'target_sha256':digest(plan)}
+    if state.get('initial_resource_fence')!=expected_fence:
+        raise Blocked('cohort_initial_fence_changed')
+    receipt=_read(_base(session)/'qualified.json')
     fixed={'schema':'voice-staging-cohort-preservation-receipt-v1','operation':session.operation,
         'context':session.context,'helper_sha256':session.helper,'plan_sha256':digest(plan),
         'prerequisite_inputs_sha256':plan['prerequisite_inputs_sha256'],

@@ -14,6 +14,30 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_qualified_reader_rejects_mutated_initial_fence(self):
+        import staging_cohort_preservation as cohort
+        c=context();session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal());session.admit(start=True)
+        plan={'fixture':'p2'};session.journal.row.update(target_sha256='c'*64)
+        initial={**session.binding(),'target_sha256':claim.digest(plan)}
+        for mutation in ('missing','foreign','legacy','context','helper','operation','target'):
+            row=copy.deepcopy(initial)
+            if mutation=='missing':del row['installation_sha256']
+            elif mutation=='foreign':row['installation_sha256']='f'*64
+            elif mutation=='legacy':row['schema']='voice-staging-resource-fence-v1';del row['installation_sha256']
+            elif mutation=='context':row['context']['revision']+=1
+            elif mutation=='helper':row['helper_sha256']='f'*64
+            elif mutation=='operation':row['operation']='f'*12
+            else:row['target_sha256']='f'*64
+            with self.subTest(mutation=mutation),patch.object(cohort,'load_plan',return_value=plan), \
+                 patch.object(cohort,'_phase_continuity'),patch.object(cohort,'_no_pending'), \
+                 patch.object(cohort,'_state',return_value={'initial_resource_fence':row}),patch.object(cohort,'_read') as read:
+                with self.assertRaisesRegex(Blocked,'cohort_initial_fence_changed'):cohort.load_qualified(session)
+                read.assert_not_called()
+        with patch.object(cohort,'load_plan',return_value=plan),patch.object(cohort,'_phase_continuity'), \
+             patch.object(cohort,'_no_pending'),patch.object(cohort,'_state',return_value={'initial_resource_fence':initial}), \
+             patch.object(cohort,'_read',side_effect=RuntimeError('receipt read reached')):
+            with self.assertRaisesRegex(RuntimeError,'receipt read reached'):cohort.load_qualified(session)
+
     def test_prepare_full_story_checks_nats_before_renderer_and_actor(self):
         from contextlib import ExitStack
         import bridge_root,actor_root,renderer_root,nats_root_plan,nats_contract_plan,migrations,source_plan,gis_existing_update
