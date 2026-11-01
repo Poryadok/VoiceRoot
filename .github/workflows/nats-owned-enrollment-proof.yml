@@ -60,7 +60,8 @@ jobs:
           sudo -n chmod -R a-w "$work/source"
           docker pull nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
           docker pull natsio/nats-box@sha256:abdc9f9f0120bb8adfbf674eb037d1551db55356eb198b7bd4ffed377f6950a6
-          sudo -n env PATH="$PATH" HOME="$work" GOTOOLCHAIN=local PYTHONDONTWRITEBYTECODE=1 \
+          sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
+            env PATH="$PATH" HOME="$work" GOTOOLCHAIN=local PYTHONDONTWRITEBYTECODE=1 \
             PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/dev" \
             "$(command -v python)" -c 'import sys,nats_contract_integration as f; f.build_fixture_records(__import__("pathlib").Path(sys.argv[1]))' "$work/bundle"
           sudo -n --preserve-env=RUNNER_ENVIRONMENT,GITHUB_ACTIONS env PYTHONDONTWRITEBYTECODE=1 \
@@ -88,6 +89,7 @@ jobs:
           [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=normal)"
+          PYTHONDONTWRITEBYTECODE=1 python scripts/ci/p2_seeded_workflow_cleanup_test.py
           work=$(sudo -n mktemp -d /root/voice-owned-nats-ci.XXXXXXXX)
           case "$work" in /root/voice-owned-nats-ci.*) ;; *) exit 1 ;; esac
           cleanup() {
@@ -119,9 +121,13 @@ jobs:
           git archive "$EXPECTED_SHA" | sudo -n tar -xf - -C "$work/source"
           sudo -n chmod -R a-w "$work/source"
           sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" before "$work/runtime"
-          (cd "$work/source/scripts/ci" && sudo -n env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest nats_owned_enrollment_test nats_owned_runtime_cleanup_test nats_owned_broker_qualification_test)
-          (cd "$work/source/scripts/staging/nats-rollout-preservation" && sudo -n env PYTHONDONTWRITEBYTECODE=1 \
-            PYTHONPATH="$work/source/scripts/staging/nats-known-baseline" python3 -m unittest scratch_inputs_test staging_cohort_auth_routing_test)
+          sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/ci" \
+            env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/ci" \
+            python3 -m unittest nats_owned_enrollment_test nats_owned_runtime_cleanup_test nats_owned_broker_qualification_test
+          sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
+            env PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONPATH="$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/staging/nats-known-baseline" \
+            python3 -m unittest scratch_inputs_test staging_cohort_auth_routing_test
           python scripts/ci/staging_qualified_helpers.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-qualified"
           sudo -n install -m 0500 "$RUNNER_TEMP/owned-qualified/bootstrap-renewer" "$work/bin/bootstrap-renewer"
           docker run --rm --mount "type=bind,source=$work/source,target=/source,readonly" \
@@ -143,16 +149,17 @@ jobs:
             "$RUNNER_TEMP/owned-qualified/story-current4-probe" "$RUNNER_TEMP/owned-qualified/provenance.json" "$work/qualified/"
           sudo -n install -m 0400 "$RUNNER_TEMP/owned-target8/story-restored8-probe" "$work/qualified/"
           sudo -n install -m 0400 "$RUNNER_TEMP/owned-target8/provenance.json" "$work/qualified/target8-provenance.json"
-          pg_image=$(PYTHONPATH="$work/source/scripts/dev" python -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["postgres"])')
+          pg_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["postgres"])')
           docker pull "$pg_image"
-          migrate_image=$(PYTHONPATH="$work/source/scripts/dev" python -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
+          migrate_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
           docker pull "$migrate_image"
-          (cd "$work/source/scripts/staging/nats-rollout-preservation" && sudo -n --preserve-env=RUNNER_ENVIRONMENT env \
+          sudo -n --preserve-env=RUNNER_ENVIRONMENT sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
+            env \
             PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \
             VOICE_COHORT_RETAINED_ROOT="$work/runtime" TMPDIR="$work/runtime" \
-            PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
+            PYTHONPATH="$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
             staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries \
             staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_qualified_continuation_reaches_c1_final_prepare \
-            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_c1_continuation_issues_typed_final_admission)
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_c1_continuation_issues_typed_final_admission
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=normal)"
