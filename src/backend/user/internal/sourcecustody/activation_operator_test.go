@@ -22,6 +22,16 @@ import (
 
 func TestActivationOperatorRequiresMTLSAndSignedOneLeaderDecision(t *testing.T) {
 	ctx, control, admin, source, keys, controller, claim, public, _, _ := openSourceFixture(t)
+	// Force the same pool pressure regardless of the host CPU count: the held
+	// permit, shutdown drain and competing monitor consume all three slots.
+	limitedConfig := control.Config().Copy()
+	limitedConfig.MaxConns = 3
+	limitedConfig.MinConns = 0
+	limited, err := pgxpool.NewWithConfig(ctx, limitedConfig)
+	require.NoError(t, err)
+	t.Cleanup(limited.Close)
+	control = limited
+	controller.pool = limited
 	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public}
 	pki := processTLS(t, t.TempDir(), "operator")
 	cert, err := tls.LoadX509KeyPair(pki.serverCert, pki.serverKey)
@@ -109,6 +119,12 @@ func TestActivationOperatorRequiresMTLSAndSignedOneLeaderDecision(t *testing.T) 
 	// spurious failure while the competing recovery holds the lock.
 	monitorConn, err := control.Acquire(ctx)
 	require.NoError(t, err)
+	// The controller and held permit can exhaust the control pool while close
+	// drains. Observe the waiter through an independent connection so the test
+	// does not depend on the pool having an extra spare slot.
+	observer, err := pgxpool.NewWithConfig(ctx, control.Config().Copy())
+	require.NoError(t, err)
+	defer observer.Close()
 	monitorPID := monitorConn.Conn().PgConn().PID()
 	waitCtx, stopWait := context.WithCancel(ctx)
 	lockResult := make(chan error, 1)
@@ -129,7 +145,7 @@ func TestActivationOperatorRequiresMTLSAndSignedOneLeaderDecision(t *testing.T) 
 	})
 	require.Eventually(t, func() bool {
 		var waiting bool
-		return control.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted)`, monitorPID).Scan(&waiting) == nil && waiting
+		return observer.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted)`, monitorPID).Scan(&waiting) == nil && waiting
 	}, 5*time.Second, 25*time.Millisecond)
 	require.NoError(t, held.Release(ctx))
 	select {
