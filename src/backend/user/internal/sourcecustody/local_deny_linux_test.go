@@ -22,6 +22,7 @@ func TestDenyJournalProcessCrash(t *testing.T) {
 	for _, stage := range []string{"after-file-sync", "after-rename"} {
 		t.Run(stage, func(t *testing.T) {
 			j, dir := testDenyJournal(t)
+			j.close()
 			cmd := exec.Command(os.Args[0], "-test.run=^TestDenyJournalCrashHelper$")
 			cmd.Env = append(os.Environ(), "VOICE_DENY_CRASH_DIR="+dir, "VOICE_DENY_CRASH_STAGE="+stage)
 			err := cmd.Run()
@@ -29,6 +30,16 @@ func TestDenyJournalProcessCrash(t *testing.T) {
 			if !errors.As(err, &exit) || exit.ExitCode() != 42 {
 				t.Fatalf("helper did not reach crash point: %v", err)
 			}
+			f, openErr := os.Open(dir)
+			if openErr != nil {
+				t.Fatal(openErr)
+			}
+			defer func() { _ = f.Close() }()
+			j, openErr = openDenyJournal(f)
+			if openErr != nil {
+				t.Fatal(openErr)
+			}
+			defer j.close()
 			err = j.matchesDeny(testDenyRecord())
 			if stage == "after-file-sync" && err == nil {
 				t.Fatal("unrenamed record accepted")
@@ -68,11 +79,22 @@ func TestDenyJournalCrashHelper(t *testing.T) {
 
 func TestDenyJournalRestrictedUmask(t *testing.T) {
 	j, dir := testDenyJournal(t)
+	j.close()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestDenyJournalUmaskHelper$")
 	cmd.Env = append(os.Environ(), "VOICE_DENY_UMASK_DIR="+dir)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("umask helper: %v: %s", err, output)
 	}
+	f, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	j, err = openDenyJournal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.close()
 	if err := j.matchesDeny(testDenyRecord()); err != nil {
 		t.Fatal(err)
 	}
@@ -134,6 +156,7 @@ func TestDenyJournalBindingAndPersistence(t *testing.T) {
 	if err := j.matchesDeny(r); err != nil {
 		t.Fatal(err)
 	}
+	j.close()
 	f, err := os.Open(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -155,8 +178,92 @@ func TestDenyJournalBindingAndPersistence(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, denyFile), []byte("corrupt"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if j.matchesDeny(r) == nil || j.persistDeny(r) == nil {
+	if other.matchesDeny(r) == nil || other.persistDeny(r) == nil {
 		t.Fatal("corrupt record accepted")
+	}
+}
+
+func TestDenyJournalExclusiveWriter(t *testing.T) {
+	j, dir := testDenyJournal(t)
+	f, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if other, err := openDenyJournal(f); err == nil {
+		other.close()
+		t.Fatal("second writer admitted")
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestDenyJournalLockHelper$")
+	cmd.Env = append(os.Environ(), "VOICE_DENY_LOCK_DIR="+dir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("cross-process exclusion: %v: %s", err, output)
+	}
+	j.close()
+	other, err := openDenyJournal(f)
+	if err != nil {
+		t.Fatalf("writer lock not released: %v", err)
+	}
+	other.close()
+}
+
+func TestDenyJournalLockHelper(t *testing.T) {
+	dir := os.Getenv("VOICE_DENY_LOCK_DIR")
+	if dir == "" {
+		return
+	}
+	f, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if other, err := openDenyJournal(f); err == nil {
+		other.close()
+		t.Fatal("second process admitted")
+	}
+}
+
+func TestDenyJournalLateWorkerKeepsWriterLease(t *testing.T) {
+	j, dir := testDenyJournal(t)
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	j.fail = func(stage string) error {
+		if stage == "write" {
+			close(entered)
+			<-release
+		}
+		return nil
+	}
+	go func() { done <- j.persistDeny(testDenyRecord()) }()
+	<-entered
+	f, err := os.Open(dir)
+	if err != nil {
+		close(release)
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if other, err := openDenyJournal(f); err == nil {
+		other.close()
+		close(release)
+		t.Fatal("writer admitted while stalled")
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if other, err := openDenyJournal(f); err == nil {
+		other.close()
+		t.Fatal("late completion released writer lease")
+	}
+	j.close()
+	other, err := openDenyJournal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.close()
+	changed := testDenyRecord()
+	changed.generation++
+	if other.persistDeny(changed) == nil {
+		t.Fatal("new generation overwrote prior deny")
 	}
 }
 

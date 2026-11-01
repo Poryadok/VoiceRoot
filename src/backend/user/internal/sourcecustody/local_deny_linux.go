@@ -6,8 +6,9 @@ package sourcecustody
 // proves a fence, or issues a receipt. The trusted host must independently
 // provide an exclusive pinned directory on a separate trusted volume, protect
 // it from PostgreSQL and other writers, and enforce deny by default at boot.
-// Exactly one live journal writer across all processes and objects is an
-// independently enforced prerequisite; the mutex covers only this object.
+// Every generation writer must use this same pinned directory and honor its
+// lifetime-held flock; the host must exclude bypass paths and protect the lock
+// inode from replacement. The filesystem must support the required lock semantics.
 // Successful fsync calls and local tests do not prove power-loss durability or
 // rollback resistance. A separate reviewed protocol must qualify storage,
 // authenticate and advance generations, and enforce the boot/watchdog gate.
@@ -27,6 +28,7 @@ import (
 )
 
 const denyFile = "source-deny-v1"
+const denyLockFile = ".source-deny.lock"
 
 var errDenyUnavailable = errors.New("deny journal unavailable")
 
@@ -52,9 +54,11 @@ func (r denyRecord) encode() []byte {
 }
 
 type denyJournal struct {
-	mu       sync.Mutex
-	dir      int
-	identity unix.Stat_t
+	mu           sync.Mutex
+	dir          int
+	lock         int
+	identity     unix.Stat_t
+	lockIdentity unix.Stat_t
 	// Fault injection is private and cannot establish journal authority.
 	fail func(string) error
 }
@@ -68,12 +72,32 @@ func openDenyJournal(dir *os.File) (*denyJournal, error) {
 	if err != nil {
 		return nil, errDenyUnavailable
 	}
-	j := &denyJournal{dir: fd}
+	j := &denyJournal{dir: fd, lock: -1}
 	if unix.Fstat(fd, &j.identity) != nil || !safeDenyDir(&j.identity) {
 		_ = unix.Close(fd)
 		return nil, errDenyUnavailable
 	}
+	lock, err := unix.Openat(fd, denyLockFile, unix.O_RDWR|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0600)
+	created := err == nil
+	if errors.Is(err, unix.EEXIST) {
+		lock, err = unix.Openat(fd, denyLockFile, unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	}
+	if err != nil {
+		_ = unix.Close(fd)
+		return nil, errDenyUnavailable
+	}
+	j.lock = lock
+	if (created && unix.Fchmod(lock, 0600) != nil) || unix.Fstat(lock, &j.lockIdentity) != nil ||
+		!safeDenyLock(&j.lockIdentity, &j.identity) || unix.Flock(lock, unix.LOCK_EX|unix.LOCK_NB) != nil || !j.rootOK() {
+		_ = unix.Close(lock)
+		_ = unix.Close(fd)
+		return nil, errDenyUnavailable
+	}
 	return j, nil
+}
+
+func safeDenyLock(s, dir *unix.Stat_t) bool {
+	return s.Mode&unix.S_IFMT == unix.S_IFREG && s.Mode&0777 == 0600 && s.Uid == uint32(os.Geteuid()) && s.Nlink == 1 && s.Dev == dir.Dev
 }
 
 func safeDenyDir(s *unix.Stat_t) bool {
@@ -81,8 +105,10 @@ func safeDenyDir(s *unix.Stat_t) bool {
 }
 
 func (j *denyJournal) rootOK() bool {
-	var s unix.Stat_t
-	return j.dir >= 0 && unix.Fstat(j.dir, &s) == nil && safeDenyDir(&s) && s.Dev == j.identity.Dev && s.Ino == j.identity.Ino
+	var s, lock, entry unix.Stat_t
+	return j.dir >= 0 && j.lock >= 0 && unix.Fstat(j.dir, &s) == nil && safeDenyDir(&s) && s.Dev == j.identity.Dev && s.Ino == j.identity.Ino &&
+		unix.Fstat(j.lock, &lock) == nil && safeDenyLock(&lock, &s) && lock.Dev == j.lockIdentity.Dev && lock.Ino == j.lockIdentity.Ino &&
+		unix.Fstatat(j.dir, denyLockFile, &entry, unix.AT_SYMLINK_NOFOLLOW) == nil && entry.Dev == lock.Dev && entry.Ino == lock.Ino
 }
 
 func (j *denyJournal) fault(stage string) error {
@@ -217,5 +243,9 @@ func (j *denyJournal) close() {
 	if j.dir >= 0 {
 		_ = unix.Close(j.dir)
 		j.dir = -1
+	}
+	if j.lock >= 0 {
+		_ = unix.Close(j.lock)
+		j.lock = -1
 	}
 }
