@@ -86,36 +86,57 @@ func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) err
 		ready()
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
+		awaitFence := func(terminate bool) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			var state string
+			if owner.QueryRow(ctx, `UPDATE public.user_custody_state SET state='CLOSED' WHERE singleton AND source_id=$1 AND epoch=$2 RETURNING state`, r.Request.SourceID, r.Request.Epoch).Scan(&state) != nil || state != "CLOSED" {
+				return ErrUnavailable
+			}
+			if terminate {
+				var terminated bool
+				err = owner.QueryRow(ctx, `SELECT pg_terminate_backend(a.pid) FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted AND a.pid=$2 AND a.backend_start=$3`, leaderKey, leaderPID, leaderStarted).Scan(&terminated)
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) || err == nil && !terminated {
+					return ErrUnavailable
+				}
+			}
+			for !locked {
+				if owner.QueryRow(ctx, `SELECT pg_try_advisory_lock($1::bigint)`, leaderKey).Scan(&locked) != nil {
+					uncertain = true
+					return ErrUnavailable
+				}
+				if !locked {
+					select {
+					case <-ctx.Done():
+						return ErrUnavailable
+					case <-ticker.C:
+					}
+				}
+			}
+			return recoverActivationLocked(ctx, owner, control, maintenance, r.Request, r.Physical, cfg.WriterRole)
+		}
 		for !locked {
 			select {
 			case <-parent.Done():
 				// A normal monitor stop must not leave its observed leader
 				// serving without this monitor. Do not terminate a replacement
 				// leader if the old backend has already disappeared.
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				var terminated bool
-				err = owner.QueryRow(ctx, `SELECT pg_terminate_backend(a.pid) FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted AND a.pid=$2 AND a.backend_start=$3`, leaderKey, leaderPID, leaderStarted).Scan(&terminated)
-				if err != nil && !errors.Is(err, pgx.ErrNoRows) || err == nil && !terminated {
-					return ErrUnavailable
-				}
-				for !locked {
-					if owner.QueryRow(ctx, `SELECT pg_try_advisory_lock($1::bigint)`, leaderKey).Scan(&locked) != nil {
-						uncertain = true
-						return ErrUnavailable
-					}
-					if !locked {
-						select {
-						case <-ctx.Done():
-							return ErrUnavailable
-						case <-ticker.C:
-						}
-					}
-				}
-				return recoverActivationLocked(ctx, owner, control, maintenance, r.Request, r.Physical, cfg.WriterRole)
+				return awaitFence(true)
 			case <-ticker.C:
 				if err = probe(); err != nil {
 					return err
+				}
+				if !locked {
+					check, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					var sameLeader bool
+					err = owner.QueryRow(check, `SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted AND a.pid=$2 AND a.backend_start=$3)`, leaderKey, leaderPID, leaderStarted).Scan(&sameLeader)
+					cancel()
+					if err != nil {
+						return ErrUnavailable
+					}
+					if !sameLeader {
+						return awaitFence(false)
+					}
 				}
 			}
 		}

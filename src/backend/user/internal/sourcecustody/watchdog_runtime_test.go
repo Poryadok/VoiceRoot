@@ -38,6 +38,14 @@ func TestWatchActivationShutdownDoesNotTerminateReplacementLeader(t *testing.T) 
 	watchActivationFixture(t, "replacement")
 }
 
+func TestWatchActivationDetectsReplacementLeader(t *testing.T) {
+	watchActivationFixture(t, "replacement-loss")
+}
+
+func TestWatchActivationReportsUnfencedReplacement(t *testing.T) {
+	watchActivationFixture(t, "replacement-timeout")
+}
+
 func watchActivationFixture(t *testing.T, mode string) {
 	t.Helper()
 	if testing.Short() {
@@ -123,7 +131,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 		case <-time.After(15 * time.Second):
 			t.Fatal("monitor did not become ready")
 		}
-		if mode == "replacement" {
+		if mode == "replacement" || mode == "replacement-loss" || mode == "replacement-timeout" {
 			replacement, err := control.Acquire(ctx)
 			require.NoError(t, err)
 			waitingCtx, cancelWait := context.WithCancel(ctx)
@@ -163,7 +171,28 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 			case <-time.After(10 * time.Second):
 				t.Fatal("replacement leader did not acquire the lock")
 			}
-			stop()
+			if mode == "replacement-loss" || mode == "replacement-timeout" {
+				require.Eventually(t, func() bool {
+					var state string
+					return observer.QueryRow(ctx, `SELECT state FROM user_custody_state WHERE singleton`).Scan(&state) == nil && state == "CLOSED"
+				}, 5*time.Second, 25*time.Millisecond, "replacement must close admission before its lock is released")
+			} else {
+				stop()
+			}
+			if mode == "replacement-timeout" {
+				select {
+				case err := <-done:
+					require.Error(t, err, "an unfenced source must not be reported as recovered")
+				case <-time.After(35 * time.Second):
+					t.Fatal("monitor did not report the unresolved replacement")
+				}
+				require.NoError(t, replacement.Ping(ctx), "the replacement must not be terminated")
+				var allowed, login bool
+				require.NoError(t, admin.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname='custody_app') FROM pg_database WHERE oid=$1`, physical.DatabaseOID).Scan(&allowed, &login))
+				require.True(t, allowed)
+				require.True(t, login)
+				return
+			}
 			select {
 			case err := <-done:
 				t.Fatalf("monitor returned while replacement held the lock: %v", err)

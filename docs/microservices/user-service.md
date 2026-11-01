@@ -82,7 +82,10 @@ The optional, separately operated `watch-activation` command uses the same
 explicit physical-source and writer-role inputs as `recover-activation`. After
 checking an active leader and its source binding, it emits `WATCHING`, monitors
 the leader lock, and holds that lock while it fences the source and writer after
-leader loss. It exits after recovery or on an error. If no leader is present at
+leader loss. If a different leader takes the lock first, the monitor closes
+admission and waits a bounded time for the lock without terminating that leader;
+it reports failure if it cannot complete the fence. It exits after recovery or
+on an error. If no leader is present at
 startup, it attempts recovery without emitting `WATCHING`.
 On a normal stop after `WATCHING`, it attempts to terminate the same observed
 leader session and fence the source before exiting. It does not terminate a
