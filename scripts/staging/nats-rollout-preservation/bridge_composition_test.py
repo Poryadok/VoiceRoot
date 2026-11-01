@@ -64,10 +64,11 @@ class CompositionTests(unittest.TestCase):
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
             through_workload=True,through_hub=True,through_storage=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False):
-        import compiler, guard, staging_cohort_preservation as cohort
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None):
+        import commands, compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
+        actual_capture=commands.capture
         class ReachedBroker(Exception):
             pass
         class ReachedInput(Exception):
@@ -121,7 +122,8 @@ class CompositionTests(unittest.TestCase):
                 from docker_runtime import NATS_IMAGE
                 if through_storage:
                     import os,uuid
-                    if not Path('/.dockerenv').exists():raise RuntimeError('isolated_container_required')
+                    if not Path('/.dockerenv').exists() and os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted':
+                        raise RuntimeError('disposable_container_or_hosted_runner_required')
                     claim_uid=str(uuid.uuid4());pv_uid=str(uuid.uuid4())
                     stage.expected.update(source_claim_uid=claim_uid,source_pv_uid=pv_uid)
                     stage.final_claim['metadata']['uid']=claim_uid
@@ -227,8 +229,10 @@ class CompositionTests(unittest.TestCase):
                     fake=FakeKube(objects);flags={'hub_released':False}
                     def capture_fence(argv,*,body=b'',**kwargs):
                         if through_storage and argv[:2]==['/usr/bin/docker','--host=unix:///var/run/docker.sock']:
-                            commands.authority_guard(argv)
-                            raise ReachedFence()
+                            if postgres is None or (cohort._base(actions.tt_session)/'local-restore.json').exists():
+                                commands.authority_guard(argv)
+                                raise ReachedFence()
+                            return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
                         if 'patch' in argv:
                             index=argv.index('patch');kind=argv[index+1]
                             if kind=='deployment' and not through_workload:raise ReachedFence()
@@ -256,6 +260,8 @@ class CompositionTests(unittest.TestCase):
                             return json.dumps(tree).encode()
                         if through_hub and argv[-3:]==['pods','-o','json']:
                             return json.dumps({'items':[live[('pod',monitor_pod['metadata']['name'])]]}).encode()
+                        if postgres is not None and ('voice-postgres-0' in argv or 'endpointslices' in argv):
+                            return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
                         if 'jsonpath-as-json=' in ' '.join(argv):
                             name=argv[argv.index('secret')+1];meta=live[('secret',name)]['metadata']
                             return json.dumps([meta['uid'],meta['resourceVersion']]).encode()
@@ -287,7 +293,8 @@ class CompositionTests(unittest.TestCase):
                         if through_hub:
                             def get_after_hub(kind,name):
                                 if flags['hub_released'] and not through_storage and kind=='pvc':raise ReachedFence()
-                                if through_storage and flags['hub_released'] and kind=='statefulset' and name=='voice-postgres':raise ReachedFence()
+                                if postgres is not None and postgres.has_get(kind,name):return postgres.get(kind,name)
+                                if through_storage and postgres is None and flags['hub_released'] and kind=='statefulset' and name=='voice-postgres':raise ReachedFence()
                                 if through_storage and flags['hub_released'] and kind.lower()=='secret' and name=='voice-app-secrets':
                                     commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
                                     return copy.deepcopy(kube.objects[('Secret',name)])
@@ -298,6 +305,9 @@ class CompositionTests(unittest.TestCase):
                                 except KeyError:
                                     return kube.get(kind,name)
                             nats_patches.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get_after_hub))
+                        if postgres is not None:
+                            import subprocess
+                            nats_patches.enter_context(patch.object(subprocess,'Popen',side_effect=postgres.popen))
                         with self.assertRaises(ReachedFence):actions.execute(request)
                     else:
                         with self.assertRaises(ReachedInput):actions.execute(request)
@@ -329,6 +339,10 @@ class CompositionTests(unittest.TestCase):
                     self.assertTrue((base/'paused.json').exists())
                     checkpoint=cohort._read(cohort._runtime_base(actions.tt_session)/'checkpoint.json')
                     self.assertEqual((checkpoint['phase'],checkpoint['status']),('COHORT_BACKUP','BLOCKED'))
+                    if postgres is not None:
+                        restore=cohort._read(base/'local-restore.json')
+                        self.assertEqual(restore['status'],'COMPLETE')
+                        self.assertEqual(restore['proof']['cleanup'],'verified')
                 self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
             else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         overrides=None

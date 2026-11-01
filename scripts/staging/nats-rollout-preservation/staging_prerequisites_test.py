@@ -395,7 +395,8 @@ class PrepareCompositionTests(unittest.TestCase):
             if full_source:
                 for prefix in ('deploy','docker','scripts/staging','scripts/storage','scripts/dev','scripts/deploy','src/backend/migrations',
                                'src/backend/auth/src/main/resources/db/migration'):
-                    relative.extend(str(path.relative_to(source_root)) for path in (source_root/prefix).rglob('*') if path.is_file())
+                    relative.extend(str(path.relative_to(source_root)) for path in (source_root/prefix).rglob('*')
+                        if path.is_file() and '__pycache__' not in path.parts and path.suffix!='.pyc')
                 relative=list(dict.fromkeys(relative))
             for name in relative:
                 dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)

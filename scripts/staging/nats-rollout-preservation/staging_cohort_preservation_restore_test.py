@@ -34,6 +34,19 @@ from auth_user_adoption_runtime import QUALIFIED_TOOLS
 
 @unittest.skipUnless(os.environ.get('VOICE_COHORT_DOCKER')=='1','isolated Docker fixture opt-in')
 class RestoreTransportTests(unittest.TestCase):
+    def test_public_prepare_reaches_real_postgres_restore_before_native_nats(self):
+        """Hosted-only PG proof; source/Kube/NATS stay explicit fixtures.
+
+        This stops before native NATS and off-node CMS qualification, so it is
+        not a qualified P2 receipt or an end-to-end authorization proof.
+        """
+        from bridge_composition_test import CompositionTests
+        from cohort_hosted_pg import HostedPostgres
+        namespace='00000000-0000-0000-0000-000000000001'
+        with HostedPostgres(namespace) as postgres:
+            CompositionTests._exercise_public_precut(self,enrolled=True,through_nats=True,through_fence=True,
+                through_workload=True,through_hub=True,through_storage=True,postgres=postgres)
+
     def test_actual_pg_dump_and_isolated_restore_with_root_session(self):
         run=subprocess.run;original_popen=subprocess.Popen
         def docker(*args,body=None):
