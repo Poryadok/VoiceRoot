@@ -156,10 +156,17 @@ class ResourceTests(unittest.TestCase):
 
     def test_prerequisite_binding_requires_baseline_and_durable_capture(self):
         session,current,journal=self.fixture();session.admit(start=True)
-        actual=current['observed']['images'];plan={'actual_before':copy.deepcopy(actual)}
+        actual=current['observed']['images'];qualified={'fixture':'qualified-p2'}
+        plan={'schema':'voice-staging-prerequisites-plan-v4','actual_before':copy.deepcopy(actual),
+              'preservation_sha256':claim.digest(qualified)}
         record={'schema':'fixture-capture','actual_after':copy.deepcopy(actual)}
         module=Mock();module.capture.return_value=record;module.load_capture.return_value=record
-        with patch.dict(sys.modules,{'staging_prerequisites':module}):
+        # Unit boundary: exercise the real journal transitions; P2 validation
+        # and its qualified receipt are deliberately synthetic here.
+        cohort=Mock();cohort.load_qualified.return_value=qualified
+        p2={'actual_before':copy.deepcopy(actual),'candidate':{'commit':context()['commit'],'images':context()['images']}}
+        with patch.dict(sys.modules,{'staging_prerequisites':module,'staging_cohort_preservation':cohort}):
+            session.bind_cohort_preservation(p2,actual)
             binding=session.bind_prerequisites(plan,actual)
             self.assertEqual(binding['target_sha256'],claim.digest(plan))
             self.assertEqual(journal.row['phase'],'prerequisites')
