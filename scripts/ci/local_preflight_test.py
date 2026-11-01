@@ -10,6 +10,63 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def full_auth_inputs(self):
+        return {'helper': str(self.root / 'helper'), 'helper_sha256': 'a' * 64,
+                'client_image_id': 'sha256:' + 'b' * 64, 'maven_cache': str(self.root / 'cache'),
+                'maven_cache_sha256': 'c' * 64, 'images': str(self.root / 'images.json'), 'images_sha256': 'd' * 64}
+
+    def full_auth_images(self):
+        return {tag: {'archive': str(self.root / str(index)), 'sha256': 'e' * 64,
+                      'image_id': 'sha256:' + str(index + 1) * 64}
+                for index, tag in enumerate(local_preflight.local_auth_full_orchestration.IMAGE_TAGS)}
+
+    def full_auth_result(self):
+        values, images = self.full_auth_inputs(), self.full_auth_images()
+        return {'schema': 'voice-local-auth-full-orchestration-v1', 'status': 'incomplete', 'slot': 0,
+                'ownership_journal': 'run/tmp/ci-local/voiceci-fixture/ownership.json',
+                'inputs': {'creator_sha256': values['helper_sha256'], 'client_image_id': values['client_image_id'],
+                           'maven_cache_sha256': values['maven_cache_sha256'],
+                           'images': {tag: {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
+                                      for tag, item in images.items()}},
+                'diagnostic': {'schema': 'voice-local-auth-full-diagnostic-v1', 'status': 'incomplete',
+                               'source': self.source, 'exit_code': 0, 'source_archive_sha256': '1' * 64,
+                               'build_archive_sha256': '2' * 64, 'maven_cache_sha256': values['maven_cache_sha256'],
+                               'reports': {'tests': 100, 'suite_count': 30, 'required_suite_count': 28,
+                                           'skipped': [], 'reports_sha256': '3' * 64}}}
+
+    def test_full_auth_opt_in_never_promotes_preflight(self):
+        plan = {'source': self.source, 'checks': {'backend-auth': ['auth']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+             patch.object(local_preflight.local_auth_full_orchestration, 'read_images', return_value=self.full_auth_images()), \
+             patch.object(local_preflight.local_auth_full_orchestration, 'run', return_value=self.full_auth_result()) as run:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         full_auth_inputs=self.full_auth_inputs())
+        run.assert_called_once()
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
+        self.assertEqual(report['auth_full_report'], 'auth-full/diagnostic.json')
+
+    def test_full_auth_invalid_or_unselected_refuses_execution(self):
+        selected = {'source': self.source, 'checks': {'backend-auth': ['auth']}}
+        for kind in ('partial', 'unselected', 'source', 'image', 'skip-format'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                result, inputs = self.full_auth_result(), self.full_auth_inputs()
+                plan = selected if kind != 'unselected' else {'source': self.source, 'checks': {}}
+                if kind == 'partial': inputs.pop('images_sha256')
+                if kind == 'source': result['diagnostic']['source'] = {'head': 'other'}
+                if kind == 'image': result['inputs']['client_image_id'] = 'sha256:' + 'f' * 64
+                if kind == 'skip-format': result['diagnostic']['reports']['skipped'] = 'unknown'
+                with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                     patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+                     patch.object(local_preflight.local_auth_full_orchestration, 'read_images', return_value=self.full_auth_images()), \
+                     patch.object(local_preflight.local_auth_full_orchestration, 'run', return_value=result) as run:
+                    report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(directory) / 'out',
+                                                 'flutter', full_auth_inputs=inputs)
+                self.assertEqual(report['status'], 'failed')
+                if kind in ('partial', 'unselected'): run.assert_not_called()
+
     def test_compose_opt_in_preserves_planned_not_run_checks(self):
         plan = {'source': self.source, 'components': {}, 'checks': {'compose-e2e': ['test.dart'],
                                                                     'compose-config': ['docker-compose.yml']}}

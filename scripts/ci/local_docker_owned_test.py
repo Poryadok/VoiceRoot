@@ -602,6 +602,70 @@ class OwnedRunTests(unittest.TestCase):
             finally:
                 owner.close()
 
+    def test_rootless_shared_workspace_requires_owned_distinct_volume_and_quarantines_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine(); owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+                mounts['/workspace'] = owner.create_resource('volume')
+                def creator(request):
+                    item = owner.state['resources'][-1]
+                    self.assertEqual(item['profile'], 'rootless-workspace-v1')
+                    self.assertEqual(request['workspace_volume'], mounts['/workspace'])
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'], 'voice.ci.kind': 'container'}
+                    return engine.create_container(item['name'], labels, rootless.IMAGE, item['network'], mounts, [])
+                bad = dict(mounts, **{'/workspace': mounts['/run/user/1000']})
+                with self.assertRaises(OwnershipError): owner.create_rootless_container(network, bad, creator)
+                name = owner.create_rootless_container(network, mounts, creator)
+                owner.start_container(name)
+                item = owner.state['resources'][-1]; item['state'] = 'executing'; owner._save()
+                owner.cancel_execution(name)
+                self.assertEqual(item['state'], 'quarantined')
+                self.assertTrue(all(r['state'] == 'quarantined' for r in owner.state['resources']
+                                    if r['kind'] == 'volume'))
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_workspace_lost_create_and_quarantine_recover_exact_journal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine(); owner = OwnedRun.create(Path(directory), engine)
+            path = owner.directory
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.WORKSPACE_TARGETS)}
+                def lost(request):
+                    item = owner.state['resources'][-1]
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'], 'voice.ci.kind': 'container'}
+                    engine.create_container(item['name'], labels, rootless.IMAGE, item['network'], mounts, [])
+                    raise OwnershipError('lost create response')
+                with self.assertRaises(OwnershipError): owner.create_rootless_container(network, mounts, lost)
+                name = owner.state['resources'][-1]['name']
+                self.assertEqual(owner.state['resources'][-1]['state'], 'creating')
+            finally:
+                owner.close()
+            owner = OwnedRun.load(path, engine)
+            try:
+                engine.rootless_profile_valid = False
+                with self.assertRaises(OwnershipError): owner.reconcile_creation(name)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'creating')
+                engine.rootless_profile_valid = True
+                owner.reconcile_creation(name)
+                owner.start_container(name)
+                owner.state['resources'][-1]['state'] = 'executing'; owner._save()
+                owner.cancel_execution(name)
+            finally:
+                owner.close()
+            owner = OwnedRun.load(path, engine)
+            try:
+                self.assertEqual(owner.state['resources'][-1]['state'], 'quarantined')
+                self.assertTrue(all(r['state'] == 'quarantined' for r in owner.state['resources'] if r['kind'] == 'volume'))
+                owner.cleanup()
+                self.assertTrue(all(r['state'] == 'removed' for r in owner.state['resources']))
+            finally:
+                owner.close()
+
     def test_rootless_lost_create_response_recovery_requires_exact_profile(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = FakeEngine()

@@ -39,6 +39,24 @@ func TestRootlessDaemonUsesOwnedUnixSocketWithoutTCP(t *testing.T) {
 	require.Equal(t, "/run/user/1000", host.Mounts[2].Target)
 }
 
+func TestRootlessWorkspaceIsOptionalOwnedAndDistinct(t *testing.T) {
+	s := validSpec()
+	s.Workspace = s.RunID + "-volume-" + strings.Repeat("1", 32)
+	require.NoError(t, s.validate())
+	raw, err := json.Marshal(s)
+	require.NoError(t, err)
+	parsed, err := parseSpec(strings.NewReader(string(raw)))
+	require.NoError(t, err)
+	_, host := buildConfig(parsed)
+	require.Len(t, host.Mounts, 4)
+	require.Equal(t, "/workspace", host.Mounts[3].Target)
+	require.Equal(t, s.Workspace, host.Mounts[3].Source)
+	for _, invalid := range []string{"foreign", s.Data, s.Legacy, s.Socket} {
+		s.Workspace = invalid
+		require.Error(t, s.validate())
+	}
+}
+
 func validSpec() spec {
 	run := "voiceci-" + strings.Repeat("a", 32)
 	nonce := strings.Repeat("b", 32)

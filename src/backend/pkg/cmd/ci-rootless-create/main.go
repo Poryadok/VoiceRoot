@@ -37,14 +37,15 @@ var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var daemonID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
 type spec struct {
-	Name    string `json:"name"`
-	RunID   string `json:"run_id"`
-	Nonce   string `json:"nonce"`
-	Daemon  string `json:"daemon"`
-	Network string `json:"network"`
-	Data    string `json:"data_volume"`
-	Legacy  string `json:"legacy_volume"`
-	Socket  string `json:"socket_volume"`
+	Name      string `json:"name"`
+	RunID     string `json:"run_id"`
+	Nonce     string `json:"nonce"`
+	Daemon    string `json:"daemon"`
+	Network   string `json:"network"`
+	Data      string `json:"data_volume"`
+	Legacy    string `json:"legacy_volume"`
+	Socket    string `json:"socket_volume"`
+	Workspace string `json:"workspace_volume,omitempty"`
 }
 
 func (s spec) validate() error {
@@ -57,6 +58,10 @@ func (s spec) validate() error {
 	if !volume.MatchString(s.Data) || !volume.MatchString(s.Legacy) || !volume.MatchString(s.Socket) ||
 		s.Data == s.Legacy || s.Socket == s.Data || s.Socket == s.Legacy {
 		return errors.New("invalid rootless volume identities")
+	}
+	if s.Workspace != "" && (!volume.MatchString(s.Workspace) || s.Workspace == s.Data ||
+		s.Workspace == s.Legacy || s.Workspace == s.Socket) {
+		return errors.New("invalid rootless workspace identity")
 	}
 	return nil
 }
@@ -81,6 +86,9 @@ func buildConfig(s spec) (*container.Config, *container.HostConfig) {
 			{Type: mount.TypeVolume, Source: s.Socket, Target: "/run/user/1000"},
 		},
 	}
+	if s.Workspace != "" {
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: s.Workspace, Target: "/workspace"})
+	}
 	return config, host
 }
 
@@ -104,7 +112,8 @@ func parseSpec(input io.Reader) (spec, error) {
 		return s, errors.New("invalid rootless request")
 	}
 	fields := map[string]*string{"name": &s.Name, "run_id": &s.RunID, "nonce": &s.Nonce, "daemon": &s.Daemon,
-		"network": &s.Network, "data_volume": &s.Data, "legacy_volume": &s.Legacy, "socket_volume": &s.Socket}
+		"network": &s.Network, "data_volume": &s.Data, "legacy_volume": &s.Legacy, "socket_volume": &s.Socket,
+		"workspace_volume": &s.Workspace}
 	seen := make(map[string]bool, len(fields))
 	for decoder.More() {
 		key, err := decoder.Token()
@@ -118,7 +127,8 @@ func parseSpec(input io.Reader) (spec, error) {
 		}
 	}
 	closeToken, err := decoder.Token()
-	if err != nil || closeToken != json.Delim('}') || len(seen) != len(fields) {
+	if err != nil || closeToken != json.Delim('}') || (len(seen) != len(fields) && len(seen) != len(fields)-1) ||
+		(len(seen) == len(fields)-1 && seen["workspace_volume"]) || (seen["workspace_volume"] && s.Workspace == "") {
 		return s, errors.New("invalid rootless request object")
 	}
 	var extra any

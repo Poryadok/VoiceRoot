@@ -21,6 +21,8 @@ from local_heavy_slots import _try_lock
 import local_rootless_profile as rootless
 import local_image_archive
 
+ROOTLESS_PROFILES = ('rootless-unix-v1', 'rootless-workspace-v1')
+
 
 class OwnershipError(Exception):
     pass
@@ -383,7 +385,7 @@ class OwnedRun:
             if item['state'] in ('starting', 'executing', 'stopping') and kind != 'container':
                 raise OwnershipError('invalid resource state')
             if item['state'] == 'quarantined' and (kind not in ('container', 'volume') or
-                    (kind == 'container' and item.get('profile') != 'rootless-unix-v1')):
+                    (kind == 'container' and item.get('profile') not in ROOTLESS_PROFILES)):
                 raise OwnershipError('invalid quarantined resource')
             if item['state'] == 'creating':
                 if item['id']:
@@ -403,11 +405,15 @@ class OwnedRun:
                         or item['image'] != rootless.IMAGE or set(item['mounts']) != rootless.TARGETS
                         or len(set(item['mounts'].values())) != 3 or item['ports']):
                     raise OwnershipError('invalid rootless container profile')
+                if item.get('profile') == 'rootless-workspace-v1' and ('command' in item
+                        or item['image'] != rootless.IMAGE or set(item['mounts']) != rootless.WORKSPACE_TARGETS
+                        or len(set(item['mounts'].values())) != 4 or item['ports']):
+                    raise OwnershipError('invalid rootless workspace profile')
                 if item.get('profile') == 'phase0-isolated-v1' and (item['network'] != 'none' or
                         set(item['mounts']) != {'/workspace/repo'} or item.get('readonly_mounts') != ['/workspace/repo'] or
                         item.get('command') != ['sleep', 'infinity'] or item['ports']):
                     raise OwnershipError('invalid phase0 container profile')
-                if ('profile' in item and item['profile'] not in ('rootless-unix-v1', 'phase0-isolated-v1') or
+                if ('profile' in item and item['profile'] not in (*ROOTLESS_PROFILES, 'phase0-isolated-v1') or
                         ('readonly_mounts' in item and item.get('profile') != 'phase0-isolated-v1')):
                     raise OwnershipError('invalid container profile')
             names.add(item['name'])
@@ -418,7 +424,7 @@ class OwnedRun:
                                                 any(name not in volumes for name in item['mounts'].values())):
                 raise OwnershipError('container references a foreign resource')
             if item['kind'] == 'volume' and item['state'] == 'quarantined' and not any(
-                    r.get('profile') == 'rootless-unix-v1' and r['state'] in ('quarantined', 'removing', 'removed')
+                    r.get('profile') in ROOTLESS_PROFILES and r['state'] in ('quarantined', 'removing', 'removed')
                     and item['name'] in r['mounts'].values() for r in state['resources']):
                 raise OwnershipError('quarantined volume has no matching daemon')
 
@@ -482,7 +488,7 @@ class OwnedRun:
         if item['kind'] == 'container' and 'command' in item and (
                 observed.get('command') != item['command'] or observed.get('entrypoint') != []):
             raise OwnershipError('Docker container command changed')
-        if item['kind'] == 'container' and item.get('profile') == 'rootless-unix-v1':
+        if item['kind'] == 'container' and item.get('profile') in ROOTLESS_PROFILES:
             self.engine.verify_rootless(item, labels, observed.get('running'))
         return observed
 
@@ -622,9 +628,9 @@ class OwnedRun:
         """
         self._validate()
         self._check_daemon()
-        if (not callable(creator) or not isinstance(mounts, dict) or set(mounts) != rootless.TARGETS
+        if (not callable(creator) or not isinstance(mounts, dict) or set(mounts) not in (rootless.TARGETS, rootless.WORKSPACE_TARGETS)
                 or any(not isinstance(value, str) for value in mounts.values())
-                or len(set(mounts.values())) != 3
+                or len(set(mounts.values())) != len(mounts)
                 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
                        for r in self.state['resources'])):
             raise OwnershipError('invalid rootless request or unresolved operation')
@@ -634,7 +640,7 @@ class OwnedRun:
         volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
         if len(networks) != 1 or any(name not in volumes for name in mounts.values()):
             raise OwnershipError('rootless network or volumes are not owned by this run')
-        if any(r.get('profile') == 'rootless-unix-v1' and r['state'] != 'removed' and
+        if any(r.get('profile') in ROOTLESS_PROFILES and r['state'] != 'removed' and
                set(r['mounts'].values()) & set(mounts.values()) for r in self.state['resources']):
             raise OwnershipError('rootless daemon volumes are already in use')
         image = self.engine.image(rootless.IMAGE)
@@ -648,12 +654,15 @@ class OwnedRun:
         nonce = uuid.uuid4().hex
         item = {'kind': 'container', 'name': self.run_id + '-container-' + nonce, 'nonce': nonce,
                 'id': '', 'state': 'creating', 'image': rootless.IMAGE, 'network': networks[0]['id'],
-                'mounts': dict(mounts), 'ports': [], 'profile': 'rootless-unix-v1'}
+                'mounts': dict(mounts), 'ports': [], 'profile':
+                    'rootless-workspace-v1' if '/workspace' in mounts else 'rootless-unix-v1'}
         self.state['resources'].append(item)
         self._save()
         request = {'name': item['name'], 'run_id': self.run_id, 'nonce': nonce, 'daemon': self.state['daemon'],
                    'network': item['network'], 'data_volume': mounts['/home/rootless/.local/share/docker'],
                    'legacy_volume': mounts['/var/lib/docker'], 'socket_volume': mounts['/run/user/1000']}
+        if '/workspace' in mounts:
+            request['workspace_volume'] = mounts['/workspace']
         identifier = creator(request)
         self._check_daemon()
         if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
@@ -774,7 +783,7 @@ class OwnedRun:
             self._validate()
             self._check_daemon()
             matches = [r for r in self.state['resources'] if r['kind'] == 'container' and r['name'] == name
-                       and r.get('profile') == 'rootless-unix-v1' and r['state'] == 'ready']
+                       and r.get('profile') in ROOTLESS_PROFILES and r['state'] == 'ready']
             if (len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
                                          for r in self.state['resources'])):
                 raise OwnershipError('rootless daemon is not ready or an operation is unresolved')
@@ -825,7 +834,7 @@ class OwnedRun:
         self._check_daemon()
         matches = [r for r in self.state['resources'] if r['kind'] == 'container' and
                    r['name'] == name and r['state'] in ('executing', 'stopping') and
-                   ('command' in r or r.get('profile') == 'rootless-unix-v1')]
+                   ('command' in r or r.get('profile') in ROOTLESS_PROFILES)]
         if len(matches) != 1:
             raise OwnershipError('no matching uncertain owned execution')
         item = matches[0]
@@ -839,7 +848,7 @@ class OwnedRun:
         self._check_daemon()
         if self._inspect(item).get('running') is not False:
             raise OwnershipError('owned container did not stop')
-        if item.get('profile') == 'rootless-unix-v1':
+        if item.get('profile') in ROOTLESS_PROFILES:
             volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume'}
             if any(name not in volumes or volumes[name]['state'] not in ('ready', 'quarantined')
                    for name in item['mounts'].values()):

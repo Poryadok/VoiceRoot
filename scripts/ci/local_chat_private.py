@@ -20,7 +20,7 @@ def validate_events(raw):
     return summary
 
 
-def inspect_pair(owner, daemon_name, client_name):
+def inspect_pair(owner, daemon_name, client_name, *, shared_workspace=False):
     """Inspect a locked journal's private daemon and client at one instant.
 
     The caller must enforce exclusive daemon, network and socket-volume access
@@ -29,8 +29,11 @@ def inspect_pair(owner, daemon_name, client_name):
     owner._validate()
     owner._check_daemon()
     resources = owner.state['resources']
+    if type(shared_workspace) is not bool:
+        raise ValueError('invalid shared workspace mode')
+    profile = 'rootless-workspace-v1' if shared_workspace else 'rootless-unix-v1'
     daemons = [r for r in resources if r['kind'] == 'container' and r['name'] == daemon_name
-               and r['state'] == 'ready' and r.get('profile') == 'rootless-unix-v1']
+               and r['state'] == 'ready' and r.get('profile') == profile]
     clients = [r for r in resources if r['kind'] == 'container' and r['name'] == client_name
                and r['state'] == 'ready' and 'command' in r]
     if len(daemons) != 1 or len(clients) != 1:
@@ -38,7 +41,8 @@ def inspect_pair(owner, daemon_name, client_name):
     daemon, client = daemons[0], clients[0]
     if (daemon['network'] != client['network'] or set(client['mounts']) != {'/socket', '/workspace'} or
             client['mounts']['/socket'] != daemon['mounts']['/run/user/1000'] or
-            client['mounts']['/workspace'] in daemon['mounts'].values()):
+            (client['mounts']['/workspace'] != daemon['mounts'].get('/workspace') if shared_workspace
+             else client['mounts']['/workspace'] in daemon['mounts'].values())):
         raise ValueError('private client socket or workspace differs')
     networks = [r for r in resources if r['kind'] == 'network' and r['id'] == daemon['network']
                 and r['state'] == 'ready']

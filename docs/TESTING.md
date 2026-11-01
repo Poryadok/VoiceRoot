@@ -725,6 +725,20 @@ the diagnostic does not authenticate helper, images, tools or Maven cache, or
 establish crash and concurrency acceptance. It reports `incomplete` and leaves
 the full `backend-auth` check `not_run`; it is not a preflight or PR receipt.
 
+An alternative full Auth diagnostic requires `--auth-full-helper`,
+`--auth-full-helper-sha256`, `--auth-full-client-image-id`,
+`--auth-full-maven-cache`, `--auth-full-maven-cache-sha256`,
+`--auth-full-images`, and `--auth-full-images-sha256`. The image manifest maps
+each of `postgres:16-alpine`, `redis:7-alpine`, `redis:7.4-alpine`,
+`nats:2.11-alpine`, and `migrate/migrate:v4.18.1` to an absolute `archive`,
+archive `sha256`, and `image_id`. Duplicate image IDs are not supported.
+The client image must provide Java, Maven, make, Bash and the required shell
+utilities. It executes `make auth-test-ci` offline against a private daemon,
+checks the captured Surefire reports, and records non-required skips. The
+caller must authenticate inputs and maintain exclusive daemon, socket and shared
+workspace custody. This diagnostic remains `incomplete`, keeps `backend-auth`
+`not_run`, and does not establish crash recovery or full preflight acceptance.
+
 When the plan selects `compose-config` or `compose-e2e`, the optional fixed
 private Compose fixture requires all five explicit inputs: `--compose-helper`,
 `--compose-helper-sha256`, `--compose-postgres-archive`,

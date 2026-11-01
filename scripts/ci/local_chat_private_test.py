@@ -90,9 +90,18 @@ class ChatPrivateTests(unittest.TestCase):
         owner.engine._call.side_effect = lambda kind, action, ident: json.dumps([
             network if kind == 'network' else daemon_raw if ident == did else client_raw])
         self.assertEqual(local_chat_private.inspect_pair(owner, 'daemon', 'client'), '172.18.0.2')
-        network['Containers']['f' * 64] = {'Name': 'foreign', 'EndpointID': '9' * 64}
+        daemon['profile'] = 'rootless-workspace-v1'
+        daemon['mounts']['/workspace'] = 'workspace'
         with self.assertRaises(ValueError):
             local_chat_private.inspect_pair(owner, 'daemon', 'client')
+        self.assertEqual(local_chat_private.inspect_pair(owner, 'daemon', 'client', shared_workspace=True), '172.18.0.2')
+        client['mounts']['/workspace'] = 'foreign'
+        with self.assertRaises(ValueError):
+            local_chat_private.inspect_pair(owner, 'daemon', 'client', shared_workspace=True)
+        client['mounts']['/workspace'] = 'workspace'
+        network['Containers']['f' * 64] = {'Name': 'foreign', 'EndpointID': '9' * 64}
+        with self.assertRaises(ValueError):
+            local_chat_private.inspect_pair(owner, 'daemon', 'client', shared_workspace=True)
 
     def test_source_change_and_failed_execution_never_report_success(self):
         owner = mock.Mock()

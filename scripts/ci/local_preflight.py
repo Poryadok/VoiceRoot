@@ -16,6 +16,8 @@ import local_ci_routing
 import local_ci_staging_execution
 import local_ci_staging_request
 import local_auth_orchestration
+import local_auth_full_orchestration
+import local_ci_matrix_inventory
 import local_chat_orchestration
 import local_compose_bridge
 import local_current_diff
@@ -95,8 +97,44 @@ def _validate_auth_report(result, source, inputs):
         raise ValueError('Auth diagnostic ownership evidence mismatch')
 
 
+def _validate_full_auth_inputs(inputs):
+    keys = {'helper', 'helper_sha256', 'client_image_id', 'maven_cache', 'maven_cache_sha256', 'images', 'images_sha256'}
+    if (not isinstance(inputs, dict) or set(inputs) != keys or
+            any(not isinstance(inputs[k], str) or not inputs[k] for k in keys) or
+            any(not Path(inputs[k]).is_absolute() for k in ('helper', 'maven_cache', 'images')) or
+            any(not re.fullmatch(r'[0-9a-f]{64}', inputs[k]) for k in ('helper_sha256', 'maven_cache_sha256', 'images_sha256')) or
+            not re.fullmatch(r'sha256:[0-9a-f]{64}', inputs['client_image_id'])):
+        raise ValueError('complete full Auth inputs and exact digests are required')
+
+
+def _validate_full_auth_report(result, source, inputs, images):
+    if not isinstance(result, dict):
+        raise ValueError('invalid full Auth report')
+    diagnostic, identities = result.get('diagnostic'), result.get('inputs')
+    expected_images = {tag: {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
+                       for tag, item in images.items()}
+    if (result.get('schema') != 'voice-local-auth-full-orchestration-v1' or result.get('status') != 'incomplete' or
+            not isinstance(diagnostic, dict) or diagnostic.get('schema') != 'voice-local-auth-full-diagnostic-v1' or
+            diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != source or diagnostic.get('exit_code') != 0 or
+            diagnostic.get('maven_cache_sha256') != inputs['maven_cache_sha256'] or not isinstance(identities, dict) or
+            identities.get('creator_sha256') != inputs['helper_sha256'] or identities.get('client_image_id') != inputs['client_image_id'] or
+            identities.get('maven_cache_sha256') != inputs['maven_cache_sha256'] or identities.get('images') != expected_images or
+            any(not isinstance(diagnostic.get(k), str) or not re.fullmatch(r'[0-9a-f]{64}', diagnostic[k])
+                for k in ('source_archive_sha256', 'build_archive_sha256'))):
+        raise ValueError('full Auth diagnostic identity or status mismatch')
+    summary, journal, slot = diagnostic.get('reports'), result.get('ownership_journal'), result.get('slot')
+    if (not isinstance(summary, dict) or type(summary.get('tests')) is not int or summary['tests'] < 1 or
+            type(summary.get('suite_count')) is not int or type(summary.get('required_suite_count')) is not int or
+            not 1 <= summary['required_suite_count'] <= summary['suite_count'] or not isinstance(summary.get('skipped'), list) or
+            not isinstance(summary.get('reports_sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', summary['reports_sha256']) or
+            type(slot) is not int or not 0 <= slot < 2 or not isinstance(journal, str) or Path(journal).is_absolute() or
+            '..' in Path(journal).parts or not Path(journal).parts or Path(journal).parts[0] != 'run' or
+            Path(journal).name != 'ownership.json'):
+        raise ValueError('full Auth report or ownership evidence mismatch')
+
+
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
-        auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None):
+        auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -108,6 +146,10 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             _validate_chat_inputs(chat_inputs)
         if auth_inputs is not None:
             _validate_auth_inputs(auth_inputs)
+        if full_auth_inputs is not None:
+            _validate_full_auth_inputs(full_auth_inputs)
+        if auth_inputs is not None and full_auth_inputs is not None:
+            raise ValueError('choose one Auth diagnostic mode')
         if compose_inputs is not None:
             local_compose_bridge.validate_inputs(compose_inputs)
         if runtime_images is not None:
@@ -123,6 +165,16 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if full_auth_inputs is not None:
+            if 'backend-auth' not in plan['checks']:
+                raise ValueError('full Auth diagnostic requires a planner-selected Auth check')
+            values = full_auth_inputs
+            images = local_auth_full_orchestration.read_images(values['images'], values['images_sha256'])
+            diagnostic = local_auth_full_orchestration.run(root, head, output / 'auth-full', values['helper'],
+                values['helper_sha256'], values['client_image_id'], values['maven_cache'], values['maven_cache_sha256'], images)
+            _validate_full_auth_report(diagnostic, plan['source'], values, images)
+            local_chat_orchestration._verify_file(values['images'], values['images_sha256'])
+            report['auth_full_report'] = 'auth-full/diagnostic.json'
         if staging_assets is not None and 'ci-script-tests' not in plan['checks']:
             raise ValueError('staging assets require a planner-selected ci-script-tests check')
         if staging_assets is not None and (not isinstance(staging_assets, dict) or
@@ -173,7 +225,8 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             report['ci_routing_report'] = 'ci-routing/diagnostic.json'
             if staging_assets is not None:
                 source = plan['source']
-                shards = [('staging', 34), ('proofs', 15), ('policy', 69)]
+                shards = [(name, local_ci_matrix_inventory.SHARD_RECIPE_COUNTS[name])
+                          for name in ('staging', 'proofs', 'policy')]
                 if runtime_images is not None: shards.append(('runtime', 23))
                 requests = []
                 for shard, recipe_count in shards:
@@ -315,6 +368,8 @@ def main():
     for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256',
                  'postgres-image-id', 'maven-image-id', 'maven-cache', 'maven-cache-sha256'):
         parser.add_argument('--auth-' + name, help='opt-in private Auth diagnostic input')
+    for name in ('helper', 'helper-sha256', 'client-image-id', 'maven-cache', 'maven-cache-sha256', 'images', 'images-sha256'):
+        parser.add_argument('--auth-full-' + name, help='opt-in full Auth diagnostic input')
     for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256', 'postgres-image-id'):
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
@@ -325,6 +380,10 @@ def main():
             'postgres_archive': args.auth_postgres_archive, 'postgres_archive_sha256': args.auth_postgres_archive_sha256,
             'postgres_image_id': args.auth_postgres_image_id, 'maven_image_id': args.auth_maven_image_id,
             'maven_cache': args.auth_maven_cache, 'maven_cache_sha256': args.auth_maven_cache_sha256}
+    full_auth = {'helper': args.auth_full_helper, 'helper_sha256': args.auth_full_helper_sha256,
+                 'client_image_id': args.auth_full_client_image_id, 'maven_cache': args.auth_full_maven_cache,
+                 'maven_cache_sha256': args.auth_full_maven_cache_sha256,
+                 'images': args.auth_full_images, 'images_sha256': args.auth_full_images_sha256}
     compose = {'helper': args.compose_helper, 'helper_sha256': args.compose_helper_sha256,
                'postgres_archive': args.compose_postgres_archive,
                'postgres_archive_sha256': args.compose_postgres_archive_sha256,
@@ -340,7 +399,8 @@ def main():
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
-                 compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images)
+                 compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images,
+                 full_auth if any(value is not None for value in full_auth.values()) else None)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 
