@@ -427,7 +427,13 @@ class PrepareCompositionTests(unittest.TestCase):
             context=resource_claim_test.context()
             if context_commit is not None:context['commit']=context_commit
             card=resource_claim_test.card(context)
-            journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
+            if strict_helpers:
+                import bootstrap_selection_test
+                installation=bootstrap_selection_test.owned_fixture()[3]
+                journal=resource_claim.RootJournal(root)
+            else:
+                installation=None;journal=resource_claim_test.MemoryJournal()
+            session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal,installation=installation)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
             if not strict_helpers:
@@ -442,7 +448,7 @@ class PrepareCompositionTests(unittest.TestCase):
             source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':operation,'context':context,'helper_sha256':session.helper,
                 'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/(operation+'.json'),source);save(installed/'policy.json',{'unrelated':'preserve'})
-            actions=bridge_root.Actions(code);actions.tt_session=session
+            actions=bridge_root.Actions(code,installation=installation);actions.tt_session=session
             def openssl(*args):subprocess.run(['/usr/bin/openssl',*map(str,args)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             key=root/'ca.key';cert=root/'ca.crt';peerkey=root/'peer.key';csr=root/'peer.csr';peer=root/'peer.crt';ext=root/'ext'
             openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','180','-subj','/CN=synthetic-root',
