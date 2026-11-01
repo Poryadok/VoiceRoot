@@ -55,7 +55,11 @@ class CompositionTests(unittest.TestCase):
         """Stop the synthetic API at the first pod inventory."""
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,through_workload=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False):
+    def test_public_prepare_journals_hub_shutdown_before_storage_recheck(self):
+        """Simulate Kubernetes pod termination; storage recheck is the boundary."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,through_workload=True,through_hub=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False):
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -65,7 +69,7 @@ class CompositionTests(unittest.TestCase):
             pass
         class ReachedFence(Exception):
             pass
-        def run(actions,request,approved,execution,workspace,stage,live,transport,get):
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             kube,params,policy=canonical_stores()
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
@@ -108,10 +112,22 @@ class CompositionTests(unittest.TestCase):
             kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
             stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
+            if through_hub:
+                from docker_runtime import NATS_IMAGE
+                hub={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':bridge_root.HUB,
+                    'namespace':'voice-staging','uid':'00000000-0000-4000-8000-000000000010','resourceVersion':'1','generation':1},
+                    'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'nats','image':NATS_IMAGE}]}}}}
+                stage.snapshots[bridge_root.HUB]=copy.deepcopy(hub)
+                stage.expected['deployment_uids'][bridge_root.HUB]=hub['metadata']['uid']
+                stage.expected['marker_uid']=stage.marker['metadata']['uid']
+                stage.old_images[bridge_root.HUB+'/nats']=NATS_IMAGE
+                card['observed']['images']=copy.deepcopy(stage.old_images)
+                live[('deployment',bridge_root.HUB)]=copy.deepcopy(hub)
             stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.expected['deployment_uids']['voice-user']=stage.snapshots['voice-user']['metadata']['uid']
             live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             live[('deployment','voice-user')]=copy.deepcopy(stage.snapshots['voice-user'])
+            if through_hub:live[('service','voice-nats')]=copy.deepcopy(stage.service)
             if enrolled and not through_nats:
                 old_get=kube.get
                 def broker_boundary(kind,name):
@@ -134,10 +150,22 @@ class CompositionTests(unittest.TestCase):
                 tree={'streams':len(detail),'consumers':0,'messages':sum(x['state']['messages'] for x in detail),
                     'bytes':sum(x['state']['bytes'] for x in detail),'total':1,
                     'account_details':[{'id':'A'+'A'*55,'stream_detail':detail}]}
-                hub={'metadata':{'name':bridge_root.HUB,'uid':'hub'}}
-                replica={'metadata':{'uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'hub'}]}}
-                monitor_pod={'metadata':{'name':bridge_root.HUB+'-fixture','ownerReferences':[{'kind':'ReplicaSet','name':'rs','uid':'rs'}]},
-                    'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}
+                hub=copy.deepcopy(stage.snapshots[bridge_root.HUB]) if through_hub else {'metadata':{'name':bridge_root.HUB,'uid':'hub'}}
+                hub_uid=hub['metadata']['uid'];rs_uid='00000000-0000-4000-8000-000000000011' if through_hub else 'rs'
+                replica={'metadata':{'uid':rs_uid,'ownerReferences':[{'kind':'Deployment','uid':hub_uid,'controller':True}]}}
+                monitor_pod={'metadata':{'name':bridge_root.HUB+'-fixture','namespace':'voice-staging',
+                    'uid':'00000000-0000-4000-8000-000000000012','resourceVersion':'1',
+                    'ownerReferences':[{'kind':'ReplicaSet','name':'rs','uid':rs_uid,'controller':True}]},
+                    'spec':{'nodeName':'pmdebook','containers':[{'name':'nats','image':NATS_IMAGE}] if through_hub else [],
+                        'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]},
+                    'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}],
+                        'containerStatuses':[{'name':'nats','ready':True,'imageID':NATS_IMAGE,
+                            'containerID':'containerd://'+'c'*64,'restartCount':0,
+                            'state':{'running':{'startedAt':'2026-10-29T00:00:00Z'}}}] if through_hub else []}}
+                if through_hub:
+                    live[('replicaset','rs')]=copy.deepcopy(replica)
+                    live[('pod',monitor_pod['metadata']['name'])]=copy.deepcopy(monitor_pod)
+                    pod=copy.deepcopy(monitor_pod)
                 old_get=kube.get
                 def get_nats(kind,name):
                     if (kind,name)==('deployment',bridge_root.HUB):return copy.deepcopy(hub)
@@ -165,16 +193,40 @@ class CompositionTests(unittest.TestCase):
                         kube.objects[('ConfigMap',name)]=row;live[('configmap',name)]=copy.deepcopy(row)
                     for name,row in rows.items():live[('secret',name)]=copy.deepcopy(row)
                     live[('secret','voice-nats-hub-tls-'+installation.generation)]={'metadata':{'uid':'tls-uid','resourceVersion':'1'}}
-                    fake=FakeKube({('configmap','voice-nats-generation'):stage.marker,
-                        ('deployment','voice-user'):stage.snapshots['voice-user']})
+                    objects={('configmap','voice-nats-generation'):stage.marker,
+                        ('deployment','voice-user'):stage.snapshots['voice-user']}
+                    if through_hub:
+                        objects[('deployment',bridge_root.HUB)]=stage.snapshots[bridge_root.HUB]
+                        objects[('pod',monitor_pod['metadata']['name'])]=monitor_pod
+                    fake=FakeKube(objects);flags={'hub_released':False}
                     def capture_fence(argv,*,body=b'',**kwargs):
                         if 'patch' in argv:
                             index=argv.index('patch');kind=argv[index+1]
                             if kind=='deployment' and not through_workload:raise ReachedFence()
                             result=fake.capture_patch(argv,body=body,**kwargs)
                             name=argv[index+2];live[(kind,name)]=fake.get(kind,name)
+                            if through_hub and kind=='deployment' and name==bridge_root.HUB:
+                                retained=fake.objects[('pod',monitor_pod['metadata']['name'])]
+                                retained['metadata']['deletionTimestamp']='2026-10-29T00:00:01Z'
+                                retained['status']['containerStatuses'][0]['state']={'terminated':{'exitCode':0,
+                                    'startedAt':'2026-10-29T00:00:00Z','finishedAt':'2026-10-29T00:00:01Z'}}
+                                live[('pod',monitor_pod['metadata']['name'])]=copy.deepcopy(retained)
+                            if through_hub and kind=='pod' and not live[(kind,name)]['metadata'].get('finalizers'):
+                                flags['hub_released']=True
                             return result
-                        if through_workload and 'pods,replicasets' in argv:raise ReachedFence()
+                        if through_workload and 'pods,replicasets' in argv:
+                            if through_hub:return json.dumps({'items':[]}).encode()
+                            raise ReachedFence()
+                        if through_hub and 'hpa,jobs,deployments' in argv:
+                            return json.dumps({'items':[]}).encode()
+                        if through_hub and 'version' in argv:
+                            commands.authority_guard(argv)
+                            return json.dumps({'serverVersion':{'major':'1','minor':'28'}}).encode()
+                        if through_hub and 'exec' in argv and 'wget' in argv:
+                            commands.authority_guard(argv)
+                            return json.dumps(tree).encode()
+                        if through_hub and argv[-3:]==['pods','-o','json']:
+                            return json.dumps({'items':[live[('pod',monitor_pod['metadata']['name'])]]}).encode()
                         if 'jsonpath-as-json=' in ' '.join(argv):
                             name=argv[argv.index('secret')+1];meta=live[('secret',name)]['metadata']
                             return json.dumps([meta['uid'],meta['resourceVersion']]).encode()
@@ -203,6 +255,11 @@ class CompositionTests(unittest.TestCase):
                     if through_fence:
                         nats_patches.enter_context(patch.object(commands,'capture',side_effect=capture_fence))
                         nats_patches.enter_context(patch.object(stage_runtime,'capture',side_effect=capture_fence))
+                        if through_hub:
+                            def get_after_hub(kind,name):
+                                if flags['hub_released'] and kind=='pvc':raise ReachedFence()
+                                return get(kind,name)
+                            nats_patches.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get_after_hub))
                         with self.assertRaises(ReachedFence):actions.execute(request)
                     else:
                         with self.assertRaises(ReachedInput):actions.execute(request)
@@ -225,6 +282,11 @@ class CompositionTests(unittest.TestCase):
                 if through_workload:
                     self.assertEqual(fake.get('deployment','voice-user')['spec']['replicas'],0)
                     self.assertEqual(cohort._read(base/'effects'/'cut-deployment-voice-user.json')['status'],'DONE')
+                if through_hub:
+                    self.assertTrue(flags['hub_released'])
+                    self.assertEqual(fake.get('deployment',bridge_root.HUB)['spec']['replicas'],0)
+                    for suffix in ('retain','release'):
+                        self.assertEqual(cohort._read(base/'effects'/('cut-pod-'+monitor_pod['metadata']['name']+'-'+suffix+'.json'))['status'],'DONE')
                 self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
             else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         overrides=None
@@ -273,7 +335,7 @@ class CompositionTests(unittest.TestCase):
         import staging_prerequisites_test as fixtures
         class ReachedKube(Exception):
             pass
-        def run(actions,request,approved,execution,workspace,stage,live,transport,get):
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             with patch.object(stage.kube,'run',side_effect=ReachedKube):
                 with self.assertRaises(ReachedKube):
                     cohort._start_cut(actions,request,approved,execution,workspace)

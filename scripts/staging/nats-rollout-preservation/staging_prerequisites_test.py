@@ -573,7 +573,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(module,'preflight_payloads',side_effect=checked))
             request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
             if on_ready is not None:
-                return on_ready(actions,request,approved,execution,workspace,stage,live,transport,get)
+                return on_ready(actions,request,approved,execution,workspace,stage,live,transport,get,card)
             if fault=='missing-issuer':
                 if bridge_missing is None:
                     with self.assertRaises(FileNotFoundError):prereq.prepare_inputs(actions,request,approved,execution,workspace)
