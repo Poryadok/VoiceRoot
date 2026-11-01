@@ -28,7 +28,13 @@ class PrivateGitTests(unittest.TestCase):
             source = local_source_snapshot.capture(root, head)
             snapshot = local_source_snapshot.materialize(root, source, base / 'snapshot')
             original = git('status', '--porcelain')
-            env = local_private_git.prepare(root, source, snapshot, base / 'fixture.git')
+            calls = []
+            def runner(command, **kwargs):
+                calls.append(command)
+                return subprocess.run(command, capture_output=True, check=False, **kwargs)
+            env = local_private_git.prepare(root, source, snapshot, base / 'fixture.git', runner=runner)
+            self.assertEqual(len(calls), 9)
+            self.assertTrue(all(command[0] == 'git' for command in calls))
             self.assertEqual(subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=snapshot, env=env, text=True).strip(), source['tree'])
             self.assertEqual(subprocess.run(['git', 'diff', '--quiet', 'HEAD'], cwd=snapshot, env=env).returncode, 0)
             new = snapshot / 'src/backend/chat/pb/new.go'
