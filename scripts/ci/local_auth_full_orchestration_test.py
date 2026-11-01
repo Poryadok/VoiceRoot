@@ -9,6 +9,36 @@ import local_auth_full_orchestration as subject
 
 
 class FullAuthInputsTests(unittest.TestCase):
+    def test_cgroup_sample_accepts_only_fixed_bounded_numeric_counters(self):
+        raw = b'12 256 3 4096 536870912 4 5 6\n'
+        self.assertEqual(subject.parse_cgroup_sample(raw), {'pids_current': 12, 'pids_max': 256,
+                         'pids_events_max': 3, 'memory_current': 4096, 'memory_max': 536870912,
+                         'memory_events_max': 4, 'memory_events_oom': 5, 'memory_events_oom_kill': 6})
+        for bad in (b'12 256 3 4096 536870912 4 5 secret', b'1 ' * 2000, b'1 2 3'):
+            with self.subTest(bad=bad[:20]), self.assertRaises(ValueError):
+                subject.parse_cgroup_sample(bad)
+
+    def test_cgroup_sampling_requires_the_ready_owned_daemon_and_fixed_limits(self):
+        owner = mock.Mock()
+        def execute(name, out, err):
+            out.write(b'12 256 3 4096 536870912 4 5 6\n'); return 0
+        owner.read_rootless_cgroup.side_effect = execute
+        sample = subject.sample_cgroup(owner, 'daemon')
+        self.assertEqual(sample['pids_events_max'], 3)
+        owner.read_rootless_cgroup.side_effect = ValueError('Auth cgroup counters unavailable')
+        with self.assertRaisesRegex(ValueError, 'cgroup counters unavailable'):
+            subject.sample_cgroup(owner, 'daemon')
+
+    def test_cgroup_limit_event_is_saved_and_fails_closed(self):
+        before = {key: 0 for key in subject.CGROUP_KEYS}
+        after = dict(before, pids_events_max=1)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, 'resource limit hit'):
+                subject.save_cgroup_counters(Path(directory), before, after)
+            saved = json.loads((Path(directory) / 'cgroup-counters.json').read_text())
+            self.assertEqual(saved['after']['pids_events_max'], 1)
+
+
     def inputs(self):
         return {tag: {'archive': str(Path(tempfile.gettempdir()) / str(index)), 'sha256': 'a' * 64,
                       'image_id': 'sha256:' + ('%x' % (index + 1)) * 64}
@@ -176,11 +206,13 @@ class FullAuthInputsTests(unittest.TestCase):
                  mock.patch.object(subject, 'provision_make', side_effect=ValueError('missing make')), \
                  mock.patch.object(subject.local_auth_full, 'wait_daemon'), \
                  mock.patch.object(subject, 'load_images'), \
+                 mock.patch.object(subject, 'sample_cgroup', return_value={key: 0 for key in subject.CGROUP_KEYS}), \
                  mock.patch.object(subject.local_auth_full, 'run_full', side_effect=lambda *args, **kw: kw['prepare_tools']()), \
                  self.assertRaisesRegex(ValueError, 'missing make'):
                 subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,
                                    'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
             scheduled.run.create_rootless_container.assert_called_once()
+            self.assertTrue((output / 'cgroup-counters.json').is_file())
             scheduled.close.assert_called_once()
             self.assertEqual(json.loads((output / 'stage.json').read_text())['stage'], 'make-provisioning')
 
@@ -208,6 +240,7 @@ class FullAuthInputsTests(unittest.TestCase):
                  mock.patch.object(subject, 'provision_make', return_value=make_tool) as provision, \
                  mock.patch.object(subject.local_auth_full, 'wait_daemon'), \
                  mock.patch.object(subject, 'load_images', return_value={}), \
+                 mock.patch.object(subject, 'sample_cgroup', return_value={key: 0 for key in subject.CGROUP_KEYS}), \
                  mock.patch.object(subject.local_auth_full, 'run_full', side_effect=lambda *args, **kw: (kw['prepare_tools'](), {'maven_cache_sha256': 'd' * 64})[1]), \
                  mock.patch.object(subject, '_verify_make'):
                 result = subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,

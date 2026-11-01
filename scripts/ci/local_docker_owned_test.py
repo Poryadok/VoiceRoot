@@ -684,6 +684,25 @@ class OwnedRunTests(unittest.TestCase):
             finally:
                 owner.close()
 
+    def test_rootless_counter_read_journals_uncertain_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine(); owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.WORKSPACE_TARGETS)}
+                def creator(request):
+                    item = owner.state['resources'][-1]
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'], 'voice.ci.kind': 'container'}
+                    return engine.create_container(item['name'], labels, rootless.IMAGE, item['network'], mounts, [])
+                name = owner.create_rootless_container(network, mounts, creator); owner.start_container(name)
+                engine.uncertain_exec = True
+                with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err, self.assertRaises(OwnershipError):
+                    owner.read_rootless_cgroup(name, out, err)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'executing')
+                with self.assertRaises(OwnershipError): owner.cleanup()
+            finally:
+                owner.close()
+
     def test_rootless_shared_workspace_requires_owned_distinct_volume_and_quarantines_it(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = FakeEngine(); owner = OwnedRun.create(Path(directory), engine)
