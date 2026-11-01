@@ -458,7 +458,21 @@ class Session:
                     'PersistentVolumeClaim','Job','Pod') if row['phase']=='cohort-preservation' and row.get('target_sha256')
                     else ('Secret','ConfigMap','Ingress','Deployment','StatefulSet','Service','NetworkPolicy',
                           'PersistentVolumeClaim','Job','Pod') if row['phase']=='prerequisites-captured' else ())
-                canonical=(len(tail)==4 and tail[-1]=='json' and tail[0] in canonical_kinds)
+                # _recheck_stores replays this fixed named projection while a
+                # qualified cohort is in prerequisites. Keep lists, arbitrary
+                # names, other kinds and the bare kubectl route out of this seam.
+                store_reads={('Secret','voice-app-secrets'),('Secret','voice-minio-credentials'),
+                    ('ConfigMap','voice-app-config'),('ConfigMap','voice-clickhouse-init'),
+                    ('Deployment','voice-file'),('Deployment','voice-user'),('Deployment','voice-redis'),
+                    ('StatefulSet','voice-minio'),('StatefulSet','voice-clickhouse'),
+                    ('PersistentVolumeClaim','data-voice-minio-0'),('PersistentVolumeClaim','chdata-voice-clickhouse-0'),
+                    ('Service','voice-minio'),('Service','voice-redis'),('Service','voice-clickhouse'),
+                    ('Job','voice-minio-create-avatars-bucket'),('Job','voice-minio-create-files-bucket'),
+                    ('Pod','voice-clickhouse-0')}
+                prerequisite_store=(row['phase']=='prerequisites' and cohort_hash is not None
+                    and row.get('target_sha256') is not None and prefix==prefixes[0]
+                    and len(tail)==4 and tail[-1]=='json' and (tail[0],tail[1]) in store_reads)
+                canonical=(len(tail)==4 and tail[-1]=='json' and tail[0] in canonical_kinds) or prerequisite_store
                 postgres_named=(row['phase']=='cohort-preservation' and len(tail)==4 and tail[-1]=='json'
                     and ((tail[0],tail[1]) in (('statefulset','voice-postgres'),
                         ('persistentvolumeclaim','pgdata-voice-postgres-0'),('endpoints','voice-postgres'))
