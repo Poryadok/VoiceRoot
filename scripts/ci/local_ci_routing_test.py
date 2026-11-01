@@ -1,5 +1,7 @@
 """Safe-subset CI routing diagnostic tests."""
 import subprocess
+import hashlib
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +11,87 @@ import local_ci_routing as routing
 
 
 class RoutingDiagnosticTest(unittest.TestCase):
+    def test_workflow_is_part_of_the_pinned_safety_surface(self):
+        self.assertIn('.github/workflows/ci.yml', routing.SAFETY_SURFACE)
+
+    def test_workflow_with_bash_env_injection_refuses_before_execution(self):
+        path = self.root / '.github/workflows/ci.yml'
+        path.parent.mkdir(parents=True)
+        path.write_text('jobs:\n  ci-gate:\n    env:\n      BASH_ENV: malicious\n')
+        expected = routing.SAFETY_SURFACE['.github/workflows/ci.yml']
+        with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, 'SAFETY_SURFACE', {'.github/workflows/ci.yml': expected}), \
+             patch.object(routing.local_process_supervision, 'run_diagnostic') as invoke:
+            with self.assertRaisesRegex(ValueError, 'safety surface changed'):
+                routing.run(self.root, self.source, self.output)
+        invoke.assert_not_called()
+
+    def test_ambient_gate_variables_do_not_reach_tests(self):
+        captured = []
+        def invoke(command, **kwargs):
+            captured.append(kwargs['env'])
+            if len(command) == 2:
+                kwargs['stdout'].write(b'All verify-required-jobs tests passed.\n')
+            else:
+                count = 8 if any('selected-acceptance-gate_test.py' in arg for arg in command) else 4
+                kwargs['stderr'].write(('Ran %s tests in 0.1s\n\nOK\n' % count).encode())
+            return subprocess.CompletedProcess(command, 0)
+        ambient = {'JOB_BACKEND_GO': 'success', 'RUN_GO': 'true', 'FILTER_AUTH': 'true',
+                   'GLOBAL': 'true', 'PROTOS': 'true', 'COMPOSE': 'true', 'CODE': 'true',
+                   'BASH_FUNC_rm%%': '() { :; }', 'BASHOPTS': 'extglob'}
+        with patch.dict(os.environ, ambient), \
+             patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, '_verify_safety'), \
+             patch.object(routing.local_source_snapshot, 'verify_materialized'), \
+             patch.object(routing.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(routing.local_process_supervision, 'run_diagnostic', side_effect=invoke):
+            routing.run(self.root, self.source, self.output)
+        for env in captured:
+            self.assertFalse(set(ambient) & set(env))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows owned process acceptance')
+    def test_python_commands_cannot_import_adjacent_shadow_modules(self):
+        marker = self.root / 'shadow-executed'
+        for directory, name, suite in ((self.root / '.github/ci', 'selected-acceptance-gate_test.py', 'SelectedAcceptanceGateTests'),
+                                       (self.root / 'scripts/ci', 'fast-gate-routing_test.py', 'FastGateRoutingTests')):
+            directory.mkdir(parents=True)
+            (directory / 'yaml.py').write_text('from pathlib import Path\nPath(' + repr(str(marker)) + ').write_text("bad")\nraise RuntimeError("shadow")\n')
+            (directory / name).write_text('import unittest, yaml\nclass ' + suite + '(unittest.TestCase):\n def test_ok(self): self.assertTrue(hasattr(yaml, "safe_load"))\nif __name__ == "__main__": unittest.main()\n')
+        (self.root / '.github/ci/verify-required-jobs_test.sh').write_text('echo "All verify-required-jobs tests passed."\n')
+        with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, '_verify_safety'), patch.object(routing, 'GATE_CASES', ('test_ok',)), \
+             patch.object(routing, 'ROUTER_CASES', ('test_ok',)), \
+             patch.object(routing.local_source_snapshot, 'verify_materialized'), \
+             patch.object(routing.local_source_snapshot, 'capture', return_value=self.source):
+            report = routing.run(self.root, self.source, self.output)
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertFalse(marker.exists())
+    def test_unreviewed_executable_drift_refuses_before_execution(self):
+        with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing.local_process_supervision, 'run_diagnostic') as invoke:
+            with self.assertRaisesRegex(ValueError, 'safety surface'):
+                routing.run(self.root, self.source, self.output)
+        invoke.assert_not_called()
+
+    def test_missing_shell_completion_cannot_satisfy_gate(self):
+        def invoke(command, **kwargs):
+            return subprocess.CompletedProcess(command, 0)
+        with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, '_verify_safety'), \
+             patch.object(routing.local_process_supervision, 'run_diagnostic', side_effect=invoke):
+            with self.assertRaisesRegex(ValueError, 'gate-shell'):
+                routing.run(self.root, self.source, self.output)
+
+    def test_modified_audited_file_refuses_before_any_process(self):
+        path = self.root / 'audited-test'
+        path.write_bytes(b'changed')
+        expected = hashlib.sha256(b'reviewed').hexdigest()
+        with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, 'SAFETY_SURFACE', {'audited-test': expected}), \
+             patch.object(routing.local_process_supervision, 'run_diagnostic') as invoke:
+            with self.assertRaisesRegex(ValueError, 'safety surface changed'):
+                routing.run(self.root, self.source, self.output)
+        invoke.assert_not_called()
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -19,10 +102,14 @@ class RoutingDiagnosticTest(unittest.TestCase):
 
     def execute(self, *, stderr=b'Ran 4 tests in 0.1s\n\nOK\n', exit_code=0, changed=False):
         def invoke(command, **kwargs):
-            content = stderr.replace(b'Ran 4 tests', b'Ran 8 tests') if 'selected-acceptance-gate_test.py' in command[2] else stderr
+            if len(command) == 2:
+                kwargs['stdout'].write(b'All verify-required-jobs tests passed.\n')
+                return subprocess.CompletedProcess(command, exit_code)
+            content = stderr.replace(b'Ran 4 tests', b'Ran 8 tests') if any('selected-acceptance-gate_test.py' in arg for arg in command) else stderr
             kwargs['stderr'].write(content)
             return subprocess.CompletedProcess(command, exit_code)
         with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, '_verify_safety'), \
              patch.object(routing.local_source_snapshot, 'verify_materialized'), \
              patch.object(routing.local_source_snapshot, 'capture', return_value=({'head': 'changed'} if changed else self.source)), \
              patch.object(routing.local_process_supervision, 'run_diagnostic', side_effect=invoke):
@@ -32,7 +119,7 @@ class RoutingDiagnosticTest(unittest.TestCase):
         report = self.execute()
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['source'], self.source)
-        self.assertEqual(len(report['commands']), 2)
+        self.assertEqual(len(report['commands']), 3)
         self.assertTrue(report['omitted'])
 
     def test_failed_skipped_or_missing_tests_are_rejected(self):
@@ -51,17 +138,21 @@ class RoutingDiagnosticTest(unittest.TestCase):
 
     def test_materialization_provides_precheck_and_every_command_has_postcheck(self):
         def invoke(command, **kwargs):
-            count = 8 if 'selected-acceptance-gate_test.py' in command[2] else 4
+            if len(command) == 2:
+                kwargs['stdout'].write(b'All verify-required-jobs tests passed.\n')
+                return subprocess.CompletedProcess(command, 0)
+            count = 8 if any('selected-acceptance-gate_test.py' in arg for arg in command) else 4
             kwargs['stderr'].write(('Ran %s tests in 0.1s\n\nOK\n' % count).encode())
             return subprocess.CompletedProcess(command, 0)
         with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root) as materialize, \
+             patch.object(routing, '_verify_safety'), \
              patch.object(routing.local_source_snapshot, 'verify_materialized') as verify, \
              patch.object(routing.local_source_snapshot, 'capture', return_value=self.source) as capture, \
              patch.object(routing.local_process_supervision, 'run_diagnostic', side_effect=invoke):
             routing.run(self.root, self.source, self.output)
         materialize.assert_called_once()
-        self.assertEqual(verify.call_count, 2)
-        self.assertEqual(capture.call_count, 2)
+        self.assertEqual(verify.call_count, 3)
+        self.assertEqual(capture.call_count, 3)
 
     def test_failed_materialization_runs_no_command(self):
         with patch.object(routing.local_source_snapshot, 'materialize', side_effect=ValueError('source changed')), \

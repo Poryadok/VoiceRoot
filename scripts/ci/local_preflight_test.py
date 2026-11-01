@@ -96,7 +96,8 @@ class LocalPreflightTests(unittest.TestCase):
     def test_ci_routing_subset_does_not_satisfy_script_matrix(self):
         plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
         diagnostic = {'schema': 'voice-local-ci-routing-diagnostic-v1', 'status': 'incomplete',
-                      'source': self.source, 'commands': [{'name': 'gate', 'tests': 8}, {'name': 'router', 'tests': 4}]}
+                      'source': self.source, 'commands': [{'name': 'gate-shell', 'tests': None},
+                                                          {'name': 'gate', 'tests': 8}, {'name': 'router', 'tests': 4}]}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
              patch.object(local_preflight.local_ci_routing, 'run', return_value=diagnostic) as route:

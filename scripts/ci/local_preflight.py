@@ -83,7 +83,8 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                     diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
                     not isinstance(diagnostic.get('commands'), list) or
                     [(row.get('name'), row.get('tests')) for row in diagnostic['commands'] if isinstance(row, dict)] !=
-                    [('gate', len(local_ci_routing.GATE_CASES)), ('router', len(local_ci_routing.ROUTER_CASES))]):
+                    [('gate-shell', None), ('gate', len(local_ci_routing.GATE_CASES)),
+                     ('router', len(local_ci_routing.ROUTER_CASES))]):
                 raise ValueError('CI routing diagnostic did not match the planned source and inventory')
             report['ci_routing_report'] = 'ci-routing/diagnostic.json'
         if 'current-diff-contract' in plan['checks']:

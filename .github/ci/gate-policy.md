@@ -62,8 +62,10 @@ parents and merge tree are checked before using the actual base. Job-level
 success does not prove every required Go matrix case ran; the inventory and
 member receipts described below are still required. Neither the comparison nor
 this gate is a local preflight receipt or release qualification. When CI script
-checks are selected, local preflight runs a source-bound subset of gate/router
-cases with retained logs. Shell fixture cases that might reach a real Docker
+checks are selected, local preflight runs the named gate shell and Python test
+scripts and a source-bound subset of router cases with retained logs. The executable
+gate/router safety surface is pinned and changes require a fresh isolation audit;
+drift refuses execution. Shell fixture cases that might reach a real Docker
 daemon or Go tool remain excluded until their execution environment is isolated;
 the full script matrix remains `not_run`. The local
 preflight runs the snapshot's current-diff validator against a synthetic commit
