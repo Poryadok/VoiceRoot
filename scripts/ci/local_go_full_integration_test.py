@@ -13,6 +13,10 @@ class FullGoTests(unittest.TestCase):
     def test_profiles_are_explicit_and_unsupported_services_refuse(self):
         self.assertEqual(subject.profile('bot')['images'], ('postgres:16-bookworm', 'nats:2.10-alpine'))
         self.assertEqual(subject.profile('search')['images'], ('postgres:16-bookworm',))
+        for service in ('controlledgame', 'moderation', 'social', 'subscription', 'story'):
+            with self.subTest(service=service):
+                self.assertEqual(subject.profile(service)['images'], ('postgres:16-bookworm',))
+                self.assertEqual(subject.profile(service)['module'], 'src/backend/' + service)
         self.assertEqual(subject.profile('chat')['images'], subject.chat.IMAGES)
         for name in ('gateway', 'file', 'voice', '../bot', 'unknown'):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'unsupported'):
@@ -58,6 +62,7 @@ class FullGoTests(unittest.TestCase):
             def execute(client, command, out, err, timeout):
                 self.assertIn('cd /workspace/source/src/backend/bot', command[2])
                 self.assertIn('go test -json -count=1 -timeout 20m -p 1 -parallel 1 ./...', command[2])
+                self.assertIn('exec env -i PATH=', command[2])
                 self.assertNotIn('-short', command[2])
                 out.write(b''.join((json.dumps(event) + '\n').encode() for event in events))
                 return 0
@@ -99,10 +104,18 @@ class FullGoTests(unittest.TestCase):
                 subject.run_profile('search', 'owner', 'daemon', 'client', root, {}, root, 'a' * 64, {}, root / 'out')
             self.assertEqual(run.call_args.kwargs, {'service': 'search'})
 
+    def test_postgres_profiles_pass_only_fixed_service_to_shared_executor(self):
+        for service in ('controlledgame', 'moderation', 'social', 'subscription', 'story'):
+            with self.subTest(service=service), mock.patch.object(subject.chat, 'run_full',
+                                                               return_value={'status': 'incomplete'}) as run:
+                subject.run_profile(service, 'owner', 'daemon', 'client', Path('.'), {}, Path('.'),
+                                    'a' * 64, {}, Path('out'))
+                self.assertEqual(run.call_args.kwargs, {'service': service})
+
     def test_repository_profile_inventories_are_nonempty_and_service_scoped(self):
         root = Path(__file__).resolve().parents[2]
         inventory = json.loads((root / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
-        for service in ('bot', 'search'):
+        for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'):
             packages = sorted({item[0] for item in inventory[service]})
             with self.subTest(service=service):
                 required = subject.read_required(root, service, packages)
