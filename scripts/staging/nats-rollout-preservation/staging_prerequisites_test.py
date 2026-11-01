@@ -364,6 +364,17 @@ class PrepareCompositionTests(unittest.TestCase):
             self.assertEqual(actions.tt_session.check()['operation'],'b'*12)
         self._cold_prepare(on_ready=ready,fixture_operation='b'*12)
 
+    def test_strict_fixture_binds_dispatcher_execution(self):
+        def ready(actions,request,approved,execution,workspace,*args):
+            self.assertEqual(execution['dispatcher_run_id'],17)
+            self.assertEqual(execution['head_sha'],actions.tt_session.context['commit'])
+            self.assertEqual(actions.tt_session.context['images'],candidate)
+            receipt=json.loads((workspace.parents[1]/'source-authority'/
+                                (actions.tt_session.operation+'.json')).read_bytes())
+            self.assertEqual(receipt['execution_sha256'],prereq.digest(execution))
+        candidate={'voice-user/user':'example.invalid/user@sha256:'+'a'*64}
+        self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,fixture_candidate_images=candidate)
+
     def test_cold_prepare_executes_all_children_before_typed_capture(self):
         self._cold_prepare()
 
@@ -387,7 +398,7 @@ class PrepareCompositionTests(unittest.TestCase):
 
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
                       context_commit=None,full_source=False,strict_helpers=False,source_overrides=None,workspace_context=None,
-                      fixture_installation=None,fixture_operation=None):
+                      fixture_installation=None,fixture_operation=None,fixture_candidate_images=None):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -448,7 +459,8 @@ class PrepareCompositionTests(unittest.TestCase):
             if context_commit is not None:context['commit']=context_commit
             if strict_helpers:
                 game_image=bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64
-                context['images']={'voice-gameintegration/gameintegration':game_image}
+                context['images']=(copy.deepcopy(fixture_candidate_images) if fixture_candidate_images is not None
+                                   else {'voice-gameintegration/gameintegration':game_image})
             card=resource_claim_test.card(context)
             if strict_helpers:
                 import bootstrap_selection_test
@@ -468,6 +480,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 approved['source_files']['scripts/staging/nats-rollout-preservation/realtime_bootstrap.py']=manifest['nats-rollout-preservation/realtime_bootstrap.py']
             if not strict_helpers:approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
             execution={'fixture':'source selected by real bridge capture, modeled here'}
+            if strict_helpers:execution.update(dispatcher_run_id=17,head_sha=context['commit'])
             if realtime_source:execution['head_sha']=context['commit']
             source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':operation,'context':context,'helper_sha256':session.helper,
                 'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
