@@ -14,6 +14,19 @@ import local_ci_matrix_inventory as matrix
 
 
 class WorkerBindingTests(unittest.TestCase):
+    def test_prewarm_tuning_is_scoped_to_build_command(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / 'scripts/ci/nats-rollout-preservation_test.sh').read_text(encoding='utf-8')
+        hashes = {name: hashlib.sha256((root / 'scripts/staging/nats-known-baseline' / name).read_bytes()).hexdigest()
+                  for name in ('go.mod', 'go.sum')}
+        _, data = worker.build_adapter(source, hashes)
+        tuned = b'timeout 600 env GOGC=30 GOMEMLIMIT=1200MiB go build github.com/nats-io/nats-server/v2/server;'
+        self.assertEqual(data.count(tuned), 1)
+        self.assertEqual(data.count(b'GOGC=30'), 1)
+        self.assertEqual(data.count(b'GOMEMLIMIT=1200MiB'), 1)
+        self.assertIn(b'python -m unittest "$@"', data)
+        self.assertIn(b'python -m unittest controller_test root_main_test docker_runtime_test stage_runtime_test', data)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

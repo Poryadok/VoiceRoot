@@ -91,7 +91,7 @@ def build_adapter(text, hashes):
         raise RuntimeError('canonical Python fixture shape differs')
     guard = '; '.join("echo '" + hashes[name] + '  /tmp/repo/scripts/staging/nats-known-baseline/' + name + "' | sha256sum -c - || exit 1" for name in ('go.mod','go.sum'))
     prewarm = (guard + '; cd /tmp/repo/scripts/staging/nats-known-baseline; '
-               'timeout 600 go build github.com/nats-io/nats-server/v2/server; ' + guard +
+               'timeout 600 env GOGC=30 GOMEMLIMIT=1200MiB go build github.com/nats-io/nats-server/v2/server; ' + guard +
                '; cd /tmp/repo/scripts/staging/nats-rollout-preservation; ' + tests.strip() + '; ' + guard)
     adapted = original.replace('GOMAXPROCS=2', 'GOMAXPROCS=1', 1).replace(goflags, "GOFLAGS='-p=1 -mod=readonly'", 1).replace(tests, '    ' + prewarm, 1).replace(baseline, baseline + '; ' + guard, 1)
     return original_sha, ('#!/bin/sh\nset -eu\n' + adapted).encode()
