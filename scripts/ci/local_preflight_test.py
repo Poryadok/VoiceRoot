@@ -217,8 +217,6 @@ class LocalPreflightTests(unittest.TestCase):
                                          head_ref='codex/test', full_go_inputs=self.full_go_inputs(['bot']))
         run.assert_called_once()
         self.assertEqual(report['status'], 'incomplete')
-        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
-        self.assertEqual(report['auth_full_report'], 'auth-full/diagnostic.json')
         self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
         self.assertEqual(report['go_full_reports']['bot']['skipped'], result['tests']['skipped'])
         for bad in (dict(result, status='pass'), dict(result, source={'head': 'wrong'}),
@@ -263,6 +261,8 @@ class LocalPreflightTests(unittest.TestCase):
                                          full_auth_inputs=self.full_auth_inputs())
         run.assert_called_once()
         self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
+        self.assertEqual(report['auth_full_report'], 'auth-full/diagnostic.json')
 
     def test_full_auth_rejects_missing_or_mismatched_make_identity(self):
         for mutation in ('missing', 'image', 'digest', 'version'):
