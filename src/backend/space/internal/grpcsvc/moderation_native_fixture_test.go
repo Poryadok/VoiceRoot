@@ -104,7 +104,9 @@ type nativeModerationFixture struct {
 	client                                            spacev1.SpaceServiceClient
 	ordinary                                          spacev1.SpaceServiceClient
 	issuer                                            *principal.Issuer
+	spaceIssuer                                       *principal.Issuer
 	roles                                             rolev1.RoleServiceClient
+	protectedRoles                                    rolev1.RoleServiceClient
 	space, owner, ownerAccount, target, targetAccount uuid.UUID
 }
 
@@ -146,9 +148,14 @@ func newNativeModerationFixtureWithMembership(t *testing.T, owner, ownerAccount,
 	f.issuer, err = principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "moderation-test", PrivateKey: key})
 	require.NoError(t, err)
 	verifier := lifecycleprincipal.Verifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }, Epoch: func(context.Context, string, int64) error { return nil }}
+	roleFixture := newInviteIngressFixture(t)
+	f.spaceIssuer = roleFixture.space
+	service := &SpaceGRPC{Store: f.st, Roles: roles, PrincipalIssuer: f.spaceIssuer}
+	f.protectedRoles = legacySettingsRoleFixture{RoleServiceClient: roles, svc: service, fixture: roleFixture}
+	service.OwnershipRoles = f.protectedRoles
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer(grpc.UnaryInterceptor(verifier.Unary()))
-	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: roles}})
+	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: service})
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	conn, err := grpc.NewClient("passthrough:///moderation", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -156,7 +163,10 @@ func newNativeModerationFixtureWithMembership(t *testing.T, owner, ownerAccount,
 	t.Cleanup(func() { _ = conn.Close() })
 	f.client = spacev1.NewSpaceServiceClient(conn)
 	var cleanup func()
-	f.ordinary, cleanup = startSpaceGRPCTestServer(t, pool, withRoleClient(roles), withProfileAccounts(mapProfileAccounts{f.owner: f.ownerAccount, f.target: f.targetAccount}))
+	f.ordinary, cleanup = startSpaceGRPCTestServer(t, pool, withRoleClient(roles), withProfileAccounts(mapProfileAccounts{f.owner: f.ownerAccount, f.target: f.targetAccount}), func(s *SpaceGRPC) {
+		s.PrincipalIssuer = f.spaceIssuer
+		s.OwnershipRoles = f.protectedRoles
+	})
 	t.Cleanup(cleanup)
 	return f
 }

@@ -28,6 +28,11 @@ func RequireInvitePermission(ctx context.Context, req *rolev1.CheckPermissionReq
 	return requireSpaceGlobalDecision(ctx, req, permissions.SpaceManageInvites)
 }
 
+// RequireBanPermission admits only Space's global ban/unban decision.
+func RequireBanPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) error {
+	return requireSpaceGlobalDecision(ctx, req, permissions.MemberBan)
+}
+
 func requireSpaceGlobalDecision(ctx context.Context, req *rolev1.CheckPermissionRequest, permission string) error {
 	return requireServiceGlobalDecision(ctx, req, permission, "space")
 }

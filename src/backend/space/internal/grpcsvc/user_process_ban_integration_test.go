@@ -182,7 +182,7 @@ func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 		return result, callErr
 	}))
 	server := grpc.NewServer(options...)
-	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: f.roles}})
+	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: f.roles, OwnershipRoles: f.protectedRoles, PrincipalIssuer: f.spaceIssuer}})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	go func() { _ = server.Serve(listener) }()
