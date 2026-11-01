@@ -72,7 +72,7 @@ class DispatchTests(unittest.TestCase):
         rows = matrix.build(root)['shards']['policy']
         expected = m.policy_expected_skips(root, rows)
         recipes = m.inventory(rows, shard='policy')
-        self.assertEqual(len(recipes), 71)
+        self.assertEqual(len(recipes), 73)
         self.assertIn(b'export VOICE_CI_RECIPE_INDEX="$idx"', m.wrappers(recipes, shard='policy')['python'])
         self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 33, 33: 1, 41: 2})
         event = next(iter(expected[21]))

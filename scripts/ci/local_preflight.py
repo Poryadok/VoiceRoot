@@ -24,6 +24,7 @@ import local_current_diff
 from local_docker_owned import OwnershipError
 import local_flutter_execution
 import local_go_plan
+import local_go_full_integration
 import local_proto_execution
 from local_process_supervision import SupervisionError
 import local_source_snapshot
@@ -133,8 +134,74 @@ def _validate_full_auth_report(result, source, inputs, images):
         raise ValueError('full Auth report or ownership evidence mismatch')
 
 
+def _validate_full_go_inputs(plan, inputs):
+    components = plan.get('components')
+    selected = components.get('go_integration') if isinstance(components, dict) else None
+    if ('backend-go-integration-pr' not in plan.get('checks', {}) or not isinstance(selected, list) or
+            not selected or any(not isinstance(name, str) for name in selected) or len(set(selected)) != len(selected)):
+        raise ValueError('full Go diagnostic requires selected integration services')
+    for service in selected:
+        local_go_full_integration.profile(service)
+    if not isinstance(inputs, dict) or set(inputs) != set(selected):
+        raise ValueError('full Go inputs must match all selected services')
+    for service in selected:
+        row = inputs[service]
+        if (not isinstance(row, dict) or set(row) != {'helper', 'helper_sha256', 'archives'} or
+                not isinstance(row['helper'], str) or not Path(row['helper']).is_absolute() or
+                not isinstance(row['helper_sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', row['helper_sha256'])):
+            raise ValueError('invalid full Go helper input')
+        local_go_full_integration.chat.validate_archives(row['archives'], local_go_full_integration.profile(service)['images'])
+        local_chat_orchestration._verify_file(row['helper'], row['helper_sha256'])
+        for image in row['archives'].values():
+            local_chat_orchestration._verify_file(image['archive'], image['archive_sha256'])
+    return selected
+
+
+def _validate_full_go_report(result, service, source, inputs, output):
+    expected = {tag: item['image_id'] for tag, item in inputs['archives'].items()}
+    expected_inputs = {'helper_sha256': inputs['helper_sha256'],
+                       'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
+                                    for tag, item in inputs['archives'].items()}}
+    if (not isinstance(result, dict) or result.get('schema') != 'voice-local-' + service + '-full-integration-v1' or
+            result.get('status') != 'incomplete' or result.get('source') != source or result.get('exit_code') != 0 or
+            result.get('images') != expected or result.get('input_identity') != expected_inputs or
+            type(result.get('required_count')) is not int or result['required_count'] < 1 or
+            any(not isinstance(result.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', result[key])
+                for key in ('events_sha256', 'source_archive_sha256', 'required_inventory_sha256')) or
+            not isinstance(result.get('go_image_id'), str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', result['go_image_id']) or
+            type(result.get('slot')) is not int or result['slot'] not in (0, 1) or
+            not isinstance(result.get('unbound_inputs'), list) or not result['unbound_inputs'] or
+            any(not isinstance(item, str) or not item for item in result['unbound_inputs'])):
+        raise ValueError('full Go diagnostic identity or status differs')
+    tests, inventory = result.get('tests'), result.get('inventory')
+    if (not isinstance(tests, dict) or type(tests.get('passed')) is not int or tests['passed'] < 1 or
+            not isinstance(tests.get('skipped'), list) or not isinstance(tests.get('packages'), list) or
+            not isinstance(inventory, dict) or not isinstance(inventory.get('packages_with_tests'), list) or
+            not isinstance(inventory.get('packages_without_tests'), list) or
+            tests['packages'] != sorted(inventory['packages_with_tests'] + inventory['packages_without_tests']) or
+            any(not isinstance(pkg, str) or not (pkg == 'voice/backend/' + service or
+                pkg.startswith('voice/backend/' + service + '/')) for pkg in tests['packages']) or
+            any(not isinstance(item, list) or len(item) != 2 or item[0] not in tests['packages'] or
+                not isinstance(item[1], str) or not item[1] for item in tests['skipped']) or
+            len({tuple(item) for item in tests['skipped']}) != len(tests['skipped'])):
+        raise ValueError('full Go test inventory differs')
+    journal = result.get('ownership_journal')
+    if not isinstance(journal, str):
+        raise ValueError('full Go ownership journal missing')
+    path = Path(journal)
+    try:
+        relative = path.relative_to(output)
+    except ValueError:
+        raise ValueError('full Go ownership journal outside output') from None
+    if (not path.is_absolute() or '..' in relative.parts or len(relative.parts) != 5 or
+            relative.parts[:3] != ('run', 'tmp', 'ci-local') or
+            not re.fullmatch(r'voiceci-[0-9a-f]{32}', relative.parts[3]) or relative.parts[4] != 'ownership.json'):
+        raise ValueError('full Go ownership journal identity differs')
+
+
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
-        auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None):
+        auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None,
+        full_go_inputs=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -165,6 +232,17 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        selected_full_go = _validate_full_go_inputs(plan, full_go_inputs) if full_go_inputs is not None else []
+        for service in selected_full_go:
+            values = full_go_inputs[service]
+            service_output = output / 'go-full' / service
+            diagnostic = local_go_full_integration.run_supervised(plan, service, root, service_output,
+                values['helper'], values['helper_sha256'], values['archives'], go_binary, base=base, head_ref=head_ref)
+            _validate_full_go_report(diagnostic, service, plan['source'], values, service_output)
+            if local_source_snapshot.capture(root, head) != plan['source']:
+                raise ValueError('source changed during full Go diagnostic')
+            report.setdefault('go_full_reports', {})[service] = {
+                'report': 'go-full/' + service + '/diagnostic.json', 'skipped': diagnostic['tests']['skipped']}
         if full_auth_inputs is not None:
             if 'backend-auth' not in plan['checks']:
                 raise ValueError('full Auth diagnostic requires a planner-selected Auth check')
@@ -360,6 +438,7 @@ def main():
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
+    parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')
     parser.add_argument('--chat-postgres-archive')
@@ -396,11 +475,21 @@ def main():
     if args.ci_runtime_images:
         with Path(args.ci_runtime_images).open('rb') as stream:
             runtime_images = local_ci_staging_request.parse_runtime_images(stream.read(1024 * 1024 + 1))
+    full_go_inputs = None
+    if args.go_integration_inputs:
+        path = Path(args.go_integration_inputs)
+        if not path.is_absolute():
+            raise ValueError('Go integration inputs path must be absolute')
+        with path.open('rb') as stream:
+            raw = stream.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ValueError('Go integration inputs exceed limit')
+        full_go_inputs = json.loads(raw, object_pairs_hook=local_go_full_integration.chat._unique)
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
                  compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images,
-                 full_auth if any(value is not None for value in full_auth.values()) else None)
+                 full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

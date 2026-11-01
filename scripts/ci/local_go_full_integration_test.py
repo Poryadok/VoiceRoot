@@ -1,8 +1,11 @@
 """Only reviewed service profiles may run full private Go diagnostics."""
 import json
+import io
+from types import SimpleNamespace
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
 import unittest
 from unittest import mock
 
@@ -10,6 +13,77 @@ import local_go_full_integration as subject
 
 
 class FullGoTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(subject.auth_broker, '_require_worker_job')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+    def test_worker_refuses_before_reading_request_when_job_is_unavailable(self):
+        with mock.patch.object(sys, 'argv', ['worker', '--worker']), \
+             mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
+             mock.patch.object(subject, 'run_selected') as run, self.assertRaisesRegex(ValueError, 'no job'):
+            subject.main()
+        run.assert_not_called()
+        with mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
+             mock.patch.object(subject.chat, 'run_full') as full, self.assertRaisesRegex(ValueError, 'no job'):
+            subject.run_profile('bot', mock.Mock(), 'daemon', 'client', Path('.'), {}, Path('.'), 'x', {}, Path('out'))
+        full.assert_not_called()
+        with mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
+             mock.patch.object(subject.chat.local_chat_private, 'inspect_pair') as inspect, self.assertRaisesRegex(ValueError, 'no job'):
+            subject.chat.run_full(mock.Mock(), 'daemon', 'client', Path('.'), {}, Path('.'), 'x', {}, Path('out'))
+        inspect.assert_not_called()
+        scheduled = mock.Mock()
+        with mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
+             self.assertRaisesRegex(ValueError, 'no job'):
+            subject.chat.run_owned(scheduled, mock.Mock(), {}, Path('.'), Path('.'), Path('out'), 'helper', 'x', {}, {})
+        scheduled.run.create_resource.assert_not_called()
+
+    def test_worker_binds_explicit_helper_and_archive_identities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            request = {'plan': {}, 'service': 'bot', 'root': str(output), 'output': str(output),
+                       'helper': str(output / 'helper'), 'helper_digest': 'a' * 64,
+                       'archives': {'postgres:16-bookworm': {'archive': str(output / 'image'),
+                                    'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + 'c' * 64}},
+                       'go_binary': 'go', 'base': 'd' * 40, 'head_ref': 'codex/test'}
+            with mock.patch.object(sys, 'argv', ['worker', '--worker']), \
+                 mock.patch.object(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
+                 mock.patch.object(sys, 'stdout', new_callable=io.StringIO), \
+                 mock.patch.object(subject.auth_broker, '_require_worker_job'), \
+                 mock.patch.object(subject, 'run_selected', return_value={'status': 'incomplete'}):
+                self.assertEqual(subject.main(), 0)
+            report = json.loads((output / 'diagnostic.json').read_text(encoding='utf-8'))
+            self.assertEqual(report['input_identity'], {'helper_sha256': 'a' * 64, 'archives': {
+                'postgres:16-bookworm': {'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + 'c' * 64}}})
+
+    def test_supervised_worker_accepts_only_matching_saved_incomplete_report(self):
+        plan = {'source': {'head': 'a' * 40}}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'out'; output.mkdir()
+            report = {'status': 'incomplete', 'source': plan['source']}
+            (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
+            fake = subprocess.CompletedProcess([], 0, stdout=json.dumps(report).encode(), stderr=b'')
+            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake):
+                self.assertEqual(subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+                                                        base='b' * 40, head_ref='codex/test'), report)
+                (output / 'diagnostic.json').write_text('{}', encoding='utf-8')
+                with self.assertRaises(ValueError):
+                    subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+                                           base='b' * 40, head_ref='codex/test')
+    def test_supervised_worker_cannot_run_inline_or_accept_forged_receipt(self):
+        plan = {'base': 'b' * 40, 'source': {'head': 'a' * 40},
+                'checks': {'backend-go-integration-pr': ['bot']}, 'components': {'go_integration': ['bot']}}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'out'
+            fake = subprocess.CompletedProcess([], 0, stdout=b'{"status":"pass"}', stderr=b'')
+            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake) as broker, \
+                 mock.patch.object(subject, 'run_selected') as inline, self.assertRaises(ValueError):
+                subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+                                       base='b' * 40, head_ref='codex/test')
+            broker.assert_called_once()
+            inline.assert_not_called()
+            request = json.loads(broker.call_args.kwargs['input'])
+            self.assertEqual(request['plan'], plan)
+            self.assertEqual(request['service'], 'bot')
     def test_profiles_are_explicit_and_unsupported_services_refuse(self):
         self.assertEqual(subject.profile('bot')['images'], ('postgres:16-bookworm', 'nats:2.10-alpine'))
         self.assertEqual(subject.profile('search')['images'], ('postgres:16-bookworm',))
@@ -37,7 +111,8 @@ class FullGoTests(unittest.TestCase):
                     subject.read_required(root, 'bot', [package])
 
     def test_chat_dispatch_keeps_existing_executor(self):
-        with mock.patch.object(subject.chat, 'run', return_value={'status': 'incomplete'}) as run:
+        with mock.patch.object(subject.auth_broker, '_require_worker_job'), \
+             mock.patch.object(subject.chat, 'run', return_value={'status': 'incomplete'}) as run:
             result = subject.run('chat', Path('.'), 'a' * 40, Path('out'), 'helper', 'b' * 64, {}, 'go')
         self.assertEqual(result['status'], 'incomplete')
         run.assert_called_once_with(Path('.'), 'a' * 40, Path('out'), 'helper', 'b' * 64, {}, 'go')
@@ -128,6 +203,7 @@ class FullGoTests(unittest.TestCase):
                 'components': {'go_integration': ['bot']}, 'base': 'c' * 40}
         with mock.patch.object(subject.snapshot, 'capture', return_value=source), \
              mock.patch.object(subject.affected_check_plan, 'build_local_plan', return_value=plan) as planner, \
+             mock.patch.object(subject.auth_broker, '_require_worker_job'), \
              mock.patch.object(subject, 'run', return_value={'status': 'incomplete', 'source': source}) as run:
             self.assertEqual(subject.run_selected(plan, 'bot', Path('.'), Path('out'), 'helper', 'b' * 64, {},
                                                   base='c' * 40, head_ref='codex/example'),
@@ -146,10 +222,29 @@ class FullGoTests(unittest.TestCase):
             subject.run_selected(plan, 'bot', Path('.'), Path('out'), 'helper', 'b' * 64, {},
                                  base='c' * 40, head_ref='codex/example')
         run.assert_not_called()
+
         with mock.patch.object(subject.affected_check_plan, 'build_local_plan', return_value={**plan, 'checks': {}}), \
              mock.patch.object(subject, 'run') as run, self.assertRaisesRegex(ValueError, 'plan differs'):
             subject.run_selected(plan, 'bot', Path('.'), Path('out'), 'helper', 'b' * 64, {},
                                  base='c' * 40, head_ref='codex/example')
+        run.assert_not_called()
+
+    def test_direct_execution_refuses_unfenced_before_acquisition(self):
+        source = {'head': 'a' * 40}
+        plan = {'base': 'c' * 40, 'source': source, 'checks': {'backend-go-integration-pr': ['chat']},
+                'components': {'go_integration': ['chat']}}
+        with mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
+             mock.patch.object(subject.chat, 'run') as chat_run, \
+             mock.patch.object(subject, 'DockerCLI') as docker, self.assertRaisesRegex(ValueError, 'no job'):
+            subject.run('chat', Path('.'), source['head'], Path('out'), 'helper', 'b' * 64, {})
+        chat_run.assert_not_called()
+        docker.assert_not_called()
+        with mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
+             mock.patch.object(subject.affected_check_plan, 'build_local_plan', return_value=plan), \
+             mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+             mock.patch.object(subject, 'run') as run, self.assertRaisesRegex(ValueError, 'no job'):
+            subject.run_selected(plan, 'chat', Path('.'), Path('out'), 'helper', 'b' * 64, {},
+                                 base='c' * 40, head_ref='codex/test')
         run.assert_not_called()
 
     def test_actual_local_planner_refuses_forged_selection(self):

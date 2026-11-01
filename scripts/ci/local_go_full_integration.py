@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 
 import affected_check_plan
 import local_chat_full_integration as chat
@@ -17,6 +18,9 @@ from local_docker_scheduled import ScheduledRun
 import local_go_dependencies
 import local_go_plan
 import local_source_snapshot as snapshot
+import local_nats_hosted_diagnostic as bootstrap
+import local_process_supervision as supervision
+import local_auth_full_orchestration as auth_broker
 
 BOT_IMAGES = ('postgres:16-bookworm', 'nats:2.10-alpine')
 SEARCH_IMAGES = ('postgres:16-bookworm',)
@@ -57,6 +61,7 @@ def read_required(source_copy, service, packages):
 def run_profile(service, owner, daemon, client, root, source, source_copy, archive_digest, identities, output):
     if service not in EXTRA_SERVICES:
         raise ValueError('unsupported Go integration service')
+    auth_broker._require_worker_job()
     return chat.run_full(owner, daemon, client, root, source, source_copy, archive_digest, identities, output,
                          service=service)
 
@@ -64,6 +69,7 @@ def run_profile(service, owner, daemon, client, root, source, source_copy, archi
 def run_selected(plan, service, root, output, helper, helper_digest, archives, go_binary='go', *, base, head_ref):
     """Require the caller's affected plan to select this service before work."""
     profile(service)
+    auth_broker._require_worker_job()
     if not isinstance(plan, dict):
         raise ValueError('invalid affected plan')
     checks, components, source = plan.get('checks'), plan.get('components'), plan.get('source')
@@ -87,6 +93,7 @@ def run_selected(plan, service, root, output, helper, helper_digest, archives, g
 def run(service, root, head, output, helper, helper_digest, archives, go_binary='go'):
     """Run one allowlisted service under caller-enforced custody, status incomplete."""
     selected = profile(service)
+    auth_broker._require_worker_job()
     if service == 'chat':
         return chat.run(root, head, output, helper, helper_digest, archives, go_binary)
     if os.name != 'nt':
@@ -122,3 +129,66 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
         'Go client container CPU and memory limits not enforced']
     (output / 'diagnostic.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return result
+
+
+def _worker_command():
+    command = bootstrap._worker_command(Path(__file__))
+    original = repr(sorted(bootstrap.PROJECT_MODULES))
+    modules = bootstrap.PROJECT_MODULES | {'local_go_full_integration', 'local_chat_full_integration',
+        'local_auth_full_orchestration', 'local_auth_full', 'local_auth_private', 'local_nats_hosted_diagnostic'}
+    if command[5].count(original) != 1:
+        raise ValueError('Go worker import allowlist changed')
+    command[5] = command[5].replace(original, repr(sorted(modules)), 1)
+    return command
+
+
+def run_supervised(plan, service, root, output, helper, helper_digest, archives, go_binary='go', *, base, head_ref):
+    """Fence the selected executor before source acquisition or owned resources."""
+    profile(service)
+    request = {'plan': plan, 'service': service, 'root': str(root), 'output': str(output),
+               'helper': str(helper), 'helper_digest': helper_digest, 'archives': archives,
+               'go_binary': str(go_binary), 'base': base, 'head_ref': head_ref}
+    raw = json.dumps(request, allow_nan=False, separators=(',', ':')).encode('utf-8')
+    if len(raw) > 1024 * 1024:
+        raise ValueError('Go worker request exceeds limit')
+    try:
+        completed = supervision.run_diagnostic(_worker_command(), timeout=10800, input=raw,
+                                               capture_output=True, check=False)
+    except BaseException as error:
+        error.add_note('Go worker cleanup may be uncertain; inspect its ownership journal and slot.')
+        raise
+    if completed.returncode != 0:
+        raise ValueError('full Go worker failed; inspect its journal before recovery')
+    try:
+        report = json.loads(completed.stdout, object_pairs_hook=chat._unique)
+        saved = json.loads((Path(output) / 'diagnostic.json').read_text(encoding='utf-8'), object_pairs_hook=chat._unique)
+        if report != saved or report.get('status') != 'incomplete' or report.get('source') != plan['source']:
+            raise ValueError()
+    except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+        raise ValueError('full Go worker returned invalid diagnostic') from None
+    return report
+
+
+def main():
+    if sys.argv[1:] != ['--worker']:
+        raise ValueError('Go integration worker requires supervised invocation')
+    auth_broker._require_worker_job()
+    raw = sys.stdin.buffer.read(1024 * 1024 + 1)
+    if len(raw) > 1024 * 1024:
+        raise ValueError('Go worker request exceeds limit')
+    request = json.loads(raw, object_pairs_hook=chat._unique)
+    keys = {'plan', 'service', 'root', 'output', 'helper', 'helper_digest', 'archives', 'go_binary', 'base', 'head_ref'}
+    if not isinstance(request, dict) or set(request) != keys:
+        raise ValueError('invalid Go worker request')
+    result = run_selected(**request)
+    result['input_identity'] = {'helper_sha256': request['helper_digest'],
+        'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
+                     for tag, item in request['archives'].items()}}
+    (Path(request['output']) / 'diagnostic.json').write_text(
+        json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

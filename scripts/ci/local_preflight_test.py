@@ -10,6 +10,53 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def full_go_inputs(self, services):
+        return {name: {'helper': str(self.root / 'helper'), 'helper_sha256': 'a' * 64,
+                       'archives': {tag: {'archive': str(self.root / (name + str(i))),
+                                           'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + str(i + 1) * 64}
+                                    for i, tag in enumerate(local_preflight.local_go_full_integration.profile(name)['images'])}}
+                for name in services}
+
+    def test_full_go_preflight_rejects_mixed_selection_before_workers(self):
+        plan = {'base': 'c' * 40, 'source': self.source, 'checks': {'backend-go-integration-pr': ['bot', 'file']},
+                'components': {'go_integration': ['bot', 'file']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_go_full_integration, 'run_supervised') as run:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         head_ref='codex/test', full_go_inputs=self.full_go_inputs(['bot']))
+        self.assertEqual(report['status'], 'failed')
+        run.assert_not_called()
+
+    def test_full_go_preflight_preserves_skips_and_incomplete_status(self):
+        plan = {'base': 'c' * 40, 'source': self.source, 'checks': {'backend-go-integration-pr': ['bot']},
+                'components': {'go_integration': ['bot']}}
+        result = {'schema': 'voice-local-bot-full-integration-v1', 'status': 'incomplete', 'source': self.source,
+                  'exit_code': 0, 'tests': {'passed': 3, 'skipped': [['voice/backend/bot', 'TestOptional']],
+                                             'packages': ['voice/backend/bot']},
+                  'inventory': {'packages_with_tests': ['voice/backend/bot'], 'packages_without_tests': []},
+                  'images': {tag: item['image_id'] for tag, item in self.full_go_inputs(['bot'])['bot']['archives'].items()},
+                  'input_identity': {'helper_sha256': 'a' * 64,
+                      'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
+                                   for tag, item in self.full_go_inputs(['bot'])['bot']['archives'].items()}},
+                  'events_sha256': 'b' * 64, 'source_archive_sha256': 'c' * 64, 'required_inventory_sha256': 'd' * 64,
+                  'required_count': 1, 'go_image_id': 'sha256:' + 'e' * 64, 'slot': 0,
+                  'ownership_journal': str(self.output / 'go-full' / 'bot' / 'run' / 'tmp' / 'ci-local' / ('voiceci-' + 'f' * 32) / 'ownership.json'),
+                  'unbound_inputs': ['external provenance']}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+             patch.object(local_preflight.local_go_full_integration, 'run_supervised', return_value=result) as run:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         head_ref='codex/test', full_go_inputs=self.full_go_inputs(['bot']))
+        run.assert_called_once()
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
+        self.assertEqual(report['go_full_reports']['bot']['skipped'], result['tests']['skipped'])
+        for bad in (dict(result, status='pass'), dict(result, source={'head': 'wrong'}),
+                    dict(result, images={}), dict(result, tests={**result['tests'], 'skipped': 'hidden'})):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                local_preflight._validate_full_go_report(bad, 'bot', self.source, self.full_go_inputs(['bot'])['bot'],
+                                                         self.output / 'go-full' / 'bot')
     def full_auth_inputs(self):
         return {'helper': str(self.root / 'helper'), 'helper_sha256': 'a' * 64,
                 'client_image_id': 'sha256:' + 'b' * 64, 'maven_cache': str(self.root / 'cache'),

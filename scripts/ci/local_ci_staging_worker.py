@@ -317,7 +317,7 @@ def main():
             raise RuntimeError('client package output exceeded limit')
         import importlib.util
         dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        dispatch_sha = 'ade423e0c8fd6981b469bc46489b7a93928a509d60da7d70b0805d920fc5a928'
+        dispatch_sha = 'ed19a66def3b6aef1340e047adb5435bb9986a34199cd4ac39d21f2f3b9c777e'
         chat._verify_file(dispatch_path, dispatch_sha)
         spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
         dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
@@ -574,7 +574,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
         hosted_policy_tests = 0
         if SHARD == 'policy':
-            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=71','bash','-ec',hosted_policy_script()], timeout=600)
+            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=73','bash','-ec',hosted_policy_script()], timeout=600)
             if any((BASE/('hosted-policy.' + suffix)).stat().st_size > 16 * 1024 * 1024 for suffix in ('stdout', 'stderr')):
                 raise RuntimeError('hosted policy output exceeded limit')
             hosted_output = (BASE/'hosted-policy.stdout').read_bytes() + (BASE/'hosted-policy.stderr').read_bytes()
