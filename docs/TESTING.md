@@ -681,7 +681,9 @@ The caller must maintain trusted control of the supplied assets, Docker daemon
 and private socket. The worker uses an owned internal network and a private
 daemon; uncertain operations retain the journal and slot for reconciliation.
 Its serial, offline Go execution and adapted preservation fixture differ from
-hosted CI, and startup, filesystem work and disk growth are not independently
+hosted CI. The preservation prebuild alone uses `GOGC=30` and a 1200 MiB Go
+soft memory target; this does not bound total container memory or establish why
+a previous compiler process was killed. Startup, filesystem work and disk growth are not independently
 bounded. The maintained staging path has not yet passed a complete real run.
 The policy runner checks 69 recipes and the hosted compiled-source test, with
 source-pinned, individually identified Linux platform skips; any other skip
