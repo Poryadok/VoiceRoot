@@ -85,6 +85,31 @@ class FullGoTests(unittest.TestCase):
             self.assertEqual(request['plan'], plan)
             self.assertEqual(request['service'], 'bot')
     def test_profiles_are_explicit_and_unsupported_services_refuse(self):
+        self.assertEqual(subject.profile('notification')['images'], ('postgres:16-bookworm', 'redis:7-alpine'))
+        self.assertEqual(subject.profile('notification')['module'], 'src/backend/notification')
+
+    def test_notification_acquires_both_source_bound_module_closures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            source = {'head': 'a' * 40}
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=Path(directory) / 'copy'), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire') as single, \
+                 mock.patch.object(subject.local_go_multi_dependencies, 'acquire', return_value={'module_dirs': ['src/backend/notification', 'src/backend/user']}) as multi, \
+                 mock.patch.object(subject, 'DockerCLI'), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host', return_value=mock.Mock()), \
+                 mock.patch.object(subject.chat, 'publish_owner'), \
+                 mock.patch.object(subject.chat, 'run_owned', return_value={'status': 'incomplete'}) as execute:
+                subject.run('notification', root, source['head'], Path(directory) / 'out', 'helper', 'b' * 64,
+                            {tag: {'archive': str(root / str(i)), 'archive_sha256': 'c' * 64,
+                                   'image_id': 'sha256:' + 'd' * 64}
+                             for i, tag in enumerate(subject.profile('notification')['images'])})
+            single.assert_not_called()
+            multi.assert_called_once()
+            self.assertEqual(execute.call_args.kwargs['service'], 'notification')
         self.assertEqual(subject.profile('bot')['images'], ('postgres:16-bookworm', 'nats:2.10-alpine'))
         self.assertEqual(subject.profile('search')['images'], ('postgres:16-bookworm',))
         self.assertEqual(subject.profile('realtime')['images'], ())
@@ -144,7 +169,7 @@ class FullGoTests(unittest.TestCase):
             root = Path(directory)
             path = root / 'scripts/ci/go_integration_required.json'
             path.parent.mkdir(parents=True)
-            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging'):
+            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging', 'notification'):
                 package = 'voice/backend/' + service
                 path.write_text(json.dumps({service: [[package, 'TestRequired']]}), encoding='utf-8')
                 self.assertEqual(subject.read_required(root, service, [package]), [[package, 'TestRequired']])
@@ -246,6 +271,38 @@ class FullGoTests(unittest.TestCase):
             self.assertEqual(result['status'], 'incomplete')
             self.assertEqual(result['required_count'], 1)
             self.assertEqual(images.call_args.args[3], subject.BOT_IMAGES)
+
+    def test_notification_checks_user_dependency_cache_after_full_suite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            copy = Path(directory) / 'copy'
+            inventory_path = copy / 'scripts/ci/go_integration_required.json'
+            inventory_path.parent.mkdir(parents=True)
+            package = 'voice/backend/notification'
+            inventory_path.write_text(json.dumps({'notification': [[package, 'TestRequired']]}), encoding='utf-8')
+            events = [dict(Package=package, Action='start'), dict(Package=package, Test='TestRequired', Action='run'),
+                      dict(Package=package, Test='TestRequired', Action='pass'), dict(Package=package, Action='pass')]
+            owner = mock.Mock()
+            def execute(client, command, out, err, timeout):
+                self.assertIn('cd /workspace/source/src/backend/notification', command[2])
+                self.assertNotIn('-short', command[2])
+                out.write(b''.join((json.dumps(event) + '\n').encode() for event in events))
+                return 0
+            owner.execute.side_effect = execute
+            source = {'head': 'a' * 40}
+            inventory = {'packages_with_tests': [package], 'packages_without_tests': []}
+            with mock.patch.object(subject.chat.local_chat_private, 'inspect_pair', return_value='private'), \
+                 mock.patch.object(subject.chat, 'verify_images'), \
+                 mock.patch.object(subject.chat.local_go_execution, 'discover_packages', return_value=inventory), \
+                 mock.patch.object(subject.chat.local_go_execution, '_verify_modules') as verify, \
+                 mock.patch.object(subject.chat.local_go_execution, '_verify_workspace'), \
+                 mock.patch.object(subject.chat.snapshot, 'verify_materialized'), \
+                 mock.patch.object(subject.chat.snapshot, 'capture', return_value=source):
+                result = subject.run_profile('notification', owner, 'daemon', 'client', root, source, copy,
+                                             'b' * 64, {tag: 'sha256:' + 'c' * 64 for tag in subject.profile('notification')['images']},
+                                             Path(directory) / 'output')
+            self.assertEqual(result['required_count'], 1)
+            self.assertEqual([call.args[2] for call in verify.call_args_list], ['src/backend/notification', 'src/backend/user'])
 
     def test_shared_provisioner_rejects_unreviewed_service_before_resources(self):
         scheduled = mock.Mock()
