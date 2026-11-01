@@ -69,6 +69,22 @@ def align_public_fixture_app_secret(kube,live):
     kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(combined)
 
 
+def capture_public_realtime(stage,kube,live,card):
+    """Enroll the canonical Realtime deployment in the fixture's real cut."""
+    row=copy.deepcopy(kube.objects[('Deployment','voice-realtime')])
+    row['metadata']['generation']=1
+    containers=row['spec']['template']['spec']
+    for container in containers.get('initContainers',[])+containers['containers']:
+        if container['name']=='realtime':
+            container['image']=bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'e'*64
+        stage.old_images['voice-realtime/'+container['name']]=container['image']
+    kube.objects[('Deployment','voice-realtime')]=copy.deepcopy(row)
+    stage.snapshots['voice-realtime']=copy.deepcopy(row)
+    stage.expected['deployment_uids']['voice-realtime']=row['metadata']['uid']
+    live[('deployment','voice-realtime')]=copy.deepcopy(row)
+    card['observed']['images']=copy.deepcopy(stage.old_images)
+
+
 def monitor_pod_inventory(argv,through_hub,hub_released,monitor_pod):
     """Supply the synthetic NATS pod only while its drain is in progress."""
     if through_hub and not hub_released and argv[-3:]==['pods','-o','json']:
@@ -127,6 +143,29 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_qualified_fixture_captures_realtime_and_writer_guard_stays_active(self):
+        import realtime_bootstrap
+        from types import SimpleNamespace
+        kube,_,_=canonical_stores()
+        stage=SimpleNamespace(snapshots={},old_images={},expected={'deployment_uids':{}})
+        live={};card={'observed':{'images':{}}}
+        capture_public_realtime(stage,kube,live,card)
+        realtime=stage.snapshots['voice-realtime']
+        self.assertEqual(stage.expected['deployment_uids']['voice-realtime'],realtime['metadata']['uid'])
+        self.assertEqual(live[('deployment','voice-realtime')],realtime)
+        self.assertTrue(any(key.startswith('voice-realtime/') for key in stage.old_images))
+        paused=copy.deepcopy(realtime);paused['spec']['replicas']=0
+        view={'snapshots':{'voice-realtime':{'uid':paused['metadata']['uid'],'spec':paused['spec']}}}
+        observed=Mock();observed.get.return_value=paused;observed.run.return_value={'items':[]}
+        realtime_bootstrap._writer_check(observed,view)
+        running=copy.deepcopy(paused);running['spec']['replicas']=1
+        observed.get.return_value=running;view['snapshots']['voice-realtime']['spec']=running['spec']
+        with self.assertRaises(realtime_bootstrap.Blocked):realtime_bootstrap._writer_check(observed,view)
+        observed.get.return_value=paused;view['snapshots']['voice-realtime']['spec']=paused['spec']
+        observed.run.return_value={'items':[{'metadata':{'labels':paused['spec']['selector']['matchLabels']},
+            'spec':paused['spec']['template']['spec']}]}
+        with self.assertRaises(realtime_bootstrap.Blocked):realtime_bootstrap._writer_check(observed,view)
+
     def test_realtime_diagnostic_reports_suppressed_cause_without_private_data(self):
         import contextlib,io
         marker='private-synthetic-password'
@@ -400,6 +439,7 @@ class CompositionTests(unittest.TestCase):
             kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
             stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
             stage.old_images['voice-user/nats-leaf']=NATS_IMAGE
+            if qualify:capture_public_realtime(stage,kube,live,card)
             card['observed']['images']=copy.deepcopy(stage.old_images)
             if through_hub:
                 if through_storage:
@@ -505,6 +545,7 @@ class CompositionTests(unittest.TestCase):
                     live[('secret','voice-nats-hub-tls-'+installation.generation)]={'metadata':{'uid':'tls-uid','resourceVersion':'1'}}
                     objects={('configmap','voice-nats-generation'):stage.marker,
                         ('deployment','voice-user'):stage.snapshots['voice-user']}
+                    if qualify:objects[('deployment','voice-realtime')]=stage.snapshots['voice-realtime']
                     if through_hub:
                         objects[('deployment',bridge_root.HUB)]=stage.snapshots[bridge_root.HUB]
                         objects[('pod',monitor_pod['metadata']['name'])]=monitor_pod
