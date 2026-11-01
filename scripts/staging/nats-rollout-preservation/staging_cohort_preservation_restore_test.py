@@ -198,7 +198,9 @@ class RestoreTransportTests(unittest.TestCase):
                                 with self.assertRaises(Exception):
                                     owner.validate_migration_admission(admission,session,base,final,stage,[],'app-only')
                                 final['target']=original_target;final['phase']='PAUSED_APPLY'
-                                authorization={'target':target,'resource_fence':session.binding()}
+                                authorization={'schema':'nats-rollout-preservation-v2',
+                                    'installation_sha256':session.installation.sha256,
+                                    'target':target,'resource_fence':session.binding()}
                                 final['authorization']=authorization
                                 with patch.object(guard,'protected_receipt',return_value=authorization):
                                     owner.complete_authorization(admission,session,base,final)
