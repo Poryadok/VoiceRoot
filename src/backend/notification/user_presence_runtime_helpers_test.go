@@ -107,7 +107,7 @@ func (d *userPresenceDiagnostic) summary() string {
 	return category
 }
 
-var errUserPresenceExited = errors.New("User child exited before readiness")
+var errUserPresenceExited = errors.New("user child exited before readiness")
 
 func waitUserPresenceReady(ctx context.Context, done <-chan struct{}, interval time.Duration, probe func(context.Context) bool) error {
 	ticker := time.NewTicker(interval)
