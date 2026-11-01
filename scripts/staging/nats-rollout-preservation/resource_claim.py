@@ -478,7 +478,7 @@ class Session:
             import actor_root
             actor_read=prefixes[0]+list(actor_root.STORY_SCHEMA_ARGS)
             import source_plan
-            clickhouse_read=prefixes[0]+list(source_plan.CLICKHOUSE_READ_ARGS)
+            clickhouse_reads=[prefix+list(source_plan.CLICKHOUSE_READ_ARGS) for prefix in prefixes]
             postgres_reads=[prefix+source_plan.postgres_read_args(name)
                 for prefix in prefixes for name in ('postgres','gateway_db')]
             identity_read=False
@@ -490,7 +490,7 @@ class Session:
                     if error.name!='staging_cohort_preservation_pg':raise
                     identity_args=None
                 identity_read=identity_args is not None and args==prefixes[0]+list(identity_args)
-            if args!=decode and args!=actor_read and args!=clickhouse_read and args not in postgres_reads and not identity_read and not is_dryrun and not is_get:
+            if args!=decode and args!=actor_read and args not in clickhouse_reads and args not in postgres_reads and not identity_read and not is_dryrun and not is_get:
                 raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
         # stage guards own those queries. No workload fence/apply/cleanup may
