@@ -692,13 +692,13 @@ class CompositionTests(unittest.TestCase):
         return kube,p,targets,renderer_repo,old,stage
 
     def test_compiler_catalog_stage_with_real_prerequisite_session(self):
-        """Unit boundary for P2, NATS, actor, Realtime and the compiler entry."""
+        """Real compiler and session; P2, NATS, actor, Realtime and Kube are fixtures."""
         import staging_prerequisites_test as fixtures, staging_prerequisites as prereq
         import staging_cohort_preservation as cohort
         import source_plan_test as source, actor_root, realtime_bootstrap, resource_claim_test
         class ReachedCompiler(Exception):pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
-            _,parameters,targets,renderer_repo,old,catalog=self._compiler_catalog_stage('app-only')
+            kube,parameters,targets,renderer_repo,old,catalog=self._compiler_catalog_stage('app-only')
             stage.snapshots=copy.deepcopy(catalog.snapshots)
             stage.snapshots.pop('voice-p3-principal-jwks')
             stage.snapshots.pop('voice-gameintegration')
@@ -708,8 +708,10 @@ class CompositionTests(unittest.TestCase):
             for name,row in stage.snapshots.items():
                 row['metadata'].setdefault('generation',1)
                 live[('deployment',name)]=copy.deepcopy(row)
-            stage.original_snapshots=copy.deepcopy(catalog.original_snapshots)
+            stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images=copy.deepcopy(old)
+            stage.marker['data'].update(generation=parameters['generation'],dataPVC=parameters['dataPVC'])
+            live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             stage.expected['deployment_uids']={name:row['metadata']['uid'] for name,row in stage.snapshots.items()}
             card['observed']['images']=copy.deepcopy(old)
             self.assertEqual(actions.tt_session.check()['phase'],'prepare')
@@ -775,7 +777,31 @@ class CompositionTests(unittest.TestCase):
                 bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
                 stack.enter_context(patch.object(realtime_bootstrap,'run_prepare',return_value=bootstrap))
                 stack.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap))
-                stack.enter_context(patch.object(bridge_root.compiler,'main',side_effect=ReachedCompiler))
+                compiler_phase=[False]
+                def report(name,status):
+                    if (name,status)==('policy-validation','STARTED'):compiler_phase[0]=True
+                stack.enter_context(patch.object(actions,'_report',side_effect=report))
+                def capture(args,body=b'',**kwargs):
+                    import commands
+                    if not compiler_phase[0]:return transport(args,body=body,**kwargs)
+                    commands.authority_guard(args)
+                    if args[1]=='create':return json.dumps(source.decoder(body)).encode()
+                    if args[3:5]==['get','services,deployments']:
+                        return json.dumps({'apiVersion':'v1','kind':'List','metadata':{},'items':list(stage.snapshots.values())}).encode()
+                    if args[3:5]==['get','--raw']:return json.dumps(kube.run(args[3:])).encode()
+                    return json.dumps(kube.run(args[3:],None if not body else json.loads(body))).encode() if args[3] in ('apply','exec') else json.dumps(kube.get(args[4],args[5])).encode()
+                stack.enter_context(patch.object(bridge_root.compiler,'capture',side_effect=capture))
+                stack.enter_context(patch('commands.capture',side_effect=capture))
+                stack.enter_context(patch.object(bridge_root.source_authority,'_head'))
+                def compiled(value,*args,**kwargs):
+                    self.assertEqual(len(value['nonnats']['checks']),16)
+                    self.assertEqual(value['target']['mode'],'app-only')
+                    self.assertFalse(any(key.startswith(bridge_root.HUB+'/') for key in value['target']['images']))
+                    self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in value['manifests']))
+                    self.assertEqual(kwargs['realtime_bootstrap_receipt'],bootstrap)
+                    self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(bootstrap))
+                    raise ReachedCompiler()
+                stack.enter_context(patch.object(bridge_root.root_cli,'prepare_preserved_value',side_effect=compiled))
                 with self.assertRaises(ReachedCompiler):actions.execute(public)
                 self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
                 self.assertEqual(session.check()['phase'],'prerequisites-captured')
