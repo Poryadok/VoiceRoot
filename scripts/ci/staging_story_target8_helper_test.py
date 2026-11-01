@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tarfile
 import tempfile
 import unittest
@@ -209,9 +208,9 @@ class PublicationTests(unittest.TestCase):
                 self.assertFalse(list(self.work.glob('voice-target8-build-*')))
 
     def test_root_owned_elf_publishes_under_ordinary_uid(self):
-        # The image's existing interpreter supplies a real
-        # root-owned read-only ELF; it is read, never executed by this check.
-        original = Path(sys.executable).resolve()
+        # The Linux system env binary is root-owned, unlike the hosted runner's
+        # Python tool cache. It is read, never executed by this check.
+        original = Path('/usr/bin/env')
         uid = os.getuid()
         self.assertNotEqual(0, uid)
         self.assertEqual(0, original.stat().st_uid)
