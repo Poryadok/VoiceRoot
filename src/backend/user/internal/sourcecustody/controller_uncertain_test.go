@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -348,6 +349,11 @@ func TestCustodyAcquireRejectsCancellationDuringStateRead(t *testing.T) {
 
 func TestCustodyWaitAfterConcurrentCleanShutdownDoesNotPoison(t *testing.T) {
 	ctx, control, _, binding, c := custodyFixture(t)
+	// The leader, held permit, and two concurrent barriers can consume every
+	// pool slot on small runners. Observe their locks on a separate connection.
+	observer, err := pgx.ConnectConfig(ctx, control.Config().ConnConfig.Copy())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, observer.Close(ctx)) })
 	p, err := c.Acquire(ctx, binding)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Release(ctx) })
@@ -374,7 +380,7 @@ func TestCustodyWaitAfterConcurrentCleanShutdownDoesNotPoison(t *testing.T) {
 	go func() { shutdown <- c.Shutdown(bounded) }()
 	waiting := func(want int) bool {
 		var count int
-		err := control.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND mode='ExclusiveLock' AND NOT granted AND objsubid=1 AND classid=($1::bigint >> 32)::oid AND objid=($1::bigint & 4294967295)::oid`, permitKey).Scan(&count)
+		err := observer.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND mode='ExclusiveLock' AND NOT granted AND objsubid=1 AND classid=($1::bigint >> 32)::oid AND objid=($1::bigint & 4294967295)::oid`, permitKey).Scan(&count)
 		return err == nil && count >= want
 	}
 	require.Eventually(t, func() bool { return waiting(1) }, 5*time.Second, 20*time.Millisecond)
