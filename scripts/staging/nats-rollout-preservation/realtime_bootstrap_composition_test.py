@@ -47,17 +47,23 @@ class CompositionTest(unittest.TestCase):
             operation = 'a' * 12
             source = installed / 'sources' / operation; source.mkdir(parents=True, mode=0o700)
             context = fixtures.context(); card = fixtures.card(context)
-            helper = hashlib.sha256(Path(bootstrap.__file__).read_bytes()).hexdigest()
-            bindings = {'nats-rollout-preservation/realtime_bootstrap.py': helper,
-                        'nats-rollout-preservation/resource_claim.py': 'f' * 64}
+            code=installed/'code';(code/'nats-rollout-preservation').mkdir(parents=True,mode=0o700)
+            bindings={}
+            for module in (bootstrap,resource_claim):
+                name='nats-rollout-preservation/'+Path(module.__file__).name
+                raw=Path(module.__file__).read_bytes();path=code/name;path.write_bytes(raw);path.chmod(0o400)
+                bindings[name]=hashlib.sha256(raw).hexdigest()
+            bootstrap.save(code/'capture-manifest.json',bindings)
+            helper=bindings['nats-rollout-preservation/realtime_bootstrap.py']
             journal = resource_claim.RootJournal(root)
             session = resource_claim.Session(context, operation, resource_claim.digest(bindings), lambda: copy.deepcopy(card), journal)
-            marker = {'metadata': {'name': 'voice-nats-generation', 'uid': 'marker'}, 'data': {'phase': 'active'}}
+            marker = {'metadata': {'name': 'voice-nats-generation', 'uid': 'marker'},
+                      'data': {'phase': 'active','generation':session.installation.generation}}
             spec = {'replicas': 1, 'selector': {'matchLabels': {'app': 'voice-realtime'}},
                     'template': {'spec': {'containers': [{'name': 'realtime'}]}}}
             deployment = {'metadata': {'name': 'voice-realtime', 'namespace': 'voice-staging', 'uid': 'deploy', 'generation': 1}, 'spec': spec}
             stage = SimpleNamespace(marker=marker, snapshots={'voice-realtime': deployment},
-                                    expected={'namespace_uid': 'ns'}, old_images=card['observed']['images'])
+                                    expected={'namespace_uid': 'ns','generation':session.installation.generation}, old_images=card['observed']['images'])
             secret = {'metadata': {'name': 'voice-app-secrets', 'namespace': 'voice-staging', 'uid': 'secret', 'resourceVersion': '1'},
                       'type': 'Opaque', 'data': {'POSTGRES_PASSWORD': base64.b64encode(admin).decode(), 'keep': 'c2VudGluZWw='}}
             class Kube:
@@ -103,7 +109,7 @@ class CompositionTest(unittest.TestCase):
                         'source_files': {'scripts/staging/nats-rollout-preservation/realtime_bootstrap.py': helper}}
             execution = {'head_sha': context['commit']}
             request = {'action': 'prepare', 'mode': 'full', 'nonce': operation + 'b' * 20}
-            actions = SimpleNamespace(tt_session=session, binding=bindings)
+            actions = bridge_root.Actions(code);actions.tt_session=session
             with mock.patch.object(guard, 'ROOT', root), mock.patch('grp.getgrnam', return_value=SimpleNamespace(gr_gid=0)), \
                  mock.patch.object(stage_runtime, 'Kube', return_value=Kube()), \
                  mock.patch.object(bootstrap, 'engine_snapshot', return_value=('ns', pg_identity)), \
@@ -111,7 +117,7 @@ class CompositionTest(unittest.TestCase):
                  mock.patch.object(bridge_root, 'INSTALLED', installed):
                 session.admit(start=True)
                 with resource_claim.command_scope(session.check):
-                    bridge_root.record_source_authority(session, approved, execution)
+                    bridge_root.record_source_authority(session, approved, execution,code=code,binding=bindings)
                     if lost:
                         with self.assertRaises(bootstrap.Blocked): bootstrap.run_prepare(actions, request, approved, execution, source, stage)
                         checkpoint = json.loads((installed / 'realtime-bootstrap' / operation / 'checkpoint.json').read_text())
@@ -128,12 +134,17 @@ class CompositionTest(unittest.TestCase):
                         receipt = bootstrap.run_prepare(actions, request, approved, execution, source, stage)
                         self.assertEqual(receipt, bootstrap.load_completed(session, actual=stage.old_images))
                         self.assertEqual(secret['data']['keep'], 'c2VudGluZWw=')
-                        target = {'tag': context['commit'], 'images': context['images'],
-                                  'realtime_bootstrap_sha256': bootstrap.digest(receipt)}
+                        target = {'registry':'registry','tag':context['commit'],'mode':'full','changed_services':[],
+                                  'source_hashes':{'source':'1'*64},'template_hashes':{'voice-realtime':'2'*64},
+                                  'input_template_hashes':{'voice-realtime':'3'*64},'images':context['images'],
+                                  'manifest_sha256':'4'*64,'migration_sha256':'5'*64,'nonnats_sha256':'6'*64,
+                                  'installation_sha256':session.installation.sha256,
+                                  'realtime_bootstrap_sha256':bootstrap.digest(receipt)}
                         session.advance_realtime_bootstrap(target, stage.old_images)
                         self.assertEqual(bootstrap.load_completed(session, rollout_target=target), receipt)
                         checkpoint = json.loads((installed / 'realtime-bootstrap' / operation / 'checkpoint.json').read_text())
-                        passed = {'status': 'PASS', 'operation': operation, 'target': target,
+                        passed = {'schema':'nats-rollout-root-v2','installation_sha256':session.installation.sha256,
+                                  'status': 'PASS', 'operation': operation, 'target': target,
                                   'resource_fence': session.binding(), 'code_capture': bindings}
                         self.assertEqual(bootstrap.validate_historical_checkpoint(checkpoint, passed)[1], receipt)
                         changed = copy.deepcopy(checkpoint); changed['receipt']['role_oid'] += 1
