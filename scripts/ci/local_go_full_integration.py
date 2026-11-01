@@ -29,7 +29,7 @@ USER_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1')
 ROLE_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1', 'redis:7-alpine')
 REALTIME_IMAGES = ()
 POSTGRES_SERVICES = frozenset({'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'})
-EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging', 'notification'}
+EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging', 'notification', 'voice'}
 
 
 def profile(service):
@@ -43,6 +43,9 @@ def profile(service):
         return {'images': USER_IMAGES, 'module': 'src/backend/user'}
     if service == 'notification':
         return {'images': ('postgres:16-bookworm', 'redis:7-alpine'), 'module': 'src/backend/notification'}
+    if service == 'voice':
+        return {'images': ('postgres:16-bookworm', 'redis:7.4-bookworm', 'nats:2.12-alpine'),
+                'module': 'src/backend/voice'}
     if service == 'gameintegration':
         return {'images': USER_IMAGES, 'module': 'src/backend/gameintegration'}
     if service in ('role', 'messaging'):
@@ -159,6 +162,8 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
         result['unbound_inputs'].append('T16 cross-service, nonroot mounted-key, threadlist DSN and BE131 projection dedicated fixtures and jobs')
     if service == 'notification':
         result['unbound_inputs'].append('BE195 real Redis endpoint and Notification quota dedicated integration job')
+    if service == 'voice':
+        result['unbound_inputs'].append('Voice R18 real Redis endpoint and dedicated Voice ledger/lifecycle integration jobs')
     (output / 'diagnostic.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return result
 

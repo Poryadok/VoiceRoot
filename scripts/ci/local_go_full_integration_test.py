@@ -85,6 +85,9 @@ class FullGoTests(unittest.TestCase):
             self.assertEqual(request['plan'], plan)
             self.assertEqual(request['service'], 'bot')
     def test_profiles_are_explicit_and_unsupported_services_refuse(self):
+        self.assertEqual(subject.profile('voice')['images'],
+                         ('postgres:16-bookworm', 'redis:7.4-bookworm', 'nats:2.12-alpine'))
+        self.assertEqual(subject.profile('voice')['module'], 'src/backend/voice')
         self.assertEqual(subject.profile('notification')['images'], ('postgres:16-bookworm', 'redis:7-alpine'))
         self.assertEqual(subject.profile('notification')['module'], 'src/backend/notification')
 
@@ -125,7 +128,7 @@ class FullGoTests(unittest.TestCase):
                 self.assertEqual(subject.profile(service)['images'], ('postgres:16-bookworm',))
                 self.assertEqual(subject.profile(service)['module'], 'src/backend/' + service)
         self.assertEqual(subject.profile('chat')['images'], subject.chat.IMAGES)
-        for name in ('gateway', 'file', 'voice', '../bot', 'unknown'):
+        for name in ('gateway', 'file', '../bot', 'unknown'):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'unsupported'):
                 subject.profile(name)
 
@@ -149,13 +152,13 @@ class FullGoTests(unittest.TestCase):
             subject.chat.validate_archives({}, subject.profile(service)['images'])
             subject.chat.verify_images(owner, 'client', {}, subject.profile(service)['images'])
         owner.execute.assert_not_called()
-        for service in ('bot', 'user', 'chat', 'search', 'gameintegration', 'role', 'messaging'):
+        for service in ('bot', 'user', 'chat', 'search', 'gameintegration', 'role', 'messaging', 'voice'):
             with self.subTest(service=service), self.assertRaises(ValueError):
                 subject.chat.validate_archives({}, subject.profile(service)['images'])
         with self.assertRaises(ValueError):
             subject.chat.validate_archives({'unexpected': {}}, subject.profile('realtime')['images'])
         with tempfile.TemporaryDirectory() as directory:
-            for service in ('gameintegration', 'role', 'messaging'):
+            for service in ('gameintegration', 'role', 'messaging', 'voice'):
                 tags = subject.profile(service)['images']
                 archives = {tag: {'archive': str(Path(directory) / str(index)), 'archive_sha256': 'a' * 64,
                                   'image_id': 'sha256:' + 'b' * 64} for index, tag in enumerate(tags)}
@@ -169,7 +172,7 @@ class FullGoTests(unittest.TestCase):
             root = Path(directory)
             path = root / 'scripts/ci/go_integration_required.json'
             path.parent.mkdir(parents=True)
-            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging', 'notification'):
+            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging', 'notification', 'voice'):
                 package = 'voice/backend/' + service
                 path.write_text(json.dumps({service: [[package, 'TestRequired']]}), encoding='utf-8')
                 self.assertEqual(subject.read_required(root, service, [package]), [[package, 'TestRequired']])
@@ -221,6 +224,27 @@ class FullGoTests(unittest.TestCase):
                 report = subject.run('messaging', root, source['head'], output, 'helper', 'a' * 64, archives)
             self.assertIn('T16 cross-service, nonroot mounted-key, threadlist DSN and BE131 projection dedicated fixtures and jobs',
                           report['unbound_inputs'])
+            self.assertEqual(report['status'], 'incomplete')
+
+    def test_voice_report_keeps_real_redis_and_lifecycle_gap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output, source = Path(directory) / 'output', {'head': 'a' * 40}
+            archives = {tag: {'archive': str(Path(directory) / str(i)), 'archive_sha256': 'b' * 64,
+                              'image_id': 'sha256:' + 'c' * 64}
+                        for i, tag in enumerate(subject.profile('voice')['images'])}
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=Path(directory) / 'copy'), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={}), \
+                 mock.patch.object(subject, 'DockerCLI'), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host'), \
+                 mock.patch.object(subject.chat, 'publish_owner'), \
+                 mock.patch.object(subject.chat, 'run_owned', return_value={'status': 'incomplete', 'source': source}):
+                report = subject.run('voice', root, source['head'], output, 'helper', 'a' * 64, archives)
+            self.assertIn('Voice R18 real Redis endpoint and dedicated Voice ledger/lifecycle integration jobs', report['unbound_inputs'])
             self.assertEqual(report['status'], 'incomplete')
 
     def test_chat_dispatch_keeps_existing_executor(self):
@@ -336,7 +360,7 @@ class FullGoTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         inventory = json.loads((root / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
         for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story',
-                        'realtime', 'analytics', 'user', 'gameintegration', 'role', 'messaging'):
+                        'realtime', 'analytics', 'user', 'gameintegration', 'role', 'messaging', 'voice'):
             packages = sorted({item[0] for item in inventory[service]})
             with self.subTest(service=service):
                 required = subject.read_required(root, service, packages)
