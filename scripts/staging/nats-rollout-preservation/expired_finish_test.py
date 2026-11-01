@@ -132,7 +132,7 @@ class FinishCommitTests(unittest.TestCase):
     def test_root_dual_readback_mints_finish_only_and_rejects_bound_record_drift(self):
         for drift in (None,'observation','pause','readback','checkpoint'):
             with self.subTest(drift=drift),TemporaryDirectory() as folder:
-                fixture=FinishCompositionTests();fixture.setup_files(folder)
+                fixture=FinishCompositionTests();fixture.setup_files(folder,publication=True)
                 base,slot,state,execution=fixture.base,fixture.slot,fixture.state,fixture.execution
                 (slot/'authority.json').unlink();(slot/'proof.json').unlink()
                 current={'schema':'voice-expired-finish-current-observation-v1','operation':state['operation'],
@@ -173,6 +173,7 @@ class FinishCommitTests(unittest.TestCase):
                     if drift is None:
                         import bridge_root
                         actions=object.__new__(bridge_root.Actions);actions.code=Path(folder)/'code';actions.binding={}
+                        actions._installation=fixture.session.installation;actions.tt_session=fixture.session
                         fixture.expire=False
                         with ExitStack() as stack:
                             fixture.adapters(stack)
@@ -198,7 +199,7 @@ class FinishCommitTests(unittest.TestCase):
 
 
 class FinishCompositionTests(unittest.TestCase):
-    def setup_files(self,folder):
+    def setup_files(self,folder,publication=False):
         prior=RecoveryAuthorityTests();prior.setUp();self.execution=copy.deepcopy(prior.execution)
         self.now=datetime.now(timezone.utc);self.clock=[self.now];self.execution['nonce']='e'*64
         template={'metadata':{'annotations':{}},'spec':{'containers':[{'name':'fixture','image':'pinned'}]}}
@@ -210,6 +211,19 @@ class FinishCompositionTests(unittest.TestCase):
             'fence_status':'VERIFIED','events':[{'kind':'actual-applied-target-fixture'}],'provenance':{},'contract':{},
             'context':{'snapshots':snapshots,'expected':{'namespace_uid':'fixture-namespace','source_claim_uid':'fixture-pvc'}},
             'expired_recovery_authority':old,'nats_migration':{'verified':True,'cut':{'post':'applied'}}}
+        if publication:
+            import resource_claim
+            from resource_claim_test import context,card,MemoryJournal,scoped_target
+            c=context();c['commit']=target['tag']
+            scoped=scoped_target(c);scoped['template_hashes']=copy.deepcopy(target['template_hashes'])
+            scoped['input_template_hashes']=copy.deepcopy(target['template_hashes'])
+            scoped['manifest_sha256']=target['manifest_sha256']
+            self.state['target']=target=scoped;receipt['target']=target
+            helper={'nats-rollout-preservation/resource_claim.py':'a'*64}
+            journal=MemoryJournal();self.session=resource_claim.Session(c,self.state['operation'],resource_claim.digest(helper),lambda:card(c),journal)
+            self.session.admit(start=True);journal.row['target_sha256']=resource_claim.digest(target)
+            self.state.update(schema='nats-rollout-root-v2',installation_sha256=self.session.installation.sha256,
+                code_capture=helper,resource_fence=self.session.binding())
         self.base=Path(folder)/('rollout-'+prior.state['operation']);self.base.mkdir(mode=0o700)
         (Path(folder)/'installed').mkdir(mode=0o700)
         parent=self.base/'expired-finish-proofs';parent.mkdir(mode=0o700);self.slot=parent/self.execution['nonce'];self.slot.mkdir(mode=0o700)
@@ -258,6 +272,9 @@ class FinishCompositionTests(unittest.TestCase):
             patch.object(transaction,'reconstruct',return_value=self.stage),patch.object(transaction,'revalidate_inputs'),
             patch('expired_proof.current_inventory',return_value='a'*64),patch('expired_finish.datetime',Clock)):
             stack.enter_context(adapter)
+        if hasattr(self,'session'):
+            import resource_claim
+            stack.enter_context(resource_claim.command_scope(self.session.check))
 
     def test_expired_apply_receipt_real_root_finish_capability_has_no_application_replay(self):
         with TemporaryDirectory() as folder,ExitStack() as stack:
