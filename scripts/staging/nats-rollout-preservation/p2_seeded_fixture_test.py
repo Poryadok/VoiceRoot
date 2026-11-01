@@ -11,6 +11,12 @@ import p2_seeded_fixture as fixture
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_hosted_driver_rejects_unapproved_environment_before_paths(self):
+        import p2_seeded_identity_hosted as driver
+        with patch.dict(fixture.os.environ,{},clear=True):
+            with self.assertRaisesRegex(RuntimeError,'owned_fixture_host_required'):
+                driver.main('/nonexistent-bundle','/nonexistent-workspace')
+
     def test_changed_preflight_census_blocks_restore(self):
         import staging_cohort_preservation as cohort, transaction, rollout_census
         seed={'streams':[{'name':'seed'}], 'consumers':[]}
