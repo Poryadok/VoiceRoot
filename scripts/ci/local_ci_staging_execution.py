@@ -143,7 +143,7 @@ def run(request, *, timeout=7200):
         identity = json.loads((output / 'identity.json').read_text(encoding='utf-8'))
         counts = json.loads((output / 'suite-counts.json').read_text(encoding='utf-8'))
         if (identity['source'] != request['commit'] or counts['shard'] != request['shard'] or
-                type(counts['recipes']) is not int or counts['recipes'] != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 73}[request['shard']] or
+                type(counts['recipes']) is not int or counts['recipes'] != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 74}[request['shard']] or
                 type(counts['hosted_go_tests']) is not int or
                 (counts['hosted_go_tests'] < 1 if request['shard'] == 'staging' else counts['hosted_go_tests'] != 0) or
                 type(counts['hosted_policy_tests']) is not int or

@@ -665,9 +665,20 @@ version of the digest-pinned Go image, which must already be present locally;
 the shared planner also requires `jq`. Go runs use host-wide slots, isolated
 source and Docker resources, limit Go runtime and package parallelism to two,
 and report individual skipped tests. The shared
-pkg non-short job, integrations, lint and other unimplemented checks remain
+pkg non-short job, integrations and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
+
+For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
+`--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and
+`--golangci-lint-sha256 <digest>`. On Windows, the diagnostic materializes the
+captured source and serially runs the hosted job's dependency resolution and
+lint commands for `pkg` and every selected Go module. It checks Go 1.26.10,
+golangci-lint 2.6.1, tool bytes and source identity, limits Go parallelism to two,
+and records command logs.
+Caller-provided hashes identify bytes but do not authenticate tool or downloaded
+dependency provenance. This Windows diagnostic does not prove hosted Linux lint
+parity; the planner check remains `not_run`, and the result cannot authorize handoff.
 
 When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
 the local inputs for experimental owned staging, proofs and policy shard executions. The JSON
