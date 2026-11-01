@@ -126,7 +126,19 @@ def validate_reports(raw, required):
             'reports_sha256': hashlib.sha256(raw).hexdigest()}
 
 
-def run_full(owner, daemon, client, root, source, source_copy, cache, output):
+def prepare_source(owner, client, root, source, source_copy, output):
+    try:
+        digest = local_go_execution.transfer_source(owner, client, root, source, source_copy, output / 'source.tar')
+    except Exception:
+        raise ValueError('Auth source transfer failed') from None
+    try:
+        build_digest = selected.normalize_archive(output / 'source.tar', output / 'build-source.tar', digest)
+    except Exception:
+        raise ValueError('Auth source normalization failed') from None
+    return digest, build_digest
+
+
+def run_full(owner, daemon, client, root, source, source_copy, cache, output, prepare_tools=lambda: None):
     """Execute the canonical make target, preserving an incomplete diagnostic."""
     root, output = Path(root).resolve(), Path(output).resolve()
     if output.exists() or output == root or root in output.parents:
@@ -140,8 +152,8 @@ def run_full(owner, daemon, client, root, source, source_copy, cache, output):
     required = required_suites(source_copy)
     digest = selected.cache_digest(cache)
     output.mkdir(parents=True)
-    source_digest = local_go_execution.transfer_source(owner, client, root, source, source_copy, output / 'source.tar')
-    build_digest = selected.normalize_archive(output / 'source.tar', output / 'build-source.tar', source_digest)
+    source_digest, build_digest = prepare_source(owner, client, root, source, source_copy, output)
+    prepare_tools()
     def run(command, stdin=None):
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             if owner.execute(client, command, out, err, 1800, stdin=stdin):

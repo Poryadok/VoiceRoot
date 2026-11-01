@@ -107,6 +107,9 @@ class FullAuthInputsTests(unittest.TestCase):
                             'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, images)
 
     def test_failure_summary_is_allowlisted_and_never_exposes_worker_text(self):
+        for phase in ('transfer', 'normalization'):
+            label = 'Auth source ' + phase + ' failed'
+            self.assertEqual(subject.failure_category(('ValueError: ' + label + '\nsecret=abc').encode()), label)
         self.assertEqual(subject.failure_category(b'Traceback\nValueError: canonical Auth make target failed\nsecret=abc'),
                          'canonical Auth target failed')
         self.assertEqual(subject.failure_category(b'unknown secret=abc'), 'unclassified worker failure')
@@ -154,11 +157,12 @@ class FullAuthInputsTests(unittest.TestCase):
                                    'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
             scheduled.close.assert_called_once()
 
-    def test_missing_make_fails_before_private_daemon_or_image_load(self):
+    def test_missing_make_fails_after_source_preparation_and_cleans_up(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'root'; root.mkdir(); output = Path(directory) / 'out'
             engine = mock.Mock(); engine._call.return_value = 'sha256:' + 'c' * 64
             scheduled = mock.Mock()
+            scheduled.run.execute.return_value = 0
             scheduled.run.create_resource.side_effect = lambda kind: ('network-' + str(scheduled.run.create_resource.call_count)
                                                                        if kind == 'network' else 'volume-' + str(scheduled.run.create_resource.call_count))
             with mock.patch.object(subject, '_require_worker_job'), \
@@ -170,12 +174,13 @@ class FullAuthInputsTests(unittest.TestCase):
                  mock.patch.object(subject, 'DockerCLI', return_value=engine), \
                  mock.patch.object(subject.ScheduledRun, 'start_host', return_value=scheduled), \
                  mock.patch.object(subject, 'provision_make', side_effect=ValueError('missing make')), \
-                 mock.patch.object(subject, 'load_images') as load, \
+                 mock.patch.object(subject.local_auth_full, 'wait_daemon'), \
+                 mock.patch.object(subject, 'load_images'), \
+                 mock.patch.object(subject.local_auth_full, 'run_full', side_effect=lambda *args, **kw: kw['prepare_tools']()), \
                  self.assertRaisesRegex(ValueError, 'missing make'):
                 subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,
                                    'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
-            scheduled.run.create_rootless_container.assert_not_called()
-            load.assert_not_called()
+            scheduled.run.create_rootless_container.assert_called_once()
             scheduled.close.assert_called_once()
             self.assertEqual(json.loads((output / 'stage.json').read_text())['stage'], 'make-provisioning')
 
@@ -203,7 +208,7 @@ class FullAuthInputsTests(unittest.TestCase):
                  mock.patch.object(subject, 'provision_make', return_value=make_tool) as provision, \
                  mock.patch.object(subject.local_auth_full, 'wait_daemon'), \
                  mock.patch.object(subject, 'load_images', return_value={}), \
-                 mock.patch.object(subject.local_auth_full, 'run_full', return_value={'maven_cache_sha256': 'd' * 64}), \
+                 mock.patch.object(subject.local_auth_full, 'run_full', side_effect=lambda *args, **kw: (kw['prepare_tools'](), {'maven_cache_sha256': 'd' * 64})[1]), \
                  mock.patch.object(subject, '_verify_make'):
                 result = subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,
                                             'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())

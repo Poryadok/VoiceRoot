@@ -152,11 +152,6 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
             {'/socket': mounts['/run/user/1000'], '/workspace': mounts['/workspace']}, [],
             command=['sleep', 'infinity'], clear_entrypoint=True)
         owner.start_container(client)
-        record_stage(output, 'make-provisioning')
-        tool_network = owner.create_resource('network')
-        if tool_network == network:
-            raise ValueError('GNU Make tool network is not isolated from the daemon')
-        make_tool = provision_make(owner, engine, tool_network, mounts['/workspace'], client)
         record_stage(output, 'socket-init')
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             if owner.execute(client, ['chown', '1000:1000', '/socket'], out, err, 30):
@@ -172,7 +167,17 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
         record_stage(output, 'image-load')
         image_inputs = load_images(owner, daemon, images, output)
         record_stage(output, 'auth-suite')
-        diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache, output / 'full')
+        make_tool = None
+        def prepare_tools():
+            nonlocal make_tool
+            record_stage(output, 'make-provisioning')
+            tool_network = owner.create_resource('network')
+            if tool_network == network:
+                raise ValueError('GNU Make tool network is not isolated from the daemon')
+            make_tool = provision_make(owner, engine, tool_network, mounts['/workspace'], client)
+            record_stage(output, 'auth-suite')
+        diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache,
+                                              output / 'full', prepare_tools=prepare_tools)
         record_stage(output, 'tool-verification')
         _verify_make(owner, client, (make_tool['sha256'] + '  /workspace/tools/make\n' +
                                      make_tool['version'] + '\n').encode('ascii'))
@@ -210,6 +215,8 @@ def failure_category(stderr):
     if not isinstance(stderr, bytes) or len(stderr) > 1024 * 1024:
         return 'unclassified worker failure'
     known = {
+        b'Auth source transfer failed': 'Auth source transfer failed',
+        b'Auth source normalization failed': 'Auth source normalization failed',
         b'canonical Auth make target failed': 'canonical Auth target failed',
         b'GNU Make provisioning or client compatibility check failed': 'GNU Make provisioning or compatibility failed',
         b'GNU Make copy identity or version differs in client': 'GNU Make identity check failed',
