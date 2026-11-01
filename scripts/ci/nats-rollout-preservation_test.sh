@@ -3,6 +3,13 @@
 # socket, staging connection, or production installer is invoked by these tests.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+owned_tmp_root=''
+if (($#)); then
+  [[ $# == 2 && "$1" == '--owned-temp-root' && -n "$2" ]] || {
+    echo 'usage: nats-rollout-preservation_test.sh [--owned-temp-root ABSOLUTE_PRIVATE_DIR]' >&2; exit 2;
+  }
+  owned_tmp_root="$2"
+fi
 # These three suites create isolated PostgreSQL containers through the host
 # Docker CLI. Run them as root on an immutable private source snapshot; never
 # expose the host Docker socket to the untrusted inner fixture container.
@@ -12,8 +19,15 @@ sudo -n true || { echo 'STAGING_PG_TESTS_REQUIRE_NONINTERACTIVE_SUDO' >&2; exit 
 [[ -z "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]] || {
   echo 'STAGING_TEST_SOURCE_MUST_BE_CLEAN' >&2; exit 1;
 }
-pg_fixture="$(sudo -n mktemp -d /var/tmp/voice-staging-pg-ci.XXXXXXXX)"
-case "$pg_fixture" in /var/tmp/voice-staging-pg-ci.*) ;; *) echo 'STAGING_PG_FIXTURE_INVALID' >&2; exit 1;; esac
+if [[ -n "$owned_tmp_root" ]]; then
+  # The caller must retain custody and provide the same private path to the
+  # private daemon. The helper refuses non-owned, public or symlink roots.
+  pg_fixture="$(python3 -I -S -B "$ROOT/scripts/ci/local_staging_owned_tmp.py" "$owned_tmp_root")"
+  case "$pg_fixture" in "$owned_tmp_root"/voice-staging-pg-ci.*) ;; *) echo 'STAGING_PG_FIXTURE_INVALID' >&2; exit 1;; esac
+else
+  pg_fixture="$(sudo -n mktemp -d /var/tmp/voice-staging-pg-ci.XXXXXXXX)"
+  case "$pg_fixture" in /var/tmp/voice-staging-pg-ci.*) ;; *) echo 'STAGING_PG_FIXTURE_INVALID' >&2; exit 1;; esac
+fi
 cleanup_pg_fixture() { sudo -n rm -rf -- "$pg_fixture"; }
 trap cleanup_pg_fixture EXIT
 git -C "$ROOT" archive HEAD | sudo -n tar -xf - -C "$pg_fixture"

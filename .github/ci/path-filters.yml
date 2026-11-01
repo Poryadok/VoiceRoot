@@ -53,6 +53,8 @@ ci_global:
   - '!scripts/ci/local_ci_matrix_inventory_test.py'
   - '!scripts/ci/local_nats_hosted_diagnostic.py'
   - '!scripts/ci/local_nats_hosted_diagnostic_test.py'
+  - '!scripts/ci/local_staging_owned_tmp.py'
+  - '!scripts/ci/local_staging_owned_tmp_test.py'
   - '!scripts/ci/local_go_execution.py'
   - '!scripts/ci/local_go_execution_test.py'
   - '!scripts/ci/local_chat_private.py'
@@ -119,6 +121,8 @@ chat_auth_java_inputs:
 
 # Explicit inputs to the local Docker ownership and bounded-slot proofs.
 local_docker_isolation:
+  - scripts/ci/local_staging_owned_tmp.py
+  - scripts/ci/local_staging_owned_tmp_test.py
   - scripts/ci/local_nats_hosted_diagnostic.py
   - scripts/ci/local_nats_hosted_diagnostic_test.py
   - scripts/ci/local_image_archive.py
