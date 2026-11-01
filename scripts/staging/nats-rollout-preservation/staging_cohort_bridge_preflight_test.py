@@ -29,7 +29,7 @@ class CohortBridgePreflightTest(unittest.TestCase):
         context=resource_claim_test.context();card=resource_claim_test.card(context)
         session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
         session.admit(start=True)
-        actions=object.__new__(bridge_root.Actions);actions.tt_session=session;actions.code=Path('/fixed-code');actions.binding={}
+        actions=object.__new__(bridge_root.Actions);actions.tt_session=session;actions._installation=session.installation;actions.code=Path('/fixed-code');actions.binding={}
         stage=SimpleNamespace(operation=session.operation,kube=object(),expected={},snapshots={'voice-user':{},bridge_root.HUB:{}})
         previous={'schema':'fixture'}
         enrollment={'schema':'voice-nats-bootstrap-enrollment-v4','previous_enrollment':previous,

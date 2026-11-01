@@ -803,7 +803,7 @@ class GISLifecycleContract(unittest.TestCase):
                 self.assertEqual(session.binding()['target_sha256'], gis.digest(state['target']))
                 existing.verify_phase(bound, kube, 'paused-old')
                 authorization = transaction.authorize(kube, base, state, cut['manifest']['archive_sha256'],
-                    state['cut']['manifest_sha256'], {})
+                    state['cut']['manifest_sha256'], {}, resource_session=session)
                 self.assertEqual((state['phase'], state['status']), ('PAUSED_APPLY', 'WAITING'))
                 self.assertEqual(state['gis_binding'], bound)
                 self.assertEqual(authorization['target'], state['target'])
