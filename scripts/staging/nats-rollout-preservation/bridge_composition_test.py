@@ -17,6 +17,22 @@ import native_store
 
 
 class CompositionTests(unittest.TestCase):
+    def test_cut_captures_real_prerequisite_inputs_before_kubernetes_observation(self):
+        """The Kubernetes read is a fixture boundary, not P2 qualification."""
+        import staging_cohort_preservation as cohort
+        import staging_prerequisites_test as fixtures
+        class ReachedKube(Exception):
+            pass
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get):
+            with patch.object(stage.kube,'run',side_effect=ReachedKube):
+                with self.assertRaises(ReachedKube):
+                    cohort._start_cut(actions,request,approved,execution,workspace)
+            session=actions.tt_session
+            self.assertEqual(session.check()['phase'],'prepare')
+            prepared=cohort.private._read_private(cohort.private._base(session)/'prepared.json')
+            self.assertTrue(prepared)
+        fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run)
+
     def test_cohort_cut_uses_fenced_resource_version_cas(self):
         """Exercise the real cut journal against an in-memory Kubernetes API.
 
@@ -24,6 +40,7 @@ class CompositionTests(unittest.TestCase):
         """
         import commands, guard, resource_claim, staging_cohort_preservation as cohort
         import staging_cohort_preservation_test as fixtures
+        from cohort_fake_kube import FakeKube
         from types import SimpleNamespace
         before={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user',
             'namespace':'voice-staging','uid':'user','resourceVersion':'3','generation':1},
@@ -33,22 +50,16 @@ class CompositionTests(unittest.TestCase):
             with patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)),\
                  patch.object(guard,'ROOT',root),patch.object(cohort,'_source'):
                 session,_=fixtures.CutEffectTests().fixture(root,before)
-                live=copy.deepcopy(before);calls=[]
-                def capture(argv,*,body,**kwargs):
-                    commands.authority_guard(argv)
-                    changes=json.loads(body);calls.append(changes)
-                    self.assertEqual(changes[:2],[{'op':'test','path':'/metadata/uid','value':live['metadata']['uid']},
-                        {'op':'test','path':'/metadata/resourceVersion','value':live['metadata']['resourceVersion']}])
-                    self.assertEqual(changes[2:], [{'op':'replace','path':'/spec/replicas','value':0}])
-                    live['spec']['replicas']=0
-                    live['metadata'].update(resourceVersion='4',generation=2)
-                    return json.dumps(live).encode()
-                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=capture):
+                kube=FakeKube({('deployment','voice-user'):before})
+                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=kube.capture_patch):
                     result=cohort.cut_cas(session,'deployment',before,[{'op':'replace','path':'/spec/replicas','value':0}])
-                    self.assertEqual(result,live)
+                    self.assertEqual(result,kube.get('deployment','voice-user'))
                     with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
                         cohort.cut_cas(session,'deployment',before,[{'op':'replace','path':'/spec/replicas','value':0}])
-                self.assertEqual(len(calls),1)
+                self.assertEqual(kube.calls,[('deployment','voice-user',[
+                    {'op':'test','path':'/metadata/uid','value':'user'},
+                    {'op':'test','path':'/metadata/resourceVersion','value':'3'},
+                    {'op':'replace','path':'/spec/replicas','value':0}])])
 
     def test_actor_drift_after_offnode_readback_prevents_transaction_authorization(self):
         import actor_root
