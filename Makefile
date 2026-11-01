@@ -344,6 +344,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/local_go_execution_test.py"
 	python3 "$(ROOT)/scripts/ci/local_chat_private_test.py"
 	python3 "$(ROOT)/scripts/ci/local_chat_orchestration_test.py"
+	python3 "$(ROOT)/scripts/ci/local_auth_private_test.py"
 	python3 "$(ROOT)/scripts/ci/local_go_dependencies_test.py"
 	python3 "$(ROOT)/scripts/ci/local_go_verify_test.py"
 	python3 "$(ROOT)/scripts/ci/local_go_plan_test.py"
