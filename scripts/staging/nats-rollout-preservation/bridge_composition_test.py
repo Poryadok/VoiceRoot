@@ -59,7 +59,12 @@ class CompositionTests(unittest.TestCase):
         """Simulate Kubernetes pod termination; storage recheck is the boundary."""
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,through_workload=True,through_hub=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False):
+    def test_public_prepare_rechecks_storage_before_postgres_capture(self):
+        """A private container store is real; Kubernetes and NATS are fixtures."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
+            through_workload=True,through_hub=True,through_storage=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False):
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -114,9 +119,30 @@ class CompositionTests(unittest.TestCase):
             stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
             if through_hub:
                 from docker_runtime import NATS_IMAGE
+                if through_storage:
+                    import os,uuid
+                    if not Path('/.dockerenv').exists():raise RuntimeError('isolated_container_required')
+                    claim_uid=str(uuid.uuid4());pv_uid=str(uuid.uuid4())
+                    stage.expected.update(source_claim_uid=claim_uid,source_pv_uid=pv_uid)
+                    stage.final_claim['metadata']['uid']=claim_uid
+                    stage.final_pv['metadata']['uid']=pv_uid
+                    stage.final_pv['spec']['claimRef']['uid']=claim_uid
+                    storage=Path('/var/lib/rancher/k3s/storage')/('pvc-'+claim_uid+'_voice-staging_'+stage.expected['source_claim'])
+                    storage.parent.mkdir(parents=True,exist_ok=True)
+                    storage.mkdir(mode=0o700);os.chown(storage,65532,10000);storage.chmod(0o2770)
+                    self.addCleanup(storage.rmdir)
+                    stage.final_path=storage;stage.final_pv['spec']['local']['path']=str(storage)
+                    live[('pvc',stage.expected['source_claim'])]=copy.deepcopy(stage.final_claim)
+                    live[('pv',stage.final_claim['spec']['volumeName'])]=copy.deepcopy(stage.final_pv)
                 hub={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':bridge_root.HUB,
                     'namespace':'voice-staging','uid':'00000000-0000-4000-8000-000000000010','resourceVersion':'1','generation':1},
                     'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'nats','image':NATS_IMAGE}]}}}}
+                if through_storage:
+                    spec=hub['spec']['template']['spec']
+                    spec['securityContext']={'fsGroup':10000,'fsGroupChangePolicy':'OnRootMismatch'}
+                    spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]
+                    spec['containers'][0].update(securityContext={'runAsUser':10000,'runAsGroup':10000,'runAsNonRoot':True},
+                        volumeMounts=[{'name':'jsdata','mountPath':'/data'}])
                 stage.snapshots[bridge_root.HUB]=copy.deepcopy(hub)
                 stage.expected['deployment_uids'][bridge_root.HUB]=hub['metadata']['uid']
                 stage.expected['marker_uid']=stage.marker['metadata']['uid']
@@ -257,8 +283,13 @@ class CompositionTests(unittest.TestCase):
                         nats_patches.enter_context(patch.object(stage_runtime,'capture',side_effect=capture_fence))
                         if through_hub:
                             def get_after_hub(kind,name):
-                                if flags['hub_released'] and kind=='pvc':raise ReachedFence()
-                                return get(kind,name)
+                                if flags['hub_released'] and not through_storage and kind=='pvc':raise ReachedFence()
+                                if through_storage and flags['hub_released'] and kind=='statefulset' and name=='voice-postgres':raise ReachedFence()
+                                if through_storage and flags['hub_released'] and kind.lower()=='secret' and name=='voice-app-secrets':
+                                    return copy.deepcopy(kube.objects[('Secret',name)])
+                                try:return get(kind,name)
+                                except KeyError:
+                                    return kube.get(kind,name)
                             nats_patches.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get_after_hub))
                         with self.assertRaises(ReachedFence):actions.execute(request)
                     else:
@@ -287,6 +318,9 @@ class CompositionTests(unittest.TestCase):
                     self.assertEqual(fake.get('deployment',bridge_root.HUB)['spec']['replicas'],0)
                     for suffix in ('retain','release'):
                         self.assertEqual(cohort._read(base/'effects'/('cut-pod-'+monitor_pod['metadata']['name']+'-'+suffix+'.json'))['status'],'DONE')
+                if through_storage:
+                    self.assertTrue((base/'paused.json').exists())
+                    self.assertEqual(cohort._state(actions.tt_session)['phase'],'COHORT_BACKUP')
                 self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
             else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         overrides=None
