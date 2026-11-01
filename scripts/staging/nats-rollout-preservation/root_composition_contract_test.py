@@ -48,7 +48,7 @@ def with_gis_server_defaults(kube):
 
 
 class RootCompositionContract(unittest.TestCase):
-    def _exercise_public_c1(self):
+    def _exercise_public_realtime(self, c2_mode=False):
         """Public continuation with synthetic P2 and external infrastructure."""
         import bridge_composition_test
         import staging_cohort_preservation as cohort
@@ -57,6 +57,22 @@ class RootCompositionContract(unittest.TestCase):
         import datetime as dt
         owner=self
         class Deep:
+            is_c2=c2_mode
+
+            def candidate(self, helper, source, mode):
+                kube,parameters,targets,renderer,old,catalog=helper._compiler_catalog_stage(mode)
+                auxiliary=Path(bridge_composition_test.__file__).parent/'fixtures'/'qualified-nginx'/'manifest.json'
+                images={key:value for key,value in old.items() if not key.startswith(bridge_root.HUB+'/')}
+                images['voice-p3-principal-jwks/jwks']='docker.io/library/nginx@sha256:'+hashlib.sha256(auxiliary.read_bytes()).hexdigest()
+                kube.objects[('ConfigMap','voice-p3-principal-public')]={'apiVersion':'v1','kind':'ConfigMap',
+                    'metadata':{'name':'voice-p3-principal-public','namespace':'voice-staging','uid':'fixture-public','resourceVersion':'1'},
+                    'immutable':True,'data':{'realtime.json':'{}'}}
+                parameters.update(registry=source_authority.REGISTRY,tag=source.TAG,mode=mode,changed_services=[],
+                    images=images,enrolled=list(catalog.snapshots),contract={'scripts':[]})
+                parameters['release_policy']['source_sha']=source.TAG
+                with patch.object(compiler,'decode_yaml',side_effect=source.decoder):
+                    return compiler.prebootstrap_image_inventory(source.SOURCE,parameters,kube)
+
             def approve(self, approved):
                 approved.update(schema='voice-source-authority-v1', repository=source_authority.REPO,
                     workflow_id=source_authority.WORKFLOW, run_id=17, run_attempt=1, tree_sha='b'*40,
@@ -92,8 +108,9 @@ class RootCompositionContract(unittest.TestCase):
                 cohort._write(base/'checkpoint.json',{'schema':'voice-staging-cohort-preservation-checkpoint-v1','plan':p2_plan})
                 cohort._write(base/'preflight.json',self.preflight)
                 request_path=cohort._request_record(session);request_path.parent.mkdir(parents=True,mode=0o700)
-                source_request={'mode':'app-only','changed_services':[],'gis_first_install':True,
+                source_request={'mode':'app-only','changed_services':[],
                     'nonce':session.operation+'a'*52,'resource_context':session.context}
+                if not self.is_c2:source_request['gis_first_install']=True
                 cohort._write(request_path,source_request)
                 stack.enter_context(patch.object(cohort,'_base',return_value=base))
                 stack.enter_context(patch.object(cohort,'load_plan',return_value=p2_plan))
@@ -119,11 +136,52 @@ class RootCompositionContract(unittest.TestCase):
                         return json.dumps(value).encode()
                     return raw
                 stack.enter_context(patch.object(stage_runtime,'capture',side_effect=kube_capture))
-                self.receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1',
-                    'secret':{'uid':'fixture','resourceVersion':'1','data_sha256':'1'*64},'fixture':'synthetic-c1'}
+                if self.is_c2:
+                    import realtime_bootstrap_existing as existing
+                    import realtime_bootstrap_existing_test as c2_fixtures
+                    anchor=c2_fixtures.ProtectedAnchorTests();anchor.setUp();anchor.guard.stop()
+                    authority=session.installation
+                    anchor.stage['marker']={'data':{'generation':authority.generation}}
+                    plan=anchor.checkpoint['plan'];plan.update(schema='voice-staging-realtime-bootstrap-v3',
+                        installation_sha256=authority.sha256,stage_sha256=existing.digest(anchor.stage),
+                        active_marker_sha256=existing.digest(anchor.stage['marker']))
+                    anchor.checkpoint['steps']['secret']['request_sha256']=existing.digest({'kind':'secret','plan_sha256':existing.digest(plan)})
+                    anchor.receipt.update(schema='voice-staging-realtime-bootstrap-receipt-v2',installation_sha256=authority.sha256,
+                        plan_sha256=existing.digest(plan),steps_sha256=existing.digest(anchor.checkpoint['steps']))
+                    anchor.checkpoint.update(schema='voice-staging-realtime-bootstrap-checkpoint-v2',installation_sha256=authority.sha256)
+                    anchor.checkpoint['resource_fence'].update(schema='voice-staging-resource-fence-v2',installation_sha256=authority.sha256,
+                        target_sha256=existing.digest(plan))
+                    target=anchor.state['target'];target.update(registry='registry',mode='full',changed_services=[],
+                        source_hashes={'source':'1'*64},template_hashes={'voice-user':'2'*64},input_template_hashes={'voice-user':'3'*64},
+                        migration_sha256='4'*64,nonnats_sha256='5'*64,installation_sha256=authority.sha256,
+                        realtime_bootstrap_sha256=existing.digest(anchor.receipt))
+                    anchor.state.update(schema='nats-rollout-root-v2',installation_sha256=authority.sha256)
+                    anchor.state['resource_fence'].update(schema='voice-staging-resource-fence-v2',installation_sha256=authority.sha256,
+                        target_sha256=existing.digest(target))
+                    anchor.active.update(schema='voice-active-release-v1',installation_sha256=authority.sha256)
+                    anchor._save()
+                    anchor._write(anchor.root/'installed/source-authority'/(anchor.op+'.json'),
+                        {'schema':'voice-staging-source-capture-v2','installation_sha256':authority.sha256,'operation':anchor.op,
+                         'context':plan['context'],'helper_sha256':plan['helper_sha256'],
+                         'approved_sha256':plan['source_authority_sha256'],'execution_sha256':plan['execution_sha256']})
+                    self.anchor_operation=anchor.op;self.anchor_receipt=copy.deepcopy(anchor.receipt)
+                    live={'postgres':plan['postgres'],'role_oid':13,'database_oid':29,'owner_oid':13,
+                        'secret':dict(anchor.receipt['secret'],realtime_value_sha256='f'*64)}
+                    shutil.copytree(anchor.root,root,dirs_exist_ok=True);anchor.tearDown()
+                    stack.enter_context(patch.object(existing,'_source'))
+                    stack.enter_context(patch.object(existing,'_observe',return_value=live))
+                    stack.enter_context(patch.object(actions,'_previous_gis_transition',return_value=None))
+                    self.receipt=None
+                else:
+                    self.receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1',
+                        'secret':{'uid':'fixture','resourceVersion':'1','data_sha256':'1'*64},'fixture':'synthetic-c1'}
                 return self.receipt
 
             def run_bootstrap(self, actions, request, approved, execution, workspace, stage):
+                if self.is_c2:
+                    import realtime_bootstrap_existing as existing
+                    self.receipt=existing.run_existing(actions,request,approved,execution,workspace,stage)
+                    return copy.deepcopy(self.receipt)
                 capture=self.prereq.load_capture(self.session,actual=stage.old_images)
                 self.realtime_plan={'actual_images':stage.old_images,'prerequisites_sha256':cohort.digest(capture),
                     'secret':copy.deepcopy(self.receipt['secret'])}
@@ -155,19 +213,27 @@ class RootCompositionContract(unittest.TestCase):
                     return {'bot_prerequisite':{'observation':{'version':bot_version if len(preflight_calls)>=4 else 0}}}
                 stage.service={'metadata':{'uid':'fixture-service'}}
                 original_get=kube.get
+                if self.is_c2:
+                    kube.objects[('Deployment','voice-p3-principal-jwks')]=copy.deepcopy(stage.snapshots['voice-p3-principal-jwks'])
                 def get(kind,name):
                     if (kind,name)==('pvc',stage.expected['source_claim']):return {'status':{'capacity':{'storage':'1Gi'}}}
+                    if self.is_c2 and kind and kind[0].islower():
+                        kind=next((identity[0] for identity in kube.objects if identity[0].lower()==kind and identity[1]==name),kind)
                     return original_get(kind,name)
                 kube.get=get
-                for kind in ('Service','Deployment'):
-                    kube.objects.pop((kind,'voice-gameintegration'),None)
+                if not self.is_c2:
+                    for kind in ('Service','Deployment'):
+                        kube.objects.pop((kind,'voice-gameintegration'),None)
                 original_run=kube.run
                 def run(args,body=None,timeout=30):
                     if args[:2]==['get','services,deployments']:
                         return {'apiVersion':'v1','kind':'List','metadata':{},
                             'items':[copy.deepcopy(row) for (kind,_),row in kube.objects.items()
                                      if kind in ('Service','Deployment')]}
-                    return original_run(args,body=body,timeout=timeout)
+                    result=original_run(args,body=body,timeout=timeout)
+                    if self.is_c2 and args[:2]==['apply','--dry-run=server'] and body:
+                        result.setdefault('metadata',{})['uid']=original_get(body['kind'],body['metadata']['name'])['metadata']['uid']
+                    return result
                 kube.run=run
                 with_gis_server_defaults(kube)
                 for seam in (patch.object(root_cli,'ROOT',self.root),patch.object(root_cli,'Kube',return_value=kube),
@@ -205,6 +271,19 @@ class RootCompositionContract(unittest.TestCase):
                 execute_gis=transaction.execute_gis_first_install
                 original_authorize=transaction.authorize
                 def authorize(kube,base,current,*authorize_args,**authorize_kwargs):
+                    if self.is_c2:
+                        owner.assertEqual(current['realtime_bootstrap']['schema'],'voice-staging-realtime-bootstrap-existing-v4')
+                        owner.assertEqual(current['realtime_bootstrap']['anchor'],{'operation':self.anchor_operation,
+                            'receipt_sha256':cohort.digest(self.anchor_receipt)})
+                        owner.assertEqual(current['target']['realtime_bootstrap_sha256'],cohort.digest(current['realtime_bootstrap']))
+                        owner.assertEqual(current['resource_fence'],session.binding())
+                        result=original_authorize(kube,base,current,*authorize_args,**authorize_kwargs)
+                        owner.assertEqual(result['target'],current['target'])
+                        owner.assertEqual(result['resource_fence'],session.binding())
+                        owner.assertEqual((current['phase'],current['status']),('PAUSED_APPLY','WAITING'))
+                        execute_gis.assert_not_called()
+                        self.authorization=result
+                        return result
                     owner.assertEqual(set(stage.snapshots),gis.baseline_workload_names(include_hub=True))
                     owner.assertNotIn('voice-gameintegration',stage.snapshots)
                     owner.assertEqual(current['realtime_bootstrap'],self.receipt)
@@ -738,10 +817,10 @@ class RootCompositionContract(unittest.TestCase):
                             bridge_root.guard.validate(bad, *args)
 
     def test_bridge_first_install_c1_receipt_reaches_prepare_and_authorize(self):
-        self._exercise_public_c1()
+        self._exercise_public_realtime()
 
     def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
-        self._exercise_bridge('c2')
+        self._exercise_public_realtime(True)
 
     @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
     def test_ordinary_candidate_inventory_is_exact_before_c1(self):
