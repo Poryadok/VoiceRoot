@@ -13,17 +13,28 @@ import (
 
 // CanonicalSpaceAccountCaptureAuthority is the Space-purpose projection of the
 // single User owner core. Transport registration and caller grants stay separate.
-type CanonicalSpaceAccountCaptureAuthority struct{ store *identityassociation.Store }
+type CanonicalSpaceAccountCaptureAuthority struct {
+	capture func(context.Context, []uuid.UUID) (identityassociation.CaptureBatchResult, error)
+}
 
 func NewCanonicalSpaceAccountCaptureAuthority(store *identityassociation.Store) (*CanonicalSpaceAccountCaptureAuthority, error) {
 	if store == nil {
 		return nil, identityassociation.ErrIncomplete
 	}
-	return &CanonicalSpaceAccountCaptureAuthority{store: store}, nil
+	return &CanonicalSpaceAccountCaptureAuthority{capture: store.CaptureProfiles}, nil
+}
+
+// NewCustodiedSpaceAccountCaptureAuthority composes the independently guarded
+// capture operation. Its caller must supply a qualified source at startup.
+func NewCustodiedSpaceAccountCaptureAuthority(capture func(context.Context, []uuid.UUID) (identityassociation.CaptureBatchResult, error)) (*CanonicalSpaceAccountCaptureAuthority, error) {
+	if capture == nil {
+		return nil, identityassociation.ErrIncomplete
+	}
+	return &CanonicalSpaceAccountCaptureAuthority{capture: capture}, nil
 }
 
 func (a *CanonicalSpaceAccountCaptureAuthority) CaptureSpaceMemberAccountBindings(ctx context.Context, req *userv1.CaptureSpaceMemberAccountBindingsRequest) (*userv1.CaptureSpaceMemberAccountBindingsResponse, error) {
-	if a == nil || a.store == nil {
+	if a == nil || a.capture == nil {
 		return nil, identityassociation.ErrIncomplete
 	}
 	if err := spaceaccountcapture.ValidateRequest(req); err != nil {
@@ -33,7 +44,7 @@ func (a *CanonicalSpaceAccountCaptureAuthority) CaptureSpaceMemberAccountBinding
 	for _, entry := range req.Cohort.Entries {
 		ids = append(ids, uuid.MustParse(entry.ProfileId))
 	}
-	captured, err := a.store.CaptureProfiles(ctx, ids)
+	captured, err := a.capture(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

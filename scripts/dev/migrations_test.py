@@ -101,7 +101,7 @@ class MigrationContracts(unittest.TestCase):
         self.assertIn('game_integration_db', template)
         self.assertIn('docker.io/library/postgres@sha256:', template)
         self.assertIn('ON_ERROR_STOP=1', template)
-        for invariant in ('migration_version <> 32', 'migration_dirty', 'rolsuper', 'rolcreaterole',
+        for invariant in ('migration_version <> 33', 'migration_dirty', 'rolsuper', 'rolcreaterole',
                           'rolcreatedb', 'rolreplication', 'rolbypassrls', "'public', 'CREATE'",
                           "'TRUNCATE'", "'UPDATE'", 'REVOKE ALL PRIVILEGES ON TABLE public.schema_migrations',
                           "'public.schema_migrations', 'UPDATE'", "c.relname <> 'schema_migrations'",
@@ -131,7 +131,7 @@ class MigrationContracts(unittest.TestCase):
         record = sql.split('SELECT json_build_object(', 1)[1].split(')::text', 1)[0]
         fields = [line.strip() for line in record.splitlines() if line.strip()]
         self.assertEqual(fields, [
-            "'schema', 'voice-gis-verifier-v2',",
+            "'schema', 'voice-gis-verifier-v3',",
             "'database', current_database(),",
             "'migration_version', version,",
             "'dirty', dirty,",

@@ -23,19 +23,30 @@
 - [ ] **[Protos/Pkg] Split NATS wire format vs `jetstream_events.proto`** — `protos/voice/events/v1/jetstream_events.proto` defines protobuf envelopes, but publishers diverge:
 ### Space
 
-- [ ] **[User/Space / A2-USER-SPACE-CAPTURE-RUNTIME] Define known-live source
-  custody and reopen contract** — the capture runtime lacks an accepted issuer
-  and invalidation protocol for independent User H/U lineage and current-source
-  qualification. Select bounded custodian-attested continuity with restore/clone
-  closed (explicit undeclared-rollback limitation), or a specified independent
-  anti-rollback witness. Name actual creation/migration caller, mount custodian,
-  physical source binding and restart/replacement invalidation. Reconcile the
-  current documented exact21 qualification with generated exact22 identity
-  catalog using real writer/catalog/baseline evidence; do not relax either gate.
+- [ ] **[User/Space / A2-USER-SPACE-CAPTURE-RUNTIME] Implement known-live source
+  custody and reopen contract** — the selected model is bounded custodian-attested
+  continuity. Before restore, clone promotion or source replacement, stop
+  admission and drain or fence all participating writers and in-flight database
+  sessions. Admission remains closed throughout the transition and afterwards
+  until separately specified source creation or requalification and continuity
+  binding succeed; closed state must survive controller restart.
+  An undeclared rollback under failed custody is outside this model's guarantee.
+  A static source receipt or a request-time check alone does not establish
+  currentness or fence a transaction across invalidation. The current code has
+  closed-source creation/migration, a separately signed one-leader opening,
+  physical source binding, guarded cutover, and restart fencing before a new
+  controller can reopen. User startup binds its guarded writer and protected
+  Space capture listener to that stream. The independently controlled lineage,
+  signing key, endpoint, restore/promotion authority and every deployed writer
+  still need concrete deployment custody and evidence; signed claims do not
+  establish those facts by themselves. Reconcile the
+  exact22 identity schema and writer qualification with real catalog, writer
+  and baseline evidence; the authority reader's version22 check does not
+  establish that qualification. Do not relax either gate.
   Existing production key parsing and private fresh receipt do not qualify
   currentness. Retained-NOW does not require full Auth history repair, but guard
-  activation requires complete participating-writer proof. Configuration denial
-  may ship separately; qualified runtime remains unfinished. See TT task
+  activation requires complete participating-writer proof. Full deployed
+  User/Space Ban and recovery qualification remain unfinished. See TT task
   A2-USER-SPACE-CAPTURE-RUNTIME and BE010-SPACE-BAN-LIFETIME-PR875 c3-c6/c18.
 
 

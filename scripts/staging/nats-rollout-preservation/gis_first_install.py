@@ -48,6 +48,8 @@ PREREQUISITE_SCHEMA = 'voice-gis-prerequisite-receipt-v1'
 DEV_PREREQUISITE_SCHEMA = 'voice-dev-gis-prerequisite-receipt-v1'
 PREREQUISITE_SCHEMA_V2 = 'voice-gis-prerequisite-receipt-v2'
 DEV_PREREQUISITE_SCHEMA_V2 = 'voice-dev-gis-prerequisite-receipt-v2'
+PREREQUISITE_SCHEMA_V3 = 'voice-gis-prerequisite-receipt-v3'
+DEV_PREREQUISITE_SCHEMA_V3 = 'voice-dev-gis-prerequisite-receipt-v3'
 
 
 def verifier_output(version):
@@ -55,8 +57,8 @@ def verifier_output(version):
         'dirty':False,'runtime_role':'gameintegration_runtime','role_restricted':True,
         'table_grants':'select_insert_update_delete','sequence_grants':'usage_select','ddl_denied':True,
         'schema_ledger_runtime_mutation_denied':True}
-    if version==32:
-        result.update(schema='voice-gis-verifier-v2',migration_version=32,
+    if version in (32,33):
+        result.update(schema='voice-gis-verifier-v'+str(version-30),migration_version=version,
             authority_singleton_verified=True,authority_triggers_verified=True,authority_functions_verified=True)
     elif version!=31:raise Blocked('gis_prerequisite_source_revision_unsupported')
     return result
@@ -167,7 +169,7 @@ def validate_prerequisite_receipt(receipt, plan):
     }:
         raise Blocked('gis_prerequisite_receipt_invalid')
     sha = re.compile(r'[a-f0-9]{64}')
-    if (receipt['schema'] not in (PREREQUISITE_SCHEMA,PREREQUISITE_SCHEMA_V2) or receipt['operation'] != plan.get('operation')
+    if (receipt['schema'] not in (PREREQUISITE_SCHEMA,PREREQUISITE_SCHEMA_V2,PREREQUISITE_SCHEMA_V3) or receipt['operation'] != plan.get('operation')
         or receipt['source_sha'] != plan.get('source_sha')
         or receipt['source_plan_sha256'] != plan.get('source_plan_sha256')
         or receipt['source_ci'] != plan.get('source_ci')
@@ -217,7 +219,7 @@ def validate_prerequisite_receipt(receipt, plan):
                 raise Blocked('gis_prerequisite_job_binding_invalid')
     verifier = receipt['verifier']
     import gis_prerequisite
-    revision=32 if receipt['schema']==PREREQUISITE_SCHEMA_V2 else 31
+    revision={PREREQUISITE_SCHEMA:31,PREREQUISITE_SCHEMA_V2:32,PREREQUISITE_SCHEMA_V3:33}[receipt['schema']]
     if gis_prerequisite.validate_source_revision(receipt['inputs'])!=revision:
         raise Blocked('gis_prerequisite_source_revision_unsupported')
     required_verifier = verifier_output(revision)
@@ -287,7 +289,7 @@ def validate_dev_prerequisite_receipt(receipt, plan):
               if isinstance(row, dict)}
     sha = re.compile(r'[a-f0-9]{64}')
     uid = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
-    if (receipt['schema'] not in (DEV_PREREQUISITE_SCHEMA,DEV_PREREQUISITE_SCHEMA_V2) or receipt['operation'] != plan.get('operation')
+    if (receipt['schema'] not in (DEV_PREREQUISITE_SCHEMA,DEV_PREREQUISITE_SCHEMA_V2,DEV_PREREQUISITE_SCHEMA_V3) or receipt['operation'] != plan.get('operation')
         or receipt['source_sha'] != plan.get('source_sha') or receipt['source_plan_sha256'] != plan.get('source_plan_sha256')
         or receipt['source_build_receipt'] != build or not isinstance(build, dict)
         or not _dev_source_build_receipt_valid(build, plan.get('source_sha'), build.get('image_ref'))
@@ -348,7 +350,7 @@ def validate_dev_prerequisite_receipt(receipt, plan):
             raise Blocked('gis_dev_prerequisite_job_image_invalid')
     verifier = receipt['verifier']
     import gis_prerequisite
-    revision=32 if receipt['schema']==DEV_PREREQUISITE_SCHEMA_V2 else 31
+    revision={DEV_PREREQUISITE_SCHEMA:31,DEV_PREREQUISITE_SCHEMA_V2:32,DEV_PREREQUISITE_SCHEMA_V3:33}[receipt['schema']]
     if gis_prerequisite.validate_source_revision(receipt['inputs'])!=revision:
         raise Blocked('gis_prerequisite_source_revision_unsupported')
     required_verifier = verifier_output(revision)

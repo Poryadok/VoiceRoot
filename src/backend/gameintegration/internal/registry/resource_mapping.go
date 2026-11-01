@@ -134,6 +134,16 @@ func (s *Store) createResourceMappingTx(ctx context.Context, tx pgx.Tx, in Resou
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return ResourceMappingReceipt{}, fmt.Errorf("read resource mapping operation: %w", err)
 	}
+	if err := lockScopedExternalKey(ctx, tx, in.ApplicationID, in.EnvironmentID, in.ExternalKey); err != nil {
+		return ResourceMappingReceipt{}, fmt.Errorf("lock scoped resource mapping: %w", err)
+	}
+	var keyTombstoned bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM gis_session_external_key_tombstones WHERE application_id=$1 AND environment_id=$2 AND external_key=$3)`, in.ApplicationID, in.EnvironmentID, in.ExternalKey).Scan(&keyTombstoned); err != nil {
+		return ResourceMappingReceipt{}, err
+	}
+	if keyTombstoned {
+		return ResourceMappingReceipt{}, ErrSessionKeyTombstoned
+	}
 
 	_, err = tx.Exec(ctx, `INSERT INTO game_resource_operations
 		(application_id, environment_id, operation_id, request_hash, receipt)

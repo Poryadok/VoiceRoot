@@ -35,6 +35,36 @@ func TestCanonicalUserSelectorGoldenDomains(t *testing.T) {
 	require.NotEqual(t, prepared.aliases[0].account, prepared.aliases[0].profile)
 }
 
+func TestCustodyDigestBindsCompleteKeyset(t *testing.T) {
+	k1, k2 := bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
+	set := keysetForTest(t, 1, map[uint32][]byte{2: k2, 1: k1})
+	digest, err := set.CustodyDigest()
+	require.NoError(t, err)
+	require.Equal(t, "bad6df9e4670717541efd3bc198ea51b6fb75c6d6af3189027c5fc288d7ed903", hex.EncodeToString(digest[:]))
+	otherOrder := keysetForTest(t, 1, map[uint32][]byte{1: k1, 2: k2})
+	otherDigest, err := otherOrder.CustodyDigest()
+	require.NoError(t, err)
+	require.Equal(t, digest, otherDigest)
+	active := keysetForTest(t, 2, map[uint32][]byte{1: k1, 2: k2})
+	activeDigest, err := active.CustodyDigest()
+	require.NoError(t, err)
+	require.NotEqual(t, digest, activeDigest)
+	snapshot := set.Snapshot()
+	snapshot.Revision++
+	revised, err := NewKeyset(snapshot, map[uint32][]byte{1: k1, 2: k2})
+	require.NoError(t, err)
+	revisedDigest, err := revised.CustodyDigest()
+	require.NoError(t, err)
+	require.NotEqual(t, digest, revisedDigest)
+	missing := keysetForTest(t, 1, map[uint32][]byte{1: k1})
+	missingDigest, err := missing.CustodyDigest()
+	require.NoError(t, err)
+	require.NotEqual(t, digest, missingDigest)
+	var nilKeys *Keyset
+	_, err = nilKeys.CustodyDigest()
+	require.ErrorIs(t, err, ErrKeysetIncomplete)
+}
+
 func TestCompleteRetainedKeysetAndPrivatePreparation(t *testing.T) {
 	k1, k2 := bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
 	snapshot := KeysetSnapshot{Revision: 2, ActiveVersion: 2, Versions: map[uint32][32]byte{1: sha256.Sum256(k1), 2: sha256.Sum256(k2)}}

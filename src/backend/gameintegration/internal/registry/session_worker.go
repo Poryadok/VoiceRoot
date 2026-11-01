@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -13,9 +14,23 @@ func RunSessionWorker(ctx context.Context, orchestrator *SessionOrchestrator, in
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	retentionTicker := time.NewTicker(time.Minute)
+	defer retentionTicker.Stop()
 	for {
 		if ctx.Err() != nil {
 			return
+		}
+		expired, expiryErr := orchestrator.Store.expiredActiveSessions(ctx)
+		if expiryErr == nil {
+			for _, lease := range expired {
+				if ctx.Err() != nil {
+					return
+				}
+				principal := SessionPrincipal{ApplicationID: lease.ApplicationID, EnvironmentID: lease.EnvironmentID}
+				operationID := deterministicOwnerID(lease.ApplicationID, lease.EnvironmentID, lease.SessionID,
+					"roster_lease_close", fmt.Sprint(lease.RosterRevision))
+				_, _ = orchestrator.CloseSession(ctx, principal, lease.SessionID, operationID)
+			}
 		}
 		keys, err := orchestrator.Store.due(ctx)
 		if err == nil {
@@ -30,6 +45,8 @@ func RunSessionWorker(ctx context.Context, orchestrator *SessionOrchestrator, in
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		case <-retentionTicker.C:
+			_, _ = orchestrator.Store.PurgeExpiredSessionData(ctx, 50)
 		}
 	}
 }

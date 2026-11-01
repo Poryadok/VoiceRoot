@@ -32,6 +32,14 @@ type SourceCut struct {
 	Digest                [32]byte
 	RetainedFloor         uint64
 }
+
+// PhysicalSourceIdentity is a controller-held PostgreSQL binding. It is not
+// proof of currentness or exclusive custody: physical clones may retain it.
+type PhysicalSourceIdentity struct {
+	SystemIdentifier string
+	Database         string
+	DatabaseOID      uint32
+}
 type CaptureBatchResult struct {
 	Cut          SourceCut
 	Observations map[uuid.UUID]CaptureObservation
@@ -57,12 +65,110 @@ type retainedCaptureRow struct {
 // Preparation is outside I; all authoritative reads are separate commands after
 // I, and SQL roundtrips do not grow with the number of requested profiles.
 func (s *Store) CaptureProfiles(ctx context.Context, ids []uuid.UUID) (CaptureBatchResult, error) {
+	return s.captureProfiles(ctx, ids, uuid.Nil, uuid.Nil, nil)
+}
+
+// CaptureProfilesForSource binds the grant's independent source generations to
+// the actual User transaction before any identity fact can be written. The pin
+// is a comparison, not proof of custody or currentness on its own.
+func (s *Store) CaptureProfilesForSource(ctx context.Context, ids []uuid.UUID, history, source uuid.UUID, digest [32]byte) (CaptureBatchResult, error) {
+	if history == uuid.Nil || source == uuid.Nil || history == source || s == nil || s.generation != history {
+		return CaptureBatchResult{}, ErrIncomplete
+	}
+	actual, err := s.keys.CustodyDigest()
+	if err != nil || digest != actual {
+		return CaptureBatchResult{}, ErrIncomplete
+	}
+	return s.captureProfiles(ctx, ids, history, source, nil)
+}
+
+// CaptureProfilesForPhysicalSource verifies the controller-held source on both
+// the lookup session and the authoritative transaction. It additionally needs
+// independently enforced endpoint and restore custody.
+func (s *Store) CaptureProfilesForPhysicalSource(ctx context.Context, ids []uuid.UUID, history, source uuid.UUID, digest [32]byte, physical PhysicalSourceIdentity) (CaptureBatchResult, error) {
+	if history == uuid.Nil || source == uuid.Nil || history == source || s == nil || s.generation != history || physical.SystemIdentifier == "" || physical.Database == "" || physical.DatabaseOID == 0 {
+		return CaptureBatchResult{}, ErrIncomplete
+	}
+	actual, err := s.keys.CustodyDigest()
+	if err != nil || digest != actual {
+		return CaptureBatchResult{}, ErrIncomplete
+	}
+	return s.captureProfiles(ctx, ids, history, source, &physical)
+}
+
+type physicalQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func checkPhysicalSource(ctx context.Context, query physicalQuerier, expected *PhysicalSourceIdentity) error {
+	if expected == nil {
+		return nil
+	}
+	var actual PhysicalSourceIdentity
+	if query.QueryRow(ctx, `SELECT system_identifier::text,current_database(),(SELECT oid FROM pg_database WHERE datname=current_database()) FROM pg_control_system()`).Scan(&actual.SystemIdentifier, &actual.Database, &actual.DatabaseOID) != nil || actual != *expected {
+		return ErrIncomplete
+	}
+	return nil
+}
+
+// ValidateForActivationTx checks an existing guarded identity source while its
+// identity mutex is held. It neither provisions data nor proves currentness,
+// writer deployment or exclusive administrative custody.
+func (s *Store) ValidateForActivationTx(ctx context.Context, tx *IdentityTx, history, source uuid.UUID, digest [32]byte, physical PhysicalSourceIdentity) error {
+	if ctx == nil || s == nil || s.keys == nil || tx == nil || tx.SQL() == nil || history == uuid.Nil || source == uuid.Nil || history == source || s.generation != history || tx.generation != history || physical.SystemIdentifier == "" || physical.Database == "" || physical.DatabaseOID == 0 {
+		return ErrIncomplete
+	}
+	actualDigest, err := s.keys.CustodyDigest()
+	if err != nil || actualDigest != digest || checkPhysicalSource(ctx, tx.SQL(), &physical) != nil || s.checkKeyset(ctx, tx) != nil {
+		return ErrIncomplete
+	}
+	var actualSource uuid.UUID
+	var ready bool
+	if tx.SQL().QueryRow(ctx, `SELECT user_source_generation,guards_active AND baseline_cut>0 AND unresolved_erase_issued=unresolved_erase_covered FROM identity_meta WHERE singleton`).Scan(&actualSource, &ready) != nil || actualSource != source || !ready {
+		return ErrIncomplete
+	}
+	return nil
+}
+
+// ActivateQualifiedGuardsTx is the transaction-local cutover primitive. Its
+// caller must first fence every writer and establish independently attested
+// source, writer deployment, Auth and restore custody. It does not commit.
+func (s *Store) ActivateQualifiedGuardsTx(ctx context.Context, tx *IdentityTx, history, source uuid.UUID, digest [32]byte, physical PhysicalSourceIdentity) error {
+	if ctx == nil || s == nil || s.keys == nil || tx == nil || tx.SQL() == nil || history == uuid.Nil || source == uuid.Nil || history == source || s.generation != history || tx.generation != history || physical.SystemIdentifier == "" || physical.Database == "" || physical.DatabaseOID == 0 {
+		return ErrIncomplete
+	}
+	actualDigest, err := s.keys.CustodyDigest()
+	if err != nil || actualDigest != digest || checkPhysicalSource(ctx, tx.SQL(), &physical) != nil || s.checkKeyset(ctx, tx) != nil {
+		return ErrIncomplete
+	}
+	var actualSource uuid.UUID
+	var active, ready bool
+	var next uint64
+	if tx.SQL().QueryRow(ctx, `SELECT user_source_generation,guards_active,NOT guards_active AND baseline_cut=0 AND unresolved_erase_issued=unresolved_erase_covered,history_head+1 FROM identity_meta WHERE singleton`).Scan(&actualSource, &active, &ready, &next) != nil || actualSource != source || active || !ready || next == 0 {
+		return ErrIncomplete
+	}
+	if prepareIdentitySQL(ctx, tx, nil, nil, nil, "ACTIVATE") != nil {
+		return ErrIncomplete
+	}
+	if _, err = tx.SQL().Exec(ctx, `UPDATE profiles SET identity_baseline_cut=$1 WHERE identity_association_id IS NULL`, next); err != nil {
+		return ErrIncomplete
+	}
+	if _, err = tx.SQL().Exec(ctx, `UPDATE identity_meta SET guards_active=true,baseline_cut=$1 WHERE singleton`, next); err != nil {
+		return ErrIncomplete
+	}
+	if _, err = tx.SQL().Exec(ctx, `SELECT identity_append_event(NULL,NULL,'GUARDS_ACTIVATED',NULL,NULL,NULL)`); err != nil {
+		return ErrIncomplete
+	}
+	return s.ValidateForActivationTx(ctx, tx, history, source, digest, physical)
+}
+
+func (s *Store) captureProfiles(ctx context.Context, ids []uuid.UUID, history, source uuid.UUID, physical *PhysicalSourceIdentity) (CaptureBatchResult, error) {
 	if s == nil {
 		return CaptureBatchResult{}, ErrIncomplete
 	}
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	prepared, err := s.prepareCaptureBatch(bounded, ids)
+	prepared, err := s.prepareCaptureBatch(bounded, ids, physical)
 	if err != nil {
 		return CaptureBatchResult{}, err
 	}
@@ -71,6 +177,15 @@ func (s *Store) CaptureProfiles(ctx context.Context, ids []uuid.UUID) (CaptureBa
 		return CaptureBatchResult{}, err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	if checkPhysicalSource(bounded, tx.SQL(), physical) != nil {
+		return CaptureBatchResult{}, ErrIncomplete
+	}
+	if history != uuid.Nil {
+		var actual uuid.UUID
+		if err = tx.SQL().QueryRow(bounded, `SELECT user_source_generation FROM identity_meta WHERE singleton`).Scan(&actual); err != nil || actual != source {
+			return CaptureBatchResult{}, ErrIncomplete
+		}
+	}
 	out, err := s.captureBatchTx(bounded, tx, prepared)
 	if err != nil {
 		return CaptureBatchResult{}, err
@@ -81,7 +196,7 @@ func (s *Store) CaptureProfiles(ctx context.Context, ids []uuid.UUID) (CaptureBa
 	return out, nil
 }
 
-func (s *Store) prepareCaptureBatch(ctx context.Context, ids []uuid.UUID) (preparedCaptureBatch, error) {
+func (s *Store) prepareCaptureBatch(ctx context.Context, ids []uuid.UUID, physical *PhysicalSourceIdentity) (preparedCaptureBatch, error) {
 	p := preparedCaptureBatch{lookups: map[uuid.UUID]PreparedProfileLookup{}, bindings: map[uuid.UUID]PreparedSelectors{}}
 	for _, id := range ids {
 		if id == uuid.Nil {
@@ -98,7 +213,15 @@ func (s *Store) prepareCaptureBatch(ctx context.Context, ids []uuid.UUID) (prepa
 		p.ids = append(p.ids, id)
 	}
 	sort.Slice(p.ids, func(i, j int) bool { return bytes.Compare(p.ids[i][:], p.ids[j][:]) < 0 })
-	rows, err := s.pool.Query(ctx, `SELECT id,account_id FROM profiles WHERE id=ANY($1)`, p.ids)
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return p, err
+	}
+	defer conn.Release()
+	if checkPhysicalSource(ctx, conn, physical) != nil {
+		return p, ErrIncomplete
+	}
+	rows, err := conn.Query(ctx, `SELECT id,account_id FROM profiles WHERE id=ANY($1)`, p.ids)
 	if err != nil {
 		return p, err
 	}

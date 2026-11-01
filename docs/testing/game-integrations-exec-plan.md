@@ -1869,7 +1869,9 @@ contracts land before consumers; activation lands after all consumers.
   The same acceptance validates the second member's current account through
   Auth, bans that account/profile through the public Gateway Space route, and
   checks Space persisted the ban and evicted the profile while the independent
-  owner roster snapshot remains unchanged. This proves the Space ban wins over
+  owner roster snapshot remains unchanged. The owner snapshot and grant are
+  checked in GIS; Space's local membership projection is retired by the ban.
+  This proves the Space ban wins over
   a still-current source roster. Parent T40 stays open for lifecycle freeze/
   restore and remaining messenger scenarios. Synthetic binding rows do
   not count as public provider-binding acceptance. Revalidated on 2026-10-01:

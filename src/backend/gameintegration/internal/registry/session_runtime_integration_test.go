@@ -21,7 +21,8 @@ func TestWinningCloseReconcilesInFlightCreateOwnerStages(t *testing.T) {
 		{name: "chat create", ownerStage: "chat_create", prior: 0},
 		{name: "chat roster", ownerStage: "chat_roster", prior: 1},
 		{name: "voice provision", ownerStage: "voice_provision", prior: 2},
-		{name: "role apply", ownerStage: "role_apply", prior: 3},
+		{name: "voice roster", ownerStage: "voice_roster", prior: 3},
+		{name: "role apply", ownerStage: "role_apply", prior: 4},
 	}
 	for _, stage := range stages {
 		t.Run(stage.name, func(t *testing.T) {
@@ -65,6 +66,9 @@ func TestWinningCloseReconcilesInFlightCreateOwnerStages(t *testing.T) {
 			close(release)
 			require.Error(t, <-workerResult, "the original create worker must lose its lease-fenced write")
 			advanceSessionUntil(t, ctx, o, p, closed.OperationID, "closed")
+			var terminalTimed bool
+			require.NoError(t, store.Pool.QueryRow(ctx, `SELECT terminalized_at IS NOT NULL FROM gis_sessions WHERE id=$1`, created.SessionID).Scan(&terminalTimed))
+			require.True(t, terminalTimed, "reconciliation must start the session retention clock")
 
 			calls := owners.calls[stage.ownerStage]
 			require.Len(t, calls, 2, "close must replay the exact owner operation to recover the committed receipt")
@@ -133,8 +137,9 @@ func TestWinningClosePersistsTypedOwnerRejectionCustody(t *testing.T) {
 		{name: "chat roster operation conflict is unresolved", stage: "chat_roster", category: "operation_conflict", prior: 1},
 		{name: "chat roster resource conflict is unresolved", stage: "chat_roster", category: "resource_conflict", prior: 1},
 		{name: "voice provision conflict is unresolved", stage: "voice_provision", category: "operation_conflict", prior: 2},
-		{name: "role revoked is no effect and still closes voice", stage: "role_apply", category: "terminal_revoked", prior: 3, noEffect: true},
-		{name: "role operation conflict is unresolved", stage: "role_apply", category: "operation_conflict", prior: 3},
+		{name: "voice roster conflict is unresolved", stage: "voice_roster", category: "operation_conflict", prior: 3},
+		{name: "role revoked is no effect and still closes voice", stage: "role_apply", category: "terminal_revoked", prior: 4, noEffect: true},
+		{name: "role operation conflict is unresolved", stage: "role_apply", category: "operation_conflict", prior: 4},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -170,6 +175,8 @@ func TestWinningClosePersistsTypedOwnerRejectionCustody(t *testing.T) {
 				adapters.SyncChatRoster = reject
 			case "voice_provision":
 				adapters.ProvisionVoice = reject
+			case "voice_roster":
+				adapters.ApplyVoiceRoster = reject
 			case "role_apply":
 				adapters.ApplyRoleGrants = reject
 			}
@@ -232,6 +239,9 @@ func TestWinningClosePersistsTypedOwnerRejectionCustody(t *testing.T) {
 			} else {
 				require.Equal(t, "closed", advanced.Stage)
 				require.Equal(t, "succeeded", advanced.Status)
+				var terminalTimed bool
+				require.NoError(t, store.Pool.QueryRow(ctx, `SELECT terminalized_at IS NOT NULL FROM gis_sessions WHERE id=$1`, created.SessionID).Scan(&terminalTimed))
+				require.True(t, terminalTimed, "a no-effect close starts the session retention clock")
 			}
 			createAfterClose, err := o.GetOperation(ctx, p, created.OperationID)
 			require.NoError(t, err)
@@ -319,8 +329,10 @@ func stageBefore(ownerStage string) string {
 		return "chat_ready"
 	case "voice_provision":
 		return "roster_ready"
-	case "role_apply":
+	case "voice_roster":
 		return "voice_ready"
+	case "role_apply":
+		return "roster_lease_ready"
 	default:
 		return ""
 	}
@@ -342,7 +354,8 @@ func TestPermanentTypedOwnerRejectionsDurablyFailAndCleanUp(t *testing.T) {
 		{name: "chat create conflict", stage: "chat_create", category: "operation_conflict"},
 		{name: "chat roster missing after create receipt", stage: "chat_roster", category: "resource_missing", prior: 1},
 		{name: "voice provision conflict", stage: "voice_provision", category: "operation_conflict", prior: 2},
-		{name: "role apply after voice provision", stage: "role_apply", category: "terminal_revoked", prior: 3, voiceExists: true},
+		{name: "voice roster conflict", stage: "voice_roster", category: "operation_conflict", prior: 3, voiceExists: true},
+		{name: "role apply after voice provision", stage: "role_apply", category: "terminal_revoked", prior: 4, voiceExists: true},
 	}
 	for _, rejected := range stages {
 		t.Run(rejected.name, func(t *testing.T) {
@@ -362,6 +375,8 @@ func TestPermanentTypedOwnerRejectionsDurablyFailAndCleanUp(t *testing.T) {
 				adapters.SyncChatRoster = ownerCall(rejected.stage)
 			case "voice_provision":
 				adapters.ProvisionVoice = ownerCall(rejected.stage)
+			case "voice_roster":
+				adapters.ApplyVoiceRoster = ownerCall(rejected.stage)
 			case "role_apply":
 				adapters.ApplyRoleGrants = ownerCall(rejected.stage)
 			}
@@ -460,7 +475,12 @@ func TestSessionCloseAndPermanentFailureHaveOneTerminalizationWinner(t *testing.
 	}
 	advanceSessionUntil(t, ctx, o, p, operations[0].OperationID, terminalState)
 	advanceSessionUntil(t, ctx, o, p, operations[1].OperationID, terminalState)
-	for _,op:=range operations{if op.OperationID!=winner{_,e:=o.AdvanceOne(ctx,op.OperationID);require.NoError(t,e,"the coalesced loser must durably resolve after the winner commits")}}
+	for _, op := range operations {
+		if op.OperationID != winner {
+			_, e := o.AdvanceOne(ctx, op.OperationID)
+			require.NoError(t, e, "the coalesced loser must durably resolve after the winner commits")
+		}
+	}
 	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT session_status FROM gis_sessions WHERE id=$1`, created.SessionID).Scan(&finalStatus))
 	if winner == closeID {
 		require.Equal(t, "close", terminalKind)
@@ -475,7 +495,7 @@ func TestSessionCloseAndPermanentFailureHaveOneTerminalizationWinner(t *testing.
 	for _, op := range operations {
 		value, e := o.GetOperation(ctx, p, op.OperationID)
 		require.NoError(t, e)
-		require.Equal(t,"succeeded",value.Status)
+		require.Equal(t, "succeeded", value.Status)
 		resolved = append(resolved, value)
 	}
 	require.NotNil(t, resolved[0].VoiceCloseReceiptID)

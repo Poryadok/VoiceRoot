@@ -68,8 +68,8 @@ class GeneratedMaterialTest(unittest.TestCase):
                 separators=(',', ':'), ensure_ascii=True).encode()).hexdigest())
             verify_sql = root/'docker/postgres/verify-gameintegration-runtime-role.sql'
             original_verifier = verify_sql.read_bytes()
-            changed_verifier = original_verifier.replace(b'migration_version <> 32',
-                b'migration_version != 30 -- migration_version <> 32')
+            changed_verifier = original_verifier.replace(b'migration_version <> 33',
+                b'migration_version != 30 -- migration_version <> 33')
             self.assertNotEqual(changed_verifier, original_verifier)
             verify_sql.write_bytes(changed_verifier)
             approved['source_files']['docker/postgres/verify-gameintegration-runtime-role.sql'] = hashlib.sha256(changed_verifier).hexdigest()

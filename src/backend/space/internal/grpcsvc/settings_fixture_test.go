@@ -82,7 +82,7 @@ func (c legacySettingsRoleFixture) CheckPermission(ctx context.Context, r *rolev
 	if err := c.verify(ctx, r, rolev1.RoleService_CheckPermission_FullMethodName); err != nil {
 		return nil, err
 	}
-	if r.Chat != nil || r.VoiceRoomId != nil || (r.PermissionName != permissions.TextChatCreateInSpace && r.PermissionName != permissions.SpaceManageSettings && r.PermissionName != permissions.SpaceManageMatchmaking) {
+	if r.Chat != nil || r.VoiceRoomId != nil || (r.PermissionName != permissions.TextChatCreateInSpace && r.PermissionName != permissions.SpaceManageSettings && r.PermissionName != permissions.SpaceManageMatchmaking && r.PermissionName != permissions.MemberBan) {
 		return nil, status.Error(codes.PermissionDenied, "wrong fixture purpose")
 	}
 	// Model the native Role owner's fresh Space qualification before legacy mask lookup.

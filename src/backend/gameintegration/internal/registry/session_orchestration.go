@@ -31,6 +31,8 @@ type SessionOwnerRequest struct {
 	ChatCreateReceiptID uuid.UUID
 	RosterRevision      int64
 	Members             []uuid.UUID
+	HostProfileID       *uuid.UUID
+	LeaseExpiresAt      time.Time
 	VoiceRoomID         uuid.UUID
 	Proto               proto.Message
 }
@@ -43,13 +45,15 @@ type SessionOwnerAdapters struct {
 	CreateChat       func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 	SyncChatRoster   func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 	ProvisionVoice   func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
+	ApplyVoiceRoster func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 	ApplyRoleGrants  func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 	CloseVoice       func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 	RevokeRoleGrants func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
 }
 type SessionOrchestrator struct {
-	Store  *Store
-	Owners SessionOwnerAdapters
+	Store                    *Store
+	Owners                   SessionOwnerAdapters
+	CommunityRosterProjector CommunityRosterSpaceProjector
 }
 type SessionActiveOutboxEvent struct {
 	EventID       *uuid.UUID
@@ -59,6 +63,8 @@ type SessionActiveOutboxEvent struct {
 	EventType     string
 	Payload       []byte
 }
+
+var ErrRosterLeaseExpired = errors.New("session roster lease expired")
 
 func NewSessionOrchestrator(store *Store, owners SessionOwnerAdapters) *SessionOrchestrator {
 	return &SessionOrchestrator{Store: store, Owners: owners}
@@ -82,6 +88,28 @@ func (o *SessionOrchestrator) GetOperation(ctx context.Context, p SessionPrincip
 		return SessionOperation{}, errors.New("session store unavailable")
 	}
 	return o.Store.getOperation(ctx, p, id)
+}
+
+func (o *SessionOrchestrator) UpdateSessionRoster(ctx context.Context, p SessionPrincipal, sessionID uuid.UUID, in SessionRosterUpdateInput) (SessionOperation, error) {
+	if o == nil || o.Store == nil || o.Store.Pool == nil {
+		return SessionOperation{}, errors.New("session store unavailable")
+	}
+	if err := validateRosterUpdate(in); err != nil {
+		return SessionOperation{}, err
+	}
+	requestHash, err := sessionRosterMutationHash(p, sessionID, in)
+	if err != nil {
+		return SessionOperation{}, err
+	}
+	rosterHash, err := sessionRosterHash(in.RosterRevision, in.Members, in.HostProfileID)
+	if err != nil {
+		return SessionOperation{}, err
+	}
+	return o.Store.acceptSessionRosterUpdate(ctx, p, sessionID, in, requestHash, rosterHash)
+}
+
+func ValidateSessionRosterUpdateInput(in SessionRosterUpdateInput) error {
+	return validateRosterUpdate(in)
 }
 func (o *SessionOrchestrator) GetActiveOutboxEvent(ctx context.Context, sessionID uuid.UUID) (*SessionActiveOutboxEvent, error) {
 	var event SessionActiveOutboxEvent
@@ -195,7 +223,7 @@ func (o *SessionOrchestrator) CloseSession(ctx context.Context, p SessionPrincip
 				if chatOwnerSessionID != nil && *chatOwnerSessionID == sessionID {
 					reconcileCreateStage = createStage
 				}
-			case "roster_ready", "voice_ready":
+			case "roster_ready", "voice_ready", "roster_lease_ready":
 				reconcileCreateStage = createStage
 			}
 		}
@@ -237,8 +265,11 @@ func (o *SessionOrchestrator) CloseSession(ctx context.Context, p SessionPrincip
 	if *terminal != operationID {
 		stage = "coalesced"
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO gis_session_operations(operation_id,session_id,application_id,environment_id,operation_kind,request_hash,status,stage) VALUES($1,$2,$3,$4,'close',$5,$6,$7)`, operationID, sessionID, p.ApplicationID, p.EnvironmentID, sum[:], operationStatus, stage)
+	_, err = tx.Exec(ctx, `INSERT INTO gis_session_operations(operation_id,session_id,application_id,environment_id,operation_kind,request_hash,status,stage,terminalized_at) VALUES($1,$2,$3,$4,'close',$5,$6,$7,CASE WHEN $6='succeeded' THEN clock_timestamp() ELSE NULL END)`, operationID, sessionID, p.ApplicationID, p.EnvironmentID, sum[:], operationStatus, stage)
 	if err != nil {
+		return SessionOperation{}, err
+	}
+	if err = markTerminalSessionClocks(ctx, tx, p, sessionID); err != nil {
 		return SessionOperation{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -335,8 +366,11 @@ func (o *SessionOrchestrator) FailSession(ctx context.Context, p SessionPrincipa
 	if *winner != operationID {
 		stage = "coalesced"
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO gis_session_operations(operation_id,session_id,application_id,environment_id,operation_kind,request_hash,status,stage,error_code) VALUES($1,$2,$3,$4,'failure',$5,$6,$7,$8)`, operationID, sessionID, p.ApplicationID, p.EnvironmentID, sum[:], operationStatus, stage, reason)
+	_, err = tx.Exec(ctx, `INSERT INTO gis_session_operations(operation_id,session_id,application_id,environment_id,operation_kind,request_hash,status,stage,error_code,terminalized_at) VALUES($1,$2,$3,$4,'failure',$5,$6,$7,$8,CASE WHEN $6='succeeded' THEN clock_timestamp() ELSE NULL END)`, operationID, sessionID, p.ApplicationID, p.EnvironmentID, sum[:], operationStatus, stage, reason)
 	if err != nil {
+		return SessionOperation{}, err
+	}
+	if err = markTerminalSessionClocks(ctx, tx, p, sessionID); err != nil {
 		return SessionOperation{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -386,18 +420,26 @@ func (o *SessionOrchestrator) AdvanceScoped(ctx context.Context, key SessionOper
 	var sessionKind, external, display string
 	var app, env, chat, chatOwner, chatReceipt, voice uuid.UUID
 	var revision int64
+	var hostProfileID *uuid.UUID
+	var leaseExpiresAt *time.Time
 	var members []uuid.UUID
-	err = o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,kind,external_key,COALESCE(display_name,''),COALESCE(chat_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_owner_session_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_create_receipt_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(voice_room_id,'00000000-0000-0000-0000-000000000000'::uuid),roster_revision,members FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3`, sessionID, key.ApplicationID, key.EnvironmentID).Scan(&app, &env, &sessionKind, &external, &display, &chat, &chatOwner, &chatReceipt, &voice, &revision, &members)
+	err = o.Store.Pool.QueryRow(ctx, `SELECT application_id,environment_id,kind,external_key,COALESCE(display_name,''),COALESCE(chat_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_owner_session_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(chat_create_receipt_id,'00000000-0000-0000-0000-000000000000'::uuid),COALESCE(voice_room_id,'00000000-0000-0000-0000-000000000000'::uuid),roster_revision,members,host_profile_id,lease_expires_at FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3`, sessionID, key.ApplicationID, key.EnvironmentID).Scan(&app, &env, &sessionKind, &external, &display, &chat, &chatOwner, &chatReceipt, &voice, &revision, &members, &hostProfileID, &leaseExpiresAt)
 	if err != nil {
 		return SessionOperation{}, err
 	}
 	p = SessionPrincipal{ApplicationID: app, EnvironmentID: env}
+	req = SessionOwnerRequest{ApplicationID: app, EnvironmentID: env, SessionID: sessionID, Kind: sessionKind, ExternalKey: external, DisplayName: display, ChatID: chat, ChatOwnerSessionID: chatOwner, ChatCreateReceiptID: chatReceipt, RosterRevision: revision, Members: members, HostProfileID: hostProfileID, VoiceRoomID: voice}
+	if leaseExpiresAt != nil {
+		req.LeaseExpiresAt = leaseExpiresAt.UTC()
+	}
+	if kind == "roster" {
+		return o.advanceRoster(ctx, p, key.OperationID, sessionID, stage, leaseOwner, req)
+	}
 	var createInput CreateSessionInput
 	err = o.Store.Pool.QueryRow(ctx, `SELECT operation_id FROM gis_session_operations WHERE session_id=$1 AND application_id=$2 AND environment_id=$3 AND operation_kind='create' ORDER BY created_at LIMIT 1`, sessionID, key.ApplicationID, key.EnvironmentID).Scan(&createInput.OperationID)
 	if err != nil {
 		return SessionOperation{}, err
 	}
-	req = SessionOwnerRequest{ApplicationID: app, EnvironmentID: env, SessionID: sessionID, Kind: sessionKind, ExternalKey: external, DisplayName: display, ChatID: chat, ChatOwnerSessionID: chatOwner, ChatCreateReceiptID: chatReceipt, RosterRevision: revision, Members: members, VoiceRoomID: voice}
 	if strings.HasPrefix(stage, "create_reconcile_pending:") {
 		return o.reconcileClosingCreateStage(ctx, key, leaseOwner, sessionID, p, req, createInput.OperationID, strings.TrimPrefix(stage, "create_reconcile_pending:"))
 	}
@@ -418,7 +460,7 @@ func (o *SessionOrchestrator) AdvanceScoped(ctx context.Context, key SessionOper
 	}
 	var ownerStage string
 	discriminator := ""
-	if stage == "roster_ready" || stage == "voice_ready" {
+	if stage == "roster_ready" || stage == "voice_ready" || stage == "roster_lease_ready" {
 		discriminator = fmt.Sprint(revision)
 	}
 	var call func(context.Context, SessionOwnerRequest) (SessionOwnerReceipt, error)
@@ -439,10 +481,21 @@ func (o *SessionOrchestrator) AdvanceScoped(ctx context.Context, key SessionOper
 		ownerStage = "voice_provision"
 		call = o.Owners.ProvisionVoice
 	case "voice_ready":
+		ownerStage = "voice_roster"
+		call = o.Owners.ApplyVoiceRoster
+	case "roster_lease_ready":
 		ownerStage = "role_apply"
 		call = o.Owners.ApplyRoleGrants
 	case "grants_ready":
-		return o.finishActive(ctx, key, sessionID, stage, leaseOwner, p)
+		operation, finishErr := o.finishActive(ctx, key, sessionID, stage, leaseOwner, p)
+		if errors.Is(finishErr, ErrRosterLeaseExpired) {
+			failureID := deterministicOwnerID(app, env, sessionID, "roster_lease_expiry", fmt.Sprint(revision))
+			if _, err := o.FailSession(ctx, p, sessionID, failureID, "ROSTER_LEASE_EXPIRED"); err != nil {
+				return SessionOperation{}, err
+			}
+			return o.Store.getOperation(ctx, p, key.OperationID)
+		}
+		return operation, finishErr
 	default:
 		return SessionOperation{}, fmt.Errorf("unknown session stage %q", stage)
 	}
@@ -474,7 +527,7 @@ func (o *SessionOrchestrator) AdvanceScoped(ctx context.Context, key SessionOper
 				if ownerStage == "chat_create" {
 					mapping = &ResourceMappingInput{
 						ApplicationID: app, EnvironmentID: env,
-						OperationID: deterministicOwnerID(app, env, sessionID, "chat_mapping", ""),
+						OperationID:  deterministicOwnerID(app, env, sessionID, "chat_mapping", ""),
 						ResourceKind: "chat", ExternalKey: external, ResourceID: receipt.ResourceID,
 						ChatID: receipt.ResourceID, ChatOperationID: req.OperationID, ChatRequestHash: req.RequestHash,
 					}
@@ -519,6 +572,8 @@ func (o *SessionOrchestrator) reconcileClosingCreateStage(ctx context.Context, c
 	case "roster_ready":
 		ownerStage, call, discriminator = "voice_provision", o.Owners.ProvisionVoice, fmt.Sprint(req.RosterRevision)
 	case "voice_ready":
+		ownerStage, call, discriminator = "voice_roster", o.Owners.ApplyVoiceRoster, fmt.Sprint(req.RosterRevision)
+	case "roster_lease_ready":
 		ownerStage, call, discriminator = "role_apply", o.Owners.ApplyRoleGrants, fmt.Sprint(req.RosterRevision)
 	default:
 		return SessionOperation{}, fmt.Errorf("unsupported create reconciliation stage %q", createStage)
@@ -647,6 +702,9 @@ func (o *SessionOrchestrator) advanceNoEffectClosingCreateStage(ctx context.Cont
 	if tag.RowsAffected() != 1 {
 		return SessionOperation{}, ErrSessionLeaseLost
 	}
+	if err = markTerminalSessionClocks(ctx, tx, SessionPrincipal{ApplicationID: key.ApplicationID, EnvironmentID: key.EnvironmentID}, session); err != nil {
+		return SessionOperation{}, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return SessionOperation{}, err
 	}
@@ -662,6 +720,8 @@ func ownerStageForCreateStage(createStage string) string {
 	case "roster_ready":
 		return "voice_provision"
 	case "voice_ready":
+		return "voice_roster"
+	case "roster_lease_ready":
 		return "role_apply"
 	default:
 		return ""
@@ -701,7 +761,7 @@ func (o *SessionOrchestrator) persistClosingCreateReceipt(ctx context.Context, c
 	if ownerStage == "chat_create" {
 		_, err = o.Store.createResourceMappingTx(ctx, tx, ResourceMappingInput{
 			ApplicationID: req.ApplicationID, EnvironmentID: req.EnvironmentID,
-			OperationID: deterministicOwnerID(req.ApplicationID, req.EnvironmentID, sessionID, "chat_mapping", ""),
+			OperationID:  deterministicOwnerID(req.ApplicationID, req.EnvironmentID, sessionID, "chat_mapping", ""),
 			ResourceKind: "chat", ExternalKey: req.ExternalKey, ResourceID: receipt.ResourceID,
 			ChatID: receipt.ResourceID, ChatOperationID: req.OperationID, ChatRequestHash: req.RequestHash,
 		})
@@ -732,6 +792,11 @@ func (o *SessionOrchestrator) persistClosingCreateReceipt(ctx context.Context, c
 			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$7 AND terminalization_stage=$8 AND session_status='closing'`
 		updateArgs = []any{sessionID, closeKey.ApplicationID, closeKey.EnvironmentID, receipt.ReceiptID,
 			nextStage, sessionStatus, closeKey.OperationID, marker}
+	case "voice_roster":
+		update = `UPDATE gis_sessions SET terminalization_stage=$4,session_status=$5,stage=$4,updated_at=now()
+			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$6 AND terminalization_stage=$7 AND session_status='closing'`
+		updateArgs = []any{sessionID, closeKey.ApplicationID, closeKey.EnvironmentID,
+			nextStage, sessionStatus, closeKey.OperationID, marker}
 	default:
 		return SessionOperation{}, fmt.Errorf("unsupported reconciliation receipt stage %q", ownerStage)
 	}
@@ -741,6 +806,9 @@ func (o *SessionOrchestrator) persistClosingCreateReceipt(ctx context.Context, c
 	}
 	if tag.RowsAffected() != 1 {
 		return SessionOperation{}, ErrSessionLeaseLost
+	}
+	if err = markTerminalSessionClocks(ctx, tx, p, sessionID); err != nil {
+		return SessionOperation{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return SessionOperation{}, err
@@ -762,6 +830,8 @@ func (o *SessionOrchestrator) recordResource(ctx context.Context, key SessionOpe
 		next = "roster_ready"
 	case "voice_provision":
 		next = "voice_ready"
+	case "voice_roster":
+		next = "roster_lease_ready"
 	case "role_apply":
 		next = "grants_ready"
 	default:
@@ -793,6 +863,8 @@ func (o *SessionOrchestrator) recordResource(ctx context.Context, key SessionOpe
 		tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET chat_roster_receipt_id=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND stage=$5 AND session_status='provisioning'`, session, key.ApplicationID, key.EnvironmentID, r.ReceiptID, currentStage)
 	case "voice_provision":
 		tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET voice_room_id=$4,voice_provision_receipt_id=$5,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND stage=$6 AND session_status='provisioning'`, session, key.ApplicationID, key.EnvironmentID, r.ResourceID, r.ReceiptID, currentStage)
+	case "voice_roster":
+		tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND stage=$4 AND session_status='provisioning'`, session, key.ApplicationID, key.EnvironmentID, currentStage)
 	case "role_apply":
 		tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET role_grant_receipt_id=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND stage=$5 AND session_status='provisioning'`, session, key.ApplicationID, key.EnvironmentID, r.ReceiptID, currentStage)
 	}
@@ -802,6 +874,11 @@ func (o *SessionOrchestrator) recordResource(ctx context.Context, key SessionOpe
 	resourceRows = tag.RowsAffected()
 	if resourceRows != 1 {
 		return ErrSessionLeaseLost
+	}
+	if ownerStage == "chat_roster" {
+		if err = replaceAcceptedBindingChatRoster(ctx, tx, key, session); err != nil {
+			return err
+		}
 	}
 	stageTag, err := tx.Exec(ctx, `UPDATE gis_sessions SET stage=$4,updated_at=now() WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND stage=$5 AND session_status='provisioning'`, session, key.ApplicationID, key.EnvironmentID, next, currentStage)
 	if err != nil {
@@ -848,6 +925,13 @@ func (o *SessionOrchestrator) finishActive(ctx context.Context, key SessionOpera
 		return SessionOperation{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var leaseValid bool
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(lease_expires_at>clock_timestamp(),false) FROM gis_sessions WHERE id=$1 FOR UPDATE`, session).Scan(&leaseValid); err != nil {
+		return SessionOperation{}, err
+	}
+	if !leaseValid {
+		return SessionOperation{}, ErrRosterLeaseExpired
+	}
 	event := uuid.New()
 	tag, err := tx.Exec(ctx, `UPDATE gis_session_operations SET status='succeeded',stage='active',active_event_id=$6,stage_retry_count=0,error_code=NULL,lease_owner=NULL,lease_until=NULL,updated_at=now()
 		WHERE application_id=$1 AND environment_id=$2 AND operation_id=$3 AND lease_owner=$4 AND stage=$5
@@ -983,7 +1067,7 @@ func (o *SessionOrchestrator) advanceTerminal(ctx context.Context, key SessionOp
 			session, key.ApplicationID, key.EnvironmentID, finalStage, receipt.ReceiptID, key.OperationID, stage)
 	} else {
 		tag, err = tx.Exec(ctx, `UPDATE gis_sessions SET terminalization_stage=$4,session_status=$4,stage=$4,
-			role_revoke_receipt_id=$5,updated_at=now()
+			role_revoke_receipt_id=$5,terminalized_at=clock_timestamp(),history_expires_at=CASE WHEN kind='match' THEN clock_timestamp()+interval '30 days' ELSE NULL END,updated_at=clock_timestamp()
 			WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND terminalization_operation_id=$6 AND terminalization_stage=$7`,
 			session, key.ApplicationID, key.EnvironmentID, finalStage, receipt.ReceiptID, key.OperationID, stage)
 	}
@@ -1077,6 +1161,9 @@ func validateCreate(in CreateSessionInput) error {
 	if in.ParentPartyKey != "" && in.DisplayName != "" {
 		return errors.New("parented child cannot set display_name")
 	}
+	if in.HostProfileID != nil && !containsUUID(in.Members, *in.HostProfileID) {
+		return errors.New("host must be present in complete roster")
+	}
 	if in.ParentPartyKey == "" && (strings.TrimSpace(in.DisplayName) == "" || !utf8.ValidString(in.DisplayName) || utf8.RuneCountInString(in.DisplayName) > 128) {
 		return errors.New("display_name required")
 	}
@@ -1086,6 +1173,82 @@ func validateCreate(in CreateSessionInput) error {
 		}
 	}
 	return nil
+}
+
+func validateRosterUpdate(in SessionRosterUpdateInput) error {
+	if in.OperationID == uuid.Nil || in.RosterRevision <= 0 || in.RosterRevision > 9007199254740991 || !in.RosterComplete || in.Members == nil {
+		return errors.New("invalid complete roster update")
+	}
+	for i, id := range in.Members {
+		if id == uuid.Nil || i > 0 && in.Members[i-1].String() >= id.String() {
+			return errors.New("roster members must be sorted unique UUIDs")
+		}
+	}
+	if in.HostProfileID != nil && !containsUUID(in.Members, *in.HostProfileID) {
+		return errors.New("host must be present in complete roster")
+	}
+	return nil
+}
+
+func markTerminalSessionClocks(ctx context.Context, tx pgx.Tx, p SessionPrincipal, sessionID uuid.UUID) error {
+	_, err := tx.Exec(ctx, `UPDATE gis_sessions SET
+		terminalized_at=COALESCE(terminalized_at,statement_timestamp()),
+		history_expires_at=CASE WHEN kind='match' THEN COALESCE(history_expires_at,COALESCE(terminalized_at,statement_timestamp())+interval '30 days') ELSE history_expires_at END
+		WHERE id=$1 AND application_id=$2 AND environment_id=$3 AND session_status IN ('closed','failed')
+		AND (terminalized_at IS NULL OR (kind='match' AND history_expires_at IS NULL))`, sessionID, p.ApplicationID, p.EnvironmentID)
+	return err
+}
+
+func replaceAcceptedBindingChatRoster(ctx context.Context, tx pgx.Tx, key SessionOperationKey, sessionID uuid.UUID) error {
+	var applicationID, environmentID, chatID uuid.UUID
+	var rosterRevision int64
+	var rosterComplete bool
+	var members []uuid.UUID
+	var leaseExpiresAt time.Time
+	err := tx.QueryRow(ctx, `SELECT application_id,environment_id,chat_id,roster_revision,roster_complete,members,lease_expires_at
+		FROM gis_sessions WHERE id=$1 AND application_id=$2 AND environment_id=$3 FOR UPDATE`, sessionID, key.ApplicationID, key.EnvironmentID).
+		Scan(&applicationID, &environmentID, &chatID, &rosterRevision, &rosterComplete, &members, &leaseExpiresAt)
+	if err != nil {
+		return err
+	}
+	if chatID == uuid.Nil || rosterRevision <= 0 || !rosterComplete {
+		return errors.New("accepted Chat roster requires a complete GIS session roster and Chat")
+	}
+	var mapped bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM game_resource_mappings
+		WHERE application_id=$1 AND environment_id=$2 AND resource_kind='chat' AND resource_id=$3
+			AND chat_id=$3 AND status='active')`, applicationID, environmentID, chatID).Scan(&mapped); err != nil {
+		return err
+	}
+	if !mapped {
+		return errors.New("accepted Chat roster has no active T30 Chat mapping")
+	}
+	if _, err := tx.Exec(ctx, `UPDATE game_resource_binding_chats
+		SET status='revoked',lease_expires_at=clock_timestamp(),updated_at=clock_timestamp()
+		WHERE application_id=$1 AND environment_id=$2 AND chat_id=$3 AND status='active'`,
+		applicationID, environmentID, chatID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO game_resource_binding_chats
+		(application_id,environment_id,binding_id,chat_id,roster_revision,status,lease_expires_at)
+		SELECT $1,$2,b.binding_id,$3,$4,'active',$6
+		FROM player_bindings b
+		WHERE b.application_id=$1 AND b.environment_id=$2 AND b.status='active'
+			AND b.profile_id=ANY($5::uuid[])
+		ON CONFLICT (application_id,environment_id,binding_id,chat_id) DO UPDATE SET
+			roster_revision=EXCLUDED.roster_revision,status='active',lease_expires_at=EXCLUDED.lease_expires_at,
+			updated_at=clock_timestamp()`, applicationID, environmentID, chatID, rosterRevision, members, leaseExpiresAt)
+	return err
+}
+
+func containsUUID(values []uuid.UUID, value uuid.UUID) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
 }
 
 func ValidateCreateSessionInput(in CreateSessionInput) error { return validateCreate(in) }

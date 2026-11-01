@@ -84,6 +84,8 @@ func TestSessionOwnerRetryDelayUsesExponentialBackoffCappedAtThirtySeconds(t *te
 
 func TestSessionWorkerRestartReclaimsRealFiveSecondLeaseWithinSixSeconds(t *testing.T) {
 	store, ctx := startT31SessionStore(t)
+	pool, trace := tracedTestPool(t, ctx, store.Pool)
+	store = &Store{Pool: pool}
 	owners := newSessionOwnerScript()
 	p := newT31TestSessionPrincipal(t, ctx, store)
 	o := NewSessionOrchestrator(store, owners.adapters())
@@ -104,7 +106,16 @@ func TestSessionWorkerRestartReclaimsRealFiveSecondLeaseWithinSixSeconds(t *test
 
 	rosterEntered := make(chan SessionOwnerRequest, 1)
 	ownerAdapters := owners.adapters()
+	createChat := ownerAdapters.CreateChat
+	ownerAdapters.CreateChat = func(ctx context.Context, request SessionOwnerRequest) (SessionOwnerReceipt, error) {
+		start := time.Now()
+		trace.event("owner.chat_create.enter", start, nil)
+		receipt, err := createChat(ctx, request)
+		trace.event("owner.chat_create.return", start, err)
+		return receipt, err
+	}
 	ownerAdapters.SyncChatRoster = func(ctx context.Context, request SessionOwnerRequest) (SessionOwnerReceipt, error) {
+		trace.event("owner.chat_roster.enter", time.Now(), nil)
 		rosterEntered <- request
 		<-ctx.Done()
 		return SessionOwnerReceipt{}, ctx.Err()
@@ -123,6 +134,17 @@ func TestSessionWorkerRestartReclaimsRealFiveSecondLeaseWithinSixSeconds(t *test
 	select {
 	case <-rosterEntered:
 	case <-deadline.C:
+		cancel()
+		diagnosticCtx, diagnosticCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer diagnosticCancel()
+		var stage, status string
+		var attempts int
+		var nextSeconds, leaseSeconds *float64
+		started := time.Now()
+		err := store.Pool.QueryRow(diagnosticCtx, `SELECT stage,status,attempts,EXTRACT(EPOCH FROM (next_attempt_at-now())), EXTRACT(EPOCH FROM (lease_until-now())) FROM gis_session_operations WHERE operation_id=$1`, accepted.OperationID).Scan(&stage, &status, &attempts, &nextSeconds, &leaseSeconds)
+		trace.event("timeout.snapshot", started, err)
+		stats := store.Pool.Stat()
+		t.Logf("timeout snapshot stage=%s status=%s attempts=%d next_seconds=%v lease_seconds=%v pool_acquired=%d pool_idle=%d pool_total=%d", stage, status, attempts, diagnosticSeconds(nextSeconds), diagnosticSeconds(leaseSeconds), stats.AcquiredConns(), stats.IdleConns(), stats.TotalConns())
 		t.Fatal("fresh worker did not reclaim and advance the expired lease to Chat roster within six seconds")
 	}
 	elapsed := time.Since(startedAt)

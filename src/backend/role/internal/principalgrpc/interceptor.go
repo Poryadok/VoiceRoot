@@ -123,6 +123,8 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 				decisionErr = RequireMatchmakingPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.SpaceManageInvites {
 				decisionErr = RequireInvitePermission(principal.WithVerified(ctx, verified), req)
+			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberBan {
+				decisionErr = RequireBanPermission(principal.WithVerified(ctx, verified), req)
 			} else if req, ok := message.(*rolev1.CheckPermissionRequest); ok && req.GetPermissionName() == permissions.MemberManageNicknames {
 				decisionErr = RequireNicknamePermission(principal.WithVerified(ctx, verified), req)
 			} else {
@@ -170,8 +172,8 @@ func OwnershipUnaryInterceptor(_ Verifier) grpc.UnaryServerInterceptor {
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && WorkloadDecisionIssuer(req.GetPermissionName()) != "" {
 				return nil, status.Error(codes.Unavailable, "protected workload decision listener required")
 			}
-			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceManageInvites || req.GetPermissionName() == permissions.SpaceManageMatchmaking) {
-				return nil, status.Error(codes.PermissionDenied, "protected invite decision listener required")
+			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceManageInvites || req.GetPermissionName() == permissions.SpaceManageMatchmaking || req.GetPermissionName() == permissions.MemberBan) {
+				return nil, status.Error(codes.PermissionDenied, "protected Space decision listener required")
 			}
 			if req, ok := request.(*rolev1.CheckPermissionRequest); ok && (req.GetPermissionName() == permissions.SpaceApproveJoinRequests || req.GetPermissionName() == permissions.SpaceManageSettings || req.GetPermissionName() == permissions.SpaceManageBots) {
 				return nil, status.Error(codes.PermissionDenied, "protected approval decision listener required")

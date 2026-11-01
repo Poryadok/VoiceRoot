@@ -4,6 +4,13 @@ services:
   gameintegration:
     environment:
       GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS: ${T31_E2E_OPERATOR_ACCOUNT_ID:-00000000-0000-4000-8000-000000000000}
+      GAME_INTEGRATION_SPACE_TEMPLATE_IDS: guild-default
+      GAME_INTEGRATION_SPACE_GRPC_ADDR: space:9090
+      GAME_INTEGRATION_SPACE_S2S_TOKEN: voice-compose-space-gameintegration
+
+  space:
+    environment:
+      SPACE_GAME_INTEGRATION_S2S_TOKEN: voice-compose-space-gameintegration
 
   t31-session-event-gateway-tls:
     image: nginx:1.28-alpine
@@ -64,6 +71,18 @@ services:
       T31_EXPECTED_EVENT_ID: ${T31_EXPECTED_EVENT_ID:?create an active GIS session first}
       T31_ACCEPTANCE_PHASE: ${T31_ACCEPTANCE_PHASE:?select a hosted acceptance phase}
       T31_ACCEPTANCE_STATE_FILE: /run/t31-state/claim.json
+      T40_PUBLIC_GATEWAY_BASE_URL: ${T40_PUBLIC_GATEWAY_BASE_URL:-http://gateway:8080}
+      T40_GAME_SERVER_CREDENTIAL: ${T40_GAME_SERVER_CREDENTIAL:-}
+      T40_GAME_ROSTER_CREDENTIAL: ${T40_GAME_ROSTER_CREDENTIAL:-}
+      T40_APPLICATION_ID: ${T40_APPLICATION_ID:-}
+      T40_ENVIRONMENT_ID: ${T40_ENVIRONMENT_ID:-}
+      T40_PLAYER_ONE_TOKEN: ${T40_PLAYER_ONE_TOKEN:-}
+      T40_PLAYER_TWO_TOKEN: ${T40_PLAYER_TWO_TOKEN:-}
+      T40_PLAYER_ONE_PROFILE_ID: ${T40_PLAYER_ONE_PROFILE_ID:-}
+      T40_PLAYER_TWO_PROFILE_ID: ${T40_PLAYER_TWO_PROFILE_ID:-}
+      T40_CHAT_DATABASE_URL: ${T40_CHAT_DATABASE_URL:-postgres://voice:voice@postgres:5432/chat_db?sslmode=disable}
+      T40_GAME_INTEGRATION_DATABASE_URL: ${T40_GAME_INTEGRATION_DATABASE_URL:-postgres://voice:voice@postgres:5432/game_integration_db?sslmode=disable}
+      T40_SPACE_DATABASE_URL: ${T40_SPACE_DATABASE_URL:-postgres://voice:voice@postgres:5432/space_db?sslmode=disable}
     volumes:
       - ${T31_E2E_TLS_DIR:?generate the disposable T31 gateway certificate first}:/run/t31:ro
       - ${T31_E2E_STATE_DIR:?create the T31 acceptance state directory first}:/run/t31-state:rw

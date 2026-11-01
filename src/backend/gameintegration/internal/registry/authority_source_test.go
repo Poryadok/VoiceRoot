@@ -73,6 +73,8 @@ func TestGISAuthoritySourceRefusesAmbiguousRetainedFloor(t *testing.T) {
 
 func TestGISAuthoritySourceSnapshotMissingClosedAndMaintenance(t *testing.T) {
 	ctx, s := gisSourceFixture(t)
+	pool, trace := tracedTestPool(t, ctx, s.Pool)
+	s = &Store{Pool: pool}
 	scope := &authorityv1.SourceScope{SchemaVersion: 1, SpaceId: uuid.NewString(), EnvironmentId: uuid.NewString(), ProfileIds: []string{uuid.NewString()}}
 	require.NoError(t, s.CheckAuthoritySourceSchema(ctx))
 	missing, err := s.ReadAuthoritySnapshot(ctx, scope)
@@ -102,7 +104,10 @@ func TestGISAuthoritySourceSnapshotMissingClosedAndMaintenance(t *testing.T) {
 	require.NotContains(t, string(live.CanonicalState), "secret display")
 	require.NotContains(t, string(live.CanonicalState), "hmac-sha256")
 	time.Sleep(time.Until(time.UnixMilli(live.ValidUntilUnixMillis)) + 10*time.Millisecond)
+	readStart := time.Now()
+	trace.event("authority.expired.enter", readStart, nil)
 	expired, err := s.ReadAuthoritySnapshot(ctx, scope)
+	trace.event("authority.expired.return", readStart, err)
 	require.NoError(t, err)
 	require.Equal(t, live.CanonicalState, expired.CanonicalState)
 	require.Equal(t, live.Revision, expired.Revision)

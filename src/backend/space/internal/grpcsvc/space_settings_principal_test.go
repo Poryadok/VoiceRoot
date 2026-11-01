@@ -131,3 +131,28 @@ func TestMemberRoleNamesUsesProtectedSpaceRead(t *testing.T) {
 	require.Empty(t, svc.memberRoleNames(t.Context(), space, profile))
 	require.Zero(t, ordinaryCalls)
 }
+
+func TestBanPermissionUsesProtectedSpaceDecision(t *testing.T) {
+	f := newInviteIngressFixture(t)
+	space, actor := uuid.New(), uuid.New()
+	called := false
+	svc := &SpaceGRPC{PrincipalIssuer: f.space, Roles: inviteDecisionFunc{check: func(context.Context, *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+		t.Fatal("Ban must not use the ordinary Role listener")
+		return nil, nil
+	}}}
+	svc.OwnershipRoles = inviteDecisionFunc{check: func(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+		called = true
+		require.Equal(t, space.String(), req.SpaceId)
+		require.Equal(t, actor.String(), req.ProfileId)
+		require.Equal(t, "MEMBER_BAN", req.PermissionName)
+		verifySettingsRoleCall(t, f, ctx, req, rolev1.RoleService_CheckPermission_FullMethodName)
+		return &rolev1.CheckPermissionResponse{Allowed: true}, nil
+	}}
+	require.NoError(t, svc.checkSpacePermissionForProfile(t.Context(), space, actor, "MEMBER_BAN"))
+	require.True(t, called)
+}
+
+func TestBanPermissionFailsClosedWithoutProtectedRole(t *testing.T) {
+	err := (&SpaceGRPC{}).checkSpacePermissionForProfile(t.Context(), uuid.New(), uuid.New(), "MEMBER_BAN")
+	require.Equal(t, codes.Unavailable, status.Code(err))
+}

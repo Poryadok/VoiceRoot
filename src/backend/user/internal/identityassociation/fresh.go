@@ -18,14 +18,33 @@ type FreshSourcePin struct {
 // on a pristine source with both independently pinned creation generations.
 // It cannot reopen or adopt an existing source and does not activate guards.
 func NewFreshStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, pin FreshSourcePin) (*Store, error) {
-	if pin.HistoryGeneration == uuid.Nil || pin.UserSourceGeneration == uuid.Nil || keys == nil || keys.snapshot.Revision != 1 {
+	return newPristineStore(ctx, pool, keys, pin.HistoryGeneration, pin.UserSourceGeneration)
+}
+
+// MigrationSourcePin is independently recorded during an exclusive, fenced
+// schema migration. It identifies new identity history, not a continuity or
+// guard-activation assertion for the pre-existing source.
+type MigrationSourcePin struct {
+	HistoryGeneration    uuid.UUID
+	UserSourceGeneration uuid.UUID
+}
+
+// NewMigratedStore provisions a pristine identity domain after the reviewed
+// schema migration; existing profile rows are retained. It cannot authorize
+// source reopening or activate writer guards.
+func NewMigratedStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, pin MigrationSourcePin) (*Store, error) {
+	return newPristineStore(ctx, pool, keys, pin.HistoryGeneration, pin.UserSourceGeneration)
+}
+
+func newPristineStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, historyGeneration, userSourceGeneration uuid.UUID) (*Store, error) {
+	if historyGeneration == uuid.Nil || userSourceGeneration == uuid.Nil || historyGeneration == userSourceGeneration || keys == nil || keys.snapshot.Revision != 1 {
 		return nil, ErrIncomplete
 	}
-	s, err := NewStore(pool, keys, pin.HistoryGeneration)
+	s, err := NewStore(pool, keys, historyGeneration)
 	if err != nil {
 		return nil, err
 	}
-	tx, err := BeginIdentityTx(ctx, pool, &ExpectedFence{Generation: pin.HistoryGeneration, KeysetRevision: 0})
+	tx, err := BeginIdentityTx(ctx, pool, &ExpectedFence{Generation: historyGeneration, KeysetRevision: 0})
 	if err != nil {
 		return nil, ErrIncomplete
 	}
@@ -41,7 +60,7 @@ func NewFreshStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, pin Fr
 		AND NOT EXISTS(SELECT 1 FROM association_selector_aliases)
 		AND NOT EXISTS(SELECT 1 FROM identity_account_parent_aliases)
 		AND NOT EXISTS(SELECT 1 FROM identity_parent_fences)
-		FROM identity_meta WHERE singleton`, pin.UserSourceGeneration, pin.HistoryGeneration).Scan(&pristine)
+		FROM identity_meta WHERE singleton`, userSourceGeneration, historyGeneration).Scan(&pristine)
 	if err != nil {
 		return nil, err
 	}

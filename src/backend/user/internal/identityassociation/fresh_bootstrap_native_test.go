@@ -17,6 +17,15 @@ func freshSourcePin(t *testing.T, pool *pgxpool.Pool) FreshSourcePin {
 	return pin
 }
 
+func TestPristineProvisioningRejectsEqualGenerations(t *testing.T) {
+	keys := keysetForTest(t, 1, map[uint32][]byte{1: bytes.Repeat([]byte{0x47}, 32)})
+	id := uuid.New()
+	_, err := NewFreshStore(context.Background(), nil, keys, FreshSourcePin{HistoryGeneration: id, UserSourceGeneration: id})
+	require.ErrorIs(t, err, ErrIncomplete)
+	_, err = NewMigratedStore(context.Background(), nil, keys, MigrationSourcePin{HistoryGeneration: id, UserSourceGeneration: id})
+	require.ErrorIs(t, err, ErrIncomplete)
+}
+
 func TestNativeFreshBootstrapRequiresBothPinnedGenerationsAndPristineSource(t *testing.T) {
 	pool, profile, account := nativeDatabase(t)
 	ctx := context.Background()
@@ -33,6 +42,8 @@ func TestNativeFreshBootstrapRequiresBothPinnedGenerationsAndPristineSource(t *t
 	_, err = NewFreshStore(ctx, pool, keys, wrongSource)
 	require.ErrorIs(t, err, ErrIncomplete)
 	_, err = NewFreshStore(ctx, pool, keys, FreshSourcePin{})
+	require.ErrorIs(t, err, ErrIncomplete)
+	_, err = NewMigratedStore(ctx, pool, keys, MigrationSourcePin{HistoryGeneration: pinned.HistoryGeneration, UserSourceGeneration: pinned.HistoryGeneration})
 	require.ErrorIs(t, err, ErrIncomplete)
 
 	store, err := NewFreshStore(ctx, pool, keys, pinned)
