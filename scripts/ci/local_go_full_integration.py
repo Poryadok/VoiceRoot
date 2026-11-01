@@ -16,6 +16,7 @@ import local_chat_orchestration as orchestration
 from local_docker_owned import DockerCLI
 from local_docker_scheduled import ScheduledRun
 import local_go_dependencies
+import local_go_multi_dependencies
 import local_go_plan
 import local_source_snapshot as snapshot
 import local_nats_hosted_diagnostic as bootstrap
@@ -28,7 +29,7 @@ USER_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1')
 ROLE_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1', 'redis:7-alpine')
 REALTIME_IMAGES = ()
 POSTGRES_SERVICES = frozenset({'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'})
-EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging'}
+EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging', 'notification'}
 
 
 def profile(service):
@@ -40,6 +41,8 @@ def profile(service):
         return {'images': BOT_IMAGES, 'module': 'src/backend/bot'}
     if service == 'user':
         return {'images': USER_IMAGES, 'module': 'src/backend/user'}
+    if service == 'notification':
+        return {'images': ('postgres:16-bookworm', 'redis:7-alpine'), 'module': 'src/backend/notification'}
     if service == 'gameintegration':
         return {'images': USER_IMAGES, 'module': 'src/backend/gameintegration'}
     if service in ('role', 'messaging'):
@@ -120,8 +123,12 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
     source = snapshot.capture(root, head)
     output.mkdir(parents=True)
     source_copy = snapshot.materialize(root, source, output / 'source')
-    acquisition = local_go_dependencies.acquire(root, source, source_copy, selected['module'],
-                                                 output / 'dependencies', go_binary)
+    if service == 'notification':
+        acquisition = local_go_multi_dependencies.acquire(root, source, source_copy,
+                                                            output / 'dependencies', go_binary)
+    else:
+        acquisition = local_go_dependencies.acquire(root, source, source_copy, selected['module'],
+                                                     output / 'dependencies', go_binary)
     checkout = output / 'run'
     checkout.mkdir()
     engine = DockerCLI()
@@ -150,6 +157,8 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
         result['unbound_inputs'].append('tagged Analytics ClickHouse schema, fixture and dedicated job')
     if service == 'messaging':
         result['unbound_inputs'].append('T16 cross-service, nonroot mounted-key, threadlist DSN and BE131 projection dedicated fixtures and jobs')
+    if service == 'notification':
+        result['unbound_inputs'].append('BE195 real Redis endpoint and Notification quota dedicated integration job')
     (output / 'diagnostic.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return result
 
@@ -158,7 +167,8 @@ def _worker_command():
     command = bootstrap._worker_command(Path(__file__))
     original = repr(sorted(bootstrap.PROJECT_MODULES))
     modules = bootstrap.PROJECT_MODULES | {'local_go_full_integration', 'local_chat_full_integration',
-        'local_auth_full_orchestration', 'local_auth_full', 'local_auth_private', 'local_nats_hosted_diagnostic'}
+        'local_auth_full_orchestration', 'local_auth_full', 'local_auth_private', 'local_nats_hosted_diagnostic',
+        'local_go_multi_dependencies'}
     if command[5].count(original) != 1:
         raise ValueError('Go worker import allowlist changed')
     command[5] = command[5].replace(original, repr(sorted(modules)), 1)

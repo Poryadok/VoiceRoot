@@ -146,6 +146,8 @@ def run_full(owner, daemon, client, root, source, source_copy, archive_digest, i
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed during full Chat integration')
     local_go_execution._verify_modules(owner, client, module)
+    if service == 'notification':
+        local_go_execution._verify_modules(owner, client, 'src/backend/user')
     local_go_execution._verify_workspace(owner, client, root, source, archive_digest)
     raw = (output / 'events.jsonl').read_bytes()
     events = receipts.read_events(raw.decode('utf-8'))
@@ -213,8 +215,13 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
                 owner.load_canonical_rootless_image(daemon, copied, item['archive_sha256'], item['image_id'],
                                                     tag, out, err, 300)
         source_digest = local_go_execution.transfer_source(owner, client, root, source, source_copy, output / 'source.tar')
-        local_go_execution.transfer_dependencies(owner, client, root, source, source_copy, source_digest,
+        if service == 'notification':
+            import local_go_multi_dependencies
+            local_go_multi_dependencies.transfer(owner, client, root, source, source_copy, source_digest,
                                                   acquisition, output / 'dependencies/download-cache.tar')
+        else:
+            local_go_execution.transfer_dependencies(owner, client, root, source, source_copy, source_digest,
+                                                      acquisition, output / 'dependencies/download-cache.tar')
         identities = {tag: archives[tag]['image_id'] for tag in image_tags}
         result = executor(owner, daemon, client, root, source, source_copy, source_digest, identities, output / 'full')
         result.update(slot=scheduled.slot, ownership_journal=str(owner.directory / 'ownership.json'),
