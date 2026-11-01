@@ -94,7 +94,7 @@ class TransportTests(unittest.TestCase):
         with TemporaryDirectory() as folder:
             self.setup_files(folder)
             record,_=transport.export(self.base,self.state,self.slot,self.execution,self.cipher)
-            actions=object.__new__(bridge_root.Actions);actions.binding={};actions.code=Path(folder)/'code';actions._installation=self.installation
+            actions=object.__new__(bridge_root.Actions);actions.binding=copy.deepcopy(self.state['code_capture']);actions.code=Path(folder)/'code';actions._installation=self.installation
             state=copy.deepcopy(self.state);calls=[]
             def verify(token,binding,source,artifact):
                 return {'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
@@ -113,7 +113,8 @@ class TransportTests(unittest.TestCase):
             with patch.object(actions,'_expired_source_admission',return_value=source_tuple),\
                  patch.object(actions,'_verify_decrypted_restore') as decrypt,\
                  patch('github_custody.verify_artifact',side_effect=verify),\
-                 patch('guard.ROOT',self.base.parent),patch('root_cli.code_binding',return_value={}),\
+                 patch('guard.ROOT',self.base.parent),patch('root_cli.ROOT',self.base.parent),\
+                 patch('root_cli.code_binding',return_value=actions.binding),\
                  patch('expired_recovery.verify_adopted_binding'),\
                  patch('transaction.authorize',side_effect=authorize),patch('bridge_root.grp.getgrnam',return_value=Mock(gr_gid=1000)):
                 result=actions._authorize_expired_native(request)
