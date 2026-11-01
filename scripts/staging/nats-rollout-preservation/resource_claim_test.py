@@ -100,8 +100,14 @@ class ResourceTests(unittest.TestCase):
                 session.check(prefix+[kind,'voice-test','-o','json'])
             for bad in (prefix+['ClusterRole','voice-test','-o','json'],
                         prefix+['Secret','voice-test','-o','yaml'],
-                        prefix+['Secret','voice-test','-o','json','--context=other']):
+                        prefix+['Secret','voice-test','-o','json','--context=other'],
+                        prefix+['clusterroles','voice-test','-o','json'],
+                        prefix+['secrets','-o','json'],prefix+['clusterroles','-o','json']):
                 with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            for kind in ('namespace','configmap','deployment','pvc','pv','node','pod','replicaset','service','secret'):
+                session.check(prefix+[kind,'voice-test','-o','json'])
+            for kind in ('pods','hpa,jobs,deployments'):
+                session.check(prefix+[kind,'-o','json'])
             import source_plan
             ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
             session.check(ch)
