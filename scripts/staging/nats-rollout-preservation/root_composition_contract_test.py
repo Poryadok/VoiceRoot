@@ -48,8 +48,8 @@ def with_gis_server_defaults(kube):
 
 
 class RootCompositionContract(unittest.TestCase):
-    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
-    def test_scoped_final_admission_rejects_changed_continuation(self):
+    @contextlib.contextmanager
+    def _scoped_final_admission_fixture(self):
         """Real journal and admission; qualified P2 and external custody are fixtures."""
         import staging_cohort_preservation as cohort
         import staging_prerequisites as prereq
@@ -122,21 +122,28 @@ class RootCompositionContract(unittest.TestCase):
             cohort._write(source_record, {'fixture': 'source-authority'})
             prereq_dir = root / 'installed' / 'prerequisites' / session.operation
             prereq_dir.mkdir(mode=0o700, parents=True)
+            yield SimpleNamespace(cohort=cohort, session=session, state=state, request=request,
+                                  runtime=runtime, base=base, target=target)
+
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
+    def test_scoped_final_admission_rejects_changed_continuation(self):
+        with self._scoped_final_admission_fixture() as fixture:
+            cohort, session, state, request = fixture.cohort, fixture.session, fixture.state, fixture.request
             altered = copy.deepcopy(state)
             altered['target']['realtime_bootstrap_sha256'] = '0' * 64
             with self.assertRaisesRegex(cohort.Blocked, 'cohort_final_target_changed'):
-                cohort.issue_final_admission(session, runtime, altered, request)
-            self.assertFalse((base / 'authorizing.json').exists())
-            handle = cohort.issue_final_admission(session, runtime, state, request)
+                cohort.issue_final_admission(session, fixture.runtime, altered, request)
+            self.assertFalse((fixture.base / 'authorizing.json').exists())
+            handle = cohort.issue_final_admission(session, fixture.runtime, state, request)
             self.assertIs(type(handle), cohort.QualifiedFinalAdmission)
-            self.assertEqual(session.binding()['target_sha256'], cohort.digest(target))
-            continuation = base / 'continuation.json'
+            self.assertEqual(session.binding()['target_sha256'], cohort.digest(fixture.target))
+            continuation = fixture.base / 'continuation.json'
             changed = cohort._read(continuation)
             changed['qualified_sha256'] = '0' * 64
             continuation.unlink()
             cohort._write(continuation, changed)
             with self.assertRaisesRegex(cohort.Blocked, 'cohort_continuation_reconciliation_required'):
-                cohort.issue_final_admission(session, runtime, state, request)
+                cohort.issue_final_admission(session, fixture.runtime, state, request)
 
     def test_c2_protected_anchor_revalidates_actual_compiler_target_after_tt_bind(self):
         # Author fixture models a historical PASS; live PG/Kubernetes
