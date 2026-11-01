@@ -32,7 +32,7 @@ Prepare PR #1048 for review and merge to `master`: connect the dedicated User Sp
 ## Validation
 - [ ] `go test -short ./...` from `src/backend/user`.
 - [ ] Relevant source-custody/runtime package tests pass; run race checks where required by existing CI/PR.
-- [ ] Confirm exact location and run `go test -tags=live -run '^TestT40ComposePublicClientPartyThreeMatchesAndChatMembership$' -count=1 .` from its owning package against isolated Compose. Record image digest and fixture limits.
+- [ ] Run from `src/backend/controlledgame`: `go test -tags=live -run '^TestT40ComposePublicClientPartyThreeMatchesAndChatMembership$' -count=1 .` against isolated Compose. The test exercises HTTP Ban and verifies Space ban/membership projection plus the independent GIS grant. Record image digest and fixture limits.
 - [ ] Verify fail-closed incomplete configuration and unqualified source, mTLS identity/CA/server-name, runtime shutdown, and successful end-to-end capture/Ban.
 - [ ] All required checks green; independent review accepted; merge SHA recorded.
 - [ ] TTenrec has DEV/STG owners and evidence gates or explicit linked blocking tasks.
