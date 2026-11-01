@@ -18,7 +18,8 @@ class Tests(unittest.TestCase):
     def test_actual_workflow_commands_cross_root_boundary_and_check_cleanup(self):
         self.assertEqual(os.geteuid(),0)
         runner=os.environ.get('SUDO_USER','voice-runner')
-        lines=WORKFLOW.read_text(encoding='utf8').splitlines()
+        owned=WORKFLOW.read_text(encoding='utf8').split('  owned-enrollment:',1)[1]
+        lines=owned.splitlines()
         commands=[line.strip() for line in lines if line.strip().startswith("sudo -n sh -eu -c 'cd ")]
         self.assertEqual(len(commands),2)
         checks=[line.strip() for line in lines if line.strip().startswith('if sudo -n test -d "$work"')]
