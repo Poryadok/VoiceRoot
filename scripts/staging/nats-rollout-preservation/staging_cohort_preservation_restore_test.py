@@ -32,6 +32,57 @@ import staging_cohort_preservation_test as cut_tests
 from auth_user_adoption_runtime import QUALIFIED_TOOLS
 
 
+class HostedPostgresLifecycleTests(unittest.TestCase):
+    """Test-only Docker responses; this does not prove hosted isolation."""
+    def fixture(self,*,create_lost=False,remove_lost=None,foreign=False):
+        from cohort_hosted_pg import HostedPostgres
+        adapter=object.__new__(HostedPostgres);adapter.name='voice-cohort-source-'+'a'*24
+        adapter.cid=None;adapter.original_popen=subprocess.Popen
+        cid='b'*64;state={'exists':not create_lost,'removed':0}
+        def docker(*args,body=None):
+            if args[0]=='create':
+                state['exists']=True
+                if create_lost:raise RuntimeError('synthetic_create_reply_lost')
+                return cid.encode()
+            if args[:2]==('ps','-a'):
+                return (cid+'\n').encode() if state['exists'] else b''
+            if args[0]=='inspect':
+                return json.dumps([{'Id':cid,'Name':'/'+adapter.name,
+                    'Config':{'Labels':{'voice.test.owner':'foreign' if foreign else adapter.name}}}]).encode()
+            if args[0]=='rm':
+                state['removed']+=1
+                if remove_lost=='before':raise RuntimeError('synthetic_remove_failed')
+                state['exists']=False
+                if remove_lost=='after':raise RuntimeError('synthetic_remove_reply_lost')
+                return b''
+            raise AssertionError('unexpected fixture command')
+        return adapter,cid,state,docker
+
+    def test_lost_create_reply_is_reconciled_by_exact_name_and_label(self):
+        adapter,cid,state,docker=self.fixture(create_lost=True)
+        with patch.object(adapter,'_docker',side_effect=docker):
+            with self.assertRaisesRegex(RuntimeError,'synthetic_create_reply_lost'):adapter.__enter__()
+        self.assertFalse(state['exists']);self.assertEqual(state['removed'],1);self.assertIsNone(adapter.cid)
+
+    def test_remove_failure_retains_identity_and_lost_success_is_reconciled(self):
+        for fault in ('before','after'):
+            with self.subTest(fault=fault):
+                adapter,cid,state,docker=self.fixture(remove_lost=fault);adapter.cid=cid
+                with patch.object(adapter,'_docker',side_effect=docker):
+                    if fault=='before':
+                        with self.assertRaisesRegex(RuntimeError,'synthetic_remove_failed'):adapter.__exit__(None,None,None)
+                        self.assertEqual(adapter.cid,cid);self.assertTrue(state['exists'])
+                    else:
+                        adapter.__exit__(None,None,None)
+                        self.assertIsNone(adapter.cid);self.assertFalse(state['exists'])
+
+    def test_foreign_label_is_never_removed(self):
+        adapter,cid,state,docker=self.fixture(foreign=True);adapter.cid=cid
+        with patch.object(adapter,'_docker',side_effect=docker):
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_identity_changed'):adapter.__exit__(None,None,None)
+        self.assertTrue(state['exists']);self.assertEqual(state['removed'],0);self.assertEqual(adapter.cid,cid)
+
+
 @unittest.skipUnless(os.environ.get('VOICE_COHORT_DOCKER')=='1','isolated Docker fixture opt-in')
 class RestoreTransportTests(unittest.TestCase):
     def test_public_prepare_reaches_real_postgres_restore_before_native_nats(self):
