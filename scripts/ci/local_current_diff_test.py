@@ -70,6 +70,7 @@ class CurrentDiffDiagnosticTest(unittest.TestCase):
         self.git('init', '-q')
         self.git('config', 'user.name', 'Test')
         self.git('config', 'user.email', 'test@example.invalid')
+        self.git('config', 'core.autocrlf', 'false')
         script = self.root / 'scripts/ci/current-diff-contract.py'
         script.parent.mkdir(parents=True)
         script.write_bytes((Path(__file__).parent / 'current-diff-contract.py').read_bytes())
@@ -104,6 +105,38 @@ class CurrentDiffDiagnosticTest(unittest.TestCase):
         (self.root / 'later.txt').write_text('later\n')
         with self.assertRaisesRegex(ValueError, 'source changed'):
             local_current_diff.run(self.root, source, self.head, self.output)
+
+    def test_merge_candidate_checks_real_parent_and_tree(self):
+        (self.root / 'new.txt').write_text('new\n')
+        self.git('add', 'new.txt')
+        self.git('commit', '-qm', 'change')
+        head = self.git('rev-parse', 'HEAD').decode().strip()
+        source = local_source_snapshot.capture(self.root, head)
+        report = local_current_diff.run_merge_candidate(self.root, source, self.head, self.output)
+        self.assertEqual(report['contract']['base'], self.head)
+        self.assertEqual(report['contract']['pr_head'], head)
+        self.assertEqual(report['contract']['changed_paths'], ['new.txt'])
+        self.assertEqual(report['source'], source)
+
+    def test_merge_candidate_rejects_dirty_source(self):
+        (self.root / 'new.txt').write_text('new\n')
+        source = local_source_snapshot.capture(self.root, self.head)
+        with self.assertRaisesRegex(ValueError, 'clean committed source'):
+            local_current_diff.run_merge_candidate(self.root, source, self.head, self.output)
+
+    def test_merge_candidate_rejects_base_not_in_head_history(self):
+        (self.root / 'base-only.txt').write_text('other\n')
+        self.git('add', 'base-only.txt')
+        self.git('commit', '-qm', 'new base')
+        advanced_base = self.git('rev-parse', 'HEAD').decode().strip()
+        self.git('checkout', '--detach', self.head)
+        (self.root / 'head-only.txt').write_text('head\n')
+        self.git('add', 'head-only.txt')
+        self.git('commit', '-qm', 'head')
+        head = self.git('rev-parse', 'HEAD').decode().strip()
+        source = local_source_snapshot.capture(self.root, head)
+        with self.assertRaisesRegex(ValueError, 'base must be an ancestor'):
+            local_current_diff.run_merge_candidate(self.root, source, advanced_base, self.output)
 
 
 if __name__ == '__main__':

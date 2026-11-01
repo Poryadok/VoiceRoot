@@ -31,23 +31,38 @@ def _execute(command, *, cwd=None, env=None, input=None, timeout):
                           capture_output=True, check=False)
 
 
-def run(root, source, base, output):
+def run(root, source, base, output, *, merge_candidate=False):
     root, output = Path(root).resolve(), Path(output).resolve()
+    if merge_candidate and (source.get('changed_paths') or source.get('raw_mismatch_paths')):
+        raise ValueError('merge candidate requires clean committed source')
     if output.exists() or output == root or root in output.parents:
         raise ValueError('output must be a new directory outside the source tree')
     output.mkdir(parents=True)
     snapshot = local_source_snapshot.materialize(root, source, output / 'source')
     env = local_private_git.prepare(root, source, snapshot, output / 'git', runner=_execute)
     env['PYTHONDONTWRITEBYTECODE'] = '1'
-    commit = _execute(['git', 'commit-tree', source['tree'], '-p', source['head']],
+    parents = ['-p', source['head']]
+    if merge_candidate:
+        # Restrict the first accepted route to an up-to-date base. This makes
+        # the committed head tree also the local merge tree used by the planner.
+        ancestor = _execute(['git', 'merge-base', '--is-ancestor', base, source['head']], env=env, timeout=30)
+        if ancestor.returncode:
+            raise ValueError('base must be an ancestor of the committed head')
+        tree = _execute(['git', 'merge-tree', '--write-tree', base, source['head']], env=env, timeout=120)
+        if tree.returncode or tree.stdout.decode('ascii', errors='strict').strip() != source['tree']:
+            raise ValueError('local merge tree differs or conflicts')
+        parents = ['-p', base, '-p', source['head']]
+    commit = _execute(['git', 'commit-tree', source['tree'], *parents],
                       input=b'local diagnostic snapshot\n', env=env, timeout=30)
     commit.check_returncode()
     target = commit.stdout.decode().strip()
     _execute(['git', 'update-ref', 'refs/heads/master', target], env=env, timeout=30).check_returncode()
     _execute(['git', 'read-tree', target], env=env, timeout=30).check_returncode()
     validator = snapshot / 'scripts/ci/current-diff-contract.py'
-    result = _execute([sys.executable, str(validator), '--repo', str(snapshot), '--base', base,
-                       '--target', target], cwd=snapshot, env=env, timeout=120)
+    command = [sys.executable, str(validator), '--repo', str(snapshot), '--base', base, '--target', target]
+    if merge_candidate:
+        command += ['--pr-head', source['head']]
+    result = _execute(command, cwd=snapshot, env=env, timeout=120)
     (output / 'stdout.log').write_bytes(result.stdout)
     (output / 'stderr.log').write_bytes(result.stderr)
     if result.returncode:
@@ -58,7 +73,7 @@ def run(root, source, base, output):
         raise ValueError('current-diff-contract emitted invalid JSON') from error
     if (not isinstance(contract, dict) or contract.get('schema') != 'voice-current-diff-v1' or
             contract.get('base') != base or contract.get('event_base') != base or
-            contract.get('target') != target or contract.get('pr_head') is not None or
+            contract.get('target') != target or contract.get('pr_head') != (source['head'] if merge_candidate else None) or
             contract.get('cached') is not False or not isinstance(contract.get('changed_paths'), list) or
             contract.get('validator_sha256') != hashlib.sha256(validator.read_bytes()).hexdigest()):
         raise ValueError('current-diff-contract identity mismatch')
@@ -70,3 +85,8 @@ def run(root, source, base, output):
               'stdout': 'stdout.log', 'stderr': 'stderr.log'}
     (output / 'diagnostic.json').write_text(json.dumps(report, indent=2, sort_keys=True), encoding='utf-8')
     return report
+
+
+def run_merge_candidate(root, source, base, output):
+    """Validate the locally constructed merge candidate for a clean head."""
+    return run(root, source, base, output, merge_candidate=True)

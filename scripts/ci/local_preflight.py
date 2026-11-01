@@ -1,7 +1,7 @@
-"""Run implemented local diagnostics from the affected plan, never issuing PASS.
+"""Run affected-plan diagnostics or the narrow current-diff-only handoff.
 
-This is an incomplete preflight foundation. Unimplemented checks and unbound
-inputs prevent PR handoff; GitHub's merge-candidate checks remain mandatory.
+The diagnostic mode remains incomplete. Handoff mode accepts only its fully
+executed current-diff-only plan; GitHub merge-candidate checks remain mandatory.
 The opt-in Auth case assumes trusted exclusive daemon/socket custody and does
 not authenticate images, helper or Maven cache, or establish crash coverage.
 """
@@ -30,6 +30,59 @@ import local_overlay_execution
 import local_proto_execution
 from local_process_supervision import SupervisionError
 import local_source_snapshot
+
+
+def _handoff_refs(root, base, head, head_ref):
+    """Require the checkout and locally fetched PR refs to retain their identities."""
+    if (not re.fullmatch(r'[0-9a-f]{40}', base) or not re.fullmatch(r'[0-9a-f]{40}', head) or
+            not isinstance(head_ref, str) or not head_ref or head_ref.startswith('-')):
+        raise ValueError('full base, head and branch identities are required')
+    def git(*args):
+        result = local_current_diff._execute(['git', '-C', str(root), *args], timeout=30)
+        if result.returncode:
+            raise ValueError('handoff Git identity check failed')
+        return result.stdout.decode('ascii', errors='strict').strip()
+    git('check-ref-format', 'refs/heads/' + head_ref)
+    if (git('rev-parse', '--verify', 'HEAD^{commit}') != head or
+            git('rev-parse', '--verify', 'refs/remotes/origin/master^{commit}') != base or
+            git('rev-parse', '--verify', 'refs/remotes/origin/' + head_ref + '^{commit}') != head):
+        raise ValueError('checkout or locally fetched PR refs differ')
+
+
+def run_handoff(root, base, head, head_ref, output):
+    """Execute and verify the complete current-diff-only local plan.
+
+    Other selected checks have no accepted evidence producer and fail closed.
+    The caller must fetch origin immediately before invoking this function.
+    """
+    root, output = Path(root).resolve(), Path(output).resolve()
+    if not local_current_diff._windows():
+        raise ValueError('handoff requires Windows descendant supervision')
+    if output.exists() or output == root or root in output.parents:
+        raise ValueError('handoff output must be new and outside the checkout')
+    _handoff_refs(root, base, head, head_ref)
+    plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
+    if set(plan.get('checks', {})) != {'current-diff-contract'}:
+        raise ValueError('unsupported selected checks prevent local handoff')
+    source = plan['source']
+    if source.get('head') != head or source.get('changed_paths') or source.get('raw_mismatch_paths'):
+        raise ValueError('handoff requires clean committed source')
+    output.mkdir(parents=True)
+    proof = local_current_diff.run_merge_candidate(root, source, base, output / 'current-diff')
+    contract = proof.get('contract', {})
+    if (proof.get('source') != source or contract.get('base') != base or
+            contract.get('event_base') != base or contract.get('pr_head') != head):
+        raise ValueError('merge-candidate proof differs from the plan')
+    if affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
+        raise ValueError('source or selected checks changed during handoff verification')
+    _handoff_refs(root, base, head, head_ref)
+    report = {'schema': 'voice-local-handoff-v1', 'status': 'complete', 'base': base,
+              'head': head, 'head_ref': head_ref, 'source': source,
+              'checks': {'current-diff-contract': 'current-diff/diagnostic.json'},
+              'limitations': ['locally fetched refs are not a live remote observation',
+                              'GitHub merge-candidate checks remain mandatory']}
+    (output / 'handoff.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    return report
 
 
 def _validate_chat_inputs(inputs):
@@ -493,6 +546,7 @@ def main():
     parser.add_argument('--go', default='go', help='Go executable matching the pinned diagnostic image')
     parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
+    parser.add_argument('--handoff', action='store_true', help='run the supported complete current-diff-only handoff plan')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
@@ -512,6 +566,13 @@ def main():
     for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256', 'postgres-image-id'):
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
+    if args.handoff:
+        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff'}
+        if any(value is not None for key, value in vars(args).items() if key not in allowed):
+            parser.error('diagnostic inputs cannot be combined with --handoff')
+        report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output)
+        print(json.dumps(report, sort_keys=True))
+        return 0
     chat = {'helper': args.chat_helper, 'helper_sha256': args.chat_helper_sha256,
             'postgres_archive': args.chat_postgres_archive, 'postgres_archive_sha256': args.chat_postgres_archive_sha256,
             'postgres_image_id': args.chat_postgres_image_id}
