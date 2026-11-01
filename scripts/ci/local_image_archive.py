@@ -39,7 +39,8 @@ def _json(data, name):
 def _inspect_archive(stream, archive_sha256, image_id, image_tag):
     if (not isinstance(archive_sha256, str) or not re.fullmatch(r'[0-9a-f]{64}', archive_sha256)
             or not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id)
-            or not isinstance(image_tag, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}', image_tag)):
+            or (image_tag is not None and (not isinstance(image_tag, str) or
+                not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}', image_tag)))):
         raise ValueError('invalid expected image identity')
     reader = _HashingReader(stream)
     entries, metadata, count, buffered = {}, {}, 0, 0
@@ -105,7 +106,7 @@ def _inspect_archive(stream, archive_sha256, image_id, image_tag):
     config_name, layers = image.get('Config'), image.get('Layers')
     if (not set(image) <= {'Config', 'RepoTags', 'Layers', 'LayerSources'} or
             not isinstance(config_name, str) or config_name not in entries or config_name not in metadata or
-            image.get('RepoTags') != [image_tag] or not isinstance(layers, list) or
+            'RepoTags' not in image or image['RepoTags'] != (None if image_tag is None else [image_tag]) or not isinstance(layers, list) or
             any(not isinstance(name, str) or name not in entries or entries[name] is None for name in layers) or
             len(set(layers)) != len(layers)):
         raise ValueError('image archive manifest differs')
@@ -118,6 +119,8 @@ def _inspect_archive(stream, archive_sha256, image_id, image_tag):
             config['rootfs'].get('diff_ids') != ['sha256:' + entries[name][0] for name in layers]):
         raise ValueError('image layer identities differ')
     if 'repositories' in metadata:
+        if image_tag is None:
+            raise ValueError('untagged image has repository tags')
         repositories = _json(metadata['repositories'], 'repositories')
         repository, tag = image_tag.rsplit(':', 1)
         if (not layers or not isinstance(repositories, dict) or set(repositories) != {repository} or
@@ -136,15 +139,18 @@ def _inspect_archive(stream, archive_sha256, image_id, image_tag):
             raise ValueError('image index must contain exactly one manifest')
         descriptor = manifests[0]
         annotations = descriptor.get('annotations')
-        repository, tag = image_tag.rsplit(':', 1)
-        first = repository.split('/', 1)[0]
-        if '.' not in first and ':' not in first and first != 'localhost':
-            repository = 'docker.io/' + (('library/' if '/' not in repository else '') + repository)
-        if (set(descriptor) != {'mediaType', 'digest', 'size', 'annotations'} or
-                descriptor.get('mediaType') != 'application/vnd.oci.image.manifest.v1+json' or
-                not isinstance(annotations, dict) or set(annotations) != {'io.containerd.image.name', 'org.opencontainers.image.ref.name'} or
-                annotations['io.containerd.image.name'] != repository + ':' + tag or
-                annotations['org.opencontainers.image.ref.name'] != tag):
+        if image_tag is None:
+            valid_reference = set(descriptor) == {'mediaType', 'digest', 'size'}
+        else:
+            repository, tag = image_tag.rsplit(':', 1)
+            first = repository.split('/', 1)[0]
+            if '.' not in first and ':' not in first and first != 'localhost':
+                repository = 'docker.io/' + (('library/' if '/' not in repository else '') + repository)
+            valid_reference = (set(descriptor) == {'mediaType', 'digest', 'size', 'annotations'} and
+                isinstance(annotations, dict) and set(annotations) == {'io.containerd.image.name', 'org.opencontainers.image.ref.name'} and
+                annotations['io.containerd.image.name'] == repository + ':' + tag and
+                annotations['org.opencontainers.image.ref.name'] == tag)
+        if (not valid_reference or descriptor.get('mediaType') != 'application/vnd.oci.image.manifest.v1+json'):
             raise ValueError('image index tag differs')
         manifest_digest = descriptor.get('digest')
         if not isinstance(manifest_digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', manifest_digest):
@@ -178,8 +184,8 @@ def _inspect_archive(stream, archive_sha256, image_id, image_tag):
         selected = {'manifest.json', 'index.json', 'oci-layout', config_name, path, *layers}
         if 'repositories' in metadata:
             selected.add('repositories')
-    elif 'oci-layout' in metadata:
-        raise ValueError('OCI layout has no index')
+    elif 'oci-layout' in metadata or image_tag is None:
+        raise ValueError('untagged image requires an OCI index')
     return ({'archive_sha256': archive_sha256, 'image_id': image_id, 'tag': image_tag,
              'platform': config['os'] + '/' + config['architecture']}, selected, entries)
 

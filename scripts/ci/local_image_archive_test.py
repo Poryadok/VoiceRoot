@@ -48,7 +48,9 @@ def fixture(*, tag='alpine:3.17', second=False, bad_layer=False, duplicate=False
 
 
 def oci_fixture(*, bad_tag=False, bad_size=False, bad_media=False, duplicate_config=False,
-                extra_blob=False, bad_layer_sources=False, pax=False):
+                extra_blob=False, bad_layer_sources=False, pax=False, untagged=False,
+                multiple=False, untagged_annotation=False, missing_repotags=False,
+                multiple_index=False, untagged_repositories=False, missing_index=False):
     layer = b'layer bytes'
     layer_id = hashlib.sha256(layer).hexdigest()
     config = json.dumps({'os': 'linux', 'architecture': 'amd64',
@@ -75,12 +77,27 @@ def oci_fixture(*, bad_tag=False, bad_size=False, bad_media=False, duplicate_con
                                             'org.opencontainers.image.ref.name': '3.17'}}]}
     legacy = [{'Config': config_name, 'RepoTags': ['alpine:3.17'], 'Layers': [layer_name],
                'LayerSources': {'sha256:' + layer_id: layer_descriptor}}]
+    if untagged:
+        legacy[0]['RepoTags'] = None
+        del index['manifests'][0]['annotations']
+        if untagged_annotation:
+            index['manifests'][0]['annotations'] = {'org.opencontainers.image.ref.name': 'unexpected'}
+    if multiple:
+        legacy.append(dict(legacy[0]))
+    if missing_repotags:
+        del legacy[0]['RepoTags']
+    if multiple_index:
+        index['manifests'].append(dict(index['manifests'][0]))
     if bad_layer_sources:
         legacy[0]['LayerSources']['sha256:' + layer_id] = dict(layer_descriptor, size=len(layer) + 1)
     entries = {config_name: config, layer_name: layer, 'blobs/sha256/' + oci_id: oci_raw,
                'manifest.json': json.dumps(legacy).encode(), 'index.json': json.dumps(index).encode(),
                'oci-layout': b'{"imageLayoutVersion":"1.0.0"}',
                'repositories': json.dumps({'alpine': {'3.17': layer_id}}).encode()}
+    if untagged and not untagged_repositories:
+        del entries['repositories']
+    if missing_index:
+        del entries['index.json']
     if extra_blob:
         extra = b'extra data'
         entries['blobs/sha256/' + hashlib.sha256(extra).hexdigest()] = extra
@@ -97,6 +114,34 @@ def oci_fixture(*, bad_tag=False, bad_size=False, bad_media=False, duplicate_con
 
 
 class ImageArchiveTests(unittest.TestCase):
+    def test_untagged_oci_requires_one_unannotated_image_and_exact_digests(self):
+        raw, digest, image_id = oci_fixture(untagged=True, extra_blob=True)
+        output = io.BytesIO()
+        result = local_image_archive.sanitize_archive(io.BytesIO(raw), output, digest, image_id, None)
+        self.assertIsNone(result['tag'])
+        self.assertEqual(local_image_archive.verify_archive(io.BytesIO(output.getvalue()),
+            result['archive_sha256'], image_id, None)['image_id'], image_id)
+        for options in ({'untagged': True, 'multiple': True},
+                        {'untagged': True, 'untagged_annotation': True},
+                        {'untagged': True, 'missing_repotags': True},
+                        {'untagged': True, 'multiple_index': True},
+                        {'untagged': True, 'untagged_repositories': True},
+                        {'untagged': True, 'missing_index': True},
+                        {'untagged': True, 'bad_layer_sources': True},
+                        {'untagged': True, 'bad_size': True}):
+            raw, digest, image_id = oci_fixture(**options)
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                local_image_archive.sanitize_archive(io.BytesIO(raw), io.BytesIO(), digest, image_id, None)
+        raw, digest, image_id = oci_fixture(untagged=True)
+        for bad_digest, bad_id in (('0'*64, image_id), (digest, 'sha256:'+'f'*64)):
+            with self.assertRaises(ValueError):
+                local_image_archive.sanitize_archive(io.BytesIO(raw), io.BytesIO(), bad_digest, bad_id, None)
+        with self.assertRaises(ValueError):
+            local_image_archive.sanitize_archive(io.BytesIO(raw), io.BytesIO(), digest, image_id, 'alpine:3.17')
+        tagged, tagged_digest, tagged_id = oci_fixture()
+        with self.assertRaises(ValueError):
+            local_image_archive.sanitize_archive(io.BytesIO(tagged), io.BytesIO(), tagged_digest, tagged_id, None)
+
     def test_sanitizer_removes_unreferenced_blobs_and_tar_extensions(self):
         raw, digest, image_id = oci_fixture(extra_blob=True, pax=True)
         output = io.BytesIO()
