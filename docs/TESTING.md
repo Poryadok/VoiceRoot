@@ -669,6 +669,12 @@ pkg non-short job, integrations and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
+The local current-diff diagnostic runs private Git preparation and the four
+subsequent Git/validator commands under a Windows Job with bounded output.
+Snapshot capture uses its own supervisor and does not bound its temporary files
+while they are written. On POSIX subprocess timeouts do not prove cleanup of
+descendants. The synthetic target does not prove the GitHub merge candidate.
+
 For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
 `--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and
 `--golangci-lint-sha256 <digest>`. On Windows, the diagnostic materializes the

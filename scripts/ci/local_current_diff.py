@@ -1,16 +1,34 @@
 """Run the source-owned current-diff validator on a private local snapshot.
 
 The synthetic target is not the GitHub merge candidate and cannot prove its
-parents or merge tree. The resulting diagnostic is not a PR receipt.
+parents or merge tree. The resulting diagnostic is not a PR receipt. Windows
+commands use an owned Job; POSIX descendant cleanup is not established.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 
 import local_private_git
+import local_process_supervision as supervision
 import local_source_snapshot
+
+
+def _windows():
+    return os.name == 'nt'
+
+
+def _execute(command, *, cwd=None, env=None, input=None, timeout):
+    """Bound output before capture; Windows broker owns the command tree."""
+    wrapper = Path(__file__).with_name('local_golangci_capture.py')
+    bounded = [sys.executable, '-B', str(wrapper), *command]
+    if _windows():
+        return supervision.run_diagnostic(bounded, cwd=cwd, env=env, input=input,
+                                          timeout=timeout, capture_output=True, check=False)
+    return subprocess.run(bounded, cwd=cwd, env=env, input=input, timeout=timeout,
+                          capture_output=True, check=False)
 
 
 def run(root, source, base, output):
@@ -19,15 +37,17 @@ def run(root, source, base, output):
         raise ValueError('output must be a new directory outside the source tree')
     output.mkdir(parents=True)
     snapshot = local_source_snapshot.materialize(root, source, output / 'source')
-    env = local_private_git.prepare(root, source, snapshot, output / 'git')
+    env = local_private_git.prepare(root, source, snapshot, output / 'git', runner=_execute)
     env['PYTHONDONTWRITEBYTECODE'] = '1'
-    target = subprocess.check_output(['git', 'commit-tree', source['tree'], '-p', source['head']],
-                                     input=b'local diagnostic snapshot\n', env=env, timeout=30).decode().strip()
-    subprocess.run(['git', 'update-ref', 'refs/heads/master', target], env=env, check=True, timeout=30)
-    subprocess.run(['git', 'read-tree', target], env=env, check=True, timeout=30)
+    commit = _execute(['git', 'commit-tree', source['tree'], '-p', source['head']],
+                      input=b'local diagnostic snapshot\n', env=env, timeout=30)
+    commit.check_returncode()
+    target = commit.stdout.decode().strip()
+    _execute(['git', 'update-ref', 'refs/heads/master', target], env=env, timeout=30).check_returncode()
+    _execute(['git', 'read-tree', target], env=env, timeout=30).check_returncode()
     validator = snapshot / 'scripts/ci/current-diff-contract.py'
-    result = subprocess.run([sys.executable, str(validator), '--repo', str(snapshot), '--base', base,
-                             '--target', target], cwd=snapshot, env=env, capture_output=True, timeout=120)
+    result = _execute([sys.executable, str(validator), '--repo', str(snapshot), '--base', base,
+                       '--target', target], cwd=snapshot, env=env, timeout=120)
     (output / 'stdout.log').write_bytes(result.stdout)
     (output / 'stderr.log').write_bytes(result.stderr)
     if result.returncode:
