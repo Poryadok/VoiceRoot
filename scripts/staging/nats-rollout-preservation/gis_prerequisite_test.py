@@ -1,5 +1,6 @@
 ﻿"""Source-bound producer and protected prerequisite collector contract tests."""
 import copy
+import contextlib
 import hashlib
 import json
 import subprocess
@@ -636,6 +637,7 @@ class Tests(unittest.TestCase):
     def test_root_authorize_apply_finish_and_failure_rollback_callbacks(self):
         import transaction
         import apply
+        import staging_cohort_preservation as cohort
 
         class FullKube(FakeKube):
             def run(self, args, body=None, timeout=30):
@@ -719,6 +721,8 @@ class Tests(unittest.TestCase):
                 after_migrate=(lambda *_args: (_ for _ in ()).throw(RuntimeError('after_create_failure'))
                     if failure=='authorize-post-create' else None)
                 patches=[
+                    # This unit exercises GIS callbacks, not cohort admission.
+                    patch.object(cohort,'issue_final_admission',return_value=None),
                     patch.object(transaction,'reconstruct',return_value=stage),
                     patch.object(transaction,'context',return_value={'snapshots':snapshots,'original_snapshots':copy.deepcopy(snapshots)}),
                     patch.object(transaction,'save'),
@@ -740,8 +744,9 @@ class Tests(unittest.TestCase):
                         'deployment_spec_sha256':'b'*64,
                         'endpoints':[{'pod_uid':'00000000-0000-0000-0000-000000000014'}]}),
                 ]
-                with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], \
-                     patches[6], patches[7], patches[8], patches[9], patches[10], patches[11], patches[12]:
+                with contextlib.ExitStack() as stack:
+                    for seam in patches:
+                        stack.enter_context(seam)
                     if failure=='authorize-post-create':
                         with self.assertRaisesRegex(RuntimeError,'after_create_failure'):
                             transaction.authorize(kube,Path(folder),state,'6'*64,'7'*64,{})
