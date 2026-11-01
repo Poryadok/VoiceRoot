@@ -70,6 +70,18 @@ class FullAuthInputsTests(unittest.TestCase):
              self.assertRaisesRegex(RuntimeError, 'uncertain'):
             subject.start_cgroup_monitor(mock.Mock(), 'daemon', Path(directory))
 
+    def test_cgroup_baseline_survives_unavailable_final_probe(self):
+        before = {'version': 'v1', **{key: 0 for key in subject.CGROUP_V1_KEYS}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            with mock.patch.object(subject, 'sample_cgroup', side_effect=[before, subject.CgroupUnavailable('probe command failed')]):
+                observed = subject.start_cgroup_monitor(mock.Mock(), 'daemon', path)
+                self.assertEqual(json.loads((path / 'cgroup-counters.json').read_text())['before'], before)
+                subject.finish_cgroup_monitor(mock.Mock(), 'daemon', path, observed)
+            saved = json.loads((path / 'cgroup-counters.json').read_text())
+            self.assertEqual((saved['status'], saved['before']), ('unavailable', before))
+            self.assertNotIn('after', saved)
+
 
     def inputs(self):
         return {tag: {'archive': str(Path(tempfile.gettempdir()) / str(index)), 'sha256': 'a' * 64,

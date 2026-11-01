@@ -65,18 +65,33 @@ def sample_cgroup(owner, daemon):
     return sample
 
 
-def record_cgroup_unavailable(output, error):
+def write_cgroup_evidence(output, value):
+    raw = (json.dumps(value, sort_keys=True) + '\n').encode('ascii')
+    with tempfile.NamedTemporaryFile(mode='wb', dir=output, prefix='.cgroup-', delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+    try:
+        os.replace(temporary, output / 'cgroup-counters.json')
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def record_cgroup_unavailable(output, error, before=None):
     reason = str(error)
     if reason not in CGROUP_UNAVAILABLE:
         raise ValueError('invalid Auth cgroup failure category')
-    (output / 'cgroup-counters.json').write_text(json.dumps(
-        {'schema': 'voice-local-auth-cgroup-v1', 'status': 'unavailable', 'reason': reason}, sort_keys=True) + '\n',
-        encoding='ascii')
+    evidence = {'schema': 'voice-local-auth-cgroup-v1', 'status': 'unavailable', 'reason': reason}
+    if before is not None:
+        evidence['before'] = before
+    write_cgroup_evidence(output, evidence)
 
 
 def start_cgroup_monitor(owner, daemon, output):
     try:
-        return sample_cgroup(owner, daemon)
+        before = sample_cgroup(owner, daemon)
+        write_cgroup_evidence(output, {'schema': 'voice-local-auth-cgroup-v1', 'status': 'started', 'before': before})
+        return before
     except CgroupUnavailable as error:
         record_cgroup_unavailable(output, error)
         return None
@@ -88,7 +103,7 @@ def finish_cgroup_monitor(owner, daemon, output, before):
     try:
         after = sample_cgroup(owner, daemon)
     except CgroupUnavailable as error:
-        record_cgroup_unavailable(output, error)
+        record_cgroup_unavailable(output, error, before)
         return
     save_cgroup_counters(output, before, after)
 
@@ -100,9 +115,8 @@ def save_cgroup_counters(output, before, after):
               ('pids_events_max', 'memory_events_max', 'memory_events_oom', 'memory_events_oom_kill'))
     if any(after[key] < before[key] for key in events):
         raise ValueError('Auth cgroup counters unavailable')
-    (output / 'cgroup-counters.json').write_text(json.dumps(
-        {'schema': 'voice-local-auth-cgroup-v1', 'status': 'observed', 'before': before, 'after': after}, sort_keys=True) + '\n',
-        encoding='ascii')
+    write_cgroup_evidence(output, {'schema': 'voice-local-auth-cgroup-v1', 'status': 'observed',
+                                   'before': before, 'after': after})
     if any(after[key] > before[key] for key in events):
         raise ValueError('Auth cgroup resource limit hit')
 
