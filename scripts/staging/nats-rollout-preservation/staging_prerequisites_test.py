@@ -350,6 +350,19 @@ class SubmitTests(unittest.TestCase):
 
 class PrepareCompositionTests(unittest.TestCase):
     """Real parent/children/Session; Kubernetes, baseline and registry are fixtures."""
+    def test_complete_fixture_source_receipt_includes_realtime_before_admission(self):
+        import os
+        if not os.environ.get('VOICE_QUALIFIED_BINARIES'):self.skipTest('qualified fixture binaries required')
+        def ready(actions,request,approved,execution,workspace,*_):
+            session=actions.tt_session
+            receipt=json.loads((workspace.parents[1]/'source-authority'/(session.operation+'.json')).read_bytes())
+            self.assertEqual(receipt['approved_sha256'],prereq.digest(approved))
+            self.assertEqual(approved['images']['realtime'],
+                'ghcr.io/poryadok/voiceroot/realtime@sha256:'+'d'*64)
+            self.assertEqual(set(session.context['images']),{'voice-gameintegration/gameintegration'})
+        self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
+            realtime_source=True,fixture_complete_candidate=True)
+
     def test_fixture_accepts_owned_installation_before_session_admission(self):
         import bootstrap_selection_test
         installation=bootstrap_selection_test.owned_fixture()[3]
@@ -506,7 +519,9 @@ class PrepareCompositionTests(unittest.TestCase):
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
             if strict_helpers:approved['images']['gameintegration']=game_image
-            if fixture_complete_candidate:approved['images']['user']=user_image
+            if fixture_complete_candidate:
+                approved['images'].update(user=user_image,
+                    realtime=bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'d'*64)
             if not strict_helpers:
                 approved['source_files']['scripts/staging/'+helper]=manifest[helper]
                 approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
