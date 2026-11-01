@@ -113,6 +113,10 @@ func newNativeModerationFixture(t *testing.T) *nativeModerationFixture {
 }
 
 func newNativeModerationFixtureWithProfiles(t *testing.T, owner, ownerAccount, target, targetAccount uuid.UUID) *nativeModerationFixture {
+	return newNativeModerationFixtureWithMembership(t, owner, ownerAccount, target, targetAccount, false)
+}
+
+func newNativeModerationFixtureWithMembership(t *testing.T, owner, ownerAccount, target, targetAccount uuid.UUID, community bool) *nativeModerationFixture {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
@@ -120,7 +124,14 @@ func newNativeModerationFixtureWithProfiles(t *testing.T, owner, ownerAccount, t
 	ctx := context.Background()
 	f := &nativeModerationFixture{owner: owner, ownerAccount: ownerAccount, target: target, targetAccount: targetAccount}
 	pool, row := nativeLifecycleProofFixtureWithSeed(t, ctx, f.owner, "Native moderation", func(st *store.SpaceStore, row *store.SpaceRow) {
-		_, err := st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, f.target)
+		var err error
+		if community {
+			_, err = st.Pool.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at) VALUES($1,$2,$3,'ban-community',$4,$5,1,'active',1,$6,clock_timestamp()+interval '10 minutes')`, row.ID, uuid.New(), uuid.New(), f.ownerAccount, f.owner, bytes.Repeat([]byte{1}, 32))
+			require.NoError(t, err)
+			_, err = st.Pool.Exec(ctx, `INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at) VALUES($1,$2,'member',ARRAY['membership'],1,1,clock_timestamp()+interval '10 minutes')`, row.ID, f.target)
+		} else {
+			_, err = st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, f.target)
+		}
 		require.NoError(t, err)
 	}, true)
 	f.space = row.ID

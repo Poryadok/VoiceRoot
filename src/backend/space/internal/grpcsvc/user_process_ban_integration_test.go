@@ -28,10 +28,26 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	spacev1 "voice.app/voice/space/v1"
+	userv1 "voice.app/voice/user/v1"
 	"voice/backend/pkg/principal"
 	"voice/backend/space/internal/lifecycleprincipal"
+	"voice/backend/space/internal/store"
 	"voice/backend/space/internal/usercapture"
 )
+
+type observedUserCapture struct {
+	t      *testing.T
+	client store.SpaceAccountCaptureClient
+}
+
+func (c observedUserCapture) CaptureSpaceMemberAccountBindings(ctx context.Context, request *userv1.CaptureSpaceMemberAccountBindingsRequest) (*userv1.CaptureSpaceMemberAccountBindingsResponse, error) {
+	started := time.Now()
+	response, err := c.client.CaptureSpaceMemberAccountBindings(ctx, request)
+	if err != nil {
+		c.t.Logf("User capture failed after %s: %v", time.Since(started), err)
+	}
+	return response, err
+}
 
 // Gateway's HTTP handler, the protected Space receiver and the User capture
 // process are real. Login claims and Auth's parent authority are fixtures.
@@ -127,8 +143,11 @@ func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 	capture, conn, err := usercapture.New(usercapture.TransportConfig{Address: user.Address, ServerName: "localhost", Roots: roots, Certificate: cert}, issuer)
 	require.NoError(t, err)
 	defer conn.Close()
-	f := newNativeModerationFixtureWithProfiles(t, owner, ownerAccount, profile, account)
-	f.st.AccountCaptures = capture
+	f := newNativeModerationFixtureWithMembership(t, owner, ownerAccount, profile, account, true)
+	f.st.AccountCaptures = observedUserCapture{t: t, client: capture}
+	member, err := f.st.IsSpaceMember(ctx, f.space, profile)
+	require.NoError(t, err)
+	require.True(t, member, "the managed target must be a member before Ban")
 	tlsDir := t.TempDir()
 	serverCert, caFile, certFile, keyFile, clientCert, clientKey := be041TLSFixture(t, tlsDir)
 	gatewayKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -155,7 +174,14 @@ func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 	runtime, err := lifecycleprincipal.New(ctx, lifecycleprincipal.Config{Listen: "127.0.0.1:0", CertFile: certFile, KeyFile: keyFile, ClientCAFile: caFile, JWKSURL: jwks.URL, JWKSCAFile: caFile, RedisAddr: redis.Addr()})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, runtime.Close()) })
-	server := grpc.NewServer(runtime.ServerOptions()...)
+	options := append(runtime.ServerOptions(), grpc.ChainUnaryInterceptor(func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		result, callErr := handler(ctx, request)
+		if callErr != nil {
+			t.Logf("Space %s: %v", info.FullMethod, callErr)
+		}
+		return result, callErr
+	}))
+	server := grpc.NewServer(options...)
 	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: f.roles}})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -170,11 +196,16 @@ func TestPublicSpaceBanThroughUserProcessCapture(t *testing.T) {
 	gateway.Env = append(os.Environ(), "VOICE_BAN_SPACE_ADDR="+listener.Addr().String(), "VOICE_BAN_CA="+caFile, "VOICE_BAN_CLIENT_CERT="+clientCert, "VOICE_BAN_CLIENT_KEY="+clientKey, "VOICE_BAN_SIGNING_KEY="+signingKey, "VOICE_BAN_ACTOR_ACCOUNT="+ownerAccount.String(), "VOICE_BAN_ACTOR_PROFILE="+owner.String(), "VOICE_BAN_SPACE="+f.space.String(), "VOICE_BAN_TARGET_ACCOUNT="+account.String())
 	output, err = gateway.CombinedOutput()
 	require.NoError(t, err, "%s", output)
-	var bans, members, audit int
+	var bans, members, retiredProjection, audit int
 	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_bans WHERE space_id=$1 AND account_id=$2`, f.space, account).Scan(&bans))
-	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2`, f.space, profile).Scan(&members))
+	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2 AND state='ACTIVE'`, f.space, profile).Scan(&members))
+	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM community_roster_members WHERE space_id=$1 AND profile_id=$2 AND revoked_at IS NOT NULL`, f.space, profile).Scan(&retiredProjection))
 	require.NoError(t, f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='member_banned'`, f.space).Scan(&audit))
 	require.Equal(t, 1, bans)
 	require.Zero(t, members)
+	require.Equal(t, 1, retiredProjection, "Ban retires the local Space projection")
 	require.Equal(t, 1, audit)
+	member, err = f.st.IsSpaceMember(ctx, f.space, profile)
+	require.NoError(t, err)
+	require.False(t, member, "the banned managed profile must lose Space access")
 }

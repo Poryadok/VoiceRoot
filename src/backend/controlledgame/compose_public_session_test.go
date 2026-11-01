@@ -217,19 +217,28 @@ func exerciseT40CommunityRoster(t *testing.T, ctx context.Context, client *Publi
 	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*), min(source_revision) FROM community_roster_members WHERE space_id=$1 AND revoked_at IS NULL AND lease_expires_at>clock_timestamp()`, spaceID).Scan(&projectedMembers, &projectedRevision))
 	require.Equal(t, 2, projectedMembers, "multiple characters for one profile project to one Voice community member")
 	require.Equal(t, int64(2), projectedRevision, "Space has applied the accepted rank-downgrade snapshot")
+	var activeCommunityHead int
+	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2 AND state='ACTIVE'`, spaceID, profileTwo).Scan(&activeCommunityHead))
+	require.Equal(t, 1, activeCommunityHead, "the target has an active managed membership before Ban")
 	_, bannedAccount := t40JSONRequest(t, ctx, baseURL, http.MethodPost, "/api/v1/auth/validate", operatorToken, nil, http.StatusOK)
 	accountID, ok := bannedAccount["user_id"].(string)
 	require.True(t, ok)
 	_, _ = t40JSONRequest(t, ctx, baseURL, http.MethodPost, "/api/v1/spaces/"+spaceID.String()+"/bans", ownerToken, map[string]any{
 		"operation_id": uuid.NewString(), "account_id": accountID, "profile_id": profileTwo.String(), "reason": "T40 banned-user acceptance",
 	}, http.StatusNoContent)
-	var activeSpaceMember, spaceBan, currentOwnerRosterMember int
-	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2`, spaceID, profileTwo).Scan(&activeSpaceMember))
+	var activeSpaceMember, retiredProjection, spaceBan, currentOwnerGrant int
+	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2 AND state='ACTIVE'`, spaceID, profileTwo).Scan(&activeSpaceMember))
 	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM space_bans WHERE space_id=$1 AND account_id=$2`, spaceID, accountID).Scan(&spaceBan))
-	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM community_roster_members WHERE space_id=$1 AND profile_id=$2 AND revoked_at IS NULL AND lease_expires_at>clock_timestamp()`, spaceID, profileTwo).Scan(&currentOwnerRosterMember))
+	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM community_roster_members WHERE space_id=$1 AND profile_id=$2 AND revoked_at IS NOT NULL`, spaceID, profileTwo).Scan(&retiredProjection))
+	require.NoError(t, gameDB.QueryRow(ctx, `SELECT count(*) FROM gis_community_grants WHERE application_id=$1 AND environment_id=$2 AND corporation_key=$3 AND binding_id=$4 AND source_reason='membership' AND revoked_at IS NULL`, appID, envID, corpKey, bindingTwo).Scan(&currentOwnerGrant))
+	ownerAfterBan, err := client.GetCommunityRosterSnapshot(ctx, rosterCredential, corpKey)
+	require.NoError(t, err)
 	require.Zero(t, activeSpaceMember, "Space ban evicts the selected profile from live community membership")
 	require.Equal(t, 1, spaceBan)
-	require.Equal(t, 1, currentOwnerRosterMember, "the independently owner-authoritative source snapshot remains recorded while the Space ban denies membership")
+	require.Equal(t, 1, retiredProjection, "Space retires its local access projection")
+	require.Equal(t, 1, currentOwnerGrant, "the independent GIS membership grant remains active")
+	require.Equal(t, view.SourceRevision, ownerAfterBan.SourceRevision)
+	require.ElementsMatch(t, view.Members, ownerAfterBan.Members, "the independent GIS roster snapshot remains unchanged")
 	return spaceID
 }
 
