@@ -108,12 +108,16 @@ type nativeModerationFixture struct {
 }
 
 func newNativeModerationFixture(t *testing.T) *nativeModerationFixture {
+	return newNativeModerationFixtureWithProfiles(t, uuid.New(), uuid.New(), uuid.New(), uuid.New())
+}
+
+func newNativeModerationFixtureWithProfiles(t *testing.T, owner, ownerAccount, target, targetAccount uuid.UUID) *nativeModerationFixture {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
 	ctx := context.Background()
-	f := &nativeModerationFixture{owner: uuid.New(), ownerAccount: uuid.New(), target: uuid.New(), targetAccount: uuid.New()}
+	f := &nativeModerationFixture{owner: owner, ownerAccount: ownerAccount, target: target, targetAccount: targetAccount}
 	pool, row := nativeLifecycleProofFixtureWithSeed(t, ctx, f.owner, "Native moderation", func(st *store.SpaceStore, row *store.SpaceRow) {
 		_, err := st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, f.target)
 		require.NoError(t, err)
