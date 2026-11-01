@@ -39,6 +39,7 @@ type supervisionSession struct {
 	lastObserved   time.Time
 	armed          bool
 	dead           bool
+	armedCh        chan struct{}
 	revokedCh      chan struct{}
 }
 
@@ -46,7 +47,7 @@ func newSupervisionSession(challenge, decision [32]byte, key ed25519.PublicKey, 
 	if challenge == [32]byte{} || decision == [32]byte{} || len(key) != ed25519.PublicKeySize || clock == nil {
 		return nil, ErrUnavailable
 	}
-	return &supervisionSession{challenge: challenge, decisionDigest: decision, key: append(ed25519.PublicKey(nil), key...), clock: clock, revokedCh: make(chan struct{})}, nil
+	return &supervisionSession{challenge: challenge, decisionDigest: decision, key: append(ed25519.PublicKey(nil), key...), clock: clock, armedCh: make(chan struct{}), revokedCh: make(chan struct{})}, nil
 }
 
 func (s *supervisionSession) revokeLocked() {
@@ -128,6 +129,7 @@ func (s *supervisionSession) accept(response MonitorResponse) error {
 	if !s.armed {
 		s.incarnation = response.Incarnation
 		s.armed = true
+		close(s.armedCh)
 	}
 	s.validUntil = s.pendingUntil
 	s.lastAccepted = s.pending
@@ -158,6 +160,30 @@ func (s *supervisionSession) liveFor(claim OpenAttestation) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.advanceLocked(s.clock()) && s.armed && s.challenge == claim.Challenge && s.decisionDigest == digest
+}
+
+// waitFor never holds a controller or session mutex while waiting. Arming is
+// a notification only: the exact decision and deadline are checked again
+// after wakeup, including when expiry and arming race.
+func (s *supervisionSession) waitFor(ctx context.Context, claim OpenAttestation) error {
+	if s == nil || ctx == nil || ctx.Err() != nil {
+		return ErrUnavailable
+	}
+	payload, err := OpenAttestationPayload(claim)
+	if err != nil || s.challenge != claim.Challenge || s.decisionDigest != sha256.Sum256(payload) {
+		return ErrUnavailable
+	}
+	select {
+	case <-ctx.Done():
+		return ErrUnavailable
+	case <-s.revoked():
+		return ErrUnavailable
+	case <-s.armedCh:
+		if ctx.Err() != nil || !s.liveFor(claim) || ctx.Err() != nil {
+			return ErrUnavailable
+		}
+		return nil
+	}
 }
 
 func (s *supervisionSession) revoke() {

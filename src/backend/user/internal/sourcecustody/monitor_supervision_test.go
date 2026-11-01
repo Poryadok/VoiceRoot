@@ -422,6 +422,49 @@ func TestSupervisionIsLiveOnlyForExactOpeningDecision(t *testing.T) {
 	require.False(t, session.liveFor(claim), "the exact decision cannot outlive the monitor deadline")
 }
 
+func TestSupervisionWaitRequiresCurrentDecisionAndLiveArming(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	now := time.Unix(1000, 0)
+	claim := OpenAttestation{
+		Challenge: supervisionNonce(1), ControlSystem: "123", ControlDatabase: "custody_db", ControlDatabaseOID: 9,
+		Binding: Binding{Epoch: 1, SourceID: "source", HistoryGeneration: uuid.New(), UserSourceGeneration: uuid.New(), KeysetDigest: supervisionNonce(2)},
+		Physical: PhysicalSource{SystemIdentifier: "456", Database: "user_db", DatabaseOID: 42}, WriterRole: "writer",
+		SourceEvidenceDigest: supervisionNonce(3), WriterManifestDigest: supervisionNonce(4), AuthEvidenceDigest: supervisionNonce(5),
+		IssuedAtUnix: 900, ExpiresAtUnix: 1100,
+	}
+	payload, err := OpenAttestationPayload(claim)
+	require.NoError(t, err)
+	session, err := newSupervisionSession(claim.Challenge, sha256.Sum256(payload), public, func() time.Time { return now })
+	require.NoError(t, err)
+	probe, err := session.issue(supervisionNonce(6))
+	require.NoError(t, err)
+	wrong := claim
+	wrong.WriterRole = "other_writer"
+	require.Error(t, session.waitFor(context.Background(), wrong))
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.Error(t, session.waitFor(canceled, claim))
+	otherSession, err := newSupervisionSession(claim.Challenge, sha256.Sum256(payload), public, func() time.Time { return now })
+	require.NoError(t, err)
+	revoked := make(chan error, 1)
+	go func() { revoked <- otherSession.waitFor(context.Background(), claim) }()
+	otherSession.revoke()
+	require.Error(t, <-revoked, "revocation must wake an unarmed waiter")
+	done := make(chan error, 1)
+	go func() { done <- session.waitFor(context.Background(), claim) }()
+	require.NoError(t, session.accept(signedProbeResponse(t, probe, uuid.New(), MonitorArmed, private)))
+	require.NoError(t, <-done)
+	duringCheck, cancelDuringCheck := context.WithCancel(context.Background())
+	session.mu.Lock()
+	session.clock = func() time.Time { cancelDuringCheck(); return now }
+	session.mu.Unlock()
+	require.Error(t, session.waitFor(duringCheck, claim), "cancellation during liveness validation must be observed")
+	require.True(t, session.liveFor(claim), "request cancellation must not revoke shared supervision")
+	now = now.Add(3 * time.Second)
+	require.Error(t, session.waitFor(context.Background(), claim), "an old arming notification is not authority")
+}
+
 func TestSupervisionStopForLastAcceptedProbeRejectsWrongBinding(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
