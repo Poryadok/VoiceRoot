@@ -371,7 +371,8 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_existing_inventory_new_candidate_creates_only_release_policy(self):
         self._cold_prepare('c2-new-candidate')
 
-    def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None):
+    def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
+                      context_commit=None,full_source=False):
         import os, shutil, subprocess, base64, yaml, uuid
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -391,6 +392,11 @@ class PrepareCompositionTests(unittest.TestCase):
                 'deploy/templates/verify-game-integration-db-job.yaml']
             relative += [str(path.relative_to(source_root)) for path in (source_root/'src/backend/migrations/game_integration_db').glob('*.sql')]
             if realtime_source:relative += ['deploy/templates/migrate-realtime-db-job.yaml','src/backend/migrations/realtime_db/000001_admission.up.sql']
+            if full_source:
+                for prefix in ('deploy','docker','scripts/staging','scripts/storage','src/backend/migrations',
+                               'src/backend/auth/src/main/resources/db/migration'):
+                    relative.extend(str(path.relative_to(source_root)) for path in (source_root/prefix).rglob('*') if path.is_file())
+                relative=list(dict.fromkeys(relative))
             for name in relative:
                 dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)
             helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
@@ -407,7 +413,9 @@ class PrepareCompositionTests(unittest.TestCase):
                     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o600)
                 manifest[name]=hashlib.sha256(raw).hexdigest()
             save(code/'capture-manifest.json',manifest)
-            context=resource_claim_test.context();card=resource_claim_test.card(context)
+            context=resource_claim_test.context()
+            if context_commit is not None:context['commit']=context_commit
+            card=resource_claim_test.card(context)
             journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}

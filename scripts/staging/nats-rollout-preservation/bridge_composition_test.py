@@ -16,7 +16,92 @@ import github_custody_test as http
 import native_store
 
 
+def canonical_stores():
+    import source_plan_test as fixtures
+    kube,params=fixtures.SourceTests().canonical_fixture('app-only')
+    for (kind,name),claim in list(kube.objects.items()):
+        if kind!='PersistentVolumeClaim':continue
+        pvname=claim['spec']['volumeName']
+        kube.objects[('PersistentVolume',pvname)]={'apiVersion':'v1','kind':'PersistentVolume',
+            'metadata':{'name':pvname,'uid':'pv-'+claim['metadata']['uid'],'resourceVersion':'1'},
+            'spec':{'claimRef':{'uid':claim['metadata']['uid'],'name':name,'namespace':'voice-staging'}}}
+    get=kube.get
+    aliases={'pvc':'PersistentVolumeClaim','pv':'PersistentVolume','secret':'Secret',
+             'configmap':'ConfigMap','deployment':'Deployment'}
+    kube.get=lambda kind,name:get(aliases.get(kind,kind),name)
+    policy={key:value for key,value in params.items() if key not in
+        ('registry','tag','mode','changed_services','images','enrolled','generation','dataPVC')}
+    return kube,params,policy
+
+
 class CompositionTests(unittest.TestCase):
+    def test_cut_binds_prerequisites_and_stores_before_enrollment_admission(self):
+        """Synthetic Kube, real pre-cut inputs and store projection; no P2 proof."""
+        import compiler, guard, staging_cohort_preservation as cohort
+        import staging_prerequisites_test as prerequisites
+        import source_plan_test as fixtures
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get):
+            kube,params,policy=canonical_stores()
+            installed=workspace.parents[1]
+            (installed/'policy.json').write_text(json.dumps(policy))
+            code=actions.code/'nats-known-baseline';code.mkdir()
+            (code/'deployed-contract.json').write_text('{}')
+            stage.kube=kube;stage.service={}
+            stage.marker['data'].update(generation=params['generation'],dataPVC=params['dataPVC'])
+            kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
+            kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
+            stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
+            stage.original_snapshots=copy.deepcopy(stage.snapshots)
+            stage.expected['deployment_uids']['voice-user']=stage.snapshots['voice-user']['metadata']['uid']
+            live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
+            live[('deployment','voice-user')]=copy.deepcopy(stage.snapshots['voice-user'])
+            original_run=kube.run
+            pod={'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]}}
+            kube.run=lambda args,body=None,timeout=30: ({'items':[pod]} if args==['get','pods','-o','json']
+                else original_run(args,body=body,timeout=timeout))
+            with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder):
+                with self.assertRaisesRegex(cohort.Blocked,'enrolled_bootstrap_selection_refused'):
+                    cohort._start_cut(actions,request,approved,execution,workspace)
+            base=cohort._base(actions.tt_session)
+            self.assertTrue((base/'precut.json').exists())
+            stores=cohort._read(base/'stores.json')
+            self.assertEqual(stores['projection']['schema'],'voice-staging-store-projection-v1')
+            self.assertTrue(stores['claims'])
+            self.assertEqual(actions.tt_session.check()['phase'],'prepare')
+        prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,full_source=True)
+
+    def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
+        """Source rendering and store binding are real; Kubernetes is synthetic."""
+        import commands, compiler, guard, resource_claim, resource_claim_test
+        import source_authority, source_plan, source_plan_test as fixtures
+        import staging_cohort_preservation as cohort
+        from types import SimpleNamespace
+        kube,params,policy=canonical_stores()
+        stage=SimpleNamespace(kube=kube,snapshots={},marker={'data':{'generation':params['generation'],'dataPVC':params['dataPVC']}})
+        context=resource_claim_test.context();context['commit']=fixtures.TAG
+        card=resource_claim_test.card(context)
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)),patch.object(guard,'ROOT',root),\
+                 patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder):
+                session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
+                session.admit(start=True)
+                cohort._write(root/'installed'/'policy.json',policy)
+                request={'mode':'app-only','changed_services':[]}
+                parameters={**policy,'registry':source_authority.REGISTRY,
+                    'tag':context['commit'],'mode':'app-only','changed_services':[],'images':{},'enrolled':[],
+                    'generation':params['generation'],'dataPVC':params['dataPVC']}
+                projection=source_plan.preservation_projection(fixtures.SOURCE,parameters,fixtures.decoder,kube)
+                approved={'source_sha':context['commit'],'source_files':{row['path']:row['sha256'] for row in projection['sources']}}
+                with resource_claim.command_scope(session.check):
+                    stores=cohort._capture_stores(session,stage,request,approved,fixtures.SOURCE)
+                    self.assertEqual(stores['projection'],projection)
+                    self.assertTrue(stores['claims'])
+                    claim=next(iter(stores['claims'].values()))
+                    kube.objects[('PersistentVolume',claim['pv']['metadata']['name'])]['spec']['claimRef']['uid']='foreign'
+                    with self.assertRaisesRegex(cohort.Blocked,'cohort_store_storage_changed'):
+                        cohort._capture_stores(session,stage,request,approved,fixtures.SOURCE)
+
     def test_cut_captures_real_prerequisite_inputs_before_kubernetes_observation(self):
         """The Kubernetes read is a fixture boundary, not P2 qualification."""
         import staging_cohort_preservation as cohort
