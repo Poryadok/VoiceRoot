@@ -38,6 +38,18 @@ class FullAuthInputsTests(unittest.TestCase):
             saved = json.loads((Path(directory) / 'cgroup-counters.json').read_text())
             self.assertEqual(saved['after']['pids_events_max'], 1)
 
+    def test_settled_unavailable_probe_is_recorded_but_uncertain_execution_propagates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            with mock.patch.object(subject, 'sample_cgroup', side_effect=subject.CgroupUnavailable('counter format invalid')):
+                self.assertIsNone(subject.start_cgroup_monitor(mock.Mock(), 'daemon', path))
+            saved = json.loads((path / 'cgroup-counters.json').read_text())
+            self.assertEqual((saved['status'], saved['reason']), ('unavailable', 'counter format invalid'))
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(subject, 'sample_cgroup', side_effect=RuntimeError('uncertain')), \
+             self.assertRaisesRegex(RuntimeError, 'uncertain'):
+            subject.start_cgroup_monitor(mock.Mock(), 'daemon', Path(directory))
+
 
     def inputs(self):
         return {tag: {'archive': str(Path(tempfile.gettempdir()) / str(index)), 'sha256': 'a' * 64,
