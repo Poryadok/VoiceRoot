@@ -75,6 +75,33 @@ class CompilerTest(unittest.TestCase):
                     expires_at=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat())
                 authorization['target']['input_template_hashes']=dict(pack['target']['template_hashes'])
                 guard.validate(authorization,p['registry'],p['tag'],mode,p['changed_services'],fixtures.SOURCE)
+                import resource_claim,resource_claim_test
+                installation=resource_claim.production_installation()
+                scoped=copy.deepcopy(authorization);scoped['schema']='nats-rollout-preservation-v2'
+                scoped['installation_sha256']=installation.sha256;scoped['target']['installation_sha256']=installation.sha256
+                c=resource_claim_test.context();c.update(commit=p['tag'],images=copy.deepcopy(scoped['target']['images']))
+                scoped['resource_fence']={'schema':'voice-staging-resource-fence-v2','installation_sha256':installation.sha256,
+                    'context':c,'operation':scoped['operation'],'helper_sha256':'7'*64,
+                    'target_sha256':resource_claim.digest(scoped['target'])}
+                guard.validate(scoped,p['registry'],p['tag'],mode,p['changed_services'],fixtures.SOURCE,installation=installation)
+                owned=resource_claim.InstallationAuthority('owned-isolated-v1','11111111-1111-4111-8111-111111111111',
+                    'r20260930a4','1'*64,'2'*64,'3'*64)
+                owned_receipt=copy.deepcopy(scoped);owned_receipt['installation_sha256']=owned.sha256
+                owned_receipt['target']['installation_sha256']=owned.sha256
+                owned_receipt['resource_fence']['installation_sha256']=owned.sha256
+                owned_receipt['resource_fence']['target_sha256']=resource_claim.digest(owned_receipt['target'])
+                guard.validate(owned_receipt,p['registry'],p['tag'],mode,p['changed_services'],fixtures.SOURCE,installation=owned)
+                with self.assertRaises(guard.Blocked):
+                    guard.validate(owned_receipt,p['registry'],p['tag'],mode,p['changed_services'],fixtures.SOURCE)
+                with self.assertRaises(guard.Blocked):
+                    guard.validate(authorization,p['registry'],p['tag'],mode,p['changed_services'],fixtures.SOURCE,installation=owned)
+                for mutation in ('foreign','legacy-fence','target'):
+                    changed=copy.deepcopy(scoped)
+                    if mutation=='foreign':changed['installation_sha256']='f'*64
+                    elif mutation=='legacy-fence':changed['resource_fence']['schema']='voice-staging-resource-fence-v1'
+                    else:changed['target']['installation_sha256']='f'*64
+                    with self.subTest(mode=mode,mutation=mutation),self.assertRaises(guard.Blocked):
+                        guard.validate(changed,p['registry'],p['tag'],mode,p['changed_services'],fixtures.SOURCE,installation=installation)
                 if mode=='full':self.assertIn('docker/clickhouse/init/001_events.sql',pack['target']['source_hashes'])
                 self.assertEqual(pack['target']['images'],p['images'])
                 self.assertTrue(any(r['kind']=='Ingress' for r in pack['manifests']))

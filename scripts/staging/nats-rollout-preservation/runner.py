@@ -33,11 +33,11 @@ def authenticated_bootstrap(root,contract,target):
     return scripts
 
 
-def preflight():
+def preflight(*,installation=None):
     receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
     root=guard.source_root()
     guard.validate(receipt,os.environ['VOICE_IMAGE_REGISTRY'],os.environ['VOICE_IMAGE_TAG'],os.environ['DEPLOY_MODE'],
-                   [s for s in os.environ.get('CHANGED_SERVICES','').split(',') if s],root)
+                   [s for s in os.environ.get('CHANGED_SERVICES','').split(',') if s],root,installation=installation)
     if Path(os.environ['VOICE_NATS_PRESERVATION_RECEIPT']).parent.name!='rollout-'+receipt['operation']:
         raise Blocked('rollout_operation_path_changed')
     frontend_only=guard.frontend_image_only(receipt['target'])
@@ -51,9 +51,9 @@ def preflight():
     return receipt
 
 
-def _main(args):
+def _main(args,*,installation=None):
     if args not in ([],['--preflight']):raise Blocked('rollout_runner_arguments_invalid')
-    receipt=preflight()
+    receipt=preflight(installation=installation)
     if args:
         print('NATS_ROLLOUT_PREFLIGHT=PASS');return
     rv=guard.claim(receipt)
@@ -69,8 +69,8 @@ def main(args):
     from root_cli import code_binding
     receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
     # Install before preflight and marker claim, not merely before kubectl apply.
-    with resource_claim.runner_scope(receipt,guard.ROOT,code_binding(Path(__file__).resolve().parents[1])):
-        return _main(args)
+    with resource_claim.runner_scope(receipt,guard.ROOT,code_binding(Path(__file__).resolve().parents[1])) as session:
+        return _main(args,installation=session.installation)
 
 
 if __name__=='__main__':

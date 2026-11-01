@@ -11,18 +11,36 @@ import resource_claim
 import resource_claim_test
 
 
-def authorize_after_fixture_p2(*args,**kwargs):
+def authorize_after_fixture_p2(*args,scoped=False,**kwargs):
     """Isolate downstream sequencing; this is not a qualified P2 proof."""
     import staging_cohort_preservation as cohort
     c=resource_claim_test.context()
-    session=resource_claim.Session(c,'a'*12,'b'*64,lambda:resource_claim_test.card(c),resource_claim_test.MemoryJournal())
+    state=args[2];session=resource_claim.Session(c,state['operation'],'b'*64,lambda:resource_claim_test.card(c),resource_claim_test.MemoryJournal())
     session.admit(start=True)
+    if scoped:
+        state['schema']='nats-rollout-root-v2';state['installation_sha256']=session.installation.sha256
+        state['target']['installation_sha256']=session.installation.sha256
+        session.journal.row.update(target_sha256=resource_claim.digest(state['target']))
+        state['resource_fence']=session.binding()
     handle=cohort.QualifiedFinalAdmission()
     with patch.object(cohort,'issue_final_admission',return_value=handle),patch.object(cohort,'complete_authorization'):
         return transaction.authorize(*args,resource_session=session,cohort_request={'fixture':'p2'},**kwargs)
 
 
 class TransactionFailureTest(unittest.TestCase):
+    def test_scoped_authorization_rejects_changed_target_before_admission(self):
+        import staging_cohort_preservation as cohort
+        c=resource_claim_test.context();session=resource_claim.Session(c,'a'*12,'b'*64,
+            lambda:resource_claim_test.card(c),resource_claim_test.MemoryJournal());session.admit(start=True)
+        target={'mode':'full','installation_sha256':session.installation.sha256}
+        session.journal.row.update(target_sha256=resource_claim.digest(target))
+        state={'schema':'nats-rollout-root-v2','installation_sha256':session.installation.sha256,
+               'resource_fence':session.binding(),'target':dict(target,mode='app-only')}
+        with patch.object(cohort,'issue_final_admission') as issue:
+            with self.assertRaisesRegex(transaction.Blocked,'installation_binding_changed'):
+                transaction.authorize(None,Path('/unused'),state,'a'*64,'b'*64,{},resource_session=session,cohort_request={})
+        issue.assert_not_called()
+
     def test_bootstrap_target_hash_without_receipt_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(transaction.Blocked,'realtime_bootstrap_receipt_missing'):
@@ -228,7 +246,10 @@ class TransactionFailureTest(unittest.TestCase):
                      patch.object(transaction.migrations,'execute',side_effect=migrate) as jobs,\
                      patch.object(transaction.renderer_root,'apply_paused',side_effect=renderer) as renderer_apply:
                     if scenario=='success':
-                        receipt=authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
+                        receipt=authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{},scoped=True)
+                        self.assertEqual(receipt['schema'],'nats-rollout-preservation-v2')
+                        self.assertEqual(receipt['installation_sha256'],state['installation_sha256'])
+                        self.assertEqual(receipt['resource_fence'],state['resource_fence'])
                         self.assertEqual(state['space_postcondition'],after)
                         self.assertEqual(order,['offnode','snapshot-open','snapshot-closed','migration',
                             'snapshot-open','snapshot-closed','renderer','prepared'])

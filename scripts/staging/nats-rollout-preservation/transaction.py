@@ -615,6 +615,21 @@ def rollback_gis_first_install(kube,base,state,journal):
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None,resource_session=None,cohort_request=None):
+    import resource_claim
+    fence=state.get('resource_fence')
+    scoped=isinstance(fence,dict) and fence.get('schema')=='voice-staging-resource-fence-v2'
+    if scoped:
+        if (type(resource_session) is not resource_claim.Session or not resource_session.admitted
+            or state.get('schema')!='nats-rollout-root-v2'
+            or state.get('installation_sha256')!=resource_session.installation.sha256
+            or state.get('target',{}).get('installation_sha256')!=resource_session.installation.sha256
+            or fence.get('target_sha256')!=canonical(state['target'])):
+            raise Blocked('staging_installation_binding_changed')
+        resource_session.require_binding(fence)
+    elif (state.get('schema')=='nats-rollout-root-v2' or 'installation_sha256' in state
+          or 'installation_sha256' in state.get('target',{})
+          or fence is not None and (not isinstance(fence,dict) or fence.get('schema')!='voice-staging-resource-fence-v1')):
+        raise Blocked('staging_installation_binding_changed')
     qualified_admission=None
     if state.get("target",{}).get("mode") in ("full","app-only") or state.get("migrations"):
         if resource_session is None or cohort_request is None:
@@ -766,6 +781,8 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             'backup':{'archive_sha256':manifest['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
                       'census_sha256':cut['census_sha256'],'off_node_verified':True},
             'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()}
+        if scoped:
+            receipt.update(schema='nats-rollout-preservation-v2',installation_sha256=resource_session.installation.sha256)
         if state.get('provisional') is not None:
             import provisional
             receipt['provisional']=copy.deepcopy(provisional.validate(state['provisional']))
