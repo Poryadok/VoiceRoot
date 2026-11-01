@@ -2,11 +2,116 @@
 import tempfile
 import subprocess
 import json
+import os
+import shutil
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import local_preflight
+
+
+class HandoffGateTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / 'repo'
+        self.root.mkdir()
+        self.output = Path(self.temp.name) / 'proof'
+        self.base, self.head = 'a' * 40, 'b' * 40
+        self.source = {'head': self.head, 'tree': 'c' * 40, 'changed_paths': [], 'raw_mismatch_paths': []}
+        self.plan = {'source': self.source, 'checks': {'current-diff-contract': ['every pull request']}}
+
+    def run_gate(self, plans=None, refs=None):
+        contract = {'base': self.base, 'event_base': self.base, 'pr_head': self.head}
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs', side_effect=refs or [None, None]), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan', side_effect=plans or [self.plan, self.plan]), \
+             patch.object(local_preflight.local_current_diff, 'run_merge_candidate', return_value={'source': self.source, 'contract': contract}) as run:
+            result = local_preflight.run_handoff(self.root, self.base, self.head, 'feature/docs', self.output)
+            return result, run
+
+    def test_exact_single_check_is_executed_before_acceptance(self):
+        result, run = self.run_gate()
+        self.assertEqual(result['status'], 'complete')
+        run.assert_called_once()
+        self.assertEqual(json.loads((self.output / 'handoff.json').read_text())['source'], self.source)
+
+    def test_extra_selected_check_fails_closed(self):
+        plan = dict(self.plan, checks={'current-diff-contract': [], 'backend-auth': []})
+        with self.assertRaisesRegex(ValueError, 'unsupported selected checks'):
+            self.run_gate(plans=[plan])
+
+    def test_changed_plan_or_refs_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'changed during'):
+            self.run_gate(plans=[self.plan, dict(self.plan, checks={'current-diff-contract': [], 'admin': []})])
+
+    def test_dirty_source_rejected(self):
+        source = dict(self.source, changed_paths=['uncommitted.md'])
+        with self.assertRaisesRegex(ValueError, 'clean committed source'):
+            self.run_gate(plans=[dict(self.plan, source=source)])
+
+
+class HandoffRefsTest(unittest.TestCase):
+    def test_actual_tracking_refs_and_checkout_must_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Test')
+            git('config', 'user.email', 'test@example.invalid')
+            (root / 'file').write_text('base')
+            git('add', 'file')
+            git('commit', '-qm', 'base')
+            base = git('rev-parse', 'HEAD')
+            (root / 'file').write_text('head')
+            git('add', 'file')
+            git('commit', '-qm', 'head')
+            head = git('rev-parse', 'HEAD')
+            git('update-ref', 'refs/remotes/origin/master', base)
+            git('update-ref', 'refs/remotes/origin/feature/docs', head)
+            local_preflight._handoff_refs(root, base, head, 'feature/docs')
+            git('update-ref', 'refs/remotes/origin/master', head)
+            with self.assertRaisesRegex(ValueError, 'refs differ'):
+                local_preflight._handoff_refs(root, base, head, 'feature/docs')
+
+    def test_docs_only_plan_executes_real_merge_contract(self):
+        if os.name != 'nt':
+            with tempfile.TemporaryDirectory() as directory:
+                with self.assertRaisesRegex(ValueError, 'Windows descendant supervision'):
+                    local_preflight.run_handoff(directory, 'a' * 40, 'b' * 40, 'feature/docs', Path(directory).parent / 'unused-proof')
+            return
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'repo'
+            root.mkdir()
+            project = Path(__file__).resolve().parents[2]
+            for name in ('.github/ci/path-filters.yml', 'scripts/ci/resolve-go-matrix.sh',
+                         'scripts/ci/resolve-go-docker-matrix.py', 'scripts/ci/current-diff-contract.py'):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(project / name, target)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Test')
+            git('config', 'user.email', 'test@example.invalid')
+            git('config', 'core.autocrlf', 'false')
+            docs = root / 'docs/DATA_MODEL.md'
+            docs.parent.mkdir()
+            docs.write_bytes(b'original\n')
+            git('add', '.')
+            git('commit', '-qm', 'base')
+            base = git('rev-parse', 'HEAD')
+            docs.write_bytes(b'updated\n')
+            git('add', '.')
+            git('commit', '-qm', 'documentation change')
+            head = git('rev-parse', 'HEAD')
+            git('update-ref', 'refs/remotes/origin/master', base)
+            git('update-ref', 'refs/remotes/origin/feature/docs', head)
+            report = local_preflight.run_handoff(root, base, head, 'feature/docs', Path(directory) / 'proof')
+            self.assertEqual(report['status'], 'complete')
+            self.assertEqual(set(report['checks']), {'current-diff-contract'})
 
 
 class LocalPreflightTests(unittest.TestCase):
