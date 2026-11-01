@@ -31,23 +31,56 @@ STAGES = frozenset({'source-copy', 'acquire-slot', 'resources', 'make-provisioni
 
 CGROUP_KEYS = ('pids_current', 'pids_max', 'pids_events_max', 'memory_current', 'memory_max',
                'memory_events_max', 'memory_events_oom', 'memory_events_oom_kill')
+CGROUP_UNAVAILABLE = frozenset({'probe command failed', 'counter format invalid', 'cgroup limits differ'})
+
+
+class CgroupUnavailable(ValueError):
+    pass
 
 
 def parse_cgroup_sample(raw):
     if not isinstance(raw, bytes) or len(raw) > 512 or not re.fullmatch(rb'(?:[0-9]{1,20}\s+){8}', raw):
-        raise ValueError('Auth cgroup counters unavailable')
+        raise CgroupUnavailable('counter format invalid')
     return dict(zip(CGROUP_KEYS, map(int, raw.split())))
 
 
 def sample_cgroup(owner, daemon):
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         if owner.read_rootless_cgroup(daemon, out, err):
-            raise ValueError('Auth cgroup counters unavailable')
+            raise CgroupUnavailable('probe command failed')
         out.seek(0); raw = out.read(513)
     sample = parse_cgroup_sample(raw)
     if sample['pids_max'] != 256 or sample['memory_max'] != 512 * 1024 * 1024:
-        raise ValueError('Auth cgroup counters unavailable')
+        raise CgroupUnavailable('cgroup limits differ')
     return sample
+
+
+def record_cgroup_unavailable(output, error):
+    reason = str(error)
+    if reason not in CGROUP_UNAVAILABLE:
+        raise ValueError('invalid Auth cgroup failure category')
+    (output / 'cgroup-counters.json').write_text(json.dumps(
+        {'schema': 'voice-local-auth-cgroup-v1', 'status': 'unavailable', 'reason': reason}, sort_keys=True) + '\n',
+        encoding='ascii')
+
+
+def start_cgroup_monitor(owner, daemon, output):
+    try:
+        return sample_cgroup(owner, daemon)
+    except CgroupUnavailable as error:
+        record_cgroup_unavailable(output, error)
+        return None
+
+
+def finish_cgroup_monitor(owner, daemon, output, before):
+    if before is None:
+        return
+    try:
+        after = sample_cgroup(owner, daemon)
+    except CgroupUnavailable as error:
+        record_cgroup_unavailable(output, error)
+        return
+    save_cgroup_counters(output, before, after)
 
 
 def save_cgroup_counters(output, before, after):
@@ -55,7 +88,7 @@ def save_cgroup_counters(output, before, after):
     if any(after[key] < before[key] for key in events):
         raise ValueError('Auth cgroup counters unavailable')
     (output / 'cgroup-counters.json').write_text(json.dumps(
-        {'schema': 'voice-local-auth-cgroup-v1', 'before': before, 'after': after}, sort_keys=True) + '\n',
+        {'schema': 'voice-local-auth-cgroup-v1', 'status': 'observed', 'before': before, 'after': after}, sort_keys=True) + '\n',
         encoding='ascii')
     if any(after[key] > before[key] for key in events):
         raise ValueError('Auth cgroup resource limit hit')
@@ -207,13 +240,12 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
                 raise ValueError('GNU Make tool network is not isolated from the daemon')
             make_tool = provision_make(owner, engine, tool_network, mounts['/workspace'], client)
             record_stage(output, 'auth-suite')
-        before = sample_cgroup(owner, daemon)
+        before = start_cgroup_monitor(owner, daemon, output)
         try:
             diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache,
                                                   output / 'full', prepare_tools=prepare_tools)
         finally:
-            after = sample_cgroup(owner, daemon)
-            save_cgroup_counters(output, before, after)
+            finish_cgroup_monitor(owner, daemon, output, before)
         record_stage(output, 'tool-verification')
         _verify_make(owner, client, (make_tool['sha256'] + '  /workspace/tools/make\n' +
                                      make_tool['version'] + '\n').encode('ascii'))
