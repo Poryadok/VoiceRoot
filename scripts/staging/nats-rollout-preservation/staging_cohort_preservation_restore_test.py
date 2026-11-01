@@ -129,7 +129,8 @@ class RestoreTransportTests(unittest.TestCase):
                         # NATS and absence of an existing auxiliary are fixtures.
                         with patch.object(bridge_root.root_cli,'code_binding',return_value={}):actions=bridge_root.Actions(source/'scripts'/'staging')
                         actions.tt_session=session
-                        request={'operation':session.operation,'action':'authorize','token':'fixture-only','artifact_id':42}
+                        request={'operation':session.operation,'action':'authorize','token':'fixture-only','artifact_id':42,
+                                 'resource_context':session.context}
                         custody={'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
                             **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
                             'artifact_id':42,'verified':True}
@@ -140,6 +141,21 @@ class RestoreTransportTests(unittest.TestCase):
                             self.assertEqual(owner.qualify_offnode(actions,request),qualified)
                             self.assertEqual(remote.call_count,1)
                         self.assertEqual(owner.load_qualified(session),qualified)
+                        # Join the real PG/CMS qualification to the production
+                        # continuation intent. Source eligibility and the saved
+                        # prepared input are explicit fixtures, not live proof.
+                        saved_request={'action':'prepare','nonce':session.operation+'0'*52,'resource_context':session.context,
+                                       'mode':'app-only','changed_services':['user']}
+                        owner.private._private_directory(owner._request_record(session).parent)
+                        owner._write(owner._request_record(session),saved_request)
+                        prepared={'request':{'mode':'app-only','changed_services':['user'],'gis_first_install':False},
+                                  'approved':approved,'execution':{},'workspace':str(source)}
+                        with patch.object(owner,'load_prepared',return_value=prepared):
+                            selected,loaded=owner.begin_continuation(session,request)
+                            self.assertEqual((selected,loaded),(qualified,prepared))
+                            self.assertEqual(owner.require_continuation(session,request)['qualified_sha256'],owner.digest(qualified))
+                            altered=dict(request,artifact_id=43)
+                            with self.assertRaises(Exception):owner.require_continuation(session,altered)
                         # NATS bytes are explicitly synthetic here; PG/CMS,
                         # Session and qualified continuation records are real.
                         with patch('native_store.verify_archive',return_value=True):
