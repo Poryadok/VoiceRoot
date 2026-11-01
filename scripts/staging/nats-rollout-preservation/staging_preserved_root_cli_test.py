@@ -23,11 +23,13 @@ class PreservedRootCLITest(unittest.TestCase):
             guard.validate(receipt,'registry',context['commit'],'full',[],Path('/fixture'))
 
     def test_transaction_rejects_foreign_receipt_before_checkpoint(self):
-        session=SimpleNamespace(operation='a'*12)
-        with tempfile.TemporaryDirectory(dir='/root') as folder,patch.object(cohort,'load_qualified',return_value={'receipt':'actual'}):
+        session=SimpleNamespace(operation='a'*12,installation=resource_claim.production_installation())
+        with tempfile.TemporaryDirectory(dir='/root') as folder,patch.object(cohort,'load_qualified',return_value={'receipt':'actual'}) as load:
             with self.assertRaisesRegex(transaction.Blocked,'cohort_preserved_prepare_invalid'):
-                transaction.prepare_preserved(None,Path(folder),Path('/code'),{'cohort_preservation_sha256':'f'*64},{},'a'*12,{},[],{},
-                    preservation_ref={'receipt':'foreign'},resource_session=session)
+                transaction.prepare_preserved(None,Path(folder),Path('/code'),{'cohort_preservation_sha256':'f'*64,'installation_sha256':session.installation.sha256},{},'a'*12,{},[],{},
+                    preservation_ref={'receipt':'foreign'},resource_session=session,
+                    prerequisites_capture={},realtime_bootstrap_receipt={})
+            load.assert_called_once_with(session)
             self.assertEqual(list(Path(folder).iterdir()),[])
 
     def test_missing_or_foreign_receipt_is_rejected_before_any_files(self):

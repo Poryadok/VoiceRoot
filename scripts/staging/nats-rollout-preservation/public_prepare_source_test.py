@@ -104,7 +104,9 @@ class PublicSourceReceiptTests(unittest.TestCase):
             self.assertFalse((installed/"prerequisites"/("a"*12)).exists())
         if fault in ("none","postwrite-session"):
             row=json.loads(receipt.read_text())
-            self.assertEqual(set(row),{"schema","operation","context","helper_sha256","approved_sha256","execution_sha256"})
+            self.assertEqual(set(row),{"schema","installation_sha256","operation","context","helper_sha256","approved_sha256","execution_sha256"})
+            self.assertEqual(row["schema"],"voice-staging-source-capture-v2")
+            self.assertEqual(row["installation_sha256"],actions.installation.sha256)
             self.assertEqual(row["context"],context)
             self.assertEqual(row["helper_sha256"],resource_claim.digest(actions.binding))
             self.assertEqual(receipt.stat().st_mode&0o777,0o600)
