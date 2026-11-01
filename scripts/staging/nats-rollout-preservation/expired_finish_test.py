@@ -174,14 +174,28 @@ class FinishCommitTests(unittest.TestCase):
                         import bridge_root
                         actions=object.__new__(bridge_root.Actions);actions.code=Path(folder)/'code';actions.binding={}
                         actions._installation=fixture.session.installation;actions.tt_session=fixture.session
+                        cut=state['cut']
+                        copy_checkpoint={'schema':'nats-rollout-copy-v2','operation':state['operation'],
+                            'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
+                            'census_sha256':cut['census_sha256'],'installation_sha256':fixture.session.installation.sha256}
+                        transaction.save(base/'copy-checkpoint.json',copy_checkpoint)
                         fixture.expire=False
                         with ExitStack() as stack:
                             fixture.adapters(stack)
                             stack.enter_context(patch.object(actions,'_finish_source_admission',return_value=
                                 (base,state,fixture.stage,copy.deepcopy(execution),{}, {},lambda:None)))
-                            stack.enter_context(patch('expired_transport.readback'))
+                            readback=stack.enter_context(patch('expired_transport.readback'))
                             decrypt=stack.enter_context(patch.object(actions,'_verify_decrypted_restore'))
                             stack.enter_context(patch('guard.protected_receipt',return_value=copy.deepcopy(state['authorization'])))
+                            wrong=copy.deepcopy(copy_checkpoint);wrong['installation_sha256']='0'*64
+                            transaction.save(base/'copy-checkpoint.json',wrong)
+                            with self.assertRaisesRegex(bridge_root.Blocked,'rollout_copy_checkpoint_changed'):
+                                actions._authorize_expired_finish({'operation':state['operation'],'nonce':'f'*64,
+                                    'upload_nonce':execution['nonce'],'token':'fixture-only','original_artifact_id':10,
+                                    'observation_artifact_id':11})
+                            readback.assert_not_called();decrypt.assert_not_called()
+                            self.assertFalse((slot/'authority.json').exists())
+                            transaction.save(base/'copy-checkpoint.json',copy_checkpoint)
                             summary=actions._authorize_expired_finish({'operation':state['operation'],'nonce':'f'*64,
                                 'upload_nonce':execution['nonce'],'token':'fixture-only','original_artifact_id':10,
                                 'observation_artifact_id':11})
