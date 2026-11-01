@@ -394,7 +394,8 @@ class PrepareCompositionTests(unittest.TestCase):
         def ready(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             user=registry+'/user@sha256:'+'c'*64
             gis=registry+'/gameintegration@sha256:'+'a'*64
-            self.assertEqual(approved['images'],{'user':user,'gameintegration':gis})
+            realtime=registry+'/realtime@sha256:'+'d'*64
+            self.assertEqual(approved['images'],{'user':user,'gameintegration':gis,'realtime':realtime})
             self.assertEqual(actions.tt_session.context['images'],{'voice-gameintegration/gameintegration':gis})
             self.assertEqual(stage.old_images['voice-user/user'],registry+'/user@sha256:'+'b'*64)
             auxiliary={'image_ref':'docker.io/library/nginx@sha256:'+'d'*64}
