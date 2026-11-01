@@ -1092,6 +1092,7 @@ def finish_only(kube,base,state,receipt,contract,reference,*,publication=None,in
         state['restart']=engine.restart()
         engine.final()
         state['context']=context(stage)
+        save(Path(base)/'checkpoint.json',state)
         if publication is not None:publication(state,authority_guard=engine.verify)
         engine.verify()
         state['context']=context(stage);state['phase']='POST_RESTART'
