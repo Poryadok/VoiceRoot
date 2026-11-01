@@ -84,7 +84,8 @@ class HostedPostgres:
         from auth_user_adoption_runtime import QUALIFIED_TOOLS
         try:
             created=self._docker('create','--name',self.name,'--network','none','--label','voice.test.owner='+self.name,
-                '-e','POSTGRES_PASSWORD='+ADMIN_PASSWORD,'-e','POSTGRES_USER='+ADMIN_USER,QUALIFIED_TOOLS['postgres']).decode().strip()
+                '-e','POSTGRES_PASSWORD='+ADMIN_PASSWORD,'-e','POSTGRES_USER='+ADMIN_USER,
+                '-e','POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256',QUALIFIED_TOOLS['postgres']).decode().strip()
         except BaseException as error:
             # An empty scan does not prove the daemon stopped processing a
             # lost create request. Preserve the unique name for reconciliation.
@@ -164,6 +165,17 @@ class HostedPostgres:
             if privileged:
                 if commands.authority_guard!=guard:raise RuntimeError('staging_resource_guard_changed')
                 session.readonly_current()
+        runtime_script=('IFS= read -r PGPASSWORD; export PGPASSWORD; '
+            'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
+            'exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
+        if argv==pg.EXEC+['sh','-ceu',runtime_script]:
+            if not re.fullmatch(rb'[A-Za-z0-9_-]{32,128}\nSELECT current_user,current_database\(\);\n',body):
+                raise RuntimeError('isolated_postgres_runtime_auth_invalid')
+            authorize()
+            # The private broker has no Kubernetes DNS: retain the exact SQL,
+            # identity and credential, changing only the network endpoint.
+            local=runtime_script.replace('-h voice-postgres ','-h 127.0.0.1 ')
+            return self._docker('exec','-i',self.cid,'sh','-ceu',local,body=body)
         if argv[:len(pg.EXEC)]==pg.EXEC:
             authorize()
             return self._docker('exec','-i',self.cid,*argv[len(pg.EXEC):],body=body)

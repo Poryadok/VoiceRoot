@@ -34,6 +34,19 @@ from auth_user_adoption_runtime import QUALIFIED_TOOLS
 
 class HostedPostgresLifecycleTests(unittest.TestCase):
     """Test-only Docker responses; this does not prove hosted isolation."""
+    def test_owned_postgres_requires_password_for_host_authentication(self):
+        from types import SimpleNamespace
+        adapter,cid,state,docker=self.fixture();created=[]
+        def record(*args,**kwargs):
+            if args[0]=='create':created.append(args)
+            if args[0] in ('start','exec'):return b''
+            return docker(*args,**kwargs)
+        with patch.object(adapter,'_docker',side_effect=record), \
+             patch('cohort_hosted_pg.subprocess.run',return_value=SimpleNamespace(returncode=0)):
+            with adapter:self.assertEqual(adapter.cid,cid)
+        self.assertEqual(len(created),1)
+        self.assertIn('POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256',created[0])
+
     def fixture(self,*,create_lost=False,remove_lost=None,foreign=False,delayed=False):
         from cohort_hosted_pg import HostedPostgres
         adapter=object.__new__(HostedPostgres);adapter.name='voice-cohort-source-'+'a'*24
