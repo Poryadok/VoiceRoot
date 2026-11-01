@@ -101,7 +101,7 @@ class CompositionTests(unittest.TestCase):
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
             through_workload=True,through_hub=True,through_storage=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None):
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False):
         import commands, compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -268,7 +268,7 @@ class CompositionTests(unittest.TestCase):
                     fake=FakeKube(objects);flags={'hub_released':False}
                     def capture_fence(argv,*,body=b'',**kwargs):
                         if through_storage and argv[:2]==['/usr/bin/docker','--host=unix:///var/run/docker.sock']:
-                            if postgres is None or (cohort._base(actions.tt_session)/'local-restore.json').exists():
+                            if postgres is None or ((cohort._base(actions.tt_session)/'local-restore.json').exists() and not qualify):
                                 commands.authority_guard(argv)
                                 raise ReachedFence()
                             return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
@@ -346,6 +346,54 @@ class CompositionTests(unittest.TestCase):
                         if postgres is not None:
                             import subprocess
                             nats_patches.enter_context(patch.object(subprocess,'Popen',side_effect=postgres.popen))
+                        if qualify:
+                            import importlib,subprocess
+                            captured=importlib.import_module('staging_cohort_preservation')
+                            auxiliary=importlib.import_module('staging_cohort_preservation_auxiliary')
+                            import github_custody
+                            recovery=installed/'recovery';recovery.mkdir(mode=0o700)
+                            subprocess.run(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-nodes',
+                                '-keyout',str(recovery/'recovery-key.pem'),'-out',str(recovery/'recovery-cert.pem'),
+                                '-subj','/CN=isolated-cohort-test','-days','1'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                            for name in ('recovery-key.pem','recovery-cert.pem'):(recovery/name).chmod(0o600)
+                            def synthetic_native(session):
+                                base=captured._runtime_base(session);payload=b'synthetic-native-nats-boundary'
+                                captured.private._private_write(base/'rollout-before.tar',payload)
+                                manifest={'archive_sha256':hashlib.sha256(payload).hexdigest()}
+                                captured._write(base/'rollout-before-manifest.json',manifest)
+                                cut={'manifest':manifest,'manifest_sha256':captured._file_identity(base/'rollout-before-manifest.json')['sha256'],
+                                    'census_sha256':'f'*64}
+                                captured._write(captured._base(session)/'native-cut.json',cut)
+                                return cut
+                            def remote(_token,binding,_path,artifact_id):
+                                return {'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
+                                    **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
+                                    'artifact_id':artifact_id,'verified':True}
+                            nats_patches.enter_context(patch.object(captured,'_capture_native',side_effect=synthetic_native))
+                            nats_patches.enter_context(patch.object(captured,'_native_readback',return_value={'synthetic_nats_boundary':True}))
+                            nats_patches.enter_context(patch.object(auxiliary,'resume',return_value=None))
+                            nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
+                            prepared=actions.execute(request)
+                            self.assertIsInstance(prepared,dict)
+                            authorize={'action':'authorize','operation':actions.tt_session.operation,'token':'fixture',
+                                'artifact_id':42,'resource_context':actions.tt_session.context}
+                            with patch.object(actions,'_prepare',side_effect=ReachedFence):
+                                with self.assertRaises(ReachedFence):actions.execute(authorize)
+                            self.assertEqual(captured.load_qualified(actions.tt_session)['operation'],actions.tt_session.operation)
+                            self.assertEqual(captured.require_continuation(actions.tt_session,authorize)['qualified_sha256'],
+                                captured.digest(captured.load_qualified(actions.tt_session)))
+                            base=captured._base(actions.tt_session)
+                            self.assertTrue((base/'precut.json').exists());self.assertTrue((base/'paused.json').exists())
+                            self.assertTrue(captured._read(base/'stores.json')['claims'])
+                            self.assertEqual(captured._read(base/'local-restore.json')['status'],'COMPLETE')
+                            self.assertEqual(captured._read(base/'local-restore.json')['proof']['cleanup'],'verified')
+                            self.assertEqual(fake.get('deployment','voice-user')['spec']['replicas'],0)
+                            self.assertEqual(fake.get('deployment',bridge_root.HUB)['spec']['replicas'],0)
+                            self.assertTrue(flags['hub_released'])
+                            for suffix in ('retain','release'):
+                                self.assertEqual(captured._read(base/'effects'/('cut-pod-'+monitor_pod['metadata']['name']+'-'+suffix+'.json'))['status'],'DONE')
+                            self.assertEqual(actions.tt_session.check()['status'],'active')
+                            return
                         with self.assertRaises(ReachedFence):actions.execute(request)
                     else:
                         with self.assertRaises(ReachedInput):actions.execute(request)
@@ -388,8 +436,14 @@ class CompositionTests(unittest.TestCase):
             source=Path(__file__).parent/'testdata'/'a3-roster-source'
             overrides={f'deploy/templates/nats-{part}-bootstrap.yaml':source/f'deploy/templates/nats-{part}-bootstrap.yaml'
                 for part in ('realtime','analytics-chat','search','notification')}
+        workspace_context=None
+        if qualify:
+            from contextlib import nullcontext
+            retained=Path(os.environ['VOICE_COHORT_RETAINED_ROOT'])
+            cohort.private._private_directory(retained)
+            workspace_context=nullcontext(tempfile.mkdtemp(prefix='public-cohort-',dir=retained))
         prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
-            full_source=True,strict_helpers=True,source_overrides=overrides)
+            full_source=True,strict_helpers=True,source_overrides=overrides,workspace_context=workspace_context)
 
     def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
         """Source rendering and store binding are real; Kubernetes is synthetic."""

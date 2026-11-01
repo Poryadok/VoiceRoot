@@ -372,7 +372,7 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare('c2-new-candidate')
 
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
-                      context_commit=None,full_source=False,strict_helpers=False,source_overrides=None):
+                      context_commit=None,full_source=False,strict_helpers=False,source_overrides=None,workspace_context=None):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -383,7 +383,7 @@ class PrepareCompositionTests(unittest.TestCase):
         if strict_helpers and not full_source:raise ValueError('strict fixture requires the captured source tree')
         source_root=Path(os.environ.get('VOICE_TEST_SOURCE_ROOT',Path(__file__).resolve().parents[3]))
         if not (source_root/'deploy/staging/services.yaml').is_file():self.skipTest('requires actual source fixture')
-        with tempfile.TemporaryDirectory(dir='/root') as folder, ExitStack() as stack:
+        with (workspace_context or tempfile.TemporaryDirectory(dir='/root')) as folder, ExitStack() as stack:
             root=Path(folder);installed=root/'installed';operation='a'*12
             workspace=installed/'sources'/operation;code=installed/'code';operator=installed/'prerequisite-inputs'
             for directory in (workspace,code/'fixture',installed/'source-authority',operator):directory.mkdir(parents=True,mode=0o700)
