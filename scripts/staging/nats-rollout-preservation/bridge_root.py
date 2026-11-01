@@ -29,6 +29,24 @@ INSTALLED=guard.ROOT/'installed'
 def private_json(path):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20)
 def save(path,row):root_save(path,row,limit=128<<20)
 
+
+def _copy_checkpoint(state,cut,installation,space_members=None):
+    import resource_claim
+    installation=resource_claim.require_installation(installation)
+    fence=resource_claim.historical_binding(state,installation=installation)
+    scoped=fence['schema']=='voice-staging-resource-fence-v2'
+    row={'schema':'nats-rollout-copy-v2' if scoped else 'nats-rollout-copy-v1',
+        'operation':state['operation'],'archive_sha256':cut['manifest']['archive_sha256'],
+        'manifest_sha256':cut['manifest_sha256'],'census_sha256':cut['census_sha256']}
+    if scoped:row['installation_sha256']=installation.sha256
+    if space_members is not None:row['space_members']=space_members
+    return row
+
+
+def _validate_copy_checkpoint(row,state,cut,installation,space_members=None):
+    if row!=_copy_checkpoint(state,cut,installation,space_members):
+        raise Blocked('rollout_copy_checkpoint_changed')
+
 def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
@@ -804,6 +822,9 @@ class Actions:
         from native_store import verify_archive
         from docker_runtime import NATS_IMAGE,DockerRuntime
         payload_base=Path(payload_base or base);cut=cut or state['cut'];binding=binding or state['cipher_binding']
+        if payload_base==Path(base):
+            _validate_copy_checkpoint(private_json(payload_base/'copy-checkpoint.json'),state,cut,self.installation,
+                state.get('cipher_space_members'))
         runtime=DockerRuntime(base,state['operation'])
         def readback(archive):
             stage.verify_final_storage()
@@ -828,12 +849,10 @@ class Actions:
 
     def _encrypt(self,base,state,execution):
         cut=state['cut']
-        copy_binding={'schema':'nats-rollout-copy-v1','operation':state['operation'],
-            'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-            'census_sha256':cut['census_sha256']}
+        members=None
         if 'space_backup' in state:
             _,members=encrypted_cut.space_members(base,state['space_backup'])
-            copy_binding['space_members']=members
+        copy_binding=_copy_checkpoint(state,cut,self.installation,members)
         save(base/'copy-checkpoint.json',copy_binding)
         cipher=encrypted_cut.encrypt_cut(base,INSTALLED/'recovery',space=state.get('space_backup'))
         if 'space_members' in cipher:state['cipher_space_members']=cipher.pop('space_members')
@@ -961,6 +980,8 @@ class Actions:
         if request['action'] in ('authorize','authorize-preserved-upload'):
             import migrations
             migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+            _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
+                state.get('cipher_space_members'))
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             upload_record=None
@@ -1195,6 +1216,8 @@ class Actions:
         slot=base/'expired-finish-proofs'/request['upload_nonce']
         record=expired_transport.upload.private_json(slot/'upload.json')
         if record['execution']!=execution:raise Blocked('expired_finish_upload_execution_changed')
+        _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
+            state.get('cipher_space_members'))
         expired_transport.readback(request['token'],base,state,slot,execution,
             {'original':request['original_artifact_id'],'observation':request['observation_artifact_id']})
         self._verify_decrypted_restore(base,state,stage)
@@ -1312,6 +1335,8 @@ class Actions:
         slot=base/'expired-recovery-proofs'/request['upload_nonce']
         record=expired_transport.upload.private_json(slot/'upload.json')
         if record['execution']!=execution:raise Blocked('expired_recovery_upload_execution_changed')
+        _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
+            state.get('cipher_space_members'))
         expired_transport.readback(request['token'],base,state,slot,execution,
             {'original':request['original_artifact_id'],'observation':request['observation_artifact_id']})
         self._verify_decrypted_restore(base,state,stage)

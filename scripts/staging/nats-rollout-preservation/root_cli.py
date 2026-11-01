@@ -156,12 +156,31 @@ def target_input(path,wanted):
     return value
 
 
-def publish_copy(base,state):
-    cut=state['cut'];row={'schema':'nats-rollout-copy-v1','operation':state['operation'],
+def _copy_record(state):
+    import resource_claim
+    installation=resource_claim.production_installation()
+    schema=state.get('schema')
+    if schema=='nats-rollout-root-v2':
+        binding=resource_claim.historical_binding(state,installation=installation)
+        if binding['schema']!='voice-staging-resource-fence-v2':raise Blocked('rollout_copy_checkpoint_changed')
+    elif schema=='nats-rollout-root-v1':
+        if 'installation_sha256' in state or 'installation_sha256' in state.get('target',{}):
+            raise Blocked('rollout_copy_checkpoint_changed')
+        if 'resource_fence' in state:
+            binding=resource_claim.historical_binding(state,installation=installation)
+            if binding['schema']!='voice-staging-resource-fence-v1':raise Blocked('rollout_copy_checkpoint_changed')
+    else:raise Blocked('rollout_copy_checkpoint_changed')
+    cut=state['cut'];row={'schema':'nats-rollout-copy-v2' if schema=='nats-rollout-root-v2' else 'nats-rollout-copy-v1','operation':state['operation'],
        'phase':state['phase'],'fence_status':state['fence_status'],
        'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
        'census_sha256':cut['census_sha256'],'messages':sum(s['state']['messages'] for s in cut['census']['streams']),
        'streams':len(cut['census']['streams']),'consumers':len(cut['census']['consumers'])}
+    if schema=='nats-rollout-root-v2':row['installation_sha256']=installation.sha256
+    return row
+
+
+def publish_copy(base,state):
+    row=_copy_record(state)
     save(base/'copy-checkpoint.json',row)
     gid=grp.getgrnam('pmd').gr_gid
     for name in ('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json'):
