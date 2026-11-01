@@ -2,6 +2,10 @@
 
 This captures tracked files and non-ignored untracked files, not ignored build
 inputs. It is a planning primitive, not a proof that a check actually ran.
+Each Git wait is bounded. On Windows the owned Job broker handles descendants;
+its 64 MiB per-stream capture limit fails closed. The POSIX timeout does not
+establish descendant cleanup. Process startup, filesystem scanning, the total
+multi-command capture and other planner Git calls remain separately unbounded.
 """
 import argparse
 import hashlib
@@ -16,11 +20,35 @@ import tarfile
 import tempfile
 
 from affected_check_plan import changed_paths
+import local_process_supervision as supervision
+
+
+GIT_TIMEOUT_SECONDS = 600
+
+
+def _windows():
+    return os.name == 'nt'
 
 
 def _git(root, *args, env=None):
-    return subprocess.check_output(['git', '-C', str(root), *args],
-                                   env=env, stderr=subprocess.PIPE)
+    command = ['git', '-C', str(root), *args]
+    if _windows():
+        result = supervision.run_diagnostic(command, env=env, timeout=GIT_TIMEOUT_SECONDS,
+                                            capture_output=True, check=False)
+        if result.returncode:
+            raise subprocess.CalledProcessError(result.returncode, command,
+                                                output=result.stdout, stderr=result.stderr)
+        return result.stdout
+    # Files prevent a surviving descendant holding a pipe from blocking the
+    # timeout return. POSIX descendant cleanup is not established here.
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        result = subprocess.run(command, env=env, stdout=out, stderr=err,
+                                timeout=GIT_TIMEOUT_SECONDS, check=False)
+        out.seek(0); err.seek(0)
+        stdout, stderr = out.read(), err.read()
+    if result.returncode:
+        raise subprocess.CalledProcessError(result.returncode, command, output=stdout, stderr=stderr)
+    return stdout
 
 
 def _reject_unresolved_inputs(index):
@@ -98,7 +126,7 @@ def capture(root, head):
     return {'schema': 'voice-local-source-snapshot-v1', 'head': head,
             'tree': first[0], 'worktree_sha256': first[1],
             'raw_mismatch_paths': first[2],
-            'changed_paths': changed_paths(root, head, first[0])}
+            'changed_paths': changed_paths(root, head, first[0], git=_git)}
 
 
 def _snapshot_entries(root, source):

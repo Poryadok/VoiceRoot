@@ -298,9 +298,10 @@ def compare_hosted(root, plan, hosted, head_ref):
             'hosted_components': previous['components']}
 
 
-def changed_paths(root, base, head):
-    raw = subprocess.check_output(['git', '-C', str(root), 'diff', '--name-status',
-                                   '-z', '--find-renames', base, head, '--'])
+def changed_paths(root, base, head, *, git=None):
+    args = ('diff', '--name-status', '-z', '--find-renames', base, head, '--')
+    raw = (subprocess.check_output(['git', '-C', str(root), *args]) if git is None
+           else git(root, *args))
     fields = raw.decode('utf-8', errors='strict').split('\0')
     if fields[-1] != '':
         raise ValueError('incomplete git diff')

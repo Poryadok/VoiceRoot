@@ -3,16 +3,82 @@ import subprocess
 import tarfile
 import hashlib
 import os
+import sys
 import tempfile
+import time
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import affected_check_plan as planner
 import local_source_snapshot as snapshot
+import local_process_supervision as supervision
 
 
 class LocalSourceSnapshotTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows owned process timeout')
+    def test_git_timeout_uses_real_windows_broker(self):
+        real_run = supervision.run_diagnostic
+        def slow_git(command, **kwargs):
+            return real_run([sys.executable, '-c', 'import time; time.sleep(30)'], **kwargs)
+        started = time.monotonic()
+        with mock.patch.object(snapshot, 'GIT_TIMEOUT_SECONDS', 0.5), \
+             mock.patch.object(supervision, 'run_diagnostic', side_effect=slow_git):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                snapshot._git(self.root, 'status')
+        self.assertLess(time.monotonic() - started, 20)
+
+    def test_git_uses_owned_windows_timeout_and_propagates_uncertainty(self):
+        with mock.patch.object(snapshot, '_windows', return_value=True), \
+             mock.patch.object(supervision, 'run_diagnostic', side_effect=supervision.SupervisionError('cleanup uncertain')) as run:
+            with self.assertRaisesRegex(supervision.SupervisionError, 'cleanup uncertain'):
+                snapshot._git(self.root, 'status')
+        self.assertEqual(run.call_args.kwargs['timeout'], snapshot.GIT_TIMEOUT_SECONDS)
+        self.assertTrue(run.call_args.kwargs['capture_output'])
+
+    def test_git_failure_preserves_captured_error_and_posix_timeout(self):
+        result = SimpleNamespace(returncode=7, stdout=b'out', stderr=b'failure')
+        with mock.patch.object(snapshot, '_windows', return_value=True), \
+             mock.patch.object(supervision, 'run_diagnostic', return_value=result):
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                snapshot._git(self.root, 'status', env={'TASK_TEST': 'value'})
+        self.assertEqual((raised.exception.returncode, raised.exception.output, raised.exception.stderr),
+                         (7, b'out', b'failure'))
+        with mock.patch.object(snapshot, '_windows', return_value=False), \
+             mock.patch.object(subprocess, 'run', side_effect=subprocess.TimeoutExpired('git', 600)) as run:
+            with self.assertRaises(subprocess.TimeoutExpired): snapshot._git(self.root, 'status')
+        self.assertEqual(run.call_args.kwargs['timeout'], snapshot.GIT_TIMEOUT_SECONDS)
+
+    def test_git_timeout_removes_private_index_and_leaves_real_index_unchanged(self):
+        before = self.git('status', '--porcelain=v1', '-z', '--untracked-files=all')
+        paths = []
+        def timed_out(root, *args, env=None):
+            paths.append(Path(env['GIT_INDEX_FILE']))
+            if args[0] == 'add':
+                raise subprocess.TimeoutExpired(args, snapshot.GIT_TIMEOUT_SECONDS)
+            return b''
+        with mock.patch.object(snapshot, '_git', side_effect=timed_out):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                snapshot._capture_tree(self.root, self.head)
+        self.assertTrue(paths)
+        self.assertFalse(paths[0].parent.exists())
+        self.assertEqual(before, self.git('status', '--porcelain=v1', '-z', '--untracked-files=all'))
+
+    def test_capture_final_diff_uses_bounded_runner_and_propagates_timeout(self):
+        tree = 'a' * 40
+        commands = []
+        def git(root, *args, env=None):
+            commands.append(args)
+            if args[0] == 'diff': raise subprocess.TimeoutExpired(args, snapshot.GIT_TIMEOUT_SECONDS)
+            if args[:2] == ('rev-parse', 'HEAD'): return self.head.encode() + b'\n'
+            if args[0] == 'ls-files': return b''
+            raise AssertionError(args)
+        with mock.patch.object(snapshot, '_capture_tree', return_value=(tree, 'digest', [])), \
+             mock.patch.object(snapshot, '_git', side_effect=git):
+            with self.assertRaises(subprocess.TimeoutExpired): snapshot.capture(self.root, self.head)
+        self.assertEqual(commands[-1][0], 'diff')
+
     def test_archive_rejects_transient_same_size_restored_mutation(self):
         source = snapshot.capture(self.root, self.head)
         with tempfile.TemporaryDirectory() as external:
