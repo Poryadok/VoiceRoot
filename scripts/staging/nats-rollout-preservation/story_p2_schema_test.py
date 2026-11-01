@@ -11,8 +11,10 @@ import actor_root as root
 import actor_root_test as legacy
 import bridge_root
 import commands
+import guard
 import resource_claim
 import resource_claim_test
+import staging_prerequisites
 
 
 def digest(row):
@@ -112,7 +114,7 @@ class Tests(unittest.TestCase):
                  patch('space_authority.capture',return_value={'postgres':'actual-bound'}),\
                  patch.object(root.actor_verification,'verify',return_value={'signed_chain_verified':True}) as actor:
                 result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},
-                    stage,['story'],None,story_composition=(plan,binding))
+                    stage,['story'],None,story_composition=(plan,binding),installation=self.installation)
                 self.assertEqual(result['compatible_story_candidate']['schema'],'voice-reviewed-story-baseline4-compatible-pair-v1')
                 self.assertEqual(result['story_schema']['binding'],binding)
                 self.assertEqual(result['mounts']['story']['key'],'story.creds')
@@ -120,17 +122,17 @@ class Tests(unittest.TestCase):
                 stage.snapshots['voice-story']['spec']['template']['spec']['volumes'][0]['secret']['secretName']='foreign'
                 with self.assertRaises(root.Blocked):
                     root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},
-                        stage,['story'],None,story_composition=(plan,binding))
+                        stage,['story'],None,story_composition=(plan,binding),installation=self.installation)
                 self.assertEqual(actor.call_count,1)
 
-    def test_precut_composition_consumes_actual_six_field_receipt_and_all_db_plan(self):
+    def test_precut_composition_consumes_v2_receipt_and_all_db_plan(self):
         original=Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory() as td:
             installed=Path(td)/'installed';installed.mkdir(mode=0o700)
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
             session.admit(start=True)
-            actions=object.__new__(bridge_root.Actions);actions.tt_session=session
+            actions=object.__new__(bridge_root.Actions);actions._installation=session.installation;actions.tt_session=session
             workspace=installed/'sources'/session.operation;workspace.mkdir(parents=True,mode=0o700)
             for relative in ('src/backend/migrations','src/backend/auth/src/main/resources/db/migration'):
                 shutil.copytree(original/relative,workspace/relative)
@@ -141,25 +143,35 @@ class Tests(unittest.TestCase):
                 str(path.relative_to(workspace)):root.hash_bytes(path.read_bytes())
                 for path in workspace.rglob('*') if path.is_file()}}
             execution={'head_sha':context['commit']}
-            receipt={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':session.context,
+            receipt={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':session.context,
                 'helper_sha256':session.helper,'approved_sha256':digest(approved),'execution_sha256':digest(execution)}
-            plan={'operation':session.operation,'context':session.context,'helper_sha256':session.helper,
-                'source_capture_sha256':digest(receipt),'approved_sha256':digest(approved),'execution_sha256':digest(execution)}
+            plan={'schema':'voice-staging-prerequisites-plan-v3','installation_sha256':session.installation.sha256,
+                'operation':session.operation,'context':session.context,'helper_sha256':session.helper,
+                'source_capture_sha256':digest(receipt),'approved_sha256':digest(approved),'execution_sha256':digest(execution),
+                'namespace_uid':'fixture-namespace','marker_sha256':'1'*64,'baseline_sha256':'2'*64,
+                'actual_before':context['images'],'policy_before_sha256':'3'*64,
+                'children':{slot: None for slot in staging_prerequisites.SLOTS},'auxiliary_images':{},
+                'renderer_authority_sha256':None,'previous_active_sha256':None}
+            prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':plan,
+                'gis_authority_sha256':'4'*64,'request':{'mode':'full','changed_services':[], 'gis_first_install':False}}
             def save(path,row):
                 path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
                 path.write_text(json.dumps(row));path.chmod(0o600)
             parent=installed/'prerequisites'/session.operation
-            save(parent/'prepared.json',{'plan':plan});save(parent/'execution.json',execution)
+            save(parent/'prepared.json',prepared);save(parent/'execution.json',execution)
             receipt_path=installed/'source-authority'/(session.operation+'.json');save(receipt_path,receipt)
-            with patch.object(bridge_root,'INSTALLED',installed),patch.object(commands,'authority_guard',session.check):
-                migrations,binding=bridge_root._cohort_story_composition(actions,{'mode':'full'},approved,workspace)
+            with patch.object(bridge_root,'INSTALLED',installed),patch.object(guard,'ROOT',Path(td)),patch.object(commands,'authority_guard',session.check):
+                request={'mode':'full','changed_services':[]}
+                migrations,binding=bridge_root._cohort_story_composition(actions,request,approved,workspace)
                 self.assertEqual(len(migrations),17)
                 self.assertEqual(binding['migration_plan_sha256'],digest(migrations))
                 self.assertEqual(binding['source_capture_sha256'],digest(receipt))
                 story=next(row for row in migrations if row['database']=='story')
                 self.assertEqual({n:v for n,v in story['hashes'].items() if n.endswith('.up.sql')},root.STORY_P2_UP)
-                other,other_binding=bridge_root._cohort_story_composition(actions,{'mode':'app-only'},approved,workspace)
+                prepared['request']['mode']='app-only';save(parent/'prepared.json',prepared)
+                other,other_binding=bridge_root._cohort_story_composition(actions,{'mode':'app-only','changed_services':[]},approved,workspace)
                 self.assertEqual(other,migrations);self.assertEqual(other_binding,binding)
+                prepared['request']['mode']='full';save(parent/'prepared.json',prepared)
                 for fault in ('receipt','source','parent'):
                     with self.subTest(fault=fault):
                         if fault=='receipt':save(receipt_path,dict(receipt,extra=True))
@@ -168,9 +180,9 @@ class Tests(unittest.TestCase):
                             path=workspace/'src/backend/migrations/story_db/000008_reference_inventory.up.sql'
                             raw=path.read_bytes();path.write_bytes(raw+b'\n')
                         else:
-                            path.write_bytes(raw);save(parent/'prepared.json',{'plan':dict(plan,helper_sha256='f'*64)})
+                            path.write_bytes(raw);save(parent/'prepared.json',dict(prepared,plan=dict(plan,helper_sha256='f'*64)))
                         with self.assertRaises(bridge_root.Blocked):
-                            bridge_root._cohort_story_composition(actions,{'mode':'full'},approved,workspace)
+                            bridge_root._cohort_story_composition(actions,request,approved,workspace)
 
 
 if __name__=='__main__':unittest.main()
