@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
-	"math"
 
 	"github.com/google/uuid"
 )
 
 const monitorDomain = "voice.user.source-custody.monitor.v1\x00"
 const monitorPayloadSize = len(monitorDomain) + 2 + 32 + 32 + 16 + 8 + 32 + 1
+
+// Exhaustion revokes the incarnation and requires closed recovery and a new
+// challenge. Lifetime cleanup remains an independent production prerequisite.
+const maxMonitorProbeSequence = 86400
 
 type MonitorResponseKind uint8
 
@@ -34,7 +37,7 @@ type MonitorResponse struct {
 
 // MonitorResponsePayload returns the fixed, domain-separated v1 wire form.
 func MonitorResponsePayload(response MonitorResponse) ([]byte, error) {
-	if response.Challenge == [32]byte{} || response.DecisionDigest == [32]byte{} || response.Incarnation == uuid.Nil || response.Sequence == 0 || response.Sequence > math.MaxInt64 || response.Nonce == [32]byte{} || response.Kind < MonitorArmed || response.Kind > MonitorStop {
+	if response.Challenge == [32]byte{} || response.DecisionDigest == [32]byte{} || response.Incarnation == uuid.Nil || response.Sequence == 0 || response.Sequence > maxMonitorProbeSequence || response.Nonce == [32]byte{} || response.Kind < MonitorArmed || response.Kind > MonitorStop {
 		return nil, ErrUnavailable
 	}
 	var b bytes.Buffer

@@ -3,7 +3,6 @@ package sourcecustody
 import (
 	"crypto/ed25519"
 	"crypto/subtle"
-	"math"
 	"sync"
 
 	"github.com/google/uuid"
@@ -43,7 +42,7 @@ func (r *monitorResponder) observe(probe supervisionProbe) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.stopped || probe.Challenge != r.challenge || probe.DecisionDigest != r.decisionDigest || probe.Nonce == [32]byte{} || probe.Sequence == 0 || probe.Sequence > math.MaxInt64 {
+	if r.stopped || probe.Challenge != r.challenge || probe.DecisionDigest != r.decisionDigest || probe.Nonce == [32]byte{} || probe.Sequence == 0 || probe.Sequence > maxMonitorProbeSequence {
 		return ErrUnavailable
 	}
 	if probe == r.latest {
@@ -53,7 +52,7 @@ func (r *monitorResponder) observe(probe supervisionProbe) error {
 		if probe.Sequence != 1 {
 			return ErrUnavailable
 		}
-	} else if !r.responded || r.latest.Sequence == math.MaxInt64 || probe.Sequence != r.latest.Sequence+1 {
+	} else if !r.responded || r.latest.Sequence >= maxMonitorProbeSequence || probe.Sequence != r.latest.Sequence+1 {
 		return ErrUnavailable
 	}
 	r.latest = probe
