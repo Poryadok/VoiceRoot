@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"voice/backend/pkg/integrationtest"
@@ -90,6 +91,11 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	require.NoError(t, err)
 	defer writer.Close()
 	require.NoError(t, writer.Ping(ctx))
+	// A client can retain a live control permit after the leader disappears.
+	// Recovery must fence the physical writer without waiting for that client.
+	held, _, err := controller.AcquireAttested(ctx, binding)
+	require.NoError(t, err)
+	defer func() { _ = held.Release(context.Background()) }()
 	binary := filepath.Join(t.TempDir(), "sourcecustody.exe")
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "../../cmd/sourcecustody")
 	output, err := build.CombinedOutput()
@@ -163,4 +169,14 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	require.False(t, allowed)
 	require.False(t, login)
 	require.Error(t, writer.Ping(ctx), "already authenticated writer must be terminated")
+	// Fencing must not discard the permit's pin: a later cutover cannot replace
+	// the physical binding until this outstanding permit has released it.
+	update, err := control.Begin(ctx)
+	require.NoError(t, err)
+	var pinned int
+	err = update.QueryRow(ctx, `SELECT 1 FROM user_custody_physical_source WHERE source_id=$1 AND epoch=$2 FOR UPDATE NOWAIT`, binding.SourceID, binding.Epoch).Scan(&pinned)
+	var lockErr *pgconn.PgError
+	require.ErrorAs(t, err, &lockErr)
+	require.Equal(t, "55P03", lockErr.Code)
+	require.NoError(t, update.Rollback(ctx))
 }

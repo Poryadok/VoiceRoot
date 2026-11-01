@@ -74,7 +74,10 @@ func recoverActivationLocked(ctx context.Context, owner *pgxpool.Conn, control, 
 	}
 	var pinned PhysicalSource
 	var evidenceCount, writerCount int
-	if tx.QueryRow(ctx, `SELECT system_identifier,database_name,database_oid FROM public.user_custody_physical_source WHERE source_id=$1 AND epoch=$2 FOR UPDATE`, request.SourceID, request.Epoch).Scan(&pinned.SystemIdentifier, &pinned.Database, &pinned.DatabaseOID) != nil || pinned != physical || tx.QueryRow(ctx, `SELECT count(*),count(DISTINCT writer_role),COALESCE(min(writer_role),'') FROM public.user_custody_open_evidence WHERE source_id=$1 AND epoch=$2`, request.SourceID, request.Epoch).Scan(&evidenceCount, &writerCount, &recordedWriter) != nil || evidenceCount == 0 || writerCount != 1 || recordedWriter != writer {
+	// A live permit holds a shared lock on this binding. A shared pin still
+	// prevents the binding from changing during the fence, without letting a
+	// stalled permit prevent the writer and source from being fenced.
+	if tx.QueryRow(ctx, `SELECT system_identifier,database_name,database_oid FROM public.user_custody_physical_source WHERE source_id=$1 AND epoch=$2 FOR SHARE`, request.SourceID, request.Epoch).Scan(&pinned.SystemIdentifier, &pinned.Database, &pinned.DatabaseOID) != nil || pinned != physical || tx.QueryRow(ctx, `SELECT count(*),count(DISTINCT writer_role),COALESCE(min(writer_role),'') FROM public.user_custody_open_evidence WHERE source_id=$1 AND epoch=$2`, request.SourceID, request.Epoch).Scan(&evidenceCount, &writerCount, &recordedWriter) != nil || evidenceCount == 0 || writerCount != 1 || recordedWriter != writer {
 		return ErrUnavailable
 	}
 	admin, err := maintenance.Acquire(ctx)
