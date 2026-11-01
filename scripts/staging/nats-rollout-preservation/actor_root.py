@@ -106,6 +106,19 @@ def story_content(image,automatic=None):
     authority=story_witness.lookup(child,config) if automatic is None else automatic(child,config)
     return child,config,authority['component_source_sha']
 
+STORY_SCHEMA_SQL="""BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout = '30s';
+SELECT json_build_object('database',current_database(),
+ 'username',current_user,
+ 'version',(SELECT version FROM schema_migrations),
+ 'dirty',(SELECT dirty FROM schema_migrations));
+ROLLBACK;
+"""
+STORY_SCHEMA_SCRIPT=('export PGPASSWORD="$POSTGRES_PASSWORD"; exec psql -X -A -t -q -v ON_ERROR_STOP=1 '
+    '-h 127.0.0.1 -U "$POSTGRES_USER" -d story_db -c "$1"')
+STORY_SCHEMA_ARGS=('exec','voice-postgres-0','-c','postgres','--','sh','-ceu',STORY_SCHEMA_SCRIPT,'--',STORY_SCHEMA_SQL)
+
+
 def story_schema(kube,source,stage):
     """Fixed compatible candidate schema; isolated fixture PASS is not input."""
     import space_authority
@@ -134,17 +147,7 @@ def story_schema(kube,source,stage):
             or unquote(url.username or '')!=user or unquote(url.password or '')!=password):fail()
     except (KeyError,TypeError,ValueError,UnicodeError,AttributeError):fail()
     authority=space_authority.capture(kube)
-    sql="""BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
-SET LOCAL statement_timeout = '30s';
-SELECT json_build_object('database',current_database(),
- 'username',current_user,
- 'version',(SELECT version FROM schema_migrations),
- 'dirty',(SELECT dirty FROM schema_migrations));
-ROLLBACK;
-"""
-    observed=kube.run(['exec','voice-postgres-0','--','sh','-ceu',
-        'export PGPASSWORD="$POSTGRES_PASSWORD"; exec psql -X -A -t -q -v ON_ERROR_STOP=1 '
-        '-h 127.0.0.1 -U "$POSTGRES_USER" -d story_db -c "$1"','--',sql],timeout=40)
+    observed=kube.run(list(STORY_SCHEMA_ARGS),timeout=40)
     if (not isinstance(observed,dict) or set(observed)!={'database','username','version','dirty'}
         or observed['database']!='story_db' or type(observed['version']) is not int
         or observed['version']!=4 or observed['dirty'] is not False or observed['username']!=user):fail()

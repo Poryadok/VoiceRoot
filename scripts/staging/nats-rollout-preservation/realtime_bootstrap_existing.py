@@ -142,6 +142,11 @@ def _anchor():
     if type(active) is not dict: raise Blocked('realtime_existing_anchor_invalid')
     operation = active.get('operation')
     state, receipt, binding, checkpoint_sha = _rollout(operation)
+    if receipt.get('schema')=='voice-staging-realtime-bootstrap-existing-v2':
+        import staging_prerequisites
+        historical=staging_prerequisites.validate_historical_capture(operation)
+        if digest(historical)!=receipt.get('prerequisites_sha256'):
+            raise Blocked('realtime_existing_anchor_changed')
     expected = state['context']['expected']
     if (active.get('namespace_uid') != expected['namespace_uid']
             or active.get('pvc_uid') != expected['source_claim_uid']
@@ -150,7 +155,7 @@ def _anchor():
     if receipt.get('schema') == 'voice-staging-realtime-bootstrap-receipt-v1':
         anchor = {'operation': operation, 'receipt_sha256': digest(receipt)}
         original_state, original_receipt = state, receipt
-    elif receipt.get('schema') == 'voice-staging-realtime-bootstrap-existing-v1':
+    elif receipt.get('schema') in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
         _validate_record(receipt)
         if (receipt['operation'] != operation or receipt['context'] != binding['context']
                 or receipt['helper_sha256'] != binding['helper_sha256']):
@@ -205,9 +210,13 @@ def _validate_record(record):
     fields = {'schema', 'operation', 'context', 'helper_sha256', 'source_authority_sha256',
               'execution_sha256', 'stage_sha256', 'actual_images', 'namespace_uid', 'anchor',
               'active_release', 'live'}
+    parented=isinstance(record,dict) and record.get('schema')=='voice-staging-realtime-bootstrap-existing-v2'
+    if parented:fields.add('prerequisites_sha256')
     try:
         if (type(record) is not dict or set(record) != fields
-                or record['schema'] != 'voice-staging-realtime-bootstrap-existing-v1'
+                or record['schema'] not in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2')
+                or parented and (not isinstance(record.get('prerequisites_sha256'),str)
+                    or not re.fullmatch(r'[a-f0-9]{64}',record['prerequisites_sha256']))
                 or not re.fullmatch(r'[a-f0-9]{12}', record['operation'])
                 or type(record['context']) is not dict or type(record['actual_images']) is not dict
                 or not record['actual_images'] or not isinstance(record['namespace_uid'], str) or not record['namespace_uid']
@@ -286,7 +295,7 @@ def _session(session):
             or getattr(commands.authority_guard, '__self__', None) is not session):
         raise Blocked('realtime_existing_authority_invalid')
     row = session.check()
-    if row.get('phase') != 'prepare': raise Blocked('realtime_existing_phase_invalid')
+    if row.get('phase') not in ('prepare','prerequisites-captured'): raise Blocked('realtime_existing_phase_invalid')
     return row
 
 
@@ -328,6 +337,11 @@ def _load_existing(session, actual, rollout_target):
     _, authority = _private(directory / 'authority.json')
     _, stage = _private(directory / 'stage.json')
     _validate_record(record)
+    parent=None
+    if record['schema']=='voice-staging-realtime-bootstrap-existing-v2':
+        import staging_prerequisites
+        parent=staging_prerequisites.load_capture(session,actual=actual,rollout_target=rollout_target)
+        if digest(parent)!=record['prerequisites_sha256']:raise Blocked('realtime_existing_parent_changed')
     if (record['operation'] != session.operation or record['context'] != session.context
             or record['helper_sha256'] != session.helper or type(authority) is not dict
             or set(authority) != {'approved', 'execution'}
@@ -337,7 +351,8 @@ def _load_existing(session, actual, rollout_target):
             or actual is not None and actual != record['actual_images']):
         raise Blocked('realtime_existing_record_changed')
     if rollout_target is None:
-        if row.get('target_sha256') is not None: raise Blocked('realtime_existing_target_changed')
+        if parent is None and row.get('target_sha256') is not None: raise Blocked('realtime_existing_target_changed')
+        if parent is not None and row.get('phase')!='prerequisites-captured':raise Blocked('realtime_existing_target_changed')
     elif (type(rollout_target) is not dict or session.binding()['target_sha256'] != digest(rollout_target)
           or rollout_target.get('realtime_bootstrap_sha256') != digest(record)):
         raise Blocked('realtime_existing_target_changed')
@@ -383,9 +398,13 @@ def run_existing(actions, request, approved, execution, source_root, stage):
         if type(actions) is not bridge_root.Actions or type(stage) is not __import__('runtime_stage').RolloutStage:
             raise Blocked('realtime_existing_authority_invalid')
         row = _session(session)
+        parent=None
+        if row.get('phase')=='prerequisites-captured':
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(session,actual=stage.old_images)
         if (request.get('action') != 'prepare' or request.get('mode') not in ('full', 'app-only')
                 or request.get('provisional_staging') is True or request.get('nonce', '')[:12] != session.operation
-                or row.get('phase') != 'prepare' or row.get('target_sha256') is not None
+                or parent is None and (row.get('phase') != 'prepare' or row.get('target_sha256') is not None)
                 or Path(source_root) != guard.ROOT / 'installed' / 'sources' / session.operation
                 or digest(actions.binding) != session.helper):
             raise Blocked('realtime_existing_authority_invalid')
@@ -397,7 +416,7 @@ def run_existing(actions, request, approved, execution, source_root, stage):
         if (observed.get('state') != 'known' or observed.get('claim') != session.context['claim']
                 or observed.get('window') != session.context['window']
                 or observed.get('operation') != card.get('operation', 0) - 1
-                or observed.get('images') != stage.old_images):
+                or observed.get('images') != (parent['actual_before'] if parent is not None else stage.old_images)):
             raise Blocked('realtime_existing_baseline_changed')
         directory = guard.ROOT / 'installed' / 'realtime-bootstrap' / session.operation
         if directory.exists():
@@ -423,6 +442,9 @@ def run_existing(actions, request, approved, execution, source_root, stage):
                   'stage_sha256': digest(view), 'actual_images': copy.deepcopy(stage.old_images),
                   'namespace_uid': plan['namespace_uid'], 'anchor': ancestry['anchor'],
                   'active_release': ancestry['active_release'], 'live': live}
+        if parent is not None:
+            record['schema']='voice-staging-realtime-bootstrap-existing-v2'
+            record['prerequisites_sha256']=digest(parent)
         _validate_record(record)
         parent = directory.parent
         # The operation directory is root-owned, exclusive and never adopted.
