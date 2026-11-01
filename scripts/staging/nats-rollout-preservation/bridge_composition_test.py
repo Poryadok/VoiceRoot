@@ -541,6 +541,12 @@ class CompositionTests(unittest.TestCase):
                             nats_patches.enter_context(patch.object(captured,'_native_readback',return_value={'synthetic_nats_boundary':True}))
                             # The tar bytes above are a named synthetic NATS boundary.
                             nats_patches.enter_context(patch('native_store.verify_archive',return_value=True))
+                            def synthetic_successor(session):
+                                self.assertIs(session,actions.tt_session)
+                                self.assertIn(session.check()['phase'],('prerequisites-captured','realtime-bootstrap','prepare'))
+                                captured.revalidate_paused(session)
+                                return captured.load_preflight(session)['nats']
+                            successor=nats_patches.enter_context(patch.object(captured,'successor_nats_authority',side_effect=synthetic_successor))
                             nats_patches.enter_context(patch.object(auxiliary,'resume',return_value=None))
                             nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
                             prepared=actions.execute(request)
@@ -581,6 +587,7 @@ class CompositionTests(unittest.TestCase):
                                     self.assertIs(stopped.call_args.kwargs['resource_session'],actions.tt_session)
                                     self.assertEqual(stopped.call_args.kwargs['cohort_request'],authorize)
                                 final=captured._read(captured._runtime_base(actions.tt_session)/'checkpoint.json',limit=128<<20)
+                                successor.assert_called_once_with(actions.tt_session)
                                 self.assertEqual(final['operation'],actions.tt_session.operation)
                                 self.assertEqual(final['resource_fence'],actions.tt_session.binding())
                                 self.assertEqual(final['realtime_bootstrap']['schema'],'voice-staging-realtime-bootstrap-receipt-v2')
