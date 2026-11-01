@@ -523,18 +523,23 @@ class CompositionTests(unittest.TestCase):
 
     def test_actor_drift_after_offnode_readback_prevents_transaction_authorization(self):
         import actor_root
-        actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'};actions._installation=None
+        from preserved_upload_actions_test import bind_copy
+        base=Path(tempfile.mkdtemp());self.addCleanup(lambda:shutil.rmtree(base))
+        actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'}
         state={'operation':'123456abcdef','cipher_binding':{},'service_actor_services':['social'],
-            'service_actor_authority':{'binding':'root-produced'}}
+            'service_actor_authority':{'binding':'root-produced'},'target':{'mode':'images-only'},
+            'cut':{'manifest':{'archive_sha256':'a'*64},'manifest_sha256':'b'*64}}
+        actions._installation=bind_copy(base,state)
         order=[]
-        with patch.object(actions,'state',return_value=(Path('/private-op'),state)),\
+        with patch.object(actions,'state',return_value=(base,state)),\
              patch.object(bridge_root.github_custody,'verify_artifact',side_effect=lambda *a:order.append('full-offnode-readback') or {'verified':True}),\
              patch.object(actions,'_verify_decrypted_restore',side_effect=lambda *a:order.append('decrypted-restore')),\
              patch.object(bridge_root,'save'),patch.object(bridge_root,'Kube'),\
              patch.object(bridge_root.transaction,'reconstruct'),\
              patch.object(actor_root,'revalidate',side_effect=bridge_root.Blocked('existing_service_actor_authority_changed')) as actor,\
              patch.object(bridge_root.transaction,'authorize') as authorize:
-            with self.assertRaises(bridge_root.Blocked):actions.execute({'action':'authorize','operation':'123456abcdef','token':'private-token','artifact_id':1})
+            with self.assertRaisesRegex(bridge_root.Blocked,'existing_service_actor_authority_changed'):
+                actions.execute({'action':'authorize','operation':'123456abcdef','token':'private-token','artifact_id':1})
         self.assertEqual(order,['full-offnode-readback','decrypted-restore'])
         actor.assert_called_once();authorize.assert_not_called()
 
