@@ -654,7 +654,8 @@ class CompositionTests(unittest.TestCase):
             cohort.private._private_directory(retained)
             workspace_context=nullcontext(tempfile.mkdtemp(prefix='public-cohort-',dir=retained))
         prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
-            full_source=True,strict_helpers=True,source_overrides=overrides,workspace_context=workspace_context)
+            full_source=True,strict_helpers=True,source_overrides=overrides,workspace_context=workspace_context,
+            fixture_complete_candidate=qualify)
 
     def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
         """Source rendering and store binding are real; Kubernetes is synthetic."""

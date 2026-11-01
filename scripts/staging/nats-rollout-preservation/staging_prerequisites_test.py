@@ -375,6 +375,21 @@ class PrepareCompositionTests(unittest.TestCase):
         candidate={'voice-user/user':'example.invalid/user@sha256:'+'a'*64}
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,fixture_candidate_images=candidate)
 
+    def test_strict_fixture_binds_user_and_new_gis_candidate(self):
+        import bridge_root
+        registry=bridge_root.source_authority.REGISTRY
+        def ready(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            user=registry+'/user@sha256:'+'c'*64
+            gis=registry+'/gameintegration@sha256:'+'a'*64
+            self.assertEqual(approved['images'],{'user':user,'gameintegration':gis})
+            self.assertEqual(actions.tt_session.context['images'],{'voice-user/user':user,
+                'voice-gameintegration/gameintegration':gis})
+            self.assertEqual(stage.old_images['voice-user/user'],registry+'/user@sha256:'+'b'*64)
+            source=json.loads((workspace.parents[1]/'source-authority'/
+                (actions.tt_session.operation+'.json')).read_bytes())
+            self.assertEqual(source['approved_sha256'],prereq.digest(approved))
+        self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,fixture_complete_candidate=True)
+
     def test_cold_prepare_executes_all_children_before_typed_capture(self):
         self._cold_prepare()
 
@@ -408,7 +423,7 @@ class PrepareCompositionTests(unittest.TestCase):
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
                       context_commit=None,full_source=False,strict_helpers=False,source_overrides=None,workspace_context=None,
                       fixture_installation=None,fixture_operation=None,fixture_candidate_images=None,
-                      fixture_manifest='d'*64,fixture_publisher_drift=False):
+                      fixture_manifest='d'*64,fixture_publisher_drift=False,fixture_complete_candidate=False):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -469,9 +484,14 @@ class PrepareCompositionTests(unittest.TestCase):
             if context_commit is not None:context['commit']=context_commit
             if strict_helpers:
                 game_image=bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64
+                user_image=bridge_root.source_authority.REGISTRY+'/user@sha256:'+'c'*64
                 context['images']=(copy.deepcopy(fixture_candidate_images) if fixture_candidate_images is not None
                                    else {'voice-gameintegration/gameintegration':game_image})
+                if fixture_complete_candidate:context['images']['voice-user/user']=user_image
             card=resource_claim_test.card(context)
+            if fixture_complete_candidate:
+                if not strict_helpers or fixture_candidate_images is not None:raise ValueError('invalid complete candidate fixture')
+                card['observed']['images']['voice-user/user']=bridge_root.source_authority.REGISTRY+'/user@sha256:'+'b'*64
             if strict_helpers:
                 import bootstrap_selection_test
                 installation=fixture_installation if fixture_installation is not None else bootstrap_selection_test.owned_fixture()[3]
@@ -482,6 +502,7 @@ class PrepareCompositionTests(unittest.TestCase):
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
             if strict_helpers:approved['images']['gameintegration']=game_image
+            if fixture_complete_candidate:approved['images']['user']=user_image
             if not strict_helpers:
                 approved['source_files']['scripts/staging/'+helper]=manifest[helper]
                 approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
