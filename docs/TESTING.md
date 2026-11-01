@@ -669,6 +669,23 @@ pkg non-short job, integrations, lint and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
+When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
+the local inputs for an experimental owned staging-shard execution. The JSON
+object must contain exactly the absolute paths `helper`, `jq`, `postgres_image`,
+`go_image`, `python_image`, `nats_image`, `nats_box_image`, `alpine_image`,
+`packages`, `wheel`, `preservation_go_cache`, and `staging_go_proxy`. The worker
+requires its pinned byte hashes and image IDs, a clean checkout matching the
+planned commit and tree, and a full base SHA. Pinned client, Go, Node and Docker
+CLI images must already be present. Missing or mismatched inputs fail closed.
+The caller must maintain trusted control of the supplied assets, Docker daemon
+and private socket. The worker uses an owned internal network and a private
+daemon; uncertain operations retain the journal and slot for reconciliation.
+Its serial, offline Go execution and adapted preservation fixture differ from
+hosted CI, and startup, filesystem work and disk growth are not independently
+bounded. This new maintained path has not yet passed a complete real staging
+run. It does not cover the other CI-script shards, and leaves `ci-script-tests`
+`not_run` and preflight incomplete even if the staging receipt is produced.
+
 When the planner selects `backend-auth`, an optional private Auth diagnostic
 can run one selected Testcontainers case by supplying all of `--auth-helper`,
 `--auth-helper-sha256`, `--auth-postgres-archive`,
