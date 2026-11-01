@@ -74,6 +74,9 @@ def capture_public_realtime(stage,kube,live,card):
     row=copy.deepcopy(kube.objects[('Deployment','voice-realtime')])
     row['metadata']['generation']=1
     containers=row['spec']['template']['spec']
+    credential_volumes=[v for v in containers['volumes'] if v['name']=='nats-service-creds']
+    if len(credential_volumes)!=1:raise ValueError('fixture_realtime_credential_volume_invalid')
+    credential_volumes[0]['secret']['secretName']='voice-nats-service-credentials-'+stage.expected['generation']
     for container in containers.get('initContainers',[])+containers['containers']:
         if container['name']=='realtime':
             container['image']=bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'e'*64
@@ -83,6 +86,13 @@ def capture_public_realtime(stage,kube,live,card):
     stage.expected['deployment_uids']['voice-realtime']=row['metadata']['uid']
     live[('deployment','voice-realtime')]=copy.deepcopy(row)
     card['observed']['images']=copy.deepcopy(stage.old_images)
+
+
+def synthetic_realtime_actor_credentials():
+    """Unsigned test-only identity; cryptographic NATS verification is a fixture."""
+    import base64
+    payload=base64.urlsafe_b64encode(json.dumps({'sub':'U'+'A'*55,'name':'voice-realtime'}).encode()).rstrip(b'=')
+    return b'-----BEGIN NATS USER JWT-----\nheader.'+payload+b'.signature\n------END NATS USER JWT------\n'
 
 
 def monitor_pod_inventory(argv,through_hub,hub_released,monitor_pod):
@@ -143,11 +153,37 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_realtime_actor_fixture_preserves_actual_mount_authority_checks(self):
+        import actor_root,base64,bootstrap_selection_test,source_plan_test
+        from types import SimpleNamespace
+        kube,_,_=canonical_stores();_,_,rows,installation=bootstrap_selection_test.owned_fixture()
+        stage=SimpleNamespace(snapshots={},old_images={},expected={'deployment_uids':{},'generation':installation.generation})
+        live={};card={'observed':{'images':{}}};capture_public_realtime(stage,kube,live,card)
+        service=rows['voice-nats-service-credentials-'+installation.generation]
+        service['data']['realtime.creds']=base64.b64encode(synthetic_realtime_actor_credentials()).decode()
+        actor_kube=Mock()
+        actor_kube.get.side_effect=lambda kind,name:copy.deepcopy(stage.snapshots[name] if kind=='deployment' else rows[name])
+        def synthetic_verify(binary,binary_sha,credentials,account_token,operator_token,actor_sha,account_sha,required,authenticate,unchanged):
+            self.assertEqual(credentials,synthetic_realtime_actor_credentials());unchanged()
+            return {'synthetic_nats_actor_boundary':True}
+        with patch.object(actor_root.actor_verification,'verify',side_effect=synthetic_verify) as verifier:
+            authority=actor_root.preflight(actor_kube,source_plan_test.SOURCE,Path('/unused'),
+                {'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['realtime'],None,installation=installation)
+            self.assertEqual(authority['roles'],['realtime']);self.assertEqual(authority['mounts']['realtime']['key'],'realtime.creds')
+            verifier.assert_called_once()
+            next(v for v in stage.snapshots['voice-realtime']['spec']['template']['spec']['volumes']
+                 if v['name']=='nats-service-creds')['secret']['secretName']='foreign'
+            verifier.reset_mock()
+            with self.assertRaises(actor_root.Blocked):
+                actor_root.preflight(actor_kube,source_plan_test.SOURCE,Path('/unused'),
+                    {'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['realtime'],None,installation=installation)
+            verifier.assert_not_called()
+
     def test_qualified_fixture_captures_realtime_and_writer_guard_stays_active(self):
-        import realtime_bootstrap
+        import actor_root,realtime_bootstrap
         from types import SimpleNamespace
         kube,_,_=canonical_stores()
-        stage=SimpleNamespace(snapshots={},old_images={},expected={'deployment_uids':{}})
+        stage=SimpleNamespace(snapshots={},old_images={},expected={'deployment_uids':{},'generation':'fixture'})
         live={};card={'observed':{'images':{}}}
         gis=bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64
         approved={'source_sha':'c'*40,'images':{'gameintegration':gis,
@@ -157,6 +193,15 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual(stage.expected['deployment_uids']['voice-realtime'],realtime['metadata']['uid'])
         self.assertEqual(live[('deployment','voice-realtime')],realtime)
         self.assertTrue(any(key.startswith('voice-realtime/') for key in stage.old_images))
+        mounted=Mock();mounted.get.return_value=copy.deepcopy(realtime)
+        proof=actor_root.mounted_role(mounted,stage,'realtime','voice-nats-service-credentials-fixture')
+        self.assertEqual(proof['key'],'realtime.creds')
+        wrong=copy.deepcopy(stage.snapshots['voice-realtime'])
+        next(v for v in wrong['spec']['template']['spec']['volumes'] if v['name']=='nats-service-creds')['secret']['secretName']='foreign'
+        mounted.get.return_value=wrong;stage.snapshots['voice-realtime']=wrong
+        with self.assertRaises(actor_root.Blocked):
+            actor_root.mounted_role(mounted,stage,'realtime','voice-nats-service-credentials-fixture')
+        stage.snapshots['voice-realtime']=realtime
         target=approved['images']['realtime']
         self.assertEqual(target.split('@',1)[0],bridge_root.source_authority.REGISTRY+'/realtime')
         self.assertNotEqual(target,stage.old_images['voice-realtime/realtime'])
@@ -428,6 +473,9 @@ class CompositionTests(unittest.TestCase):
             if enrolled:
                 import base64, bootstrap_selection, bootstrap_selection_test, nats_contract_plan as plan
                 _,previous,rows,installation=bootstrap_selection_test.owned_fixture()
+                if qualify:
+                    service=rows['voice-nats-service-credentials-'+installation.generation]
+                    service['data']['realtime.creds']=base64.b64encode(synthetic_realtime_actor_credentials()).decode()
                 self.assertEqual(actions.tt_session.installation,installation)
                 old_rows=[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)}
                     for stream,config in plan.V3_DECLARATIONS]
@@ -665,6 +713,16 @@ class CompositionTests(unittest.TestCase):
                             import importlib,subprocess
                             import staging_p3_prerequisites as p3
                             import realtime_bootstrap
+                            import actor_root
+                            def synthetic_actor_verify(binary,binary_sha,credentials,account_token,operator_token,
+                                                       actor_sha,account_sha,required,authenticate,unchanged):
+                                self.assertEqual(credentials,synthetic_realtime_actor_credentials())
+                                self.assertEqual(actor_sha,hashlib.sha256(('U'+'A'*55).encode()).hexdigest())
+                                self.assertEqual(account_sha,installation.account_sha256)
+                                self.assertEqual(set(required),{'pub','sub'})
+                                unchanged()
+                                return {'synthetic_nats_actor_boundary':True}
+                            nats_patches.enter_context(patch.object(actor_root.actor_verification,'verify',side_effect=synthetic_actor_verify))
                             nats_patches.enter_context(patch.object(p3,'verify_complete',
                                 side_effect=report_p3_failure(p3.verify_complete)))
                             nats_patches.enter_context(patch.object(realtime_bootstrap,'run_prepare',
