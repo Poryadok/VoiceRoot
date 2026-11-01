@@ -707,10 +707,13 @@ Caller-provided hashes identify bytes but do not authenticate tool or downloaded
 dependency provenance. This Windows diagnostic does not prove hosted Linux lint
 parity; the planner check remains `not_run`, and the result cannot authorize handoff.
 
-For planner-selected `match-squad-overlay`, `--overlay-image-id` opts into a
-Linux diagnostic using the pinned Python image already present on the owned
+For planner-selected `match-squad-overlay`, `--overlay-image-id` and
+`--overlay-kubectl` opt into a Linux diagnostic using the pinned Python image already present on the owned
 daemon. It runs the selected source in a network-isolated container with a
 read-only source mount and checks the discovered test count and absence of skips.
+The latter input is an absolute path to Linux/amd64 kubectl v1.34.0 with
+SHA-256 `cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c`;
+the worker verifies its source bytes and the copy in the read-only client.
 Image provenance, daemon custody and crash recovery are not established by this
 diagnostic. The check remains `not_run` and preflight remains incomplete.
 

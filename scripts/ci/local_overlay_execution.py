@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shlex
 import sys
+import tempfile
 
 import affected_check_plan
 import local_auth_full_orchestration as auth_broker
@@ -24,6 +25,7 @@ import local_source_snapshot
 
 
 PYTHON_IMAGE = 'sha256:61d53b56a648da09aa966c5cc46a7e751aea2b38d01f33b04456a9f289685be9'
+KUBECTL_SHA256 = 'cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c'
 MODULES = ('scripts.dev.match_squad_overlay_test', 'scripts.dev.match_squad_runtime_overlay_test')
 DISCOVER = ('import unittest; s=unittest.defaultTestLoader.loadTestsFromNames(' + repr(list(MODULES)) +
             '); print("VOICE_OVERLAY_DISCOVERED=" + str(s.countTestCases()))')
@@ -32,6 +34,24 @@ OUTPUT_LIMIT = 1024 * 1024
 
 def _windows():
     return os.name == 'nt'
+
+
+def provision_kubectl(owner, loader, binary):
+    """Copy one pinned tool into the owned volume before its read-only mount."""
+    path = Path(binary)
+    orchestration._verify_file(path, KUBECTL_SHA256)
+    with path.open('rb') as stream, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        command = ['sh', '-c', 'set -eu; test ! -e /workspace/tools; mkdir /workspace/tools; '
+                   'umask 077; cat > /workspace/tools/kubectl; chmod 755 /workspace/tools/kubectl']
+        if owner.execute(loader, command, out, err, 300, stdin=stream):
+            raise ValueError('overlay kubectl transfer failed')
+    orchestration._verify_file(path, KUBECTL_SHA256)
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        if owner.execute(loader, ['sh', '-c', 'sha256sum /workspace/tools/kubectl'], out, err, 60):
+            raise ValueError('overlay kubectl verification failed')
+        out.seek(0)
+        if out.read(256) != (KUBECTL_SHA256 + '  /workspace/tools/kubectl\n').encode('ascii'):
+            raise ValueError('overlay kubectl identity differs')
 
 
 def validate_discovery(raw):
@@ -63,7 +83,7 @@ def _command(owner, client, output, label, command, timeout):
     return code, out.read_bytes(), err.read_bytes()
 
 
-def run(root, plan, output, image_id, *, base, head_ref):
+def run(root, plan, output, image_id, kubectl, *, base, head_ref):
     auth_broker._require_worker_job()
     if not _windows():
         raise ValueError('Windows supervised overlay diagnostic required')
@@ -77,6 +97,7 @@ def run(root, plan, output, image_id, *, base, head_ref):
         raise ValueError('affected overlay plan differs')
     if image_id != PYTHON_IMAGE:
         raise ValueError('pinned Python image identity required')
+    orchestration._verify_file(kubectl, KUBECTL_SHA256)
     if output.exists() or output == root or root in output.parents:
         raise ValueError('overlay output must be new and outside source')
     if local_source_snapshot.capture(root, source['head']) != source:
@@ -98,9 +119,14 @@ def run(root, plan, output, image_id, *, base, head_ref):
                                         clear_entrypoint=True)
         owner.start_container(loader)
         source_digest = local_go_execution.transfer_source(owner, loader, root, source, snapshot, output / 'source.tar')
+        provision_kubectl(owner, loader, kubectl)
         client = owner.create_phase0_container(image_id, volume)
         owner.start_container(client)
-        prefix = ('cd /workspace/repo/source && exec env -i PATH=/usr/local/bin:/usr/bin:/bin '
+        code, stdout, stderr = _command(owner, client, output, 'kubectl',
+            'sha256sum /workspace/repo/tools/kubectl', 60)
+        if code or stdout != (KUBECTL_SHA256 + '  /workspace/repo/tools/kubectl\n').encode('ascii'):
+            raise ValueError('overlay read-only kubectl identity differs')
+        prefix = ('cd /workspace/repo/source && exec env -i PATH=/workspace/repo/tools:/usr/local/bin:/usr/bin:/bin '
                   'HOME=/tmp PYTHONDONTWRITEBYTECODE=1 python3 -B ')
         code, stdout, stderr = _command(owner, client, output, 'version', prefix + '--version', 30)
         version = stdout.decode('utf-8', errors='strict').strip()
@@ -118,7 +144,8 @@ def run(root, plan, output, image_id, *, base, head_ref):
                 engine._call('image', 'inspect', image_id, '--format', '{{.Os}}/{{.Architecture}}') != 'linux/amd64'):
             raise ValueError('source or Python image changed during overlay diagnostic')
         result = {'schema': 'voice-local-overlay-diagnostic-v1', 'status': 'incomplete', 'source': source,
-                  'image_id': image_id, 'version': version, 'command': command, 'source_archive_sha256': source_digest,
+                  'image_id': image_id, 'version': version, 'kubectl_sha256': KUBECTL_SHA256,
+                  'command': command, 'source_archive_sha256': source_digest,
                   'modules': list(MODULES), 'tests': {'discovered': count, 'passed': passed, 'skipped': []},
                   'stdout_sha256': hashlib.sha256(stdout).hexdigest(), 'stderr_sha256': hashlib.sha256(stderr).hexdigest(),
                   'slot': scheduled.slot, 'ownership_journal': str((owner.directory / 'ownership.json').relative_to(output)),
@@ -144,9 +171,9 @@ def _worker_command():
     return command
 
 
-def run_supervised(root, plan, output, image_id, *, base, head_ref):
+def run_supervised(root, plan, output, image_id, kubectl, *, base, head_ref):
     request = {'root': str(root), 'plan': plan, 'output': str(output), 'image_id': image_id,
-               'base': base, 'head_ref': head_ref}
+               'kubectl': str(kubectl), 'base': base, 'head_ref': head_ref}
     raw = json.dumps(request, allow_nan=False, separators=(',', ':')).encode('utf-8')
     if len(raw) > 1024 * 1024:
         raise ValueError('overlay worker request exceeds limit')
@@ -176,7 +203,7 @@ def main():
     if len(raw) > 1024 * 1024:
         raise ValueError('overlay worker request exceeds limit')
     request = json.loads(raw, object_pairs_hook=chat._unique)
-    if not isinstance(request, dict) or set(request) != {'root', 'plan', 'output', 'image_id', 'base', 'head_ref'}:
+    if not isinstance(request, dict) or set(request) != {'root', 'plan', 'output', 'image_id', 'kubectl', 'base', 'head_ref'}:
         raise ValueError('invalid overlay worker request')
     result = run(**request)
     print(json.dumps(result, sort_keys=True))
