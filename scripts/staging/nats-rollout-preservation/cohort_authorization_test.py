@@ -12,6 +12,27 @@ import resource_claim_test as fixture
 
 
 class CompletionAdmissionTests(unittest.TestCase):
+    def test_legacy_completion_rejects_extraneous_installation(self):
+        import staging_cohort_preservation as cohort
+        c=fixture.context();journal=fixture.MemoryJournal()
+        session=resource_claim.Session(c,'a'*12,'b'*64,lambda:fixture.card(c),journal);session.admit(start=True)
+        journal.row.update(schema='voice-staging-resource-fence-v1',target_sha256='c'*64)
+        del journal.row['installation_sha256']
+        binding=session.binding();target={'fixture':'legacy'}
+        authorization={'schema':'nats-rollout-preservation-v1','target':target,'resource_fence':binding}
+        state={'phase':'PAUSED_APPLY','status':'WAITING','target':target,'authorization':authorization}
+        record={'request_sha256':'d'*64,'target_sha256':'c'*64}
+        handle=cohort.QualifiedFinalAdmission()
+        with patch.object(cohort,'_issued',return_value=record),patch.object(cohort,'_write') as write, \
+             patch.object(guard,'protected_receipt',side_effect=lambda *a,**k:authorization):
+            authorization['installation_sha256']=session.installation.sha256
+            with self.assertRaisesRegex(cohort.Blocked,'cohort_final_authorization_incomplete'):
+                cohort.complete_authorization(handle,session,Path('/unused'),state)
+            write.assert_not_called()
+            del authorization['installation_sha256']
+            cohort.complete_authorization(handle,session,Path('/unused'),state)
+            write.assert_called_once()
+
     def test_fabricated_authorize_result_cannot_make_real_session_ready(self):
         with tempfile.TemporaryDirectory(dir="/root") as directory:
             root=Path(directory);(root/"installed").mkdir(mode=0o700)
