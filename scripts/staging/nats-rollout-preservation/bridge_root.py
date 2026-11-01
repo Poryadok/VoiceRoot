@@ -251,6 +251,23 @@ class Actions:
         observer=getattr(self,'_observer',None)
         if observer is not None:observer(name,status)
 
+    def _require_authorization_operation(self,operation):
+        session=getattr(self,'tt_session',None)
+        if session is not None and operation!=session.operation:
+            raise Blocked('staging_authorization_operation_changed')
+        return session
+
+    def _require_authorization_binding(self,state):
+        import resource_claim
+        session=self._require_authorization_operation(state.get('operation'))
+        fence=state.get('resource_fence')
+        if isinstance(fence,dict) and fence.get('schema')=='voice-staging-resource-fence-v2':
+            if type(session) is not resource_claim.Session or not session.admitted:
+                raise Blocked('staging_installation_binding_changed')
+            resource_claim.historical_binding(state,installation=session.installation)
+            session.require_binding(fence)
+        return session
+
     def execute_observed(self,request,observe):
         if getattr(self,'_observer',None) is not None:raise Blocked('bridge_operation_already_observed')
         self._observer=observe
@@ -978,6 +995,7 @@ class Actions:
         base,state=self.state(request['operation'])
         if request['action']=='status':return status_summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
+            session=self._require_authorization_binding(state)
             import migrations
             migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
             _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
@@ -1328,9 +1346,13 @@ class Actions:
         """Actual dual readback and fresh guards precede durable transaction entry."""
         import expired_transport
         import expired_recovery
+        self._require_authorization_operation(request.get('operation'))
+        _,current_state=self.state(request['operation'])
+        self._require_authorization_binding(current_state)
         # Current master/source/helper admission is repeated for this separate
         # authorize request, while upload proof stays bound to its own nonce.
         base,state,stage,execution,current,admission,all_fresh=self._expired_source_admission(request)
+        self._require_authorization_binding(state)
         execution['nonce']=request['upload_nonce']
         slot=base/'expired-recovery-proofs'/request['upload_nonce']
         record=expired_transport.upload.private_json(slot/'upload.json')
