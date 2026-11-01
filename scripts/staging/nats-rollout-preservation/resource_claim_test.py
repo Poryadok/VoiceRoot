@@ -95,6 +95,13 @@ class ResourceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'staging_cohort_auth_permit_invalid'):session.check(auth+['other'])
             session.check(auth);self.assertIsNone(session._cohort_auth_permit)
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(auth)
+            prefix=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get']
+            for kind in ('Secret','ConfigMap','Deployment','StatefulSet','Service','PersistentVolumeClaim','Job','Pod'):
+                session.check(prefix+[kind,'voice-test','-o','json'])
+            for bad in (prefix+['ClusterRole','voice-test','-o','json'],
+                        prefix+['Secret','voice-test','-o','yaml'],
+                        prefix+['Secret','voice-test','-o','json','--context=other']):
+                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             import source_plan
             ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
             session.check(ch)

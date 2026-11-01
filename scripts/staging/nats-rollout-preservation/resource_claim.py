@@ -445,9 +445,11 @@ class Session:
                 if len(tail)==5:
                     return tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
                 if len(tail) not in (3,4) or tail[-2]!='-o':return False
-                canonical=(row['phase']=='prerequisites-captured' and len(tail)==4 and tail[-1]=='json'
-                    and tail[0] in ('Secret','ConfigMap','Ingress','Deployment','StatefulSet','Service','NetworkPolicy',
-                                    'PersistentVolumeClaim','Job','Pod'))
+                canonical_kinds=(('Secret','ConfigMap','Deployment','StatefulSet','Service',
+                    'PersistentVolumeClaim','Job','Pod') if row['phase']=='cohort-preservation' and row.get('target_sha256')
+                    else ('Secret','ConfigMap','Ingress','Deployment','StatefulSet','Service','NetworkPolicy',
+                          'PersistentVolumeClaim','Job','Pod') if row['phase']=='prerequisites-captured' else ())
+                canonical=(len(tail)==4 and tail[-1]=='json' and tail[0] in canonical_kinds)
                 if not canonical and not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
                 if len(tail)==4 and not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',tail[1]):return False
                 output=tail[-1]
