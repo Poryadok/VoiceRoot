@@ -455,7 +455,9 @@ class ResourceTests(unittest.TestCase):
         session.expected_target=claim.digest(target);binding=session.binding()
         state=dict(schema='nats-rollout-root-v2',installation_sha256=session.installation.sha256,operation='a'*12,target=target,code_capture=helper,resource_fence=binding)
         self.assertEqual(claim.historical_binding(state),binding)
-        for invalid in ({k:v for k,v in state.items() if k!='resource_fence'},dict(state,target=dict(tag='e'*40,images=context()['images']))):
+        changed_target=dict(target,tag='e'*40)
+        changed_state=dict(state,target=changed_target,resource_fence=dict(binding,target_sha256=claim.digest(changed_target)))
+        for invalid in ({k:v for k,v in state.items() if k!='resource_fence'},changed_state):
             with self.assertRaises(RuntimeError):claim.historical_binding(invalid)
 
     def repair(self):
