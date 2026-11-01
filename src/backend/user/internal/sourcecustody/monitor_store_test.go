@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -112,4 +113,30 @@ GRANT SELECT,INSERT ON public.user_custody_monitor_response TO monitor_responder
 	bad.DecisionDigest = supervisionNonce(9)
 	_, err = store.ReadResponses(ctx, bad, supervisionProbe{})
 	require.Error(t, err)
+
+	// This exercises the transport and both workers with independent login
+	// roles. It does not establish source identity or physical watchdog health.
+	challenge, decision := supervisionNonce(21), supervisionNonce(22)
+	now := time.Unix(1000, 0)
+	session, err := newSupervisionSession(challenge, decision, public, func() time.Time { return now })
+	require.NoError(t, err)
+	monitor, err := newMonitorResponder(challenge, decision, uuid.New(), private)
+	require.NoError(t, err)
+	poller := newMonitorPoller(session, store, rand.Reader)
+	worker := newMonitorResponseWorker(monitor, responder, func(context.Context) error { return nil })
+	require.NoError(t, poller.step(ctx))
+	require.False(t, session.live())
+	require.NoError(t, worker.step(ctx))
+	require.NoError(t, poller.step(ctx))
+	require.True(t, session.live())
+	now = now.Add(time.Second)
+	require.NoError(t, poller.step(ctx))
+	require.NoError(t, worker.step(ctx))
+	require.NoError(t, poller.step(ctx))
+	require.True(t, session.live())
+	now = now.Add(2100 * time.Millisecond)
+	require.True(t, session.live(), "the heartbeat must renew beyond the original ARMED deadline")
+	require.NoError(t, worker.stop())
+	require.NoError(t, poller.step(ctx))
+	require.False(t, session.live(), "a durable STOP must revoke the same session")
 }
