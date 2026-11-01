@@ -55,7 +55,72 @@ def canonical_stores():
     return kube,params,policy
 
 
+def align_public_fixture_app_secret(kube,live):
+    """Use one synthetic pre-C1 Secret for store and prerequisite reads."""
+    key=('secret','voice-app-secrets')
+    original=live[key]
+    combined=copy.deepcopy(kube.objects[('Secret','voice-app-secrets')])
+    combined['metadata']=copy.deepcopy(original['metadata'])
+    combined['type']=original['type']
+    for name in ('REALTIME_DATABASE_URL','GAME_INTEGRATION_DATABASE_URL','GAME_INTEGRATION_DB_PASSWORD'):
+        combined['data'].pop(name,None)
+    combined['data'].update(original['data'])
+    live[key]=combined
+    kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(combined)
+
+
 class CompositionTests(unittest.TestCase):
+    def test_public_fixture_aligns_app_secret_before_prerequisite_capture(self):
+        import source_plan, source_plan_test, staging_gis_material
+        kube,params,_=canonical_stores()
+        original={'apiVersion':'v1','kind':'Secret','metadata':{'name':'voice-app-secrets',
+            'namespace':'voice-staging','uid':'00000000-0000-4000-8000-000000000123','resourceVersion':'1'},
+            'type':'Opaque','data':{'POSTGRES_PASSWORD':'cHc='}}
+        live={('secret','voice-app-secrets'):original}
+        align_public_fixture_app_secret(kube,live)
+        saved=live[('secret','voice-app-secrets')]
+        self.assertEqual(saved,kube.objects[('Secret','voice-app-secrets')])
+        self.assertEqual(saved['metadata'],original['metadata'])
+        self.assertEqual(saved['data']['POSTGRES_PASSWORD'],'cHc=')
+        self.assertIn('USER_R2_ENDPOINT',saved['data'])
+        self.assertNotIn('REALTIME_DATABASE_URL',saved['data'])
+        self.assertEqual(staging_gis_material.inspect_app_secret(saved)['credentials'],'absent')
+        self.assertIsInstance(source_plan.preservation_projection(source_plan_test.SOURCE,params,
+            source_plan_test.decoder,kube),dict)
+
+    def test_aligned_app_secret_reaches_real_gis_preflight_and_patch(self):
+        self._exercise_aligned_gis_preflight()
+
+    def test_changed_app_secret_still_refuses_before_prerequisite_patch(self):
+        self._exercise_aligned_gis_preflight(drift=True)
+
+    def _exercise_aligned_gis_preflight(self,*,drift=False):
+        import staging_prerequisites as prereq, staging_cohort_preservation as cohort
+        import staging_prerequisites_test as fixture, staging_gis_material, stage_runtime
+        def ready(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            kube,_,_=canonical_stores()
+            align_public_fixture_app_secret(kube,live)
+            prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
+            plan={'actual_before':stage.old_images,'candidate':{'commit':actions.tt_session.context['commit'],
+                'images':actions.tt_session.context['images']}}
+            with patch.object(cohort,'validate_plan'),patch.object(cohort,'load_qualified',return_value=qualified), \
+                 patch.object(cohort,'capture_stage',return_value=stage),patch.object(cohort,'capture_final_stage',return_value=stage), \
+                 patch.object(cohort,'load_auxiliary_successor',return_value=None),patch.object(cohort,'revalidate_paused'):
+                actions.tt_session.bind_cohort_preservation(plan,stage.old_images)
+                if drift:
+                    changed=copy.deepcopy(live[('secret','voice-app-secrets')])
+                    changed['metadata']['uid']='00000000-0000-4000-8000-000000000999'
+                    def changed_get(kind,name):
+                        return copy.deepcopy(changed) if (kind,name)==('secret','voice-app-secrets') else get(kind,name)
+                    with patch.object(stage_runtime.Kube,'get',side_effect=changed_get):
+                        with self.assertRaisesRegex(staging_gis_material.MaterialError,'staging_gis_preflight_invalid'):
+                            prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+                else:prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+            if drift:self.assertNotIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
+            else:self.assertIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
+        fixture.PrepareCompositionTests()._cold_prepare(on_ready=ready)
+
     def test_captured_module_mapping_is_restored_after_import_failure(self):
         import sys
         from types import SimpleNamespace
@@ -115,6 +180,7 @@ class CompositionTests(unittest.TestCase):
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             from docker_runtime import NATS_IMAGE
             kube,params,policy=canonical_stores()
+            if qualify:align_public_fixture_app_secret(kube,live)
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
             stage.kube=kube;stage.service={}
@@ -274,6 +340,10 @@ class CompositionTests(unittest.TestCase):
                             return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
                         if 'patch' in argv:
                             index=argv.index('patch');kind=argv[index+1]
+                            if qualify and kind=='secret' and argv[index+2]=='voice-app-secrets':
+                                result=transport(argv,body=body,**kwargs)
+                                kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(live[('secret','voice-app-secrets')])
+                                return result
                             if kind=='deployment' and not through_workload:raise ReachedFence()
                             result=fake.capture_patch(argv,body=body,**kwargs)
                             name=argv[index+2];live[(kind,name)]=fake.get(kind,name)
@@ -335,7 +405,7 @@ class CompositionTests(unittest.TestCase):
                                 if through_storage and postgres is None and flags['hub_released'] and kind=='statefulset' and name=='voice-postgres':raise ReachedFence()
                                 if through_storage and flags['hub_released'] and kind.lower()=='secret' and name=='voice-app-secrets':
                                     commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
-                                    return copy.deepcopy(kube.objects[('Secret',name)])
+                                    return copy.deepcopy(live[('secret',name)] if qualify else kube.objects[('Secret',name)])
                                 if through_storage and flags['hub_released'] and kind=='Deployment' and name in stage.snapshots:
                                     commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
                                     return copy.deepcopy(live[('deployment',name)])
