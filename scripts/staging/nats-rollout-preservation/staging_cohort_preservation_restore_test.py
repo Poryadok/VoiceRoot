@@ -37,7 +37,7 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
     def fixture(self,*,create_lost=False,remove_lost=None,foreign=False):
         from cohort_hosted_pg import HostedPostgres
         adapter=object.__new__(HostedPostgres);adapter.name='voice-cohort-source-'+'a'*24
-        adapter.cid=None;adapter.original_popen=subprocess.Popen
+        adapter.cid=None;adapter.observed_cid=None;adapter.original_popen=subprocess.Popen
         cid='b'*64;state={'exists':not create_lost,'removed':0}
         def docker(*args,body=None):
             if args[0]=='create':
@@ -71,7 +71,7 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
                 with patch.object(adapter,'_docker',side_effect=docker):
                     if fault=='before':
                         with self.assertRaisesRegex(RuntimeError,'synthetic_remove_failed'):adapter.__exit__(None,None,None)
-                        self.assertEqual(adapter.cid,cid);self.assertTrue(state['exists'])
+                        self.assertEqual((adapter.cid,adapter.observed_cid),(cid,cid));self.assertTrue(state['exists'])
                     else:
                         adapter.__exit__(None,None,None)
                         self.assertIsNone(adapter.cid);self.assertFalse(state['exists'])
@@ -80,7 +80,7 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
         adapter,cid,state,docker=self.fixture(foreign=True);adapter.cid=cid
         with patch.object(adapter,'_docker',side_effect=docker):
             with self.assertRaisesRegex(RuntimeError,'isolated_postgres_identity_changed'):adapter.__exit__(None,None,None)
-        self.assertTrue(state['exists']);self.assertEqual(state['removed'],0);self.assertEqual(adapter.cid,cid)
+        self.assertTrue(state['exists']);self.assertEqual(state['removed'],0);self.assertEqual((adapter.cid,adapter.observed_cid),(cid,cid))
 
 
 @unittest.skipUnless(os.environ.get('VOICE_COHORT_DOCKER')=='1','isolated Docker fixture opt-in')
