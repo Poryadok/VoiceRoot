@@ -202,17 +202,23 @@ func (s *SpaceStore) accountBanSnapshot(ctx context.Context, space, operation uu
 	if err != nil {
 		return nil, err
 	}
+	// Keep each exact-source check while avoiding a network round trip per row.
+	lookups := &pgx.Batch{}
+	for i := range b.sources {
+		lookups.Queue(`SELECT association_id::text,association_revision,account_id FROM space_account_qualifications WHERE space_id=$1 AND source_bytes=$2`, space, deterministicBanBytes(b.sources[i].entry))
+	}
+	results := s.tx.SendBatch(ctx, lookups)
+	defer results.Close()
 	ownerPresent := false
 	for i := range b.sources {
 		source := &b.sources[i]
 		if source.entry.ProfileId == b.owner.String() {
 			ownerPresent = true
 		}
-		key := deterministicBanBytes(source.entry)
 		var association string
 		var revision uint64
 		var qualifiedAccount uuid.UUID
-		err = s.tx.QueryRow(ctx, `SELECT association_id::text,association_revision,account_id FROM space_account_qualifications WHERE space_id=$1 AND source_bytes=$2`, space, key).Scan(&association, &revision, &qualifiedAccount)
+		err = results.QueryRow().Scan(&association, &revision, &qualifiedAccount)
 		if err == nil {
 			if source.nativeAccount != uuid.Nil && source.nativeAccount != qualifiedAccount {
 				return nil, ErrAccountBanUnavailable
@@ -223,6 +229,9 @@ func (s *SpaceStore) accountBanSnapshot(ctx context.Context, space, operation uu
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return nil, err
 		}
+	}
+	if err = results.Close(); err != nil {
+		return nil, err
 	}
 	if !ownerPresent || b.revision <= 0 {
 		return nil, ErrAccountBanUnavailable
@@ -446,19 +455,31 @@ func (s *SpaceStore) BanAccount(ctx context.Context, in AccountBanInput) error {
 			if err != nil {
 				return err
 			}
+			// Preserve the insert-then-verify order for every receipt, but pipeline
+			// the statements under the same transaction and Space fence.
+			qualifications := &pgx.Batch{}
 			for _, result := range response.Results {
 				entry := proto.Clone(result.Entry).(*userv1.SpaceAccountCaptureEntry)
 				entry.ExpectedAssociationId = ""
 				entry.ExpectedAssociationRevision = 0
-				_, err = scoped.tx.Exec(ctx, `INSERT INTO space_account_qualifications(space_id,source_bytes,profile_id,account_id,association_id,association_revision,owner_receipt_digest,result_bytes,operation_id)
+				key := deterministicBanBytes(entry)
+				qualifications.Queue(`INSERT INTO space_account_qualifications(space_id,source_bytes,profile_id,account_id,association_id,association_revision,owner_receipt_digest,result_bytes,operation_id)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(space_id,source_bytes) DO NOTHING`, in.SpaceID, deterministicBanBytes(entry), result.Entry.ProfileId, result.AccountId, result.AssociationId, result.AssociationRevision, result.OwnerReceiptDigest, deterministicBanBytes(result), snapshot.request.OperationId)
-				if err != nil {
+				qualifications.Queue(`SELECT account_id=$3 AND association_id=$4 AND association_revision=$5 FROM space_account_qualifications WHERE space_id=$1 AND source_bytes=$2`, in.SpaceID, key, result.AccountId, result.AssociationId, result.AssociationRevision)
+			}
+			qualificationResults := scoped.tx.SendBatch(ctx, qualifications)
+			defer qualificationResults.Close()
+			for range response.Results {
+				if _, err = qualificationResults.Exec(); err != nil {
 					return err
 				}
 				var equal bool
-				if err = scoped.tx.QueryRow(ctx, `SELECT account_id=$3 AND association_id=$4 AND association_revision=$5 FROM space_account_qualifications WHERE space_id=$1 AND source_bytes=$2`, in.SpaceID, deterministicBanBytes(entry), result.AccountId, result.AssociationId, result.AssociationRevision).Scan(&equal); err != nil || !equal {
+				if err = qualificationResults.QueryRow().Scan(&equal); err != nil || !equal {
 					return ErrAccountBanUnavailable
 				}
+			}
+			if err = qualificationResults.Close(); err != nil {
+				return err
 			}
 			for _, profile := range profiles {
 				if _, err = scoped.retirePendingMemberAdmission(ctx, in.SpaceID, profile); err != nil {
