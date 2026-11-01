@@ -173,6 +173,33 @@ def _observation(session,label,argv,body=b'',*,limit=4<<20,timeout=30,pass_fds=(
     return raw
 
 
+def _successor_native_observation(session,capability,argv,*,limit,timeout):
+    """Send one validated native command under the current successor fence."""
+    plan=load_plan(session);_phase_continuity(session,plan);_no_pending(session)
+    row=session.check()
+    if (row.get('phase') not in ('prerequisites-captured','realtime-bootstrap','prepare')
+        or session._cohort_native_capability is not capability or session._cohort_native_permit is not None
+        or session._cohort_auth_permit is not None or session._cohort_permit is not None):
+        raise Blocked('cohort_native_successor_invalid')
+    ident='observe-native-'+secrets.token_hex(8);body=b''
+    directory=_base(session)/'effects';private._private_directory(directory)
+    intent={'schema':'voice-staging-cohort-effect-v1','operation':session.operation,'effect_id':ident,
+        'binding':session.binding(),'argv':argv,'body_sha256':hashlib.sha256(body).hexdigest(),'status':'PENDING'}
+    path=directory/(ident+'.json');_write(path,intent)
+    if _read(path)!=intent:raise Blocked('cohort_effect_changed')
+    session._cohort_native_permit=resource_claim._CohortNativePermit(capability,row['phase'],
+        digest(session.binding()),row['cohort_preservation_sha256'],ident,tuple(argv),intent['body_sha256'])
+    try:
+        raw=commands.capture(argv,body=body,limit=limit,timeout=timeout,
+            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'})
+        if session._cohort_native_permit is not None:raise Blocked('cohort_permit_not_consumed')
+        _phase_continuity(session,plan)
+        if _read(path)!=intent:raise Blocked('cohort_effect_changed')
+        save(path,{**intent,'status':'DONE','response_sha256':hashlib.sha256(raw).hexdigest()})
+        return raw
+    finally:session._cohort_native_permit=None
+
+
 def _no_pending(session):
     auth=_base(session)/'auth'
     if auth.exists():
@@ -1217,6 +1244,26 @@ def _closed_copy_authority(session,runtime,broker,tree):
     if load_preflight(session)!=frozen:raise Blocked('cohort_preflight_changed')
     revalidate_paused(session)
     return current
+
+
+def successor_nats_authority(session):
+    """Requalify the immutable cut using a privately restored owned broker."""
+    from expired_proof import observe_copy
+    from staging_cohort_preservation_runtime import NativeRuntime
+    continuation=load_rollout_continuation(session)
+    if session._cohort_native_capability is not None:raise Blocked('cohort_native_successor_busy')
+    capability=object();session._cohort_native_capability=capability
+    try:
+        runtime=NativeRuntime(session,successor=capability);results=[]
+        def validate(runtime,broker,tree,row,manifest,records):
+            results.append(_closed_copy_authority(session,runtime,broker,tree))
+        observe_copy(runtime,_runtime_base(session)/'rollout-before.tar',continuation['cut']['manifest'],
+            'successor-'+secrets.token_hex(6),lambda:revalidate_paused(session),validate=validate,native_only=True)
+        if len(results)!=1:raise Blocked('cohort_closed_copy_authority_changed')
+        if load_rollout_continuation(session)!=continuation:raise Blocked('cohort_continuation_changed')
+        return results[0]
+    finally:
+        session._cohort_native_permit=None;session._cohort_native_capability=None
 
 
 def _capture_native(session):

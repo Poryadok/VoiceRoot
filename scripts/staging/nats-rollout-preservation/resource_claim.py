@@ -24,6 +24,17 @@ FIELDS={'project','resource','actor','claim','generation','window','revision','o
 
 
 @dataclass(frozen=True,slots=True)
+class _CohortNativePermit:
+    capability: object
+    phase: str
+    binding_sha256: str
+    lineage_sha256: str
+    effect_id: str
+    argv: tuple
+    body_sha256: str
+
+
+@dataclass(frozen=True,slots=True)
 class InstallationAuthority:
     """Root-composed expected identity, never selected by an observed record."""
     profile: str
@@ -308,6 +319,8 @@ class Session:
         self._prerequisite_readonly_permit=None
         self._cohort_permit=None
         self._cohort_auth_permit=None
+        self._cohort_native_capability=None
+        self._cohort_native_permit=None
         self._cohort_lineage=None
         self._prerequisite_readonly_busy=False
         self._prerequisite_readonly_capture=None
@@ -412,6 +425,18 @@ class Session:
                 or not isinstance(permit['body_sha256'],str) or not re.fullmatch(r'[a-f0-9]{64}',permit['body_sha256'])):
                 raise RuntimeError('staging_cohort_auth_permit_invalid')
             self._cohort_auth_permit=None
+            return row
+        if argv and self._cohort_native_capability is not None and Path(str(argv[0])).name=='docker':
+            permit=self._cohort_native_permit
+            if (type(permit) is not _CohortNativePermit or permit.capability is not self._cohort_native_capability
+                or row.get('phase') not in ('prerequisites-captured','realtime-bootstrap','prepare')
+                or permit.phase!=row.get('phase') or permit.lineage_sha256!=cohort_hash
+                or permit.binding_sha256!=digest(_journal_binding(row,self.installation))
+                or not re.fullmatch(r'observe-native-[a-f0-9]{16}',permit.effect_id)
+                or type(permit.argv) is not tuple or tuple(argv)!=permit.argv
+                or not re.fullmatch(r'[a-f0-9]{64}',permit.body_sha256)):
+                raise RuntimeError('staging_cohort_native_permit_invalid')
+            self._cohort_native_permit=None
             return row
         if argv and row.get('phase') in ('cohort-preservation','prerequisites','prerequisites-captured'):
             args=list(argv);permit=self._prerequisite_permit

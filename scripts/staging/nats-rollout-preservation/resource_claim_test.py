@@ -248,6 +248,25 @@ class ResourceTests(unittest.TestCase):
         journal.row['target_sha256']=None;session.expected_target=None
         with self.assertRaises(RuntimeError):session.check(prefix+['Secret','voice-app-secrets','-o','json'])
 
+    def test_successor_native_permit_is_one_shot_and_bound_to_current_fence(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        journal.row.update(phase='prerequisites-captured',target_sha256='d'*64,cohort_preservation_sha256='c'*64)
+        session.expected_target='d'*64;session._cohort_lineage='c'*64
+        capability=object();session._cohort_native_capability=capability
+        argv=['/usr/bin/docker','--host=unix:///var/run/docker.sock','image','inspect','fixture']
+        def permit(**changes):
+            values=dict(capability=capability,phase='prerequisites-captured',
+                binding_sha256=claim.digest(session.binding()),lineage_sha256='c'*64,
+                effect_id='observe-native-0123456789abcdef',argv=tuple(argv),body_sha256='e'*64)
+            values.update(changes);return claim._CohortNativePermit(**values)
+        for bad in (permit(capability=object()),permit(phase='prepare'),permit(binding_sha256='a'*64),
+                    permit(lineage_sha256='a'*64),permit(argv=tuple(argv+['other'])),permit(body_sha256='bad')):
+            session._cohort_native_permit=bad
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_native_permit_invalid'):session.check(argv)
+        session._cohort_native_permit=permit();session.check(argv)
+        self.assertIsNone(session._cohort_native_permit)
+        with self.assertRaisesRegex(RuntimeError,'staging_cohort_native_permit_invalid'):session.check(argv)
+
     def test_prerequisite_binding_requires_baseline_and_durable_capture(self):
         session,current,journal=self.fixture();session.admit(start=True)
         actual=current['observed']['images'];qualified={'fixture':'qualified-p2'}
