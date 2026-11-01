@@ -35,8 +35,8 @@ def canonical_stores():
 
 
 class CompositionTests(unittest.TestCase):
-    def test_cut_binds_prerequisites_and_stores_before_enrollment_admission(self):
-        """Synthetic Kube, real pre-cut inputs and store projection; no P2 proof."""
+    def test_public_prepare_binds_stores_before_enrollment_admission(self):
+        """Synthetic source/Kube, real pre-cut and store projection; no P2 proof."""
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -57,9 +57,19 @@ class CompositionTests(unittest.TestCase):
             pod={'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]}}
             kube.run=lambda args,body=None,timeout=30: ({'items':[pod]} if args==['get','pods','-o','json']
                 else original_run(args,body=body,timeout=timeout))
-            with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder):
+            saved=workspace.with_name(workspace.name+'-source-fixture');workspace.rename(saved)
+            (installed/'source-authority'/(actions.tt_session.operation+'.json')).unlink()
+            execution={**execution,'head_sha':actions.tt_session.context['commit']}
+            request={**request,'action':'prepare','nonce':actions.tt_session.operation+'a'*52,
+                'source_sha':actions.tt_session.context['commit'],'resource_context':actions.tt_session.context,'token':'fixture'}
+            def capture_source(_token,_run,_sha,destination):
+                shutil.copytree(saved,destination,dirs_exist_ok=True)
+                return copy.deepcopy(approved)
+            with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder),\
+                 patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)),\
+                 patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source):
                 with self.assertRaisesRegex(cohort.Blocked,'enrolled_bootstrap_selection_refused'):
-                    cohort._start_cut(actions,request,approved,execution,workspace)
+                    actions.execute(request)
             base=cohort._base(actions.tt_session)
             self.assertTrue((base/'precut.json').exists())
             stores=cohort._read(base/'stores.json')
