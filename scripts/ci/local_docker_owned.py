@@ -376,6 +376,8 @@ class OwnedRun:
                     keys.add('profile')
                 if 'readonly_mounts' in item:
                     keys.add('readonly_mounts')
+                if 'image_operation' in item:
+                    keys.add('image_operation')
             if (set(item) != keys
                     or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'quarantined', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
@@ -409,6 +411,19 @@ class OwnedRun:
                         or item['image'] != rootless.IMAGE or set(item['mounts']) != rootless.WORKSPACE_TARGETS
                         or len(set(item['mounts'].values())) != 4 or item['ports']):
                     raise OwnershipError('invalid rootless workspace profile')
+                if 'image_operation' in item:
+                    operation = item['image_operation']
+                    tag = r'[A-Za-z0-9][A-Za-z0-9._:/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}'
+                    if (item.get('profile') not in ROOTLESS_PROFILES or item['state'] not in
+                            ('executing', 'stopping', 'quarantined', 'removing', 'removed') or
+                            not isinstance(operation, dict) or set(operation) !=
+                            {'kind', 'archive_sha256', 'image_id', 'source_tag', 'target_tag'} or
+                            operation['kind'] != 'alias-load-v1' or
+                            not isinstance(operation['archive_sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', operation['archive_sha256']) or
+                            not isinstance(operation['image_id'], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', operation['image_id']) or
+                            any(not isinstance(operation[k], str) or not re.fullmatch(tag, operation[k]) for k in ('source_tag', 'target_tag')) or
+                            operation['source_tag'] == operation['target_tag']):
+                        raise OwnershipError('invalid rootless image operation')
                 if item.get('profile') == 'phase0-isolated-v1' and (item['network'] != 'none' or
                         set(item['mounts']) != {'/workspace/repo'} or item.get('readonly_mounts') != ['/workspace/repo'] or
                         item.get('command') != ['sleep', 'infinity'] or item['ports']):
@@ -752,6 +767,113 @@ class OwnedRun:
                     if active_error is None:
                         raise OwnershipError('canonical image archive cleanup failed') from cleanup_error
                     active_error.add_note('Canonical image archive cleanup failed: ' + str(canonical_path))
+
+    def load_canonical_rootless_alias(self, name, archive_path, archive_sha256, image_id,
+                                      source_tag, target_tag, stdout, stderr, timeout=300):
+        """Add one independently verified tag to an existing owned image.
+
+        Caller controls the private daemon/socket. An uncertain operation must
+        be stopped and quarantined; this does not prove daemon-side cancellation.
+        """
+        tag_pattern = r'[A-Za-z0-9][A-Za-z0-9._:/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}'
+        if (not isinstance(source_tag, str) or not re.fullmatch(tag_pattern, source_tag) or
+                not isinstance(target_tag, str) or not re.fullmatch(tag_pattern, target_tag) or
+                source_tag == target_tag or not isinstance(archive_sha256, str) or
+                not re.fullmatch(r'[0-9a-f]{64}', archive_sha256) or not isinstance(image_id, str) or
+                not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id) or type(timeout) not in (int, float) or
+                not 0 < timeout <= 86400):
+            raise OwnershipError('invalid alias identity')
+        path = Path(archive_path)
+        if not path.is_absolute() or path.resolve() != path or path.parent != self.directory or path.is_symlink():
+            raise OwnershipError('image archive must be a regular file in the owned run directory')
+        canonical_path = None
+        try:
+            with path.open('rb') as source:
+                before, current = os.fstat(source.fileno()), path.lstat()
+                if (not stat.S_ISREG(before.st_mode) or not stat.S_ISREG(current.st_mode) or
+                        (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino)):
+                    raise OwnershipError('image archive identity differs')
+                with tempfile.NamedTemporaryFile(mode='w+b', prefix='canonical-alias-', suffix='.tar',
+                                                 dir=self.directory, delete=False) as canonical:
+                    canonical_path = Path(canonical.name)
+                    identity = local_image_archive.sanitize_archive(source, canonical, archive_sha256, image_id, target_tag)
+                after, current = os.fstat(source.fileno()), path.lstat()
+                if (not stat.S_ISREG(current.st_mode) or
+                        (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) !=
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) or
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) !=
+                        (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)):
+                    raise OwnershipError('image archive changed during canonicalization')
+            self._load_rootless_alias(name, canonical_path, identity['archive_sha256'], image_id,
+                                      source_tag, target_tag, stdout, stderr, timeout)
+        except (OSError, ValueError) as exc:
+            raise OwnershipError('alias canonicalization failed') from exc
+        finally:
+            if canonical_path is not None:
+                active_error = sys.exception()
+                try:
+                    canonical_path.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    if active_error is None:
+                        raise OwnershipError('canonical alias archive cleanup failed') from cleanup_error
+                    active_error.add_note('Canonical alias archive cleanup failed: ' + str(canonical_path))
+
+    def _load_rootless_alias(self, name, path, archive_sha256, image_id, source_tag, target_tag, stdout, stderr, timeout):
+        self._validate(); self._check_daemon()
+        matches = [r for r in self.state['resources'] if r['kind'] == 'container' and r['name'] == name
+                   and r.get('profile') in ROOTLESS_PROFILES and r['state'] == 'ready']
+        if len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
+                                    for r in self.state['resources']):
+            raise OwnershipError('rootless daemon is not ready or an operation is unresolved')
+        item = matches[0]
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('rootless daemon is not running')
+        with Path(path).open('rb') as archive:
+            before, current = os.fstat(archive.fileno()), Path(path).lstat()
+            if (not stat.S_ISREG(before.st_mode) or not stat.S_ISREG(current.st_mode) or
+                    (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino) or
+                    hashlib.file_digest(archive, 'sha256').hexdigest() != archive_sha256):
+                raise OwnershipError('canonical alias archive identity differs')
+            item['image_operation'] = {'kind': 'alias-load-v1', 'archive_sha256': archive_sha256,
+                                       'image_id': image_id, 'source_tag': source_tag, 'target_tag': target_tag}
+            item['state'] = 'executing'; self._save()
+            prefix = ['docker', '--host', 'unix:///run/user/1000/docker.sock']
+            def inventory():
+                with tempfile.TemporaryFile() as out:
+                    code = self.engine.execute(item['id'], prefix + ['image', 'ls', '--all', '--no-trunc',
+                        '--format', '{{.Repository}}:{{.Tag}} {{.ID}}'], out, stderr, timeout)
+                    out.seek(0); raw = out.read(8 * 1024 * 1024 + 1)
+                if type(code) is not int or code != 0 or len(raw) > 8 * 1024 * 1024:
+                    raise OwnershipError('private image inventory unavailable')
+                try:
+                    rows = [line.split(' ') for line in raw.decode('ascii').splitlines()]
+                except UnicodeDecodeError:
+                    raise OwnershipError('invalid private image inventory') from None
+                pattern = r'(?:<none>:<none>|[A-Za-z0-9][A-Za-z0-9._:/-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})'
+                if any(len(row) != 2 or not re.fullmatch(pattern, row[0]) or
+                       not re.fullmatch(r'sha256:[0-9a-f]{64}', row[1]) for row in rows):
+                    raise OwnershipError('invalid private image inventory')
+                return sorted(tuple(row) for row in rows)
+            initial = inventory()
+            if (initial.count((source_tag, image_id)) != 1 or sum(tag == source_tag for tag, _ in initial) != 1 or
+                    any(tag == target_tag for tag, _ in initial)):
+                raise OwnershipError('alias source or target differs')
+            archive.seek(0)
+            if self.engine.execute_verified_stream(item['id'], prefix + ['load'], stdout, stderr, timeout,
+                                                   archive, archive_sha256):
+                raise OwnershipError('private alias load failed')
+            after, current = os.fstat(archive.fileno()), Path(path).lstat()
+            archive.seek(0)
+            if (not stat.S_ISREG(current.st_mode) or (after.st_dev, after.st_ino) != (current.st_dev, current.st_ino) or
+                    (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns) or
+                    hashlib.file_digest(archive, 'sha256').hexdigest() != archive_sha256):
+                raise OwnershipError('canonical alias archive changed')
+            if inventory() != sorted(initial + [(target_tag, image_id)]):
+                raise OwnershipError('private alias inventory changed unexpectedly')
+        self._check_daemon()
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('rootless daemon stopped during alias load')
+        del item['image_operation']; item['state'] = 'ready'; self._save()
 
     def load_rootless_image(self, name, archive_path, archive_sha256, image_id, stdout, stderr, timeout=300):
         """Load an archive into an owned daemon; caller identities are not provenance proof.

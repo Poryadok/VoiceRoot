@@ -435,6 +435,88 @@ class OwnedRunTests(unittest.TestCase):
             finally:
                 owner.close()
 
+    def test_canonical_alias_requires_exact_inventory_and_journals_before_effect(self):
+        from local_image_archive_test import oci_fixture
+        raw, digest, image_id = oci_fixture()
+        class AliasEngine(FakeEngine):
+            def __init__(self):
+                super().__init__(); self.tags = {'alpine:3.16': image_id}; self.mode = 'ok'; self.loaded = 0
+            def execute(self, identifier, command, stdout, stderr, timeout, stdin=None):
+                if 'ls' not in command: raise AssertionError(command)
+                for tag, value in sorted(self.tags.items()): stdout.write((tag + ' ' + value + '\n').encode())
+                if self.mode == 'source-ambiguous': stdout.write(('alpine:3.16 sha256:' + 'f' * 64 + '\n').encode())
+                return 0
+            def execute_verified_stream(self, identifier, command, stdout, stderr, timeout, stdin, expected):
+                item = owner.state['resources'][-1]
+                self.assert_persisted = json.loads((owner.directory / 'ownership.json').read_text())['resources'][-1]
+                if item['state'] != 'executing' or self.assert_persisted.get('image_operation', {}).get('target_tag') != 'alpine:3.17':
+                    raise AssertionError('operation not durably journaled')
+                self.loaded += 1
+                if self.mode == 'uncertain': raise OwnershipError('outcome uncertain')
+                self.tags['alpine:3.17'] = image_id if self.mode in ('ok', 'source-drift', 'extra-after') else 'sha256:' + 'f' * 64
+                if self.mode == 'source-drift': self.tags['alpine:3.16'] = 'sha256:' + 'e' * 64
+                if self.mode == 'extra-after': self.tags['foreign:latest'] = image_id
+                return 0
+        for mode in ('ok', 'source-missing', 'source-wrong', 'source-ambiguous', 'target-present', 'target-foreign',
+                     'foreign-after', 'source-drift', 'extra-after', 'uncertain'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                engine = AliasEngine(); engine.mode = mode
+                foreign = engine.create('volume', 'foreign-sentinel', {'owner': 'foreign'})
+                owner = OwnedRun.create(Path(directory), engine)
+                try:
+                    network = owner.create_resource('network')
+                    mounts = {target: owner.create_resource('volume') for target in sorted(rootless.WORKSPACE_TARGETS)}
+                    def creator(request):
+                        item = owner.state['resources'][-1]
+                        labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'], 'voice.ci.kind': 'container'}
+                        return engine.create_container(item['name'], labels, rootless.IMAGE, item['network'], mounts, [])
+                    name = owner.create_rootless_container(network, mounts, creator); owner.start_container(name)
+                    archive = owner.directory / 'alias.tar'; archive.write_bytes(raw)
+                    if mode == 'source-missing': engine.tags.clear()
+                    if mode == 'source-wrong': engine.tags['alpine:3.16'] = 'sha256:' + 'f' * 64
+                    if mode == 'target-present': engine.tags['alpine:3.17'] = image_id
+                    if mode == 'target-foreign': engine.tags['alpine:3.17'] = 'sha256:' + 'f' * 64
+                    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+                        if mode == 'ok':
+                            owner.load_canonical_rootless_alias(name, archive, digest, image_id, 'alpine:3.16', 'alpine:3.17', out, err)
+                            self.assertEqual(owner.state['resources'][-1]['state'], 'ready')
+                            self.assertNotIn('image_operation', owner.state['resources'][-1])
+                        else:
+                            with self.assertRaises(OwnershipError):
+                                owner.load_canonical_rootless_alias(name, archive, digest, image_id, 'alpine:3.16', 'alpine:3.17', out, err)
+                            self.assertEqual(owner.state['resources'][-1]['state'], 'executing')
+                            self.assertEqual(engine.loaded, 0 if mode in ('source-missing', 'source-wrong', 'source-ambiguous', 'target-present', 'target-foreign') else 1)
+                            if mode == 'uncertain':
+                                run_directory = owner.directory
+                                owner.close(); owner = OwnedRun.load(run_directory, engine)
+                                self.assertEqual(owner.state['resources'][-1]['image_operation']['target_tag'], 'alpine:3.17')
+                            owner.cancel_execution(name)
+                            self.assertEqual(owner.state['resources'][-1]['state'], 'quarantined')
+                            self.assertTrue(all(row['state'] == 'quarantined' for row in owner.state['resources'] if row['kind'] == 'volume'))
+                    owner.cleanup()
+                    self.assertTrue(engine.exists('volume', foreign))
+                finally:
+                    owner.close()
+
+    def test_alias_rejects_unverified_archive_before_daemon_operation(self):
+        from local_image_archive_test import oci_fixture
+        raw, digest, image_id = oci_fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            owner = OwnedRun.create(Path(directory), FakeEngine())
+            try:
+                archive = owner.directory / 'alias.tar'; archive.write_bytes(raw)
+                with mock.patch.object(owner, '_load_rootless_alias') as operation:
+                    for expected_digest, expected_id, target in (('0' * 64, image_id, 'alpine:3.17'),
+                                                                  (digest, 'sha256:' + 'f' * 64, 'alpine:3.17'),
+                                                                  (digest, image_id, 'alpine:wrong')):
+                        with self.subTest(target=target), self.assertRaises(OwnershipError):
+                            owner.load_canonical_rootless_alias('daemon', archive, expected_digest, expected_id,
+                                                                'alpine:3.16', target, None, None)
+                    operation.assert_not_called()
+                self.assertEqual(list(owner.directory.glob('canonical-alias-*.tar')), [])
+            finally:
+                owner.close()
+
     def test_failed_resource_inspection_keeps_reconcilable_creation(self):
         class ChangedNetworkEngine(FakeEngine):
             def create(self, kind, name, labels):

@@ -731,7 +731,8 @@ An alternative full Auth diagnostic requires `--auth-full-helper`,
 `--auth-full-images`, and `--auth-full-images-sha256`. The image manifest maps
 each of `postgres:16-alpine`, `redis:7-alpine`, `redis:7.4-alpine`,
 `nats:2.11-alpine`, and `migrate/migrate:v4.18.1` to an absolute `archive`,
-archive `sha256`, and `image_id`. Duplicate image IDs are not supported.
+archive `sha256`, and `image_id`. Repeated image IDs require separately verified
+archives for each tag and are loaded through a journaled private-daemon alias.
 The client image must provide Java, Maven, make, Bash and the required shell
 utilities. It executes `make auth-test-ci` offline against a private daemon,
 checks the captured Surefire reports, and records non-required skips. The
