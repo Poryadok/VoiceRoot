@@ -27,16 +27,13 @@ def prove_fixture_bootstrap(old, renewed, operator, installation):
     """Require the old credential to fail on the music API, then prove renewed."""
     import bootstrap_auth
     from nats_contract_actor import Actor
-    from nats_contract_plan import ContractError
     class MusicDenied(Exception): pass
     original = Actor.mutate
     def checked(actor, api, payload):
-        try:return original(actor,api,payload)
-        except ContractError as error:
-            if (api == '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata'
-                    and str(error) == 'nats_contract_actor_refused'):
-                raise MusicDenied() from None
-            raise
+        if api == '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata':
+            _prove_fixture_music_denied(actor)
+            raise MusicDenied()
+        return original(actor,api,payload)
     Actor.mutate = checked
     try:
         try:bootstrap_auth.prove(old,operator,lambda:None,installation=installation)
@@ -44,6 +41,22 @@ def prove_fixture_bootstrap(old, renewed, operator, installation):
         else:raise RuntimeError('old_bootstrap_unexpectedly_authorizes_music_consumer')
     finally:Actor.mutate = original
     return bootstrap_auth.prove(renewed,operator,lambda:None,installation=installation)
+
+
+def _prove_fixture_music_denied(actor):
+    """Accept only a typed server permission error for the exact music subject."""
+    from docker_runtime import NATS_IMAGE
+    runtime=actor.runtime
+    actor.assert_closed_isolation()
+    helper=runtime.base/'music-acl-probe'
+    shutil.copyfile('/bundle/helper',helper);helper.chmod(0o550);os.chown(helper,0,65532)
+    name=runtime.create('music-acl-probe',NATS_IMAGE,
+        [(helper,'/kernel',False),(runtime.inputs_directory(),'/inputs',False)],['/kernel','music-acl-denial'],actor.broker)
+    runtime.run(['start',name]);status=runtime.run(['wait',name],timeout=15)
+    if runtime.inspect(name)['State']['Running']:raise RuntimeError('fixture_music_acl_probe_failed')
+    actor.assert_closed_isolation()
+    if status!='0' or runtime.run(['logs',name],timeout=10,limit=1024).strip()!='FIXTURE_MUSIC_PUBLISH_DENIED':
+        raise RuntimeError('fixture_music_acl_probe_failed')
 
 
 def select_transport(args, environ=None, platform=None):
@@ -391,7 +404,25 @@ def inner(base):
 
 def build_fixture_records(bundle,*,a3_roster=False):
     source=Path(__file__).resolve().parents[3];module=source/'scripts/staging/nats-known-baseline'
-    helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "fmt"; "os"; "reflect";')
+    helper=fixture.HELPER.replace('"fmt"; "os";', '"crypto/sha256"; "encoding/hex"; "encoding/json"; "errors"; "fmt"; "os"; "reflect"; "strings";')
+    acl_probe=r'''
+func musicACLDenial() {
+ const subject = "$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata"
+ errs:=make(chan error, 4)
+ nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/bootstrap.creds"),
+  nats.Timeout(2*time.Second),nats.NoReconnect(),nats.CustomInboxPrefix("_INBOX.voice.bootstrap.reply"),
+  nats.ErrorHandler(func(_ *nats.Conn,_ *nats.Subscription,e error){select {case errs<-e:default:}}));must(e);defer nc.Close()
+ reply,e:=nc.Request("$JS.API.INFO",nil,3*time.Second);must(e)
+ var info map[string]json.RawMessage;must(json.Unmarshal(reply.Data,&info))
+ if _,bad:=info["error"];bad || len(info["type"])==0 {panic("fixture_music_acl_control_failed")}
+ select {case <-errs:panic("fixture_music_acl_control_failed");default:}
+ must(nc.Publish(subject,[]byte("{}")));must(nc.FlushTimeout(3*time.Second))
+ select {case err:=<-errs:
+  if !errors.Is(err,nats.ErrPermissionViolation) || !strings.Contains(err.Error(),"Publish to \""+subject+"\"") {panic("fixture_music_acl_probe_failed")}
+ case <-time.After(3*time.Second):panic("fixture_music_acl_probe_failed")}
+ fmt.Println("FIXTURE_MUSIC_PUBLISH_DENIED")
+}
+'''
     contract=json.loads((module/'deployed-contract.json').read_text())
     grants=fixture_bootstrap_grants(contract,a3_roster=a3_roster)
     grant_text=json.dumps(grants,separators=(',',':'))
@@ -417,6 +448,7 @@ def build_fixture_records(bundle,*,a3_roster=False):
     # Payload/extra-fixture validation uses its separate disposable broad
     # role; the migration actor retains the exact limited old grant list.
     helper=helper.replace('"/inputs/bootstrap.creds"','"/inputs/social.creds"')
+    helper=helper.replace('func main() {',acl_probe+'\nfunc main() { if len(os.Args)==2 && os.Args[1]=="music-acl-denial" {musicACLDenial();return};')
     seed_contract=r'''
 func seedContract() {
  nc,e:=nats.Connect("nats://127.0.0.1:4222",nats.UserCredentials("/inputs/social.creds"),nats.Timeout(2*time.Second),nats.NoReconnect());must(e);defer nc.Close()

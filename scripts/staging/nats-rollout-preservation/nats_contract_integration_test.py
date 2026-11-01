@@ -16,6 +16,24 @@ import contract_fixture_entry as capture_entry
 
 
 class HostedTransportTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux custody modules')
+    def test_music_probe_only_accepts_success_and_fixed_denial_marker(self):
+        sys.path.insert(0, str(Path(__file__).parent.parent/'nats-known-baseline'))
+        self.addCleanup(sys.path.pop, 0)
+        for status, output, accepted in (('0','FIXTURE_MUSIC_PUBLISH_DENIED\n',True),
+                ('1','FIXTURE_MUSIC_PUBLISH_DENIED\n',False),('0','broker timeout',False)):
+            with self.subTest(status=status, output=output), tempfile.TemporaryDirectory() as directory:
+                runtime=Mock();runtime.base=Path(directory);runtime.create.return_value='probe'
+                runtime.inspect.return_value={'State':{'Running':False}}
+                runtime.run.side_effect=lambda args, **kwargs: status if args[0]=='wait' else output if args[0]=='logs' else ''
+                actor=SimpleNamespace(runtime=runtime,broker='broker',assert_closed_isolation=Mock())
+                def copy(_source,target):Path(target).write_bytes(b'fixture')
+                with patch.object(integration.shutil,'copyfile',side_effect=copy), patch.object(integration.os,'chown'):
+                    if accepted:integration._prove_fixture_music_denied(actor)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError,'fixture_music_acl_probe_failed'):
+                            integration._prove_fixture_music_denied(actor)
+
     @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root custody')
     def test_real_bootstrap_prove_checks_fixture_account_before_runtime(self):
         sys.path.insert(0, str(Path(__file__).parent.parent/'nats-known-baseline'))
@@ -58,8 +76,9 @@ class HostedTransportTests(unittest.TestCase):
                 Actor.mutate(None, '$JS.API.CONSUMER.CREATE.file_events.messaging_music_metadata', {})
             return {'verified': True}
         def denied(self, api, payload): raise ContractError('nats_contract_actor_refused')
-        with patch.object(bootstrap_auth, 'prove', side_effect=prover), patch.object(Actor, 'mutate', denied):
+        with patch.object(bootstrap_auth, 'prove', side_effect=prover), patch.object(integration, '_prove_fixture_music_denied') as probe:
             self.assertTrue(integration.prove_fixture_bootstrap(b'old', b'new', operator, installation)['verified'])
+            probe.assert_called_once()
         self.assertEqual(seen, [(b'old', installation), (b'new', installation)])
         def wrong_failure(*args, **kwargs): raise bootstrap_auth.Blocked('bootstrap_auth_account_changed')
         with patch.object(bootstrap_auth, 'prove', side_effect=wrong_failure):
@@ -69,6 +88,9 @@ class HostedTransportTests(unittest.TestCase):
             Actor.mutate(None, '$JS.API.CONSUMER.CREATE.social_events.other', {})
         with patch.object(bootstrap_auth, 'prove', side_effect=other_api), patch.object(Actor, 'mutate', denied):
             with self.assertRaisesRegex(ContractError, 'nats_contract_actor_refused'):
+                integration.prove_fixture_bootstrap(b'old', b'new', operator, installation)
+        with patch.object(bootstrap_auth, 'prove', side_effect=prover), patch.object(integration, '_prove_fixture_music_denied', side_effect=RuntimeError('fixture_music_acl_probe_failed')):
+            with self.assertRaisesRegex(RuntimeError, 'fixture_music_acl_probe_failed'):
                 integration.prove_fixture_bootstrap(b'old', b'new', operator, installation)
 
     def test_existing_fixture_credentials_do_not_already_grant_music_consumer(self):
@@ -358,6 +380,10 @@ class FixtureIsolationTest(unittest.TestCase):
                 self.assertNotIn('nats-rollout-preservation/' + name, manifest)
                 self.assertTrue((bundle / name).is_file())
             helper = (bundle / 'helper.go').read_text(encoding='utf-8')
+            acl_probe = helper.split('func musicACLDenial()',1)[1].split('func main()',1)[0]
+            self.assertIn('nats.UserCredentials("/inputs/bootstrap.creds")', acl_probe)
+            self.assertIn('errors.Is(err,nats.ErrPermissionViolation)', acl_probe)
+            self.assertIn('FIXTURE_MUSIC_PUBLISH_DENIED', acl_probe)
             for source_bound_seed in ('SocialMaxAge int64', 'SocialDuplicateWindow int64',
                     'social.Config.Duplicates=time.Duration(baseline.SocialDuplicateWindow)',
                     'js.AddConsumer(expected.Stream,&nats.ConsumerConfig',
