@@ -51,7 +51,11 @@ class CompositionTests(unittest.TestCase):
         """Stop the synthetic API at the first workload mutation."""
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False):
+    def test_public_prepare_journals_client_cut_before_pod_drain(self):
+        """Stop the synthetic API at the first pod inventory."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,through_workload=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False):
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -161,14 +165,16 @@ class CompositionTests(unittest.TestCase):
                         kube.objects[('ConfigMap',name)]=row;live[('configmap',name)]=copy.deepcopy(row)
                     for name,row in rows.items():live[('secret',name)]=copy.deepcopy(row)
                     live[('secret','voice-nats-hub-tls-'+installation.generation)]={'metadata':{'uid':'tls-uid','resourceVersion':'1'}}
-                    fake=FakeKube({('configmap','voice-nats-generation'):stage.marker})
+                    fake=FakeKube({('configmap','voice-nats-generation'):stage.marker,
+                        ('deployment','voice-user'):stage.snapshots['voice-user']})
                     def capture_fence(argv,*,body=b'',**kwargs):
                         if 'patch' in argv:
                             index=argv.index('patch');kind=argv[index+1]
-                            if kind=='deployment':raise ReachedFence()
+                            if kind=='deployment' and not through_workload:raise ReachedFence()
                             result=fake.capture_patch(argv,body=body,**kwargs)
-                            live[('configmap','voice-nats-generation')]=fake.get('configmap','voice-nats-generation')
+                            name=argv[index+2];live[(kind,name)]=fake.get(kind,name)
                             return result
+                        if through_workload and 'pods,replicasets' in argv:raise ReachedFence()
                         if 'jsonpath-as-json=' in ' '.join(argv):
                             name=argv[argv.index('secret')+1];meta=live[('secret',name)]['metadata']
                             return json.dumps([meta['uid'],meta['resourceVersion']]).encode()
@@ -216,6 +222,9 @@ class CompositionTests(unittest.TestCase):
                 self.assertEqual(fake.get('configmap','voice-nats-generation')['data']['phase'],'rollout-capturing')
                 record=cohort._read(base/'effects'/'cut-configmap-voice-nats-generation.json')
                 self.assertEqual(record['status'],'DONE')
+                if through_workload:
+                    self.assertEqual(fake.get('deployment','voice-user')['spec']['replicas'],0)
+                    self.assertEqual(cohort._read(base/'effects'/'cut-deployment-voice-user.json')['status'],'DONE')
                 self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
             else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         overrides=None
