@@ -691,7 +691,7 @@ class CompositionTests(unittest.TestCase):
             expected={'generation':p['generation'],'source_claim':p['dataPVC'],'source_claim_uid':'pvc','source_pv_uid':'pv'})
         return kube,p,targets,renderer_repo,old,stage
 
-    def _exercise_catalog_compiler(self,mode,policy_case='valid'):
+    def _exercise_catalog_compiler(self,mode,policy_case='valid',deep=None):
         """Real compiler and session; P2, NATS, actor, renderer, Realtime and Kube are fixtures."""
         import staging_prerequisites_test as fixtures, staging_prerequisites as prereq
         import staging_cohort_preservation as cohort
@@ -712,6 +712,7 @@ class CompositionTests(unittest.TestCase):
             stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images=copy.deepcopy(old)
             stage.marker['data'].update(generation=parameters['generation'],dataPVC=parameters['dataPVC'])
+            if deep is not None:stage.marker['data']['previousGeneration']='old'
             live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             stage.expected.update(generation=parameters['generation'],source_claim=parameters['dataPVC'])
             stage.final_claim['metadata']['name']=parameters['dataPVC']
@@ -725,6 +726,7 @@ class CompositionTests(unittest.TestCase):
             approved['images']={name.removeprefix('voice-'):bridge_root.source_authority.REGISTRY+'/'+name.removeprefix('voice-')+'@sha256:'+'a'*64
                 for name in targets if name!='voice-p3-principal-jwks'}
             approved['images']['nats-hub-config-renderer']=renderer_repo+'@sha256:'+'d'*64
+            if deep is not None:deep.approve(approved)
             source_record=workspace.parents[1]/'source-authority'/(actions.tt_session.operation+'.json')
             source_value=json.loads(source_record.read_bytes());source_value['approved_sha256']=prereq.digest(approved)
             bridge_root.save(source_record,source_value)
@@ -739,7 +741,14 @@ class CompositionTests(unittest.TestCase):
             else:renderer.assert_not_called()
             session=actions.tt_session
             qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
+            contract={'scripts':[]}
+            for part in ('realtime','notification','search','analytics-chat'):
+                raw=(source.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')).read_bytes().split(b'---')[0]
+                contract['scripts'].append({'part':part,'sha256':hashlib.sha256(source.decoder(raw)['data']['bootstrap.sh'].encode()).hexdigest()})
+            if deep is not None:contract=deep.contract(contract,actions.code)
             p2_plan={'actual_before':stage.old_images,'candidate':{'commit':session.context['commit'],'images':session.context['images']}}
+            if deep is not None:
+                p2_plan=deep.plan(p2_plan,stage,source,request,prepared,contract)
             # P2 qualification is a synthetic boundary; Session checks and
             # the prerequisite producer still run against the real journal.
             with ExitStack() as stack:
@@ -774,12 +783,9 @@ class CompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(cohort,'_offnode_records',return_value={'artifact_id':42}))
                 stack.enter_context(patch.object(cohort,'_read',side_effect=read))
                 stack.enter_context(patch.object(cohort,'capture_final_stage',side_effect=final_stage))
-                contract={'scripts':[]}
-                for part in ('realtime','notification','search','analytics-chat'):
-                    raw=(source.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')).read_bytes().split(b'---')[0]
-                    contract['scripts'].append({'part':part,'sha256':hashlib.sha256(source.decoder(raw)['data']['bootstrap.sh'].encode()).hexdigest()})
                 contract_path=actions.code/'nats-known-baseline'/'deployed-contract.json'
-                contract_path.parent.mkdir(parents=True,exist_ok=True);contract_path.write_text(json.dumps(contract));contract_path.chmod(0o600)
+                if deep is None:
+                    contract_path.parent.mkdir(parents=True,exist_ok=True);contract_path.write_text(json.dumps(contract));contract_path.chmod(0o600)
                 policy={key:value for key,value in parameters.items() if key in {'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}}
                 policy['release_policy']['source_sha']=approved['source_sha']
                 if policy_case=='null':policy['release_policy']=None
@@ -798,7 +804,10 @@ class CompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(cohort,'record_actor_successor'))
                 stack.enter_context(patch.object(renderer_root,'revalidate'))
                 bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
-                stack.enter_context(patch.object(realtime_bootstrap,'run_prepare',return_value=bootstrap))
+                if deep is not None:
+                    bootstrap=deep.bootstrap(session,stage,stack,prereq,cohort,actions,workspace,kube,approved,execution,contract,p2_plan)
+                stack.enter_context(patch.object(realtime_bootstrap,'run_prepare',
+                    **({'side_effect':deep.run_bootstrap} if deep is not None else {'return_value':bootstrap})))
                 stack.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap))
                 compiler_phase=[False]
                 def report(name,status):
@@ -841,6 +850,8 @@ class CompositionTests(unittest.TestCase):
                     self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in value['manifests']))
                     self.assertEqual(kwargs['realtime_bootstrap_receipt'],bootstrap)
                     self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(bootstrap))
+                    if deep is not None:
+                        return deep.prepare(value,args,kwargs,session,stage,kube,workspace,qualified,contract,public,stack)
                     authorization=guard_test.receipt()
                     authorization.update(schema='nats-rollout-preservation-v2',installation_sha256=session.installation.sha256,target=copy.deepcopy(value['target']),
                         backup={'archive_sha256':'1'*64,'manifest_sha256':'2'*64,'census_sha256':'3'*64,'off_node_verified':True},
@@ -864,17 +875,38 @@ class CompositionTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,'release_policy_input_shape'):actions.execute(public)
                     prepare.assert_not_called()
                 else:
-                    with self.assertRaises(ReachedCompiler):actions.execute(public)
+                    if deep is None:
+                        with self.assertRaises(ReachedCompiler):actions.execute(public)
+                    else:
+                        deep.result=actions.execute(public)
                     build.assert_called_once();prepare.assert_called_once()
-                self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
-                self.assertEqual(session.check()['phase'],'prerequisites-captured')
+                if deep is None:
+                    self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
+                    self.assertEqual(session.check()['phase'],'prerequisites-captured')
+                else:
+                    self.assertEqual(session.check()['phase'],'prepare')
         context=resource_claim_test.context()
         context['images']={'voice-gameintegration/gameintegration':bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64}
         if mode=='full':
             context['images'].update({bridge_root.HUB+'/nats':'nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb',
                 bridge_root.HUB+'/nats-config-renderer':bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer@sha256:'+'d'*64})
         with patch.object(resource_claim_test,'context',return_value=context):
-            fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run,full_source=policy_case=='valid',context_commit=source.TAG)
+            with ExitStack() as setup:
+                overrides=None
+                if deep is not None:
+                    import yaml
+                    directory=Path(setup.enter_context(tempfile.TemporaryDirectory(dir='/root')))
+                    source_root=Path(__file__).parent/'testdata'/'a3-roster-source'
+                    scripts=Path(__file__).parent/'fixtures'/'cohort-captured-scripts'
+                    overrides={}
+                    for part in ('realtime','notification','search','analytics-chat'):
+                        relative=f'deploy/templates/nats-{part}-bootstrap.yaml'
+                        documents=list(yaml.safe_load_all((source_root/relative).read_text()))
+                        documents[0]['data']['bootstrap.sh']=(scripts/(part+'.sh')).read_text()
+                        output=directory/(part+'.yaml');output.write_text(yaml.safe_dump_all(documents,sort_keys=False))
+                        overrides[relative]=output
+                fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run,full_source=policy_case=='valid',
+                    strict_helpers=deep is not None,context_commit=source.TAG,source_overrides=overrides)
 
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
         for mode in ('full','app-only'):
