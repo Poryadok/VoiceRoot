@@ -479,7 +479,8 @@ class Session:
             actor_read=prefixes[0]+list(actor_root.STORY_SCHEMA_ARGS)
             import source_plan
             clickhouse_read=prefixes[0]+list(source_plan.CLICKHOUSE_READ_ARGS)
-            postgres_reads=[prefixes[0]+source_plan.postgres_read_args(name) for name in ('postgres','gateway_db')]
+            postgres_reads=[prefix+source_plan.postgres_read_args(name)
+                for prefix in prefixes for name in ('postgres','gateway_db')]
             identity_read=False
             if args not in postgres_reads and args[:len(prefixes[0])+3]==prefixes[0]+['exec','voice-postgres-0','-c']:
                 try:
