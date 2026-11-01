@@ -86,6 +86,12 @@ class CompositionTests(unittest.TestCase):
                 cohort._write(guard.ROOT/'bootstrap-enrollment.json',previous)
                 cohort._write(guard.ROOT/'bootstrap-enrollment-v4.json',current)
                 for name,row in rows.items():kube.objects[('Secret',name)]=row
+                def secret_meta(name):
+                    if name.startswith('voice-nats-hub-tls-'):
+                        return {'uid':'tls-uid','resourceVersion':'1'}
+                    meta=kube.objects[('Secret',name)]['metadata']
+                    return {key:meta[key] for key in ('uid','resourceVersion')}
+                kube.secret_meta=secret_meta
                 stage.marker['metadata'].update(uid='marker-uid',resourceVersion='4')
                 stage.marker['data']['generation']=installation.generation
             kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
