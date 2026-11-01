@@ -10,6 +10,39 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def test_lint_opt_in_preserves_diagnostic_status_and_inventory(self):
+        plan = {'source': self.source, 'checks': {'golangci': ['go']},
+                'components': {'go': ['chat']}}
+        inputs = {'go': str(self.root / 'go'), 'go_sha256': 'a' * 64,
+                  'lint': str(self.root / 'lint'), 'lint_sha256': 'b' * 64}
+        commands = [{'action': action, 'module': module, 'exit_code': 0,
+                     'stdout_sha256': 'c' * 64, 'stderr_sha256': 'd' * 64}
+                    for action in ('resolve', 'lint') for module in ('pkg', 'chat')]
+        diagnostic = {'schema': 'voice-local-golangci-diagnostic-v1', 'status': 'incomplete',
+                      'source': self.source, 'modules': ['pkg', 'chat'], 'commands': commands,
+                      'tools': {'go_sha256': 'a' * 64, 'golangci_sha256': 'b' * 64},
+                      'platform': {'goos': 'windows', 'goarch': 'amd64'}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+             patch.object(local_preflight.local_golangci_execution, 'run', return_value=diagnostic):
+            result = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         lint_inputs=inputs)
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['checks']['golangci']['status'], 'not_run')
+        self.assertEqual(result['golangci_report'], 'golangci/diagnostic.json')
+
+    def test_lint_opt_in_refuses_unselected_before_execution(self):
+        plan = {'source': self.source, 'checks': {}, 'components': {'go': ['chat']}}
+        inputs = {'go': str(self.root / 'go'), 'go_sha256': 'a' * 64,
+                  'lint': str(self.root / 'lint'), 'lint_sha256': 'b' * 64}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_golangci_execution, 'run') as run:
+            result = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         lint_inputs=inputs)
+        self.assertEqual(result['status'], 'failed')
+        run.assert_not_called()
+
     def full_go_inputs(self, services):
         return {name: {'helper': str(self.root / 'helper'), 'helper_sha256': 'a' * 64,
                        'archives': {tag: {'archive': str(self.root / (name + str(i))),
