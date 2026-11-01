@@ -21,6 +21,10 @@ func openSourceFixture(t *testing.T, tracers ...pgx.QueryTracer) (context.Contex
 }
 
 func openSourceFixtureOptions(t *testing.T, guardsActive bool, tracers ...pgx.QueryTracer) (context.Context, *pgxpool.Pool, *pgxpool.Pool, *pgxpool.Pool, *identityassociation.Keyset, *Controller, OpenAttestation, ed25519.PublicKey, uuid.UUID, uuid.UUID) {
+	return openSourceFixtureWithParent(t, guardsActive, nil, tracers...)
+}
+
+func openSourceFixtureWithParent(t *testing.T, guardsActive bool, lifetime func(context.Context) context.Context, tracers ...pgx.QueryTracer) (context.Context, *pgxpool.Pool, *pgxpool.Pool, *pgxpool.Pool, *identityassociation.Keyset, *Controller, OpenAttestation, ed25519.PublicKey, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx, control, admin, request := creationFixture(t)
 	physical, err := CreateClosedSource(ctx, control, admin, request)
@@ -69,7 +73,11 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	source, err = pgxpool.NewWithConfig(ctx, config)
 	require.NoError(t, err)
 	t.Cleanup(source.Close)
-	controller, err := Start(ctx, control, binding)
+	parent := ctx
+	if lifetime != nil {
+		parent = lifetime(ctx)
+	}
+	controller, err := Start(parent, control, binding)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = controller.Shutdown(context.Background()) })
 	challenge, err := controller.ActivationChallenge()

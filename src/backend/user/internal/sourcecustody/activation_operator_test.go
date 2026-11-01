@@ -278,7 +278,13 @@ func TestActivationOperatorCloseFinishesAfterCallerDisconnects(t *testing.T) {
 }
 
 func TestActivationOperatorShutdownFencesOpenedSource(t *testing.T) {
-	ctx, control, admin, source, keys, controller, claim, public, _, _ := openSourceFixture(t)
+	var stopParent context.CancelFunc
+	ctx, control, admin, source, keys, controller, claim, public, _, _ := openSourceFixtureWithParent(t, true, func(parent context.Context) context.Context {
+		var lifetime context.Context
+		lifetime, stopParent = context.WithCancel(parent)
+		return lifetime
+	})
+	defer stopParent()
 	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public}
 	encoded, err := json.Marshal(claim)
 	require.NoError(t, err)
@@ -294,6 +300,7 @@ func TestActivationOperatorShutdownFencesOpenedSource(t *testing.T) {
 	op := &activationOperator{server: &http.Server{Handler: handler}, admin: admin, source: source}
 	held, _, err := controller.AcquireAttested(ctx, claim.Binding)
 	require.NoError(t, err)
+	stopParent()
 	done := make(chan error, 1)
 	go func() { done <- op.close() }()
 	joined := false
