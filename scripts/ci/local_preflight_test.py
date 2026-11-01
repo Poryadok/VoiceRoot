@@ -10,6 +10,35 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def test_overlay_opt_in_preserves_incomplete_and_hosted_check(self):
+        plan = {'source': self.source, 'checks': {'match-squad-overlay': ['overlay']}}
+        inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE}
+        diagnostic = {'schema': 'voice-local-overlay-diagnostic-v1', 'status': 'incomplete',
+                      'source': self.source, 'image_id': inputs['image_id'], 'version': 'Python 3.12.1',
+                      'slot': 0, 'ownership_journal': 'run/tmp/ci-local/voiceci-test/ownership.json',
+                      'modules': list(local_preflight.local_overlay_execution.MODULES),
+                      'tests': {'discovered': 2, 'passed': 2, 'skipped': []},
+                      'stdout_sha256': 'b' * 64, 'stderr_sha256': 'c' * 64,
+                      'source_archive_sha256': 'd' * 64, 'unbound_inputs': ['image provenance']}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_overlay_execution, 'run_supervised', return_value=diagnostic):
+            result = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         head_ref='codex/test', overlay_inputs=inputs)
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['checks']['match-squad-overlay']['status'], 'not_run')
+        self.assertEqual(result['overlay_report'], 'overlay/diagnostic.json')
+
+    def test_overlay_unselected_or_partial_refuses_before_worker(self):
+        plan = {'source': self.source, 'checks': {}}
+        inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_overlay_execution, 'run_supervised') as run:
+            result = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         overlay_inputs=inputs)
+        self.assertEqual(result['status'], 'failed')
+        run.assert_not_called()
+
     def test_lint_opt_in_preserves_diagnostic_status_and_inventory(self):
         plan = {'source': self.source, 'checks': {'golangci': ['go']},
                 'components': {'go': ['chat']}}

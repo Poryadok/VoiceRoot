@@ -88,7 +88,7 @@ def inventory(rows, *, shard='staging'):
         if '..' in path.split('/') or not re.fullmatch(r'[A-Za-z0-9_./-]+', path):
             raise ValueError('unsafe recipe path')
         result.append(('bash' if kind == '$(BASH)' else 'python', path))
-    if (len(result) != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 75}[shard] or len(set(result)) != len(result) or
+    if (len(result) != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 76}[shard] or len(set(result)) != len(result) or
             result.count(('bash', PRESERVATION)) != (1 if shard == 'staging' else 0)):
         raise ValueError('shard recipe inventory differs')
     return result
@@ -103,7 +103,7 @@ def command(recipe):
     return [('/run/user/1000/adapter-root/bash-guard' if kind == 'bash' else 'python3'), ROOT + path]
 
 def wrappers(recipes, *, shard='staging'):
-    if shard not in ('staging', 'proofs', 'runtime', 'policy') or len(recipes) != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 75}[shard]:
+    if shard not in ('staging', 'proofs', 'runtime', 'policy') or len(recipes) != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 76}[shard]:
         raise ValueError('shard recipe count differs')
     result = {}
     for kind in ('bash','python'):
@@ -245,7 +245,7 @@ def policy_skip_logger():
 original = unittest.result.TestResult.addSkip
 def add_skip(self, test, reason):
     index = os.environ.get('VOICE_CI_RECIPE_INDEX', '')
-    if not index.isdigit() or not 0 <= int(index) <= 75:
+    if not index.isdigit() or not 0 <= int(index) <= 76:
         raise RuntimeError('invalid policy skip recipe identity')
     data = (json.dumps({'recipe': int(index), 'id': test.id(), 'reason': str(reason)}, separators=(',', ':')) + '\\n').encode('utf-8')
     if len(data) > 4096:
@@ -275,7 +275,7 @@ def parse_policy_skip_events(data):
     for line in data.splitlines():
         row = json.loads(line, object_pairs_hook=unique)
         if (not isinstance(row, dict) or set(row) != {'recipe', 'id', 'reason'} or
-                type(row['recipe']) is not int or not 0 <= row['recipe'] <= 75 or
+                type(row['recipe']) is not int or not 0 <= row['recipe'] <= 76 or
                 any(not isinstance(row[key], str) or not 0 < len(row[key]) <= 512 for key in ('id', 'reason'))):
             raise ValueError('invalid policy skip event')
         item = (row['id'], row['reason'])
@@ -286,7 +286,7 @@ def parse_policy_skip_events(data):
 
 
 def validate_policy_recipe(index, data, observed, expected):
-    if type(index) is not int or not 0 <= index < 75 or len(data) > 16 * 1024 * 1024:
+    if type(index) is not int or not 0 <= index < 76 or len(data) > 16 * 1024 * 1024:
         raise ValueError('policy recipe identity or output size invalid')
     if re.search(rb'(?im)^\s*skip(?:ped)?(?:\s|:|\()', data):
         raise ValueError('unreviewed policy skip marker')
