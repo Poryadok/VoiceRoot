@@ -121,6 +121,11 @@ class RootCompositionContract(unittest.TestCase):
             cohort._write(source_record, {'fixture': 'source-authority'})
             prereq_dir = root / 'installed' / 'prerequisites' / session.operation
             prereq_dir.mkdir(mode=0o700, parents=True)
+            altered = copy.deepcopy(state)
+            altered['target']['realtime_bootstrap_sha256'] = '0' * 64
+            with self.assertRaisesRegex(cohort.Blocked, 'cohort_final_target_changed'):
+                cohort.issue_final_admission(session, runtime, altered, request)
+            self.assertFalse((base / 'authorizing.json').exists())
             handle = cohort.issue_final_admission(session, runtime, state, request)
             self.assertIs(type(handle), cohort.QualifiedFinalAdmission)
             self.assertEqual(session.binding()['target_sha256'], cohort.digest(target))
