@@ -7,11 +7,13 @@ import json
 from pathlib import Path
 import re
 
+KUBECTL_HASH = 'cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c'
 ASSET_NAMES = frozenset({
     'helper', 'jq', 'postgres_image', 'go_image', 'python_image',
     'nats_image', 'nats_box_image', 'alpine_image', 'packages',
     'wheel', 'preservation_go_cache', 'staging_go_proxy',
 })
+POLICY_ASSET_NAMES = ASSET_NAMES | {'kubectl'}
 REQUEST_NAMES = frozenset({'root', 'output', 'commit', 'tree', 'base', 'shard', 'assets'})
 
 
@@ -42,7 +44,8 @@ def validate(request):
         if not isinstance(request[name], str) or not re.fullmatch(r'[0-9a-f]{40}', request[name]):
             raise ValueError('invalid staging Git identity')
     assets = request['assets']
-    if not isinstance(assets, dict) or set(assets) != ASSET_NAMES:
+    if (not isinstance(assets, dict) or set(assets) not in (ASSET_NAMES, POLICY_ASSET_NAMES) or
+            (shard == 'policy' and set(assets) != POLICY_ASSET_NAMES)):
         raise ValueError('invalid staging asset inventory')
     if shard == 'runtime':
         validate_runtime_images(request['runtime_images'])
@@ -75,7 +78,7 @@ def parse(raw):
 
 def parse_assets(raw):
     assets = _json(raw)
-    if not isinstance(assets, dict) or set(assets) != ASSET_NAMES:
+    if not isinstance(assets, dict) or set(assets) not in (ASSET_NAMES, POLICY_ASSET_NAMES):
         raise ValueError('invalid staging asset inventory')
     if any(not isinstance(value, str) or not value or not Path(value).is_absolute()
            for value in assets.values()):

@@ -21,6 +21,7 @@ import local_ci_matrix_inventory as matrix_inventory
 
 HELPER_HASH = '27107931deb9d34a1055c6fff20c00dd5d97cecc2732cb6d1f0bd27646dc35a1'
 JQ_HASH = '5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5'
+KUBECTL_HASH = request_contract.KUBECTL_HASH
 NODE_IMAGE = 'sha256:9214e73b07d3828f371e8d5d8bfebdfa1b0625c3c82253a4cbd09d9c00e20b4a'
 GO_IMAGE = 'sha256:a9daab691df2dfe118e5c6d3d6bd8fd6767ea2c9bf8fa3c9356161055dd7b97d'
 PYTHON_CLIENT = 'sha256:61d53b56a648da09aa966c5cc46a7e751aea2b38d01f33b04456a9f289685be9'
@@ -31,6 +32,10 @@ import local_chat_orchestration as chat
 import local_go_execution as go
 import local_rootless_profile as profile
 import local_source_snapshot as snapshot
+
+
+def verify_policy_kubectl(path):
+    chat._verify_file(path, KUBECTL_HASH)
 
 
 def configure(request):
@@ -128,6 +133,7 @@ def main():
     BASE.mkdir(exist_ok=False)
     chat._verify_file(HELPER, HELPER_HASH)
     chat._verify_file(JQ, JQ_HASH)
+    if SHARD == 'policy': verify_policy_kubectl(ASSETS['kubectl'])
     engine = DockerCLI()
     daemon_id = engine.daemon()
     for image in (GO_IMAGE, CLI_IMAGE, PYTHON_CLIENT, NODE_IMAGE):
@@ -185,6 +191,13 @@ def main():
         if (BASE / 'tool-check.stdout').read_text().split()[0] != JQ_HASH:
             raise RuntimeError('transferred jq differs')
         execute('install-trusted-tools', client, ['sh','-ec','install -o 0 -g 0 -m 0555 /run/user/1000/tools/jq /usr/local/bin/jq; install -D -o 0 -g 0 -m 0555 /run/user/1000/tools/docker-cli /usr/local/libexec/voice-ci-docker'])
+        if SHARD == 'policy':
+            with ASSETS['kubectl'].open('rb') as binary:
+                execute('copy-kubectl', client, ['sh','-ec','set -C; cat > /run/user/1000/tools/kubectl; install -o 0 -g 0 -m 0555 /run/user/1000/tools/kubectl /usr/local/bin/kubectl'], stdin=binary)
+            verify_policy_kubectl(ASSETS['kubectl'])
+            execute('check-kubectl', client, ['sha256sum','/usr/local/bin/kubectl'])
+            if (BASE/'check-kubectl.stdout').read_text().split() != [KUBECTL_HASH, '/usr/local/bin/kubectl']:
+                raise RuntimeError('transferred kubectl differs')
         docker_cli_sha = (BASE/'tool-check.stdout').read_text().splitlines()[1].split()[0]
         private = owner.create_rootless_container(network, mounts,
             lambda request: chat._create_daemon(HELPER, HELPER_HASH, engine.rootless_creator_env(), request))
@@ -490,9 +503,14 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         execute('resolve-base',client,common+['bash','/workspace/repo/scripts/ci/resolve-voice-r22-base.sh'])
         if (BASE/'resolve-base.stdout').read_text().strip() != SOURCE_BASE: raise RuntimeError('hosted event base differs')
         execute('verify-base',client,common+['git','-C','/workspace/repo','cat-file','-e','' + SOURCE_BASE + '^{commit}'])
+        if SHARD == 'policy':
+            execute('user-kubectl-check', client, common + ['sh','-ec','[ "$(command -v kubectl)" = /usr/local/bin/kubectl ]; [ ! -w /usr/local/bin/kubectl ]; sha256sum /usr/local/bin/kubectl; kubectl version --client'])
+            if (BASE/'user-kubectl-check.stdout').read_text().splitlines()[0] != KUBECTL_HASH + '  /usr/local/bin/kubectl': raise RuntimeError('unprivileged kubectl differs')
         execute('user-tool-check', client, common + ['sh','-ec','command -v go; go version; [ "$(command -v node)" = /usr/local/bin/node ]; node --version; [ "$(command -v jq)" = /usr/local/bin/jq ]; jq --version; [ "$(command -v docker)" = /usr/local/bin/docker ]; docker --version; [ ! -w /usr/local/bin ]; [ ! -w /usr/local/libexec ]; sha256sum /usr/local/bin/node /usr/local/bin/jq /usr/local/bin/docker /usr/local/libexec/voice-ci-docker; python3 --version; git --version; make --version | head -1; for x in bash openssl curl wget base64 tar timeout sha256sum awk sed; do command -v "$x"; done'])
         tool_output = (BASE/'user-tool-check.stdout').read_text()
+        if SHARD == 'policy': tool_output += (BASE/'user-kubectl-check.stdout').read_text()
         expected_tools = [(node_hashes[0].split()[0],'/usr/local/bin/node'),(JQ_HASH,'/usr/local/bin/jq'),(wrapper_sha,'/usr/local/bin/docker'),(docker_cli_sha,'/usr/local/libexec/voice-ci-docker')]
+        if SHARD == 'policy': expected_tools.append((KUBECTL_HASH, '/usr/local/bin/kubectl'))
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
         hosted_policy_tests = 0
         if SHARD == 'policy':

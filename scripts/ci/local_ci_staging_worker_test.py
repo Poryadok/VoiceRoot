@@ -34,6 +34,16 @@ class WorkerBindingTests(unittest.TestCase):
                          [Path(self.request['assets'][key]) for key in
                           ('postgres_image', 'go_image', 'python_image', 'nats_image', 'nats_box_image', 'alpine_image')])
 
+    def test_kubectl_requires_absolute_verified_unchanged_file(self):
+        path = Path(self.tmp.name) / 'kubectl'
+        path.write_bytes(b'client bytes')
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        with patch.object(worker, 'KUBECTL_HASH', digest):
+            worker.verify_policy_kubectl(path)
+            with self.assertRaises(ValueError): worker.verify_policy_kubectl(Path('relative'))
+            path.write_bytes(b'changed')
+            with self.assertRaises(ValueError): worker.verify_policy_kubectl(path)
+
     def test_host_identity_and_cleanliness_fail_closed(self):
         good = [b'a' * 40 + b'\n', b'b' * 40 + b'\n', b'']
         with patch.object(worker, 'host_git', side_effect=good): worker.verify_host()

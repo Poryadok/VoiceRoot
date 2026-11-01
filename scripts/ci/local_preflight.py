@@ -119,6 +119,11 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
         if staging_assets is not None and 'ci-script-tests' not in plan['checks']:
             raise ValueError('staging assets require a planner-selected ci-script-tests check')
+        if staging_assets is not None and (not isinstance(staging_assets, dict) or
+                not isinstance(staging_assets.get('kubectl'), str) or not Path(staging_assets['kubectl']).is_absolute()):
+            raise ValueError('selected CI script shards require an absolute kubectl asset path')
+        if staging_assets is not None:
+            local_chat_orchestration._verify_file(staging_assets['kubectl'], local_ci_staging_request.KUBECTL_HASH)
         if runtime_images is not None and (staging_assets is None or 'ci-script-tests' not in plan['checks']):
             raise ValueError('runtime images require staging assets and a planner-selected ci-script-tests check')
         if compose_inputs is not None:
