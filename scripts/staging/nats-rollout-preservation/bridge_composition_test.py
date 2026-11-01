@@ -279,11 +279,29 @@ class CompositionTests(unittest.TestCase):
                  patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source),ExitStack() as nats_patches:
                 if through_nats:
                     import importlib.util, sys
+                    # Source-owned dynamic modules must be loaded from the
+                    # captured tree even if unittest discovery imported their
+                    # working-tree equivalents before this test started.
+                    nats_patches.enter_context(patch.dict(sys.modules,{}))
+                    dev_root=Path(__file__).resolve().parents[2]/'dev'
+                    for name,loaded in list(sys.modules.items()):
+                        filename=getattr(loaded,'__file__',None)
+                        if filename and Path(filename).resolve().is_relative_to(dev_root):
+                            sys.modules.pop(name,None)
                     captured=actions.code/'nats-rollout-preservation'/'staging_cohort_preservation.py'
                     spec=importlib.util.spec_from_file_location('staging_cohort_preservation',captured)
                     module=importlib.util.module_from_spec(spec)
                     nats_patches.enter_context(patch.dict(sys.modules,{'staging_cohort_preservation':module}))
                     spec.loader.exec_module(module)
+                    # These modules retain a reference to the owner at import
+                    # time. Bind the captured copies even when test discovery
+                    # imported the working-tree modules earlier.
+                    for name in ('staging_cohort_preservation_runtime','staging_cohort_preservation_pg',
+                                 'staging_cohort_preservation_auxiliary','staging_cohort_preservation_auth'):
+                        spec=importlib.util.spec_from_file_location(name,captured.with_name(name+'.py'))
+                        child=importlib.util.module_from_spec(spec)
+                        nats_patches.enter_context(patch.dict(sys.modules,{name:child}))
+                        spec.loader.exec_module(child)
                     nats_patches.enter_context(patch.object(bootstrap_auth,'DockerRuntime',
                         side_effect=lambda base,operation:cohort_fake_nats.ScratchBroker(base,operation,'A'+'A'*55)))
                     nats_patches.enter_context(patch.object(bootstrap_auth,'Actor',cohort_fake_nats.ScratchActor))
