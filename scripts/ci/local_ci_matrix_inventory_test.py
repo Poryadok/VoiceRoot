@@ -43,6 +43,8 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertTrue(any('local_auth_private_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_full_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_full_orchestration_test.py' in row['recipe'] for row in result['shards']['policy']))
+        self.assertTrue(any('local_go_full_integration_test.py' in row['recipe'] for row in result['shards']['policy']))
+        self.assertTrue(any('local_chat_full_integration_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_compose_bridge_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertIn('Makefile, workflow and snapshot root may follow links', result['omitted'])
         self.assertIn('hosted-only input files are not hashed', result['omitted'])

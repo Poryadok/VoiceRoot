@@ -93,6 +93,8 @@ def verify_images(owner, client, identities, image_tags=IMAGES):
 
 
 def run_full(owner, daemon, client, root, source, source_copy, archive_digest, identities, output, *, service='chat'):
+    from local_auth_full_orchestration import _require_worker_job
+    _require_worker_job()
     if service == 'chat':
         module, image_tags, inventory_reader = MODULE, IMAGES, read_required
         test_args = '-p 2'
@@ -166,6 +168,8 @@ def validate_archives(archives, image_tags=IMAGES):
 
 def run_owned(scheduled, engine, source, root, source_copy, output, helper, helper_digest, archives, acquisition,
               *, service='chat'):
+    from local_auth_full_orchestration import _require_worker_job
+    _require_worker_job()
     owner, failure, result = scheduled.run, None, None
     try:
         if service == 'chat':
@@ -236,6 +240,8 @@ def run(root, head, output, helper, helper_digest, archives, go_binary='go'):
     The caller must supervise this process and maintain exclusive daemon/socket
     custody. This is not yet wired to the preflight or the general Go matrix.
     """
+    from local_auth_full_orchestration import _require_worker_job
+    _require_worker_job()
     if os.name != 'nt':
         raise ValueError('Windows supervised diagnostic required; Linux is unsupported')
     validate_archives(archives)

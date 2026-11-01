@@ -725,6 +725,21 @@ the diagnostic does not authenticate helper, images, tools or Maven cache, or
 establish crash and concurrency acceptance. It reports `incomplete` and leaves
 the full `backend-auth` check `not_run`; it is not a preflight or PR receipt.
 
+For planner-selected `backend-go-integration-pr`, `--go-integration-inputs`
+accepts an absolute path to a JSON object keyed by every selected service. Each
+value contains exactly `helper`, `helper_sha256`, and `archives`. The helper is
+an absolute path; `archives` maps each required image tag to `archive` (absolute
+path), `archive_sha256`, and `image_id`. Chat requires `postgres:16-bookworm`,
+`redis:7.4-alpine`, and `migrate/migrate:v4.18.1`; Bot requires
+`postgres:16-bookworm` and `nats:2.10-alpine`; Search requires
+`postgres:16-bookworm`. Missing, extra or unsupported services and image inputs
+fail before owned execution. A supervised Windows Job worker recomputes the
+source plan. Per-service reports preserve skipped tests and unbound provenance
+limitations; the check remains `not_run` and the preflight remains `incomplete`.
+Caller custody of images, helper, Docker daemon and socket is required; this is
+not hosted CI parity or a PR receipt. The policy shard runs the full Go executor
+contract tests as a separate recipe.
+
 An alternative full Auth diagnostic requires `--auth-full-helper`,
 `--auth-full-helper-sha256`, `--auth-full-client-image-id`,
 `--auth-full-maven-cache`, `--auth-full-maven-cache-sha256`,

@@ -12,6 +12,12 @@ import local_chat_full_integration as subject
 
 
 class FullChatTests(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        import local_auth_full_orchestration
+        patcher = mock.patch.object(local_auth_full_orchestration, '_require_worker_job')
+        patcher.start()
+        self.addCleanup(patcher.stop)
     def events(self, action='pass'):
         package = 'voice/backend/chat/internal/store'
         return [dict(Package=package, Action='start'),
