@@ -15,6 +15,8 @@ ROOT=Path('/workspace')
 sys.path.insert(0,str(ROOT/'scripts/staging/nats-known-baseline'))
 sys.path.insert(0,str(ROOT/'scripts/staging/nats-rollout-preservation'))
 from bootstrap_renewal import invoke,RenewalError
+import actor_permissions
+import actor_root
 
 PIN='618f1f78e650d19c4948c1d08741ed625c6f9aa706159219dbf11c785a56237c'
 
@@ -37,6 +39,8 @@ def run(generator,binary):
             or actual.get('account_sha256')!=request['account_sha256']
             or actual.get('credential_sha256')!=sha(credentials)):
             raise ValueError('owned_crypto_binding_invalid')
+        grant=actor_root.source_grants((ROOT/'deploy/nats/acl-intent.yaml').read_bytes())['bootstrap']
+        actor_permissions.evaluate(actual['effective'],{'pub':grant['publish'],'sub':grant['subscribe']})
         lines=credentials.splitlines(keepends=True)
         indexes=[i for i,line in enumerate(lines) if line.count('.')==2]
         if len(indexes)!=1:raise ValueError('owned_credential_shape_invalid')
@@ -46,7 +50,7 @@ def run(generator,binary):
         try:invoke(binary,changed,mode='--verify-existing-actor')
         except RenewalError:pass
         else:raise ValueError('invalid_signature_accepted')
-    print('owned_crypto_private_pipe=PASS invalid_signature=REFUSED')
+    print('owned_crypto_private_pipe=PASS complete_acl=PASS invalid_signature=REFUSED')
 
 
 if __name__=='__main__':
