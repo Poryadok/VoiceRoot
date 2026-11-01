@@ -542,6 +542,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
                      'local_chat_orchestration.py', 'local_chat_orchestration_test.py',
                      'local_auth_private.py', 'local_auth_private_test.py', 'local_auth_orchestration.py',
                      'local_compose_private.py', 'local_compose_private_test.py',
+                     'local_compose_bridge.py', 'local_compose_bridge_test.py',
                      'local_image_archive.py', 'local_image_archive_test.py',
                      'local_docker_owned.py', 'local_docker_owned_test.py',
                      'local_docker_scheduled.py', 'local_docker_scheduled_test.py',

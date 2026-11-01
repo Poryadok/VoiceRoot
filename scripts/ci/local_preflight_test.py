@@ -10,6 +10,51 @@ import local_preflight
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def test_compose_opt_in_preserves_planned_not_run_checks(self):
+        plan = {'source': self.source, 'components': {}, 'checks': {'compose-e2e': ['test.dart'],
+                                                                    'compose-config': ['docker-compose.yml']}}
+        diagnostic = {'schema': 'voice-local-compose-bridge-v1', 'status': 'incomplete',
+                      'selected_checks': ['compose-config', 'compose-e2e'], 'fixture_report': 'fixture/diagnostic.json'}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_compose_bridge, 'run', return_value=diagnostic) as bridge:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
+                                         compose_inputs=self.chat_inputs())
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['compose_private_report'], 'compose-private/bridge.json')
+        self.assertEqual(report['checks'], {'compose-e2e': {'status': 'not_run'}, 'compose-config': {'status': 'not_run'}})
+        bridge.assert_called_once_with(plan, self.chat_inputs(), self.output / 'compose-private')
+
+    def test_compose_opt_out_or_failure_never_qualifies_checks(self):
+        plan = {'source': self.source, 'components': {}, 'checks': {'compose-config': ['docker-compose.yml']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_compose_bridge, 'run') as bridge:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        bridge.assert_not_called()
+        self.assertEqual(report['checks']['compose-config']['status'], 'not_run')
+        for result in ({'status': 'incomplete'}, {'schema': 'voice-local-compose-bridge-v1', 'status': 'pass',
+                       'selected_checks': ['compose-config'], 'fixture_report': 'fixture/diagnostic.json'}):
+            with self.subTest(result=result), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+                 patch.object(local_preflight.local_compose_bridge, 'run', return_value=result):
+                report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(temp) / 'out', 'flutter',
+                                             compose_inputs=self.chat_inputs())
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['checks']['compose-config']['status'], 'not_run')
+
+    def test_compose_unselected_and_partial_input_fail_before_launch(self):
+        for checks, inputs in (({'backend-auth': ['auth']}, self.chat_inputs()),
+                               ({'compose-e2e': ['test.dart']}, {'helper': 'partial'})):
+            with self.subTest(checks=checks), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(local_preflight.affected_check_plan, 'build_local_plan',
+                              return_value={'source': self.source, 'components': {}, 'checks': checks}), \
+                 patch.object(local_preflight.local_compose_bridge.supervision, 'run_diagnostic') as broker:
+                report = local_preflight.run(self.root, 'c' * 40, self.source['head'], Path(temp) / 'out', 'flutter',
+                                             compose_inputs=inputs)
+            self.assertEqual(report['status'], 'failed')
+            broker.assert_not_called()
+
     def auth_inputs(self):
         return {'helper': str(self.root / 'creator.exe'), 'helper_sha256': 'a' * 64,
                 'postgres_archive': str(self.root / 'postgres.tar'), 'postgres_archive_sha256': 'b' * 64,
