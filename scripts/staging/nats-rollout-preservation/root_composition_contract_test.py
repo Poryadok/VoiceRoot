@@ -49,7 +49,7 @@ def with_gis_server_defaults(kube):
 
 class RootCompositionContract(unittest.TestCase):
     @contextlib.contextmanager
-    def _scoped_final_admission_fixture(self):
+    def _scoped_final_admission_fixture(self, receipt_kind='c2'):
         """Real journal and admission; qualified P2 and external custody are fixtures."""
         import staging_cohort_preservation as cohort
         import staging_prerequisites as prereq
@@ -70,8 +70,10 @@ class RootCompositionContract(unittest.TestCase):
             plan = {'actual_before': old, 'candidate': {'commit': context['commit'], 'images': context['images']},
                 'preflight_sha256': cohort.digest(preflight), 'prerequisite_inputs_sha256': 'c' * 64}
             capture = {'actual_before': old, 'fixture': 'prerequisites-capture'}
-            receipt = {'schema': 'voice-staging-realtime-bootstrap-existing-v1',
-                'prerequisites_sha256': cohort.digest(capture), 'fixture': 'c2-receipt'}
+            receipt = {'schema': ('voice-staging-realtime-bootstrap-receipt-v1' if receipt_kind == 'c1'
+                                  else 'voice-staging-realtime-bootstrap-existing-v1'),
+                'prerequisites_sha256': cohort.digest(capture), 'fixture': receipt_kind + '-receipt'}
+            realtime_plan = {'actual_images': old, 'prerequisites_sha256': cohort.digest(capture)}
             source_request = {'action': 'prepare', 'nonce': session.operation + 'a' * 52,
                 'resource_context': context, 'mode': 'app-only', 'changed_services': []}
             request = {'action': 'authorize', 'operation': session.operation,
@@ -85,6 +87,9 @@ class RootCompositionContract(unittest.TestCase):
                 patch.object(cohort, '_offnode_records', return_value=custody),
                 patch.object(prereq, 'validate_plan'), patch.object(prereq, 'capture', return_value=capture),
                 patch.object(prereq, 'load_capture', return_value=capture),
+                patch.object(realtime_bootstrap, 'validate_plan'),
+                patch.object(realtime_bootstrap, 'load_plan', return_value=realtime_plan),
+                patch.object(realtime_bootstrap, 'load_completed', return_value=receipt),
                 patch.object(existing, 'load_existing', return_value=receipt)):
                 stack.enter_context(seam)
             base = cohort._base(session)
@@ -108,7 +113,11 @@ class RootCompositionContract(unittest.TestCase):
                 'manifest_sha256': root_cli.public_code_sha(manifests),
                 'cohort_preservation_sha256': cohort.digest(qualified),
                 'prerequisites_sha256': cohort.digest(capture), 'realtime_bootstrap_sha256': cohort.digest(receipt)}
-            session.advance_prerequisites_target(target, old)
+            if receipt_kind == 'c1':
+                session.bind_realtime_bootstrap(realtime_plan, old)
+                session.advance_realtime_bootstrap(target, old)
+            else:
+                session.advance_prerequisites_target(target, old)
             preserved = {'cut': {}, 'provenance': {}, 'contract': {}, 'events': [], 'custody': custody}
             state = {**copy.deepcopy(preserved), 'target': target, 'operation': session.operation,
                 'resource_fence': session.binding(), 'migrations': [], 'phase': 'AWAITING_OFF_NODE',
@@ -127,7 +136,12 @@ class RootCompositionContract(unittest.TestCase):
 
     @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
     def test_scoped_final_admission_rejects_changed_continuation(self):
-        with self._scoped_final_admission_fixture() as fixture:
+        for receipt_kind in ('c1', 'c2'):
+            with self.subTest(receipt_kind=receipt_kind):
+                self._check_scoped_final_admission(receipt_kind)
+
+    def _check_scoped_final_admission(self, receipt_kind):
+        with self._scoped_final_admission_fixture(receipt_kind) as fixture:
             cohort, session, state, request = fixture.cohort, fixture.session, fixture.state, fixture.request
             altered = copy.deepcopy(state)
             altered['target']['realtime_bootstrap_sha256'] = '0' * 64
