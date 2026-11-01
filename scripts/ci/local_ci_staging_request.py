@@ -33,7 +33,7 @@ def validate(request):
     if not isinstance(request, dict):
         raise ValueError('invalid staging request fields')
     shard = request.get('shard')
-    if shard not in ('staging', 'proofs', 'runtime'):
+    if shard not in ('staging', 'proofs', 'runtime', 'policy'):
         raise ValueError('unsupported CI script shard')
     expected = REQUEST_NAMES | ({'runtime_images'} if shard == 'runtime' else set())
     if set(request) != expected:

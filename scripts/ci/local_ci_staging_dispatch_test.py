@@ -1,8 +1,10 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import local_ci_matrix_inventory as matrix
@@ -13,6 +15,49 @@ def rows():
     return [{'recipe':'$(BASH) "$(ROOT)/'+(m.PRESERVATION if i == 0 else 'scripts/ci/test%d.sh'%i)+'"'} for i in range(34)]
 
 class DispatchTests(unittest.TestCase):
+    def test_policy_skip_logger_records_real_test_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'sitecustomize.py').write_bytes(m.policy_skip_logger())
+            log = root / 'skips.jsonl'; log.write_bytes(b'')
+            program = ('import unittest\nclass T(unittest.TestCase):\n'
+                       ' @unittest.skip("reviewed reason")\n def test_case(self): pass\n'
+                       'unittest.main()\n')
+            env = dict(os.environ, PYTHONPATH=str(root), VOICE_CI_SKIP_LOG=str(log), VOICE_CI_RECIPE_INDEX='21')
+            result = subprocess.run([sys.executable, '-B', '-c', program], env=env, capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(m.parse_policy_skip_events(log.read_bytes()), {21: {('__main__.T.test_case', 'reviewed reason')}})
+            with self.assertRaises(ValueError): m.parse_policy_skip_events(log.read_bytes() * 2)
+            with self.assertRaises(ValueError): m.parse_policy_skip_events(b'not-json\n')
+    def test_policy_skips_are_named_source_pinned_and_counted(self):
+        root = Path(__file__).resolve().parents[2]
+        rows = matrix.build(root)['shards']['policy']
+        expected = m.policy_expected_skips(root, rows)
+        recipes = m.inventory(rows, shard='policy')
+        self.assertEqual(len(recipes), 69)
+        self.assertIn(b'export VOICE_CI_RECIPE_INDEX="$idx"', m.wrappers(recipes, shard='policy')['python'])
+        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 33, 33: 1, 41: 2})
+        event = next(iter(expected[21]))
+        summary = b'Ran 3 tests in 0.1s\nOK (skipped=1)\n'
+        m.validate_policy_recipe(21, summary, {event}, expected)
+        for bad in (set(), {('foreign.test', event[1])}, {event, ('extra.test', event[1])}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                m.validate_policy_recipe(21, summary, bad, expected)
+        with self.assertRaises(ValueError): m.validate_policy_recipe(21, b'Ran 1 test in 0s\nOK (skipped=1)\n', {event}, expected)
+        for bad in (b'Ran 0 tests in 0s\nOK\n', b'Ran 2 tests in 0s\nFAILED (failures=1)\n',
+                    b'Ran 2 tests in 0s\nOK (skipped=1)\n', b'OK\n',
+                    b'Ran 2 tests in 0s\nOK\nRan 2 tests in 0s\nOK\n'):
+            with self.subTest(output=bad), self.assertRaises(ValueError):
+                m.validate_policy_recipe(0, bad, set(), {})
+        with self.assertRaises(ValueError): m.validate_policy_recipe(1, b'skip (shallow clone has no HEAD^)\nAll resolve-staging-matrix tests passed.\n', set(), expected)
+        m.validate_policy_recipe(3, b'== docs-only PR skips gate ==\nAll verify-required-jobs tests passed.\n', set(), expected)
+        with tempfile.TemporaryDirectory() as directory:
+            copy = Path(directory)
+            for name, _, _ in m.POLICY_SKIP_FILES.values():
+                target = copy / name; target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((root / name).read_bytes())
+            target.write_bytes(target.read_bytes() + b'\n')
+            with self.assertRaises(ValueError): m.policy_expected_skips(copy, rows)
     def test_story_adapter_binds_source_and_private_resources(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / 'scripts/ci/story-media-cohort-chain.sh').read_bytes()

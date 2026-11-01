@@ -111,6 +111,14 @@ def hosted_go_script(directory):
             '[ "${codes[1]}" = 0 ] || exit 125; exit "${codes[0]}"')
 
 
+def hosted_policy_script():
+    return ('set -o pipefail; cd /workspace/repo; '
+            'exec 3> >(head -c 16777217 >&2); stderr_pid=$!; '
+            '/usr/local/bin/python3 scripts/ci/compiled_source_build_test.py 2>&3 | head -c 16777217; '
+            'codes=("${PIPESTATUS[@]}"); exec 3>&-; wait "$stderr_pid" || exit 125; '
+            '[ "${codes[1]}" = 0 ] || exit 125; exit "${codes[0]}"')
+
+
 def validate_hosted_go_logs(output, packages, dispatch):
     if (output / 'hosted-go.stderr').stat().st_size > 16 * 1024 * 1024:
         raise RuntimeError('hosted Go diagnostics exceeded limit')
@@ -287,7 +295,7 @@ def main():
             raise RuntimeError('client package output exceeded limit')
         import importlib.util
         dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        dispatch_sha = 'acdba14ee13015649397b4ef6b141df7074fbbc1307fffeb871a525b9f65679b'
+        dispatch_sha = '3dd045d98e2e1cad0ccce50131a3bdcd6bb1adb42556df58700df9590687e0a1'
         chat._verify_file(dispatch_path, dispatch_sha)
         spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
         dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
@@ -430,6 +438,14 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         inventory = matrix_inventory.build(ROOT)
         recipes = dispatch.inventory(inventory['shards'][SHARD], shard=SHARD)
         wrappers = dispatch.wrappers(recipes, shard=SHARD)
+        if SHARD == 'policy':
+            expected_skips = dispatch.policy_expected_skips(ROOT, inventory['shards']['policy'])
+            skip_logger = dispatch.policy_skip_logger()
+            skip_logger_sha = hashlib.sha256(skip_logger).hexdigest()
+            with tempfile.TemporaryFile() as stream:
+                stream.write(skip_logger); stream.seek(0)
+                execute('policy-skip-logger', client, ['sh','-ec','set -C; cat > /run/user/1000/adapter-root/sitecustomize.py; chmod 444 /run/user/1000/adapter-root/sitecustomize.py'], stdin=stream)
+            execute('policy-skip-init', client, ['sh','-ec','set -C; : > /run/user/1000/policy-skips; chown 1000:1000 /run/user/1000/policy-skips'])
         for kind,name in (('bash','bash-guard'),('python','python3')):
             with tempfile.TemporaryFile() as stream:
                 stream.write(wrappers[kind]); stream.seek(0)
@@ -456,6 +472,10 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
                 'find','/run/user/1000/source-mirror','-writable','-print','-quit'], timeout=300)
             if (BASE/'runtime-mirror-writable.stdout').read_bytes().strip():
                 raise RuntimeError('runtime source mirror writable by test user')
+        if SHARD == 'policy':
+            execute('policy-logger-before', client, ['sha256sum','/run/user/1000/adapter-root/sitecustomize.py'])
+            if (BASE/'policy-logger-before.stdout').read_text().split()[0] != skip_logger_sha:
+                raise RuntimeError('policy skip logger differs')
         verify_peers()
         common = ['setpriv','--reuid=1000','--regid=1000','--clear-groups','env',
             'HOME=/run/user/1000','USER=voiceci','GITHUB_ACTIONS=true','PYTHONDONTWRITEBYTECODE=1','VOICE_CONTRACT_PROFILE=current',
@@ -465,6 +485,8 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             'GOPROXY=file:///run/user/1000/staging-proxy/download','GOSUMDB=off','GOTOOLCHAIN=local',
             'GOFLAGS=-p=1 -mod=readonly','GOMAXPROCS=1','CGO_ENABLED=0','GOCACHE=/run/user/1000/gocache']
         if SHARD == 'runtime': common.append('DOCKER_BUILDKIT=0')
+        if SHARD == 'policy':
+            common.extend(('PYTHONPATH=/run/user/1000/adapter-root', 'VOICE_CI_SKIP_LOG=/run/user/1000/policy-skips'))
         execute('resolve-base',client,common+['bash','/workspace/repo/scripts/ci/resolve-voice-r22-base.sh'])
         if (BASE/'resolve-base.stdout').read_text().strip() != SOURCE_BASE: raise RuntimeError('hosted event base differs')
         execute('verify-base',client,common+['git','-C','/workspace/repo','cat-file','-e','' + SOURCE_BASE + '^{commit}'])
@@ -472,6 +494,14 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         tool_output = (BASE/'user-tool-check.stdout').read_text()
         expected_tools = [(node_hashes[0].split()[0],'/usr/local/bin/node'),(JQ_HASH,'/usr/local/bin/jq'),(wrapper_sha,'/usr/local/bin/docker'),(docker_cli_sha,'/usr/local/libexec/voice-ci-docker')]
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
+        hosted_policy_tests = 0
+        if SHARD == 'policy':
+            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=69','bash','-ec',hosted_policy_script()], timeout=600)
+            if any((BASE/('hosted-policy.' + suffix)).stat().st_size > 16 * 1024 * 1024 for suffix in ('stdout', 'stderr')):
+                raise RuntimeError('hosted policy output exceeded limit')
+            hosted_output = (BASE/'hosted-policy.stdout').read_bytes() + (BASE/'hosted-policy.stderr').read_bytes()
+            dispatch.validate_policy_recipe(0, hosted_output, set(), {})
+            hosted_policy_tests = int(re.search(rb'(?m)^Ran ([0-9]+) tests? in ', hosted_output).group(1))
         execute('make-dry-run',client,common+['make','-C','/workspace/repo','-n','BASH=/run/user/1000/adapter-root/bash-guard','ci-script-tests-' + SHARD])
         lines = (BASE/'make-dry-run.stdout').read_text().splitlines()
         lines = [line for line in lines if not line.startswith('make: Entering directory') and not line.startswith('make: Leaving directory')]
@@ -512,12 +542,20 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             execute('recipe-log-'+str(index),client,['sh','-ec','[ "$(wc -c < "$1")" -le 16777216 ]; cat "$1"','sh',path])
         if code != 0: raise RuntimeError('preservation failed: ' + str(code))
         if SHARD == 'staging' and cid_status != 0: raise RuntimeError('successful run lacks inner container identity')
-        if SHARD in ('proofs', 'runtime') and cid_status == 0: raise RuntimeError('unexpected preservation container')
+        if SHARD in ('proofs', 'runtime', 'policy') and cid_status == 0: raise RuntimeError('unexpected preservation container')
         output = (BASE / 'preservation.stdout').read_bytes()
-        dispatch.validate_make_log(output)
+        dispatch.validate_make_log(output, shard=SHARD)
         count = dispatch.validate_events((BASE/'recipe-events.stdout').read_bytes(),recipes)
+        skip_events = {}
+        if SHARD == 'policy':
+            execute('policy-skips', client, ['sh','-ec','[ "$(wc -c < /run/user/1000/policy-skips)" -le 1048576 ]; cat /run/user/1000/policy-skips'])
+            skip_events = dispatch.parse_policy_skip_events((BASE/'policy-skips.stdout').read_bytes())
+            if any(index not in expected_skips for index in skip_events):
+                raise RuntimeError('unexpected policy skip recipe')
         for index in range(len(recipes)):
-            dispatch.validate_recipe(index,(BASE/('recipe-log-'+str(index)+'.stdout')).read_bytes(),shard=SHARD)
+            data = (BASE/('recipe-log-'+str(index)+'.stdout')).read_bytes()
+            if SHARD == 'policy': dispatch.validate_policy_recipe(index, data, skip_events.get(index, set()), expected_skips)
+            else: dispatch.validate_recipe(index,data,shard=SHARD)
         tests = 0
         if SHARD == 'staging':
             for marker in (b'PASS: hosted JWT resolver + TLS leaf + exact ACL proof', b'PASS: canonical hosted JWT/TLS bootstrap and least-privilege ACL proof', b'NATS_ROLLOUT_PRESERVATION=PASS valid-receipt-paused-apply-and-second-use-veto-all-modes'):
@@ -528,7 +566,8 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             tests = validate_hosted_go_logs(BASE, packages, dispatch)
         execute('tools-after-hosted', client, ['sha256sum'] + [path for _,path in expected_tools])
         if (BASE/'tools-after-hosted.stdout').read_text().splitlines() != [digest + '  ' + path for digest,path in expected_tools]: raise RuntimeError('tools changed during hosted steps')
-        (BASE / 'suite-counts.json').write_text(json.dumps({'shard':SHARD,'recipes':count,'hosted_go_tests':tests},indent=2))
+        (BASE / 'suite-counts.json').write_text(json.dumps({'shard':SHARD,'recipes':count,'hosted_go_tests':tests,
+            'hosted_policy_tests':hosted_policy_tests},indent=2))
         chat._verify_file(dispatch_path,dispatch_sha)
         execute('adapter-after', client, ['sha256sum','/run/user/1000/adapter-root/offline-runner.sh'])
         if (BASE/'adapter-after.stdout').read_text().split()[0] != adapter_sha: raise RuntimeError('adapter file differs after execution')
@@ -537,6 +576,10 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             if (BASE/'story-adapter-after.stdout').read_text().split()[0] != story_sha:
                 raise RuntimeError('runtime adapter differs after execution')
             execute('runtime-source-compare-after', client, ['tar','-df','/run/user/1000/source.tar','-C','/run/user/1000/source-mirror'], timeout=300)
+        if SHARD == 'policy':
+            execute('policy-logger-after', client, ['sha256sum','/run/user/1000/adapter-root/sitecustomize.py'])
+            if (BASE/'policy-logger-after.stdout').read_text().split()[0] != skip_logger_sha:
+                raise RuntimeError('policy skip logger changed')
         execute('containers-after', client, docker + ['ps', '-aq', '--no-trunc'])
         if (BASE / 'containers-after.stdout').read_bytes().strip():
             raise RuntimeError('inner container remains')
