@@ -29,6 +29,14 @@ def card(c):
             images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
 
 
+def scoped_target(c):
+    return {'registry':'registry','tag':c['commit'],'mode':'full','changed_services':[],
+        'source_hashes':{'source':'1'*64},'template_hashes':{'voice-user':'2'*64},
+        'input_template_hashes':{'voice-user':'3'*64},'images':copy.deepcopy(c['images']),
+        'manifest_sha256':'4'*64,'migration_sha256':'5'*64,'nonnats_sha256':'6'*64,
+        'installation_sha256':claim.production_installation().sha256}
+
+
 class MemoryJournal:
     def __init__(self): self.row=None; self.events=[];self.supersessions=[]
     def read(self): return copy.deepcopy(self.row)
@@ -149,8 +157,11 @@ class ResourceTests(unittest.TestCase):
                 self.assertIsNone(session._prerequisite_permit)
                 with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(effect)
             else:
+                import commands
                 readonly=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','-i','voice-postgres-0']
-                session._prerequisite_readonly_permit=readonly.copy();session.check(readonly)
+                launch=commands.launch_snapshot(readonly,b'',25,1024,{},())
+                session._prerequisite_readonly_permit=launch
+                with patch.object(session,'readonly_current'):session.check(readonly,launch=launch)
                 self.assertIsNone(session._prerequisite_readonly_permit)
                 with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(readonly)
 
@@ -191,7 +202,7 @@ class ResourceTests(unittest.TestCase):
             realtime=Mock();existing=Mock();receipt={'typed':'receipt','prerequisites_sha256':parent_hash}
             realtime.load_completed.return_value=receipt;existing.load_existing.return_value=receipt
             target={'tag':context()['commit'],'images':context()['images'],'prerequisites_sha256':parent_hash,
-                'realtime_bootstrap_sha256':claim.digest(receipt)}
+                'realtime_bootstrap_sha256':claim.digest(receipt),'installation_sha256':session.installation.sha256}
             with patch.dict(sys.modules,{'staging_prerequisites':prerequisites,'realtime_bootstrap':realtime,
                                         'realtime_bootstrap_existing':existing}):
                 if mode=='cold':
@@ -223,7 +234,8 @@ class ResourceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'advance_required'):
                 session.bind_target(context()['commit'],context()['images'],actual,'d'*64)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
-            bad={'tag':context()['commit'],'images':context()['images'],'realtime_bootstrap_sha256':'0'*64}
+            bad={'tag':context()['commit'],'images':context()['images'],'realtime_bootstrap_sha256':'0'*64,
+                 'installation_sha256':session.installation.sha256}
             with self.assertRaises(RuntimeError):session.advance_realtime_bootstrap(bad,actual)
             self.assertEqual(journal.row['phase'],'realtime-bootstrap')
             target=dict(bad,realtime_bootstrap_sha256=claim.digest(receipt))
@@ -248,7 +260,8 @@ class ResourceTests(unittest.TestCase):
         module.load_completed.side_effect=changed
         with patch.dict(sys.modules,{'realtime_bootstrap':module}):
             session.bind_realtime_bootstrap(plan,actual)
-            target={'tag':context()['commit'],'images':context()['images'],'realtime_bootstrap_sha256':claim.digest(receipt)}
+            target={'tag':context()['commit'],'images':context()['images'],'realtime_bootstrap_sha256':claim.digest(receipt),
+                    'installation_sha256':session.installation.sha256}
             with self.assertRaises(RuntimeError):session.advance_realtime_bootstrap(target,actual)
             self.assertEqual(journal.row['status'],'uncertain')
             self.assertEqual(journal.row['phase'],'realtime-bootstrap')
@@ -364,11 +377,11 @@ class ResourceTests(unittest.TestCase):
 
     def test_runner_reads_live_journal_each_stage_and_never_closes_it(self):
         session,current,journal=self.fixture();session.admit(start=True)
-        target=dict(tag='c'*40,images=context()['images'])
+        target=dict(tag='c'*40,images=context()['images'],installation_sha256=session.installation.sha256)
         session.bind_target('c'*40,context()['images'],current['observed']['images'],claim.digest(target));session.ready()
         binding=session.binding();helper={'fixture':'b'*64}
         journal.row['helper_sha256']=claim.digest(helper);binding['helper_sha256']=claim.digest(helper)
-        receipt=dict(operation='a'*12,target=target,resource_fence=binding)
+        receipt=dict(schema='nats-rollout-preservation-v2',installation_sha256=session.installation.sha256,operation='a'*12,target=target,resource_fence=binding)
         check=Mock(side_effect=lambda:copy.deepcopy(current));check.uncertain=Mock()
         with patch.object(claim,'require_helper'),patch.object(claim,'RootJournal',return_value=journal),patch.object(claim,'Check',return_value=check):
             with self.assertRaises(RuntimeError):
@@ -411,10 +424,10 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(journal.row,before);self.assertEqual(len(journal.events),events)
 
     def test_nested_runner_and_apply_have_one_uncertain_notification_owner(self):
-        session,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'])
+        session,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'],installation_sha256=session.installation.sha256)
         helper={'fixture':'b'*64};journal.row.update(helper_sha256=claim.digest(helper),target_sha256=claim.digest(target))
-        binding={k:copy.deepcopy(journal.row[k]) for k in ('schema','context','operation','helper_sha256','target_sha256')}
-        receipt=dict(operation='a'*12,target=target,resource_fence=binding)
+        binding={k:copy.deepcopy(journal.row[k]) for k in ('schema','installation_sha256','context','operation','helper_sha256','target_sha256')}
+        receipt=dict(schema='nats-rollout-preservation-v2',installation_sha256=session.installation.sha256,operation='a'*12,target=target,resource_fence=binding)
         check=Mock(side_effect=lambda:copy.deepcopy(current));check.uncertain=Mock(side_effect=RuntimeError('lost POST response'))
         with patch.object(claim,'require_helper'),patch.object(claim,'RootJournal',return_value=journal),patch.object(claim,'Check',return_value=check):
             with self.assertRaisesRegex(RuntimeError,'apply response lost'):
@@ -436,11 +449,11 @@ class ResourceTests(unittest.TestCase):
         check.uncertain.assert_not_called();self.assertEqual(journal.row,before)
 
     def test_historical_parent_binding_does_not_reuse_its_old_resource_authority(self):
-        session,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'])
+        session,current,journal=self.prepared();target=scoped_target(context())
         helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
         session.helper=claim.digest(helper);journal.row.update(helper_sha256=session.helper,target_sha256=claim.digest(target))
         session.expected_target=claim.digest(target);binding=session.binding()
-        state=dict(operation='a'*12,target=target,code_capture=helper,resource_fence=binding)
+        state=dict(schema='nats-rollout-root-v2',installation_sha256=session.installation.sha256,operation='a'*12,target=target,code_capture=helper,resource_fence=binding)
         self.assertEqual(claim.historical_binding(state),binding)
         for invalid in ({k:v for k,v in state.items() if k!='resource_fence'},dict(state,target=dict(tag='e'*40,images=context()['images']))):
             with self.assertRaises(RuntimeError):claim.historical_binding(invalid)
@@ -479,15 +492,15 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(journal.row,expected)
 
     def test_repair_proof_reads_exact_protected_parent(self):
-        old,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'])
+        old,current,journal=self.prepared();target=scoped_target(context())
         helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
         old.helper=claim.digest(helper);journal.row.update(helper_sha256=old.helper,target_sha256=claim.digest(target))
         old.expected_target=claim.digest(target)
-        state=dict(operation=old.operation,target=target,code_capture=helper,resource_fence=old.binding(),
+        state=dict(schema='nats-rollout-root-v2',installation_sha256=old.installation.sha256,operation=old.operation,target=target,code_capture=helper,resource_fence=old.binding(),
             status='PROVISIONAL_READY',phase='POST_RESTART',fence_status='RELEASED')
         old.complete('PROVISIONAL_READY',context()['images'])
         import json
-        actions=Mock();actions.state.return_value=(Path('/private'),state)
+        actions=Mock();actions.installation=old.installation;actions.state.return_value=(Path('/private'),state)
         request=dict(operation=old.operation)
         with patch('operator_retirement.private_bytes',return_value=json.dumps(state).encode()):
             proof=claim.repair_proof(actions,request,journal.row)
@@ -499,21 +512,21 @@ class ResourceTests(unittest.TestCase):
     def test_root_archive_and_actual_protected_checkpoint_survive_failed_replacement(self):
         import root_main
         old,new,memory,request=self.repair()
-        target=dict(tag='c'*40,images=context()['images'])
+        target=scoped_target(context())
         helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
         previous=memory.read();previous.update(helper_sha256=claim.digest(helper),target_sha256=claim.digest(target))
-        binding={k:previous[k] for k in ('schema','context','operation','helper_sha256','target_sha256')}
-        state=dict(operation=old.operation,target=target,code_capture=helper,resource_fence=binding,
+        binding={k:previous[k] for k in ('schema','installation_sha256','context','operation','helper_sha256','target_sha256')}
+        state=dict(schema='nats-rollout-root-v2',installation_sha256=old.installation.sha256,operation=old.operation,target=target,code_capture=helper,resource_fence=binding,
             status='PROVISIONAL_READY',phase='POST_RESTART',fence_status='RELEASED')
         # The disposable CI image has no host operator account. Keep the real
         # chown/mode/custody path, with a fixture-local group identity only.
-        with tempfile.TemporaryDirectory() as folder,patch('grp.getgrnam',return_value=Mock(gr_gid=os.getgid())):
+        with tempfile.TemporaryDirectory(dir='/root') as folder,patch('grp.getgrnam',return_value=Mock(gr_gid=os.getgid())):
             root=Path(folder);(root/'installed').mkdir(mode=0o700)
             base=root/('rollout-'+old.operation);base.mkdir(mode=0o700)
             root_main.save(base/'checkpoint.json',state)
             journal=claim.RootJournal(root);journal.save(previous)
             import bridge_root,guard,root_cli
-            actions=bridge_root.Actions.__new__(bridge_root.Actions);actions.tt_session=new;actions.binding=helper
+            actions=bridge_root.Actions.__new__(bridge_root.Actions);actions._installation=old.installation;actions.tt_session=new;actions.binding=helper
             new.journal=journal;new.repair_guard=lambda req,prior:claim.repair_proof(actions,req,prior)
             with patch.object(guard,'ROOT',root),patch.object(root_cli,'ROOT',root):
                 with patch.object(journal,'save',side_effect=OSError('replace interrupted')):
