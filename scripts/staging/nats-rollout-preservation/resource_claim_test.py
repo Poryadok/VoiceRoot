@@ -129,7 +129,9 @@ class ResourceTests(unittest.TestCase):
                         prefix+['--raw',raw.replace('voice-staging','other')]):
                 with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             saved=copy.deepcopy(journal.row);journal.row['target_sha256']=None
-            with self.assertRaises(RuntimeError):session.check(prefix+['secret','voice-test','-o','json'])
+            for unbound in (prefix+['secret','voice-test','-o','json'],prefix+['--raw',raw],
+                            prefix+['pods,replicasets','-o','go-template='+IMAGE_TEMPLATE]):
+                with self.assertRaises(RuntimeError):session.check(unbound)
             journal.row=saved
             import source_plan
             ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
