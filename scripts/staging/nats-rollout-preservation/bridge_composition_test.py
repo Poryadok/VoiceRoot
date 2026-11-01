@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from unittest.mock import Mock, patch
 import bridge_root
 import encrypted_cut
@@ -699,16 +699,25 @@ class CompositionTests(unittest.TestCase):
         class ReachedCompiler(Exception):pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             request=dict(request,mode=mode,changed_services=[])
+            if deep is not None and deep.is_c2:request.pop('gis_first_install')
             kube,parameters,targets,renderer_repo,old,catalog=self._compiler_catalog_stage(mode)
+            if deep is not None and deep.is_c2:
+                import uuid
+                for index,(identity,row) in enumerate(kube.objects.items(),1):
+                    row['metadata']['uid']=str(uuid.UUID(int=index))
+                    if identity[0]=='Deployment' and identity[1] in catalog.snapshots:
+                        catalog.snapshots[identity[1]]['metadata']['uid']=row['metadata']['uid']
             stage.snapshots=copy.deepcopy(catalog.snapshots)
             stage.snapshots.pop('voice-p3-principal-jwks')
-            stage.snapshots.pop('voice-gameintegration')
+            if deep is None or not deep.is_c2:stage.snapshots.pop('voice-gameintegration')
             old.pop('voice-p3-principal-jwks/jwks')
             for key in list(old):
-                if key.startswith('voice-gameintegration/'):del old[key]
+                if key.startswith('voice-gameintegration/') and (deep is None or not deep.is_c2):del old[key]
             for name,row in stage.snapshots.items():
                 row['metadata'].setdefault('generation',1)
                 live[('deployment',name)]=copy.deepcopy(row)
+            if deep is not None and deep.is_c2:
+                for identity,row in kube.objects.items():live[identity]=copy.deepcopy(row)
             stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images=copy.deepcopy(old)
             stage.marker['data'].update(generation=parameters['generation'],dataPVC=parameters['dataPVC'])
@@ -727,6 +736,14 @@ class CompositionTests(unittest.TestCase):
                 for name in targets if name!='voice-p3-principal-jwks'}
             approved['images']['nats-hub-config-renderer']=renderer_repo+'@sha256:'+'d'*64
             if deep is not None:deep.approve(approved)
+            if deep is not None and deep.is_c2:
+                optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host',
+                    'developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret',
+                    'apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size',
+                    'web_origin','release_policy'}
+                existing_policy={key:copy.deepcopy(value) for key,value in parameters.items() if key in optional}
+                existing_policy['release_policy']['source_sha']=approved['source_sha']
+                bridge_root.save(workspace.parents[1]/'policy.json',existing_policy)
             source_record=workspace.parents[1]/'source-authority'/(actions.tt_session.operation+'.json')
             source_value=json.loads(source_record.read_bytes());source_value['approved_sha256']=prereq.digest(approved)
             bridge_root.save(source_record,source_value)
@@ -735,7 +752,9 @@ class CompositionTests(unittest.TestCase):
                     source_sha,renderer_root.storage(current))
                 return {'descriptor':descriptor,'broker_image':old[bridge_root.HUB+'/nats'],
                     'output':{'sha256':'e'*64,'bytes':10,'verified':True},'input_binding':{}}
-            with patch.object(renderer_root,'prove',side_effect=renderer_proof) as renderer,patch.object(renderer_root,'revalidate'):
+            import gis_existing_update
+            boundary=patch.object(gis_existing_update,'load_authority',return_value=None) if deep is not None and deep.is_c2 else nullcontext()
+            with patch.object(renderer_root,'prove',side_effect=renderer_proof) as renderer,patch.object(renderer_root,'revalidate'),boundary:
                 prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
             if mode=='full':renderer.assert_called_once()
             else:renderer.assert_not_called()
@@ -765,7 +784,8 @@ class CompositionTests(unittest.TestCase):
                     stage.expected['deployment_uids']['voice-p3-principal-jwks']=stage.snapshots['voice-p3-principal-jwks']['metadata']['uid']
                     stage.old_images=receipt['actual_after']
                     return stage
-                loaded={'request':{'mode':request['mode'],'changed_services':request['changed_services'],'gis_first_install':True},
+                loaded={'request':{'mode':request['mode'],'changed_services':request['changed_services'],
+                    'gis_first_install':request.get('gis_first_install') is True},
                     'approved':approved,'execution':execution,'workspace':str(workspace)}
                 public={'action':'authorize','operation':session.operation,'token':'fixture','artifact_id':42,'resource_context':session.context}
                 source_request=dict(request,nonce=session.operation+'a'*52,resource_context=session.context)
@@ -808,7 +828,10 @@ class CompositionTests(unittest.TestCase):
                     bootstrap=deep.bootstrap(session,stage,stack,prereq,cohort,actions,workspace,kube,approved,execution,contract,p2_plan)
                 stack.enter_context(patch.object(realtime_bootstrap,'run_prepare',
                     **({'side_effect':deep.run_bootstrap} if deep is not None else {'return_value':bootstrap})))
-                stack.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap))
+                if deep is not None and deep.is_c2:
+                    import realtime_bootstrap_existing
+                    stack.enter_context(patch.object(realtime_bootstrap,'load_existing',side_effect=realtime_bootstrap_existing.load_existing))
+                else:stack.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap))
                 compiler_phase=[False]
                 def report(name,status):
                     if (name,status)==('policy-validation','STARTED'):
@@ -848,8 +871,9 @@ class CompositionTests(unittest.TestCase):
                     self.assertEqual(value['target']['mode'],mode)
                     self.assertEqual(any(key.startswith(bridge_root.HUB+'/') for key in value['target']['images']),mode=='full')
                     self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in value['manifests']))
-                    self.assertEqual(kwargs['realtime_bootstrap_receipt'],bootstrap)
-                    self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(bootstrap))
+                    receipt=bootstrap if deep is None else deep.receipt
+                    self.assertEqual(kwargs['realtime_bootstrap_receipt'],receipt)
+                    self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(receipt))
                     if deep is not None:
                         return deep.prepare(value,args,kwargs,session,stage,kube,workspace,qualified,contract,public,stack)
                     authorization=guard_test.receipt()
@@ -887,6 +911,7 @@ class CompositionTests(unittest.TestCase):
                     self.assertEqual(session.check()['phase'],'prepare')
         context=resource_claim_test.context()
         context['images']={'voice-gameintegration/gameintegration':bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64}
+        if deep is not None and deep.is_c2:context['images']=deep.candidate(self,source,mode)
         if mode=='full':
             context['images'].update({bridge_root.HUB+'/nats':'nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb',
                 bridge_root.HUB+'/nats-config-renderer':bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer@sha256:'+'d'*64})
@@ -906,7 +931,9 @@ class CompositionTests(unittest.TestCase):
                         output=directory/(part+'.yaml');output.write_text(yaml.safe_dump_all(documents,sort_keys=False))
                         overrides[relative]=output
                 fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run,full_source=policy_case=='valid',
-                    strict_helpers=deep is not None,context_commit=source.TAG,source_overrides=overrides)
+                    strict_helpers=deep is not None,context_commit=source.TAG,source_overrides=overrides,
+                    **({'fixture_operation':'b'*12,'fixture_candidate_images':context['images']}
+                       if deep is not None and deep.is_c2 else {}))
 
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
         for mode in ('full','app-only'):
