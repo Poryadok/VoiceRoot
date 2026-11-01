@@ -33,17 +33,18 @@ class StagingIntegrationTests(unittest.TestCase):
                            {'name': 'gate', 'tests': len(preflight.local_ci_routing.GATE_CASES)},
                            {'name': 'router', 'tests': len(preflight.local_ci_routing.ROUTER_CASES)}]}
             receipt = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete',
-                       'source': source['head'], 'base': 'c' * 40, 'recipes': 34, 'hosted_go_tests': 3}
+                       'source': source['head'], 'base': 'c' * 40, 'shard': 'staging', 'recipes': 34, 'hosted_go_tests': 3}
+            proofs = dict(receipt, shard='proofs', recipes=15, hosted_go_tests=0)
             with patch.object(preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
                  patch.object(preflight.local_ci_routing, 'run', return_value=routing), \
-                 patch.object(preflight.local_ci_staging_execution, 'run', return_value=receipt) as run, \
+                 patch.object(preflight.local_ci_staging_execution, 'run', side_effect=[receipt, proofs]) as run, \
                  patch.object(preflight.local_source_snapshot, 'capture', return_value=source):
                 result = preflight.run(root, 'c' * 40, source['head'], Path(directory) / 'out',
                                        'flutter', staging_assets={'helper': 'test'})
             self.assertEqual(result['status'], 'incomplete')
             self.assertEqual(result['checks']['ci-script-tests']['status'], 'not_run')
-            self.assertEqual(run.call_args.args[0]['commit'], source['head'])
-            self.assertEqual(run.call_args.args[0]['tree'], source['tree'])
+            self.assertEqual([call.args[0]['shard'] for call in run.call_args_list], ['staging', 'proofs'])
+            self.assertTrue(all(call.args[0]['commit'] == source['head'] and call.args[0]['tree'] == source['tree'] for call in run.call_args_list))
 
     def test_changed_source_and_worker_failure_fail_preflight(self):
         for failure in ('drift', 'worker'):
@@ -57,7 +58,7 @@ class StagingIntegrationTests(unittest.TestCase):
                     {'name': 'gate', 'tests': len(preflight.local_ci_routing.GATE_CASES)},
                     {'name': 'router', 'tests': len(preflight.local_ci_routing.ROUTER_CASES)}]}
                 receipt = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete',
-                           'source': source['head'], 'base': 'c' * 40, 'recipes': 34, 'hosted_go_tests': 3}
+                           'source': source['head'], 'base': 'c' * 40, 'shard': 'staging', 'recipes': 34, 'hosted_go_tests': 3}
                 side_effect = preflight.local_ci_staging_execution.ExecutionError('worker failed') if failure == 'worker' else None
                 with patch.object(preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
                      patch.object(preflight.local_ci_routing, 'run', return_value=routing), \

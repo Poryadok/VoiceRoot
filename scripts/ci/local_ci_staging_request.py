@@ -12,12 +12,14 @@ ASSET_NAMES = frozenset({
     'nats_image', 'nats_box_image', 'alpine_image', 'packages',
     'wheel', 'preservation_go_cache', 'staging_go_proxy',
 })
-REQUEST_NAMES = frozenset({'root', 'output', 'commit', 'tree', 'base', 'assets'})
+REQUEST_NAMES = frozenset({'root', 'output', 'commit', 'tree', 'base', 'shard', 'assets'})
 
 
 def validate(request):
     if not isinstance(request, dict) or set(request) != REQUEST_NAMES:
         raise ValueError('invalid staging request fields')
+    if request['shard'] not in ('staging', 'proofs'):
+        raise ValueError('unsupported CI script shard')
     for name in ('commit', 'tree', 'base'):
         if not isinstance(request[name], str) or not re.fullmatch(r'[0-9a-f]{40}', request[name]):
             raise ValueError('invalid staging Git identity')

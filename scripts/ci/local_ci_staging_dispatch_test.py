@@ -12,6 +12,17 @@ def rows():
     return [{'recipe':'$(BASH) "$(ROOT)/'+(m.PRESERVATION if i == 0 else 'scripts/ci/test%d.sh'%i)+'"'} for i in range(34)]
 
 class DispatchTests(unittest.TestCase):
+    def test_proofs_inventory_and_receipts_are_exact(self):
+        entries = [{'recipe': '$(BASH) "$(ROOT)/scripts/ci/proof%d.sh"' % i} for i in range(15)]
+        recipes = m.inventory(entries, shard='proofs')
+        self.assertEqual(len(recipes), 15)
+        self.assertNotIn(b'--owned-temp-root', m.wrappers(recipes, shard='proofs')['bash'])
+        m.validate_recipe(0, b'Missing Docker Go module download helper test passed.\n', shard='proofs')
+        m.validate_recipe(2, b'Ran 3 tests in 1s\nOK\n', shard='proofs')
+        for bad in (b'', b'Ran 0 tests in 1s\nOK\n', b'Ran 3 tests in 1s\nOK (skipped=1)\n'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError): m.validate_recipe(2, bad, shard='proofs')
+        with self.assertRaises(ValueError): m.inventory(entries[:-1], shard='proofs')
+        with self.assertRaises(ValueError): m.inventory(entries, shard='runtime')
     def test_exact_events_and_missing_duplicate_failure(self):
         recipes = m.inventory(rows())
         events = ''.join(f'{i}\tstart\n{i}\texit\t0\n' for i in range(34)).encode()

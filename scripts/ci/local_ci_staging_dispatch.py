@@ -5,7 +5,9 @@ import shlex
 ROOT = '/workspace/repo/'
 PRESERVATION = 'scripts/ci/nats-rollout-preservation_test.sh'
 
-def inventory(rows):
+def inventory(rows, *, shard='staging'):
+    if shard not in ('staging', 'proofs'):
+        raise ValueError('unsupported shard')
     result = []
     for row in rows:
         recipe = row['recipe']
@@ -16,12 +18,14 @@ def inventory(rows):
         if '..' in path.split('/') or not re.fullmatch(r'[A-Za-z0-9_./-]+', path):
             raise ValueError('unsafe recipe path')
         result.append(('bash' if kind == '$(BASH)' else 'python', path))
-    if len(result) != 34 or len(set(result)) != len(result) or result.count(('bash', PRESERVATION)) != 1:
-        raise ValueError('staging recipe inventory differs')
+    if (len(result) != {'staging': 34, 'proofs': 15}[shard] or len(set(result)) != len(result) or
+            result.count(('bash', PRESERVATION)) != (1 if shard == 'staging' else 0)):
+        raise ValueError('shard recipe inventory differs')
     return result
 
-def wrappers(recipes):
-    if len(recipes) != 34: raise ValueError('staging recipe count differs')
+def wrappers(recipes, *, shard='staging'):
+    if shard not in ('staging', 'proofs') or len(recipes) != {'staging': 34, 'proofs': 15}[shard]:
+        raise ValueError('shard recipe count differs')
     result = {}
     for kind in ('bash','python'):
         shell = ['#!/bin/bash', 'set -u -o pipefail', 'case "${1-}" in']
@@ -33,7 +37,7 @@ def wrappers(recipes):
             'printf "%s\\tstart\\n" "$idx" >> /run/user/1000/recipe-events',
             'rc=0'])
         pipe = ' 2>&1 | tee "/run/user/1000/recipe-${idx}.log" | head -c 16777217'
-        if kind == 'bash':
+        if kind == 'bash' and shard == 'staging':
             shell.append('if [ "$1" = '+shlex.quote(ROOT+PRESERVATION)+' ]; then '+binary+' "$@" --owned-temp-root /run/user/1000/fixture-root'+pipe+'; codes=("${PIPESTATUS[@]}"); else '+binary+' "$@"'+pipe+'; codes=("${PIPESTATUS[@]}"); fi')
         else:
             shell.append(binary+' "$@"'+pipe+'; codes=("${PIPESTATUS[@]}")')
@@ -76,20 +80,33 @@ MARKERS = (
     'All setup-github-runner tests passed.', 'staging NATS diagnostic workflow contract passed',
 )
 
-def validate_recipe(index, data):
-    if type(index) is not int or not 0 <= index < len(MARKERS) or len(data) > 16*1024*1024:
+PROOFS_MARKERS = (
+    'Missing Docker Go module download helper test passed.', 'All e2e-manifest tests passed.', None,
+    'compose_fcm_diag_contract=pass', 'All compose-e2e-smoke tests passed.', None, None,
+    'Compose E2E live phase tests passed.', 'Compose NATS JetStream gate regression tests passed.',
+    'All compose-a1-multi-account-proof tests passed.',
+    'All compose-a1-flutter-profile-handoff tests passed.',
+    'All compose-file-attachment-restart-proof tests passed.', None,
+    'A1 attachment restart CI reachability contract passed.',
+    'A1 Flutter profile-handoff CI reachability contract passed.',
+)
+
+def validate_recipe(index, data, *, shard='staging'):
+    if shard not in ('staging', 'proofs'): raise ValueError('unsupported shard')
+    markers = MARKERS if shard == 'staging' else PROOFS_MARKERS
+    if type(index) is not int or not 0 <= index < len(markers) or len(data) > 16*1024*1024:
         raise ValueError('recipe identity or output size invalid')
     if re.search(rb'(?i)\bskip(?:ped)?\b', data): raise ValueError('recipe skipped')
-    marker = MARKERS[index]
+    marker = markers[index]
     if marker is not None:
         if data.splitlines().count(marker.encode()) != 1: raise ValueError('recipe marker missing or duplicated')
         return
     summaries = re.findall(rb'^Ran ([0-9]+) tests? in [^\r\n]+\r?$', data, flags=re.MULTILINE)
     oks = re.findall(rb'^OK\r?$', data, flags=re.MULTILINE)
-    expected = 3 if index == 20 else 1
+    expected = 3 if shard == 'staging' and index == 20 else 1
     if len(summaries) != expected or len(oks) != expected or any(int(x) <= 0 for x in summaries):
         raise ValueError('recipe test summaries incomplete')
-    if index == 20 and data.splitlines().count(b'NATS_ROLLOUT_PRESERVATION=PASS valid-receipt-paused-apply-and-second-use-veto-all-modes') != 1:
+    if shard == 'staging' and index == 20 and data.splitlines().count(b'NATS_ROLLOUT_PRESERVATION=PASS valid-receipt-paused-apply-and-second-use-veto-all-modes') != 1:
         raise ValueError('preservation marker missing')
 
 def validate_go_json(data, packages):

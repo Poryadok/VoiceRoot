@@ -16,6 +16,7 @@ import secrets
 import re
 
 import local_ci_staging_request as request_contract
+import local_ci_matrix_inventory as matrix_inventory
 
 HELPER_HASH = '27107931deb9d34a1055c6fff20c00dd5d97cecc2732cb6d1f0bd27646dc35a1'
 JQ_HASH = '5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5'
@@ -32,10 +33,10 @@ import local_source_snapshot as snapshot
 
 
 def configure(request):
-    global ROOT, BASE, HELPER, JQ, SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE, IMAGES, ASSETS
+    global ROOT, BASE, HELPER, JQ, SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE, SHARD, IMAGES, ASSETS
     request = request_contract.validate(request)
     ROOT, BASE = Path(request['root']), Path(request['output'])
-    SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE = request['commit'], request['tree'], request['base']
+    SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE, SHARD = request['commit'], request['tree'], request['base'], request['shard']
     ASSETS = {key: Path(value) for key, value in request['assets'].items()}
     HELPER, JQ = ASSETS['helper'], ASSETS['jq']
     IMAGES = (
@@ -364,8 +365,15 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         execute('staging-proxy-hash',client,['sha256sum','/run/user/1000/staging-proxy.tar'])
         if (BASE/'staging-proxy-hash.stdout').read_text().split()[0] != proxy_sha: raise RuntimeError('proxy transfer differs')
         execute('staging-proxy-extract',client,['sh','-ec','mkdir /run/user/1000/staging-proxy /run/user/1000/tmp /run/user/1000/gocache; tar --no-same-owner -xf /run/user/1000/staging-proxy.tar -C /run/user/1000/staging-proxy; chown -R 1000:1000 /run/user/1000/tmp /run/user/1000/gocache'])
-        recipes = [('bash', 'scripts/ci/rollout-app-tier-order_test.sh'), ('bash', 'scripts/staging/lib/kubectl-configmap_test.sh'), ('python', 'scripts/staging/staging-resend-preflight-workflow_test.py'), ('bash', 'scripts/staging/preflight-resend-key_test.sh'), ('python', 'scripts/staging/check-resend-key_test.py'), ('bash', 'scripts/staging/app-secret-merge_test.sh'), ('python', 'scripts/staging/mail-only-patch_test.py'), ('bash', 'scripts/staging/mail-only-resend_test.sh'), ('python', 'scripts/staging/minio-app-env-contract_test.py'), ('bash', 'scripts/staging/ensure-app-secrets_test.sh'), ('bash', 'scripts/staging/ensure-app-secrets-dry-run_test.sh'), ('bash', 'scripts/staging/ensure-minio-credentials_test.sh'), ('bash', 'scripts/staging/restore-principal-secrets_test.sh'), ('bash', 'scripts/staging/restore-nats-secrets_test.sh'), ('bash', 'scripts/staging/ensure-user-search-projection-secret_test.sh'), ('bash', 'scripts/staging/apply-observability_test.sh'), ('bash', 'scripts/staging/lib/kubectl-secret_test.sh'), ('bash', 'scripts/ci/nats-leaf-topology-invariants-test_test.sh'), ('python', 'scripts/staging/nats-search-probe-workflow_test.py'), ('bash', 'scripts/staging/staging-source-acquisition-workflow_test.sh'), ('bash', 'scripts/ci/nats-rollout-preservation_test.sh'), ('bash', 'scripts/staging/nats-bootstrap-policy_test.sh'), ('bash', 'scripts/staging/nats-generation-contract_test.sh'), ('bash', 'scripts/staging/restore-nats-generation_test.sh'), ('bash', 'scripts/staging/nats-root-rotation-contract_test.sh'), ('bash', 'scripts/staging/nats-live-acl-proof-contract_test.sh'), ('bash', 'scripts/staging/nats-root-diagnostics-contract_test.sh'), ('bash', 'scripts/staging/nats-legacy-recovery-contract_test.sh'), ('bash', 'scripts/ci/nats-jwt-rollout-contract-test.sh'), ('bash', 'scripts/ci/nats-jwt-leaf-hosted-proof.sh'), ('bash', 'scripts/ci/nats-canonical-acl-hosted-proof.sh'), ('python', 'scripts/staging/public-storage-ingress_test.py'), ('bash', 'scripts/staging/setup-github-runner_test.sh'), ('bash', 'scripts/ci/nats-search-jetstream-workflow-contract_test.sh')]
-        wrappers = {'bash': b'#!/bin/bash\nset -u -o pipefail\ncase "${1-}" in\n  /workspace/repo/scripts/ci/rollout-app-tier-order_test.sh) idx=0 ;;\n  /workspace/repo/scripts/staging/lib/kubectl-configmap_test.sh) idx=1 ;;\n  /workspace/repo/scripts/staging/preflight-resend-key_test.sh) idx=3 ;;\n  /workspace/repo/scripts/staging/app-secret-merge_test.sh) idx=5 ;;\n  /workspace/repo/scripts/staging/mail-only-resend_test.sh) idx=7 ;;\n  /workspace/repo/scripts/staging/ensure-app-secrets_test.sh) idx=9 ;;\n  /workspace/repo/scripts/staging/ensure-app-secrets-dry-run_test.sh) idx=10 ;;\n  /workspace/repo/scripts/staging/ensure-minio-credentials_test.sh) idx=11 ;;\n  /workspace/repo/scripts/staging/restore-principal-secrets_test.sh) idx=12 ;;\n  /workspace/repo/scripts/staging/restore-nats-secrets_test.sh) idx=13 ;;\n  /workspace/repo/scripts/staging/ensure-user-search-projection-secret_test.sh) idx=14 ;;\n  /workspace/repo/scripts/staging/apply-observability_test.sh) idx=15 ;;\n  /workspace/repo/scripts/staging/lib/kubectl-secret_test.sh) idx=16 ;;\n  /workspace/repo/scripts/ci/nats-leaf-topology-invariants-test_test.sh) idx=17 ;;\n  /workspace/repo/scripts/staging/staging-source-acquisition-workflow_test.sh) idx=19 ;;\n  /workspace/repo/scripts/ci/nats-rollout-preservation_test.sh) idx=20 ;;\n  /workspace/repo/scripts/staging/nats-bootstrap-policy_test.sh) idx=21 ;;\n  /workspace/repo/scripts/staging/nats-generation-contract_test.sh) idx=22 ;;\n  /workspace/repo/scripts/staging/restore-nats-generation_test.sh) idx=23 ;;\n  /workspace/repo/scripts/staging/nats-root-rotation-contract_test.sh) idx=24 ;;\n  /workspace/repo/scripts/staging/nats-live-acl-proof-contract_test.sh) idx=25 ;;\n  /workspace/repo/scripts/staging/nats-root-diagnostics-contract_test.sh) idx=26 ;;\n  /workspace/repo/scripts/staging/nats-legacy-recovery-contract_test.sh) idx=27 ;;\n  /workspace/repo/scripts/ci/nats-jwt-rollout-contract-test.sh) idx=28 ;;\n  /workspace/repo/scripts/ci/nats-jwt-leaf-hosted-proof.sh) idx=29 ;;\n  /workspace/repo/scripts/ci/nats-canonical-acl-hosted-proof.sh) idx=30 ;;\n  /workspace/repo/scripts/staging/setup-github-runner_test.sh) idx=32 ;;\n  /workspace/repo/scripts/ci/nats-search-jetstream-workflow-contract_test.sh) idx=33 ;;\n  *) exec /bin/bash "$@" ;;\nesac\nprintf "%s\\tstart\\n" "$idx" >> /run/user/1000/recipe-events\nrc=0\nif [ "$1" = /workspace/repo/scripts/ci/nats-rollout-preservation_test.sh ]; then /bin/bash "$@" --owned-temp-root /run/user/1000/fixture-root 2>&1 | tee "/run/user/1000/recipe-${idx}.log" | head -c 16777217; codes=("${PIPESTATUS[@]}"); else /bin/bash "$@" 2>&1 | tee "/run/user/1000/recipe-${idx}.log" | head -c 16777217; codes=("${PIPESTATUS[@]}"); fi\nrc=${codes[0]}; if [ "${codes[1]}" != 0 ] || [ "${codes[2]}" != 0 ]; then rc=125; fi\nprintf "%s\\texit\\t%s\\n" "$idx" "$rc" >> /run/user/1000/recipe-events\nexit "$rc"\n', 'python': b'#!/bin/bash\nset -u -o pipefail\ncase "${1-}" in\n  /workspace/repo/scripts/staging/staging-resend-preflight-workflow_test.py) idx=2 ;;\n  /workspace/repo/scripts/staging/check-resend-key_test.py) idx=4 ;;\n  /workspace/repo/scripts/staging/mail-only-patch_test.py) idx=6 ;;\n  /workspace/repo/scripts/staging/minio-app-env-contract_test.py) idx=8 ;;\n  /workspace/repo/scripts/staging/nats-search-probe-workflow_test.py) idx=18 ;;\n  /workspace/repo/scripts/staging/public-storage-ingress_test.py) idx=31 ;;\n  *) exec /usr/local/bin/python3 "$@" ;;\nesac\nprintf "%s\\tstart\\n" "$idx" >> /run/user/1000/recipe-events\nrc=0\n/usr/local/bin/python3 "$@" 2>&1 | tee "/run/user/1000/recipe-${idx}.log" | head -c 16777217; codes=("${PIPESTATUS[@]}")\nrc=${codes[0]}; if [ "${codes[1]}" != 0 ] || [ "${codes[2]}" != 0 ]; then rc=125; fi\nprintf "%s\\texit\\t%s\\n" "$idx" "$rc" >> /run/user/1000/recipe-events\nexit "$rc"\n'}
+        import importlib.util
+        dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
+        dispatch_sha = 'e3da9b376ee864bcd3758e449b681e13cbe5e518b299eb57e72981f575397625'
+        chat._verify_file(dispatch_path, dispatch_sha)
+        spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
+        dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
+        inventory = matrix_inventory.build(ROOT)
+        recipes = dispatch.inventory(inventory['shards'][SHARD], shard=SHARD)
+        wrappers = dispatch.wrappers(recipes, shard=SHARD)
         for kind,name in (('bash','bash-guard'),('python','python3')):
             with tempfile.TemporaryFile() as stream:
                 stream.write(wrappers[kind]); stream.seek(0)
@@ -399,13 +407,13 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         tool_output = (BASE/'user-tool-check.stdout').read_text()
         expected_tools = [(node_hashes[0].split()[0],'/usr/local/bin/node'),(JQ_HASH,'/usr/local/bin/jq'),(wrapper_sha,'/usr/local/bin/docker'),(docker_cli_sha,'/usr/local/libexec/voice-ci-docker')]
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
-        execute('make-dry-run',client,common+['make','-C','/workspace/repo','-n','BASH=/run/user/1000/adapter-root/bash-guard','ci-script-tests-staging'])
+        execute('make-dry-run',client,common+['make','-C','/workspace/repo','-n','BASH=/run/user/1000/adapter-root/bash-guard','ci-script-tests-' + SHARD])
         import shlex
         lines = (BASE/'make-dry-run.stdout').read_text().splitlines()
         lines = [line for line in lines if not line.startswith('make: Entering directory') and not line.startswith('make: Leaving directory')]
         expected = [[('/run/user/1000/adapter-root/bash-guard' if kind == 'bash' else 'python3'),'/workspace/repo/'+path] for kind,path in recipes]
         if [shlex.split(line) for line in lines] != expected: raise RuntimeError('expanded Make command inventory differs')
-        command = common + ['bash','-ec','set -o pipefail; cd /workspace/repo; make BASH=/run/user/1000/adapter-root/bash-guard ci-script-tests-staging 2>&1 | head -c 33554433']
+        command = common + ['bash','-ec','set -o pipefail; cd /workspace/repo; make BASH=/run/user/1000/adapter-root/bash-guard ci-script-tests-' + SHARD + ' 2>&1 | head -c 33554433']
         code = execute('preservation', client, command, timeout=5400, allow_failure=True)
         execute('tools-after-make', client, ['sha256sum'] + [path for _,path in expected_tools])
         if (BASE/'tools-after-make.stdout').read_text().splitlines() != [digest + '  ' + path for digest,path in expected_tools]: raise RuntimeError('tools changed during Make')
@@ -439,26 +447,25 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             path = '/run/user/1000/recipe-' + str(index) + '.log'
             execute('recipe-log-'+str(index),client,['sh','-ec','[ "$(wc -c < "$1")" -le 16777216 ]; cat "$1"','sh',path])
         if code != 0: raise RuntimeError('preservation failed: ' + str(code))
-        if cid_status != 0: raise RuntimeError('successful run lacks inner container identity')
+        if SHARD == 'staging' and cid_status != 0: raise RuntimeError('successful run lacks inner container identity')
+        if SHARD == 'proofs' and cid_status == 0: raise RuntimeError('unexpected preservation container')
         output = (BASE / 'preservation.stdout').read_bytes()
-        dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        chat._verify_file(dispatch_path,'456b03f5181e46431c6358a60e1f786757246f66274d11042aa0afd8025786ba')
-        spec = importlib.util.spec_from_file_location('staging_dispatch',dispatch_path)
-        dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
         dispatch.validate_make_log(output)
         count = dispatch.validate_events((BASE/'recipe-events.stdout').read_bytes(),recipes)
         for index in range(len(recipes)):
-            dispatch.validate_recipe(index,(BASE/('recipe-log-'+str(index)+'.stdout')).read_bytes())
-        for marker in (b'PASS: hosted JWT resolver + TLS leaf + exact ACL proof', b'PASS: canonical hosted JWT/TLS bootstrap and least-privilege ACL proof', b'NATS_ROLLOUT_PRESERVATION=PASS valid-receipt-paused-apply-and-second-use-veto-all-modes'):
-            if marker not in output.splitlines(): raise RuntimeError('required staging marker missing')
-        execute('hosted-go-list',client,common+['bash','-ec','cd /workspace/repo/scripts/staging/nats-leaf-routing-test; go list ./...'],timeout=600)
-        packages = (BASE/'hosted-go-list.stdout').read_text().splitlines()
-        execute('hosted-go',client,common+['bash','-ec','set -o pipefail; cd /workspace/repo/scripts/staging/nats-leaf-routing-test; go test -json -count=1 -timeout=90s ./... 2>&1 | head -c 16777217'],timeout=1200)
-        execute('tools-after-hosted-go', client, ['sha256sum'] + [path for _,path in expected_tools])
-        if (BASE/'tools-after-hosted-go.stdout').read_text().splitlines() != [digest + '  ' + path for digest,path in expected_tools]: raise RuntimeError('tools changed during hosted Go')
-        tests = dispatch.validate_go_json((BASE/'hosted-go.stdout').read_bytes(),packages)
-        (BASE / 'suite-counts.json').write_text(json.dumps({'recipes':count,'hosted_go_tests':tests},indent=2))
-        chat._verify_file(dispatch_path,'456b03f5181e46431c6358a60e1f786757246f66274d11042aa0afd8025786ba')
+            dispatch.validate_recipe(index,(BASE/('recipe-log-'+str(index)+'.stdout')).read_bytes(),shard=SHARD)
+        tests = 0
+        if SHARD == 'staging':
+            for marker in (b'PASS: hosted JWT resolver + TLS leaf + exact ACL proof', b'PASS: canonical hosted JWT/TLS bootstrap and least-privilege ACL proof', b'NATS_ROLLOUT_PRESERVATION=PASS valid-receipt-paused-apply-and-second-use-veto-all-modes'):
+                if marker not in output.splitlines(): raise RuntimeError('required staging marker missing')
+            execute('hosted-go-list',client,common+['bash','-ec','cd /workspace/repo/scripts/staging/nats-leaf-routing-test; go list ./...'],timeout=600)
+            packages = (BASE/'hosted-go-list.stdout').read_text().splitlines()
+            execute('hosted-go',client,common+['bash','-ec','set -o pipefail; cd /workspace/repo/scripts/staging/nats-leaf-routing-test; go test -json -count=1 -timeout=90s ./... 2>&1 | head -c 16777217'],timeout=1200)
+            tests = dispatch.validate_go_json((BASE/'hosted-go.stdout').read_bytes(),packages)
+        execute('tools-after-hosted', client, ['sha256sum'] + [path for _,path in expected_tools])
+        if (BASE/'tools-after-hosted.stdout').read_text().splitlines() != [digest + '  ' + path for digest,path in expected_tools]: raise RuntimeError('tools changed during hosted steps')
+        (BASE / 'suite-counts.json').write_text(json.dumps({'shard':SHARD,'recipes':count,'hosted_go_tests':tests},indent=2))
+        chat._verify_file(dispatch_path,dispatch_sha)
         execute('adapter-after', client, ['sha256sum','/run/user/1000/adapter-root/offline-runner.sh'])
         if (BASE/'adapter-after.stdout').read_text().split()[0] != adapter_sha: raise RuntimeError('adapter file differs after execution')
         execute('containers-after', client, docker + ['ps', '-aq', '--no-trunc'])
