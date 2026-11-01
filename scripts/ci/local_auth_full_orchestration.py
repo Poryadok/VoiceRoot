@@ -31,6 +31,7 @@ STAGES = frozenset({'source-copy', 'acquire-slot', 'resources', 'make-provisioni
 
 CGROUP_KEYS = ('pids_current', 'pids_max', 'pids_events_max', 'memory_current', 'memory_max',
                'memory_events_max', 'memory_events_oom', 'memory_events_oom_kill')
+CGROUP_V1_KEYS = ('pids_current', 'pids_max', 'pids_events_max', 'memory_current', 'memory_max', 'memory_failcnt')
 CGROUP_PROBE_FAILURES = {31: 'cgroup directory unavailable', 32: 'awk unavailable', 33: 'pids.current unavailable',
                          34: 'pids.max unavailable', 35: 'pids.events unavailable', 36: 'memory.current unavailable',
                          37: 'memory.max unavailable', 38: 'memory.events unavailable'}
@@ -43,9 +44,13 @@ class CgroupUnavailable(ValueError):
 
 
 def parse_cgroup_sample(raw):
-    if not isinstance(raw, bytes) or len(raw) > 512 or not re.fullmatch(rb'(?:[0-9]{1,20}\s+){8}', raw):
+    if not isinstance(raw, bytes) or len(raw) > 512 or not re.fullmatch(rb'v[12]\s+(?:[0-9]{1,20}\s+){6,8}', raw):
         raise CgroupUnavailable('counter format invalid')
-    return dict(zip(CGROUP_KEYS, map(int, raw.split())))
+    version, *values = raw.split()
+    keys = CGROUP_KEYS if version == b'v2' else CGROUP_V1_KEYS
+    if len(values) != len(keys):
+        raise CgroupUnavailable('counter format invalid')
+    return {'version': version.decode('ascii'), **dict(zip(keys, map(int, values)))}
 
 
 def sample_cgroup(owner, daemon):
@@ -89,7 +94,10 @@ def finish_cgroup_monitor(owner, daemon, output, before):
 
 
 def save_cgroup_counters(output, before, after):
-    events = ('pids_events_max', 'memory_events_max', 'memory_events_oom', 'memory_events_oom_kill')
+    if before['version'] != after['version']:
+        raise ValueError('Auth cgroup counters unavailable')
+    events = (('pids_events_max', 'memory_failcnt') if before['version'] == 'v1' else
+              ('pids_events_max', 'memory_events_max', 'memory_events_oom', 'memory_events_oom_kill'))
     if any(after[key] < before[key] for key in events):
         raise ValueError('Auth cgroup counters unavailable')
     (output / 'cgroup-counters.json').write_text(json.dumps(

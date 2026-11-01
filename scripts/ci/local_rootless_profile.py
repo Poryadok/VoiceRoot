@@ -31,12 +31,19 @@ COMMAND = ('dockerd', '--storage-driver=vfs', '--iptables=false', '--ip-masq=fal
 TARGETS = frozenset({'/home/rootless/.local/share/docker', '/var/lib/docker', '/run/user/1000'})
 WORKSPACE_TARGETS = TARGETS | {'/workspace'}
 CGROUP_COUNTER_COMMAND = ("set -eu; cd /sys/fs/cgroup || exit 31; command -v awk >/dev/null || exit 32; "
+                          "if test -e pids.current; then "
                           "test -r pids.current || exit 33; test -r pids.max || exit 34; "
                           "test -r pids.events || exit 35; test -r memory.current || exit 36; "
                           "test -r memory.max || exit 37; test -r memory.events || exit 38; "
-                          "cat pids.current pids.max; "
+                          "echo v2; cat pids.current pids.max; "
                           "awk '$1==\"max\" {print $2}' pids.events; cat memory.current memory.max; "
-                          "for key in max oom oom_kill; do awk -v key=\"$key\" '$1==key {print $2}' memory.events; done")
+                          "for key in max oom oom_kill; do awk -v key=\"$key\" '$1==key {print $2}' memory.events; done; "
+                          "else test -r pids/pids.current || exit 33; test -r pids/pids.max || exit 34; "
+                          "test -r pids/pids.events || exit 35; test -r memory/memory.usage_in_bytes || exit 36; "
+                          "test -r memory/memory.limit_in_bytes || exit 37; test -r memory/memory.failcnt || exit 38; "
+                          "echo v1; cat pids/pids.current pids/pids.max; "
+                          "awk '$1==\"max\" {print $2}' pids/pids.events; "
+                          "cat memory/memory.usage_in_bytes memory/memory.limit_in_bytes memory/memory.failcnt; fi")
 CONFIG_DEFAULTS = {
     'Domainname': '', 'AttachStdin': False, 'AttachStdout': False, 'AttachStderr': False,
     'ExposedPorts': {'2375/tcp': {}, '2376/tcp': {}}, 'Tty': False,
