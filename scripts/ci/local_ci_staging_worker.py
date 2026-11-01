@@ -34,11 +34,12 @@ import local_source_snapshot as snapshot
 
 
 def configure(request):
-    global ROOT, BASE, HELPER, JQ, SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE, SHARD, IMAGES, ASSETS
+    global ROOT, BASE, HELPER, JQ, SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE, SHARD, IMAGES, ASSETS, RUNTIME_IMAGES
     request = request_contract.validate(request)
     ROOT, BASE = Path(request['root']), Path(request['output'])
     SOURCE_COMMIT, SOURCE_TREE, SOURCE_BASE, SHARD = request['commit'], request['tree'], request['base'], request['shard']
     ASSETS = {key: Path(value) for key, value in request['assets'].items()}
+    RUNTIME_IMAGES = request.get('runtime_images', {})
     HELPER, JQ = ASSETS['helper'], ASSETS['jq']
     IMAGES = (
     (ASSETS['postgres_image'], 'bcdd6a15d43a8a7ef1dbe8ae5b625d426163ce4419cdb07953aff03fed760222', 'sha256:6a2e324ebe59af6031c4c1cd96c1d5072c2ebc36563d2196365e43b8297c062d', 'postgres:16-alpine'),
@@ -133,7 +134,7 @@ def main():
     try:
         (BASE / 'identity.json').write_text(json.dumps({'daemon': daemon_id, 'slot': scheduled.slot,
             'journal': str(owner.directory / 'ownership.json'), 'source': SOURCE_COMMIT,
-            'images': [row[2:] for row in IMAGES]}, indent=2))
+            'images': [row[2:] for row in IMAGES], 'runtime_images': RUNTIME_IMAGES}, indent=2))
         print('SCRIPT_PROBE_OWNER', scheduled.slot, owner.directory, flush=True)
         network = owner.create_resource('network')
         mounts = {path: owner.create_resource('volume') for path in
@@ -216,6 +217,26 @@ def main():
             execute('tag-check-' + str(number), client, docker + ['image', 'inspect', tag, '--format', '{{.Id}}'])
             if (BASE / ('tag-check-' + str(number) + '.stdout')).read_text().strip() != image:
                 raise RuntimeError('private tag identity differs')
+        if SHARD == 'runtime':
+            for key, tag in (('postgres', None), ('docker_cli', 'docker:27-cli'), ('python', 'python:3.12-bookworm')):
+                row = RUNTIME_IMAGES[key]
+                path, digest, image = Path(row['archive']), row['sha256'], row['image_id']
+                chat._verify_file(path, digest)
+                copy = owner.directory / ('runtime-' + key + '.tar')
+                with path.open('rb') as source_file, copy.open('xb') as target:
+                    shutil.copyfileobj(source_file, target, 1024 * 1024)
+                chat._verify_file(path, digest); chat._verify_file(copy, digest)
+                with (BASE / ('runtime-load-' + key + '.stdout')).open('xb') as out, \
+                     (BASE / ('runtime-load-' + key + '.stderr')).open('xb') as err:
+                    owner.load_canonical_rootless_image(private, copy, digest, image, None, out, err, 300)
+                execute('runtime-platform-' + key, client, docker + ['image', 'inspect', image, '--format', '{{.Os}}/{{.Architecture}}'])
+                if (BASE / ('runtime-platform-' + key + '.stdout')).read_text().strip() != 'linux/amd64':
+                    raise RuntimeError('runtime image platform differs')
+                if tag is not None:
+                    execute('runtime-tag-' + key, client, docker + ['image', 'tag', image, tag])
+                    execute('runtime-tag-check-' + key, client, docker + ['image', 'inspect', tag, '--format', '{{.Id}}'])
+                    if (BASE / ('runtime-tag-check-' + key + '.stdout')).read_text().strip() != image:
+                        raise RuntimeError('runtime private tag differs')
         execute('git-prep', client, ['sh', '-ec', 'mkdir -p /workspace/repo; git -c init.templateDir=/dev/null init /workspace/repo'])
         with (BASE / 'source.bundle').open('rb') as bundle:
             execute('git-transfer', client, ['sh', '-ec', 'set -C; cat > /workspace/source.bundle'], timeout=180, stdin=bundle)
@@ -264,6 +285,12 @@ def main():
         execute('client-packages', client, ['bash', '-ec', setup], timeout=600)
         if (BASE / 'client-packages.stdout').stat().st_size > 32 * 1024 * 1024:
             raise RuntimeError('client package output exceeded limit')
+        import importlib.util
+        dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
+        dispatch_sha = 'acdba14ee13015649397b4ef6b141df7074fbbc1307fffeb871a525b9f65679b'
+        chat._verify_file(dispatch_path, dispatch_sha)
+        spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
+        dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
         # Derive the Python fixture shell exactly from the bound git archive.
         source_tar = BASE / 'source.tar'
         source_hash = (BASE / 'git-before.stdout').read_text().splitlines()[2].split()[0]
@@ -278,12 +305,31 @@ def main():
                 item = tar.getmember('scripts/staging/nats-known-baseline/' + name)
                 if not item.isfile() or item.size > 1024**2: raise RuntimeError('Go source invalid')
                 hashes[name] = hashlib.sha256(tar.extractfile(item).read()).hexdigest()
+            if SHARD == 'runtime':
+                story = tar.getmember('scripts/ci/story-media-cohort-chain.sh')
+                dockerfile = tar.getmember('scripts/ci/story-media-cohort-chain.Dockerfile')
+                if not story.isfile() or not dockerfile.isfile() or story.size > 1024**2 or dockerfile.size > 1024**2:
+                    raise RuntimeError('runtime fixture source invalid')
+                story_adapter = dispatch.story_media_adapter(tar.extractfile(story).read(), tar.extractfile(dockerfile).read(),
+                    RUNTIME_IMAGES['docker_cli']['image_id'], RUNTIME_IMAGES['python']['image_id'])
         chat._verify_file(source_tar, source_hash)
         original_sha, adapter_bytes = build_adapter(text, hashes)
         adapter_sha = hashlib.sha256(adapter_bytes).hexdigest()
         with tempfile.TemporaryFile() as stream:
             stream.write(adapter_bytes); stream.seek(0)
             execute('fixture-adapter', client, ['sh','-ec','mkdir /run/user/1000/adapter-root; chmod 755 /run/user/1000/adapter-root; set -C; cat > /run/user/1000/adapter-root/offline-runner.sh; chmod 444 /run/user/1000/adapter-root/offline-runner.sh'], stdin=stream)
+        if SHARD == 'runtime':
+            story_sha = hashlib.sha256(story_adapter).hexdigest()
+            with tempfile.TemporaryFile() as stream:
+                stream.write(story_adapter); stream.seek(0)
+                execute('story-adapter', client, ['sh','-ec','set -C; cat > /run/user/1000/adapter-root/story-media.sh; chmod 444 /run/user/1000/adapter-root/story-media.sh'], stdin=stream)
+            with source_tar.open('rb') as stream:
+                execute('runtime-source-transfer', client, ['sh','-ec','set -C; cat > /run/user/1000/source.tar'], timeout=300, stdin=stream)
+            chat._verify_file(source_tar, source_hash)
+            execute('runtime-source-hash', client, ['sha256sum','/run/user/1000/source.tar'])
+            if (BASE/'runtime-source-hash.stdout').read_text().split()[0] != source_hash:
+                raise RuntimeError('runtime source transfer differs')
+            execute('runtime-source-extract', client, ['sh','-ec','mkdir /run/user/1000/source-mirror; tar --no-same-owner -xf /run/user/1000/source.tar -C /run/user/1000/source-mirror; tar -df /run/user/1000/source.tar -C /run/user/1000/source-mirror'], timeout=300)
         (BASE / 'fixture-adapter.json').write_text(json.dumps({'canonical_argument_sha256':original_sha,
             'adapted_sha256':adapter_sha,'go_source_sha256':hashes}, indent=2))
         wrapper = """#!/bin/sh
@@ -381,12 +427,6 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         execute('staging-proxy-hash',client,['sha256sum','/run/user/1000/staging-proxy.tar'])
         if (BASE/'staging-proxy-hash.stdout').read_text().split()[0] != proxy_sha: raise RuntimeError('proxy transfer differs')
         execute('staging-proxy-extract',client,['sh','-ec','mkdir /run/user/1000/staging-proxy /run/user/1000/tmp /run/user/1000/gocache; tar --no-same-owner -xf /run/user/1000/staging-proxy.tar -C /run/user/1000/staging-proxy; chown -R 1000:1000 /run/user/1000/tmp /run/user/1000/gocache'])
-        import importlib.util
-        dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        dispatch_sha = 'e3da9b376ee864bcd3758e449b681e13cbe5e518b299eb57e72981f575397625'
-        chat._verify_file(dispatch_path, dispatch_sha)
-        spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
-        dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
         inventory = matrix_inventory.build(ROOT)
         recipes = dispatch.inventory(inventory['shards'][SHARD], shard=SHARD)
         wrappers = dispatch.wrappers(recipes, shard=SHARD)
@@ -408,6 +448,14 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             if 'permission denied' not in message and 'operation not permitted' not in message: raise RuntimeError('denial was not a permission check')
         execute('adapter-before', client, ['sha256sum','/run/user/1000/adapter-root/offline-runner.sh'])
         if (BASE/'adapter-before.stdout').read_text().split()[0] != adapter_sha: raise RuntimeError('adapter file differs before execution')
+        if SHARD == 'runtime':
+            execute('story-adapter-before', client, ['sha256sum','/run/user/1000/adapter-root/story-media.sh'])
+            if (BASE/'story-adapter-before.stdout').read_text().split()[0] != story_sha:
+                raise RuntimeError('runtime adapter differs before execution')
+            execute('runtime-mirror-writable', client, ['setpriv','--reuid=1000','--regid=1000','--clear-groups',
+                'find','/run/user/1000/source-mirror','-writable','-print','-quit'], timeout=300)
+            if (BASE/'runtime-mirror-writable.stdout').read_bytes().strip():
+                raise RuntimeError('runtime source mirror writable by test user')
         verify_peers()
         common = ['setpriv','--reuid=1000','--regid=1000','--clear-groups','env',
             'HOME=/run/user/1000','USER=voiceci','GITHUB_ACTIONS=true','PYTHONDONTWRITEBYTECODE=1','VOICE_CONTRACT_PROFILE=current',
@@ -416,6 +464,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             'TMPDIR=/run/user/1000/tmp','PATH=/run/user/1000/adapter-root:/usr/local/bin:/run/user/1000/tools:/usr/bin:/bin',
             'GOPROXY=file:///run/user/1000/staging-proxy/download','GOSUMDB=off','GOTOOLCHAIN=local',
             'GOFLAGS=-p=1 -mod=readonly','GOMAXPROCS=1','CGO_ENABLED=0','GOCACHE=/run/user/1000/gocache']
+        if SHARD == 'runtime': common.append('DOCKER_BUILDKIT=0')
         execute('resolve-base',client,common+['bash','/workspace/repo/scripts/ci/resolve-voice-r22-base.sh'])
         if (BASE/'resolve-base.stdout').read_text().strip() != SOURCE_BASE: raise RuntimeError('hosted event base differs')
         execute('verify-base',client,common+['git','-C','/workspace/repo','cat-file','-e','' + SOURCE_BASE + '^{commit}'])
@@ -426,7 +475,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         execute('make-dry-run',client,common+['make','-C','/workspace/repo','-n','BASH=/run/user/1000/adapter-root/bash-guard','ci-script-tests-' + SHARD])
         lines = (BASE/'make-dry-run.stdout').read_text().splitlines()
         lines = [line for line in lines if not line.startswith('make: Entering directory') and not line.startswith('make: Leaving directory')]
-        expected = [[('/run/user/1000/adapter-root/bash-guard' if kind == 'bash' else 'python3'),'/workspace/repo/'+path] for kind,path in recipes]
+        expected = [dispatch.command(recipe) for recipe in recipes]
         if [shlex.split(line) for line in lines] != expected: raise RuntimeError('expanded Make command inventory differs')
         command = common + ['bash','-ec','set -o pipefail; cd /workspace/repo; make BASH=/run/user/1000/adapter-root/bash-guard ci-script-tests-' + SHARD + ' 2>&1 | head -c 33554433']
         code = execute('preservation', client, command, timeout=5400, allow_failure=True)
@@ -463,7 +512,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
             execute('recipe-log-'+str(index),client,['sh','-ec','[ "$(wc -c < "$1")" -le 16777216 ]; cat "$1"','sh',path])
         if code != 0: raise RuntimeError('preservation failed: ' + str(code))
         if SHARD == 'staging' and cid_status != 0: raise RuntimeError('successful run lacks inner container identity')
-        if SHARD == 'proofs' and cid_status == 0: raise RuntimeError('unexpected preservation container')
+        if SHARD in ('proofs', 'runtime') and cid_status == 0: raise RuntimeError('unexpected preservation container')
         output = (BASE / 'preservation.stdout').read_bytes()
         dispatch.validate_make_log(output)
         count = dispatch.validate_events((BASE/'recipe-events.stdout').read_bytes(),recipes)
@@ -483,6 +532,11 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         chat._verify_file(dispatch_path,dispatch_sha)
         execute('adapter-after', client, ['sha256sum','/run/user/1000/adapter-root/offline-runner.sh'])
         if (BASE/'adapter-after.stdout').read_text().split()[0] != adapter_sha: raise RuntimeError('adapter file differs after execution')
+        if SHARD == 'runtime':
+            execute('story-adapter-after', client, ['sha256sum','/run/user/1000/adapter-root/story-media.sh'])
+            if (BASE/'story-adapter-after.stdout').read_text().split()[0] != story_sha:
+                raise RuntimeError('runtime adapter differs after execution')
+            execute('runtime-source-compare-after', client, ['tar','-df','/run/user/1000/source.tar','-C','/run/user/1000/source-mirror'], timeout=300)
         execute('containers-after', client, docker + ['ps', '-aq', '--no-trunc'])
         if (BASE / 'containers-after.stdout').read_bytes().strip():
             raise RuntimeError('inner container remains')
