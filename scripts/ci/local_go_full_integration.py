@@ -24,8 +24,10 @@ import local_auth_full_orchestration as auth_broker
 
 BOT_IMAGES = ('postgres:16-bookworm', 'nats:2.10-alpine')
 SEARCH_IMAGES = ('postgres:16-bookworm',)
+USER_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1')
+REALTIME_IMAGES = ()
 POSTGRES_SERVICES = frozenset({'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'})
-EXTRA_SERVICES = POSTGRES_SERVICES | {'bot'}
+EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime'}
 
 
 def profile(service):
@@ -35,6 +37,10 @@ def profile(service):
         return {'images': chat.IMAGES, 'module': 'src/backend/chat'}
     if service == 'bot':
         return {'images': BOT_IMAGES, 'module': 'src/backend/bot'}
+    if service == 'user':
+        return {'images': USER_IMAGES, 'module': 'src/backend/user'}
+    if service == 'realtime':
+        return {'images': REALTIME_IMAGES, 'module': 'src/backend/realtime'}
     if service in POSTGRES_SERVICES:
         return {'images': SEARCH_IMAGES, 'module': 'src/backend/' + service}
     raise ValueError('unsupported Go integration service: image, tool and dedicated CI prerequisites require review')
@@ -127,6 +133,10 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
         'Go dependency and cached ziphash provenance', 'host acquisition supervision',
         'source inventory completeness audit and dedicated integration jobs',
         'Go client container CPU and memory limits not enforced']
+    if service == 'realtime':
+        result['unbound_inputs'].append('tagged Realtime lifecycle PostgreSQL fixture and dedicated job')
+    if service == 'user':
+        result['unbound_inputs'].append('User association, admission and capture dedicated fixtures and jobs')
     (output / 'diagnostic.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return result
 
