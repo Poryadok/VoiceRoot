@@ -96,14 +96,14 @@ def run_full(owner, daemon, client, root, source, source_copy, archive_digest, i
     if service == 'chat':
         module, image_tags, inventory_reader = MODULE, IMAGES, read_required
         test_args = '-p 2'
-    elif service in ('bot', 'search'):
+    else:
         import local_go_full_integration as full_go
+        if service not in full_go.EXTRA_SERVICES:
+            raise ValueError('unsupported Go service profile')
         selected = full_go.profile(service)
         module, image_tags = selected['module'], selected['images']
         inventory_reader = lambda source_copy, packages: full_go.read_required(source_copy, service, packages)
         test_args = '-p 1 -parallel 1'
-    else:
-        raise ValueError('unsupported Go service profile')
     root, output = Path(root).resolve(), Path(output).resolve()
     if output == root or root in output.parents or output.exists():
         raise ValueError('output must be new and outside source tree')
@@ -122,7 +122,8 @@ def run_full(owner, daemon, client, root, source, source_copy, archive_digest, i
     if local_chat_private.inspect_pair(owner, daemon, client) != address:
         raise ValueError('private daemon address changed')
     go = ('cd /workspace/source/' + module + ' && '
-               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly '
+               'exec env -i PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin '
+               'HOME=/tmp GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly '
                'GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
                'GOCACHE=/workspace/go-build GOMODCACHE=/workspace/go-mod '
                'DOCKER_HOST=unix:///socket/docker.sock TESTCONTAINERS_RYUK_DISABLED=true '
@@ -170,12 +171,12 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
     try:
         if service == 'chat':
             image_tags, executor = IMAGES, run_full
-        elif service in ('bot', 'search'):
+        else:
             import local_go_full_integration as full_go
+            if service not in full_go.EXTRA_SERVICES:
+                raise ValueError('unsupported Go service profile')
             image_tags = full_go.profile(service)['images']
             executor = lambda *args: full_go.run_profile(service, *args)
-        else:
-            raise ValueError('unsupported Go service profile')
         validate_archives(archives, image_tags)
         network = owner.create_resource('network')
         mounts = {name: owner.create_resource('volume') for name in

@@ -1,6 +1,6 @@
 """Explicitly profiled full Go integration diagnostics, never a preflight pass.
 
-Only Chat, Bot and Search are implemented. Other services require a reviewed profile
+Only explicitly listed services are implemented. Other services require a reviewed profile
 for their own images, binaries, environment and dedicated CI checks. The caller
 must supervise this process and maintain exclusive private daemon/socket custody.
 """
@@ -20,15 +20,19 @@ import local_source_snapshot as snapshot
 
 BOT_IMAGES = ('postgres:16-bookworm', 'nats:2.10-alpine')
 SEARCH_IMAGES = ('postgres:16-bookworm',)
+POSTGRES_SERVICES = frozenset({'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'})
+EXTRA_SERVICES = POSTGRES_SERVICES | {'bot'}
 
 
 def profile(service):
+    if not isinstance(service, str):
+        raise ValueError('unsupported Go integration service')
     if service == 'chat':
         return {'images': chat.IMAGES, 'module': 'src/backend/chat'}
     if service == 'bot':
         return {'images': BOT_IMAGES, 'module': 'src/backend/bot'}
-    if service == 'search':
-        return {'images': SEARCH_IMAGES, 'module': 'src/backend/search'}
+    if service in POSTGRES_SERVICES:
+        return {'images': SEARCH_IMAGES, 'module': 'src/backend/' + service}
     raise ValueError('unsupported Go integration service: image, tool and dedicated CI prerequisites require review')
 
 
@@ -51,7 +55,7 @@ def read_required(source_copy, service, packages):
 
 
 def run_profile(service, owner, daemon, client, root, source, source_copy, archive_digest, identities, output):
-    if service not in ('bot', 'search'):
+    if service not in EXTRA_SERVICES:
         raise ValueError('unsupported Go integration service')
     return chat.run_full(owner, daemon, client, root, source, source_copy, archive_digest, identities, output,
                          service=service)
