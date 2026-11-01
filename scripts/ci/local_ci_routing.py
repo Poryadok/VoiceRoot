@@ -41,6 +41,11 @@ def _hash(path):
     return digest.hexdigest()
 
 
+def _shell_path():
+    """Resolve the Windows diagnostic shell; tests may supply a fixture."""
+    return Path('C:/Program Files/Git/bin/bash.exe').resolve(strict=True)
+
+
 def _verify_safety(snapshot):
     try:
         if any(_hash(snapshot / name) != expected for name, expected in SAFETY_SURFACE.items()):
@@ -59,7 +64,7 @@ def run(root, source, output):
     _verify_safety(snapshot)
     executable = Path(sys.executable).resolve(strict=True)
     binary_hash = _hash(executable)
-    shell = Path('C:/Program Files/Git/bin/bash.exe').resolve(strict=True)
+    shell = _shell_path()
     shell_hash = _hash(shell)
     env = {key: value for key, value in os.environ.items()
            if not key.upper().startswith(('PYTHON', 'VOICE_', 'GIT_', 'JOB_', 'RUN_', 'FILTER_', 'BASH_FUNC_'))

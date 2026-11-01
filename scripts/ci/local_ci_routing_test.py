@@ -59,6 +59,7 @@ class RoutingDiagnosticTest(unittest.TestCase):
             (directory / name).write_text('import unittest, yaml\nclass ' + suite + '(unittest.TestCase):\n def test_ok(self): self.assertTrue(hasattr(yaml, "safe_load"))\nif __name__ == "__main__": unittest.main()\n')
         (self.root / '.github/ci/verify-required-jobs_test.sh').write_text('echo "All verify-required-jobs tests passed."\n')
         with patch.object(routing.local_source_snapshot, 'materialize', return_value=self.root), \
+             patch.object(routing, '_shell_path', return_value=Path('C:/Program Files/Git/bin/bash.exe').resolve(strict=True)), \
              patch.object(routing, '_verify_safety'), patch.object(routing, 'GATE_CASES', ('test_ok',)), \
              patch.object(routing, 'ROUTER_CASES', ('test_ok',)), \
              patch.object(routing.local_source_snapshot, 'verify_materialized'), \
@@ -97,6 +98,11 @@ class RoutingDiagnosticTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / 'root'
         self.root.mkdir()
+        self.fixture_shell = self.root / 'fixture-shell'
+        self.fixture_shell.write_bytes(b'owned fake shell for mocked execution')
+        shell_patch = patch.object(routing, '_shell_path', return_value=self.fixture_shell)
+        shell_patch.start()
+        self.addCleanup(shell_patch.stop)
         self.output = Path(self.tmp.name) / 'output'
         self.source = {'head': 'a' * 40, 'tree': 'b' * 40}
 
@@ -120,6 +126,8 @@ class RoutingDiagnosticTest(unittest.TestCase):
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['source'], self.source)
         self.assertEqual(len(report['commands']), 3)
+        self.assertEqual(report['bash']['path'], str(self.fixture_shell))
+        self.assertEqual(report['bash']['sha256'], hashlib.sha256(self.fixture_shell.read_bytes()).hexdigest())
         self.assertTrue(report['omitted'])
 
     def test_failed_skipped_or_missing_tests_are_rejected(self):
