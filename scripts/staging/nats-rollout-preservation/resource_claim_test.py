@@ -106,6 +106,16 @@ class ResourceTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             for kind in ('namespace','configmap','deployment','pvc','pv','node','pod','replicaset','service','secret'):
                 session.check(prefix+[kind,'voice-test','-o','json'])
+            for kind,name in (('statefulset','voice-postgres'),('persistentvolumeclaim','pgdata-voice-postgres-0'),
+                              ('persistentvolume','pvc-1234'),('endpoints','voice-postgres')):
+                session.check(prefix+[kind,name,'-o','json'])
+            endpoint_slice=prefix+['endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json']
+            session.check(endpoint_slice)
+            for bad in (prefix+['statefulset','unrelated','-o','json'],
+                        prefix+['persistentvolumeclaim','unrelated','-o','json'],
+                        prefix+['endpoints','unrelated','-o','json'],
+                        endpoint_slice[:-3]+['kubernetes.io/service-name=other','-o','json']):
+                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             for kind in ('pods','hpa,jobs,deployments'):
                 session.check(prefix+[kind,'-o','json'])
             from runtime_stage import IMAGE_TEMPLATE

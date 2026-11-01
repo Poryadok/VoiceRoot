@@ -444,6 +444,8 @@ class Session:
                     return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1])
                         or re.fullmatch(r'/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-[a-z0-9-]{1,100}:8222/proxy/jsz\?accounts=true&streams=true&consumers=true&config=true&limit=2048',tail[1]))
                 if len(tail)==5:
+                    if row['phase']=='cohort-preservation' and tail==['endpointslices','-l',
+                            'kubernetes.io/service-name=voice-postgres','-o','json']:return True
                     return tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
                 if len(tail) not in (3,4) or tail[-2]!='-o':return False
                 if row['phase']=='cohort-preservation' and len(tail)==3:
@@ -457,7 +459,12 @@ class Session:
                     else ('Secret','ConfigMap','Ingress','Deployment','StatefulSet','Service','NetworkPolicy',
                           'PersistentVolumeClaim','Job','Pod') if row['phase']=='prerequisites-captured' else ())
                 canonical=(len(tail)==4 and tail[-1]=='json' and tail[0] in canonical_kinds)
+                postgres_named=(row['phase']=='cohort-preservation' and len(tail)==4 and tail[-1]=='json'
+                    and ((tail[0],tail[1]) in (('statefulset','voice-postgres'),
+                        ('persistentvolumeclaim','pgdata-voice-postgres-0'),('endpoints','voice-postgres'))
+                        or tail[0]=='persistentvolume'))
                 if (row['phase']=='cohort-preservation' and not canonical
+                    and not postgres_named
                     and tail[0] not in ('namespace','configmap','deployment','pvc','pv','node','pod',
                                        'replicaset','service','secret')):return False
                 if not canonical and not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
