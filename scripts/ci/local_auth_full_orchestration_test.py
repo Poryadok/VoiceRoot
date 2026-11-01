@@ -29,6 +29,16 @@ class FullAuthInputsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'cgroup counters unavailable'):
             subject.sample_cgroup(owner, 'daemon')
 
+    def test_settled_probe_exit_codes_explain_missing_cgroup_dependencies(self):
+        owner = mock.Mock()
+        for code, reason in ((31, 'cgroup directory unavailable'), (32, 'awk unavailable'),
+                             (33, 'pids.current unavailable'), (38, 'memory.events unavailable'),
+                             (1, 'probe command failed')):
+            with self.subTest(code=code):
+                owner.read_rootless_cgroup.return_value = code
+                with self.assertRaisesRegex(subject.CgroupUnavailable, '^' + reason + '$'):
+                    subject.sample_cgroup(owner, 'daemon')
+
     def test_cgroup_limit_event_is_saved_and_fails_closed(self):
         before = {key: 0 for key in subject.CGROUP_KEYS}
         after = dict(before, pids_events_max=1)

@@ -30,7 +30,11 @@ COMMAND = ('dockerd', '--storage-driver=vfs', '--iptables=false', '--ip-masq=fal
            '--host=unix:///run/user/1000/docker.sock')
 TARGETS = frozenset({'/home/rootless/.local/share/docker', '/var/lib/docker', '/run/user/1000'})
 WORKSPACE_TARGETS = TARGETS | {'/workspace'}
-CGROUP_COUNTER_COMMAND = ("set -eu; cd /sys/fs/cgroup; cat pids.current pids.max; "
+CGROUP_COUNTER_COMMAND = ("set -eu; cd /sys/fs/cgroup || exit 31; command -v awk >/dev/null || exit 32; "
+                          "test -r pids.current || exit 33; test -r pids.max || exit 34; "
+                          "test -r pids.events || exit 35; test -r memory.current || exit 36; "
+                          "test -r memory.max || exit 37; test -r memory.events || exit 38; "
+                          "cat pids.current pids.max; "
                           "awk '$1==\"max\" {print $2}' pids.events; cat memory.current memory.max; "
                           "for key in max oom oom_kill; do awk -v key=\"$key\" '$1==key {print $2}' memory.events; done")
 CONFIG_DEFAULTS = {
