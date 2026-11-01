@@ -371,7 +371,7 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_existing_inventory_new_candidate_creates_only_release_policy(self):
         self._cold_prepare('c2-new-candidate')
 
-    def _cold_prepare(self,fault=None,*,realtime_source=False):
+    def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None):
         import os, shutil, subprocess, base64, yaml, uuid
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -522,7 +522,7 @@ class PrepareCompositionTests(unittest.TestCase):
             stage=object.__new__(runtime_stage.RolloutStage);stage.kube=kube;stage.operation=operation;stage.marker=copy.deepcopy(marker)
             stage.snapshots={'voice-user':copy.deepcopy(deployment)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images=copy.deepcopy(card['observed']['images']);stage.expected={'namespace_uid':ns,'deployment_uids':{'voice-user':'user'},
-                'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid}
+                'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid,'generation':session.installation.generation}
             stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
                 'index_sha256':'e'*64,'manifest_sha256':'d'*64,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+'d'*64})
@@ -541,7 +541,9 @@ class PrepareCompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(module,'preflight_payloads',side_effect=checked))
             request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
             if fault=='missing-issuer':
-                with self.assertRaises(FileNotFoundError):prereq.prepare_inputs(actions,request,approved,execution,workspace)
+                if bridge_missing is None:
+                    with self.assertRaises(FileNotFoundError):prereq.prepare_inputs(actions,request,approved,execution,workspace)
+                else:bridge_missing(actions,request,approved,execution,workspace)
                 self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
             if fault=='expanded-trust':
                 with self.assertRaisesRegex(prereq.Blocked,'issuer_trust_changed'):prereq.prepare_inputs(actions,request,approved,execution,workspace)

@@ -40,16 +40,32 @@ class BridgePrerequisiteComposition(unittest.TestCase):
     def _exercise(self, fault=None, *, with_realtime=False):
         original = prereq.run_prepare
 
-        def joined(actions, request, approved, execution, workspace):
+        def bridge_missing(actions,request,approved,execution,workspace):
+            import staging_cohort_preservation as cohort
+            session=actions.tt_session;installed=workspace.parents[1]
+            saved=workspace.with_name(workspace.name+'-fixture');workspace.rename(saved)
+            (installed/'source-authority'/(session.operation+'.json')).unlink()
+            execution=dict(execution,head_sha=approved['source_sha'])
+            public=dict(request,action='prepare',nonce=session.operation+'a'*52,token='fixture',
+                        source_sha=session.context['commit'],resource_context=session.context)
+            def source(_token,_run,_sha,destination):
+                shutil.copytree(saved,destination,dirs_exist_ok=True)
+                return copy.deepcopy(approved)
+            # Exercise real bridge/source capture. The handoff to pre-cut
+            # inputs is a test boundary, not a qualified P2 proof.
+            with patch.object(bridge_root,'INSTALLED',installed),patch.object(actions,'_idle'), \
+                 patch.object(actions,'_dispatcher',return_value=(17,execution)), \
+                 patch.object(source_authority,'capture_source',side_effect=source), \
+                 patch.object(prereq,'P2_BINARY_PINS',{}), \
+                 patch.object(cohort,'prepare',side_effect=lambda a,r,ap,ex,ws:prereq.prepare_inputs(a,r,ap,ex,ws)):
+                with self.assertRaises(FileNotFoundError) as caught:actions.execute(public)
+            self.assertEqual(caught.exception.filename,str(installed/'prerequisite-inputs'/'p3-issuer.json'))
+
+        def joined(actions, request, approved, execution, workspace, *, preservation_ref):
+            import staging_cohort_preservation as cohort
             session = actions.tt_session
             installed = workspace.parents[1]
-            saved = workspace.with_name(workspace.name + '-fixture')
-            workspace.rename(saved)
-            (installed / 'source-authority' / (session.operation + '.json')).unlink()
             stage = runtime_stage.RolloutStage.capture.return_value
-            def source(_token, _run, _sha, destination):
-                shutil.copytree(saved, destination, dirs_exist_ok=True)
-                return copy.deepcopy(approved)
             def capture(*args, **kwargs):
                 if session.check()['phase'] == 'prerequisites':
                     publisher = stage.kube.get('deployment', 'voice-p3-principal-jwks')
@@ -64,25 +80,28 @@ class BridgePrerequisiteComposition(unittest.TestCase):
                         self._realtime_successor(actions, request, approved, execution, workspace, stage)
                     raise ReachedPolicy()
             request = dict(request, nonce=session.operation + 'a' * 52, token='fixture', action='prepare')
-            execution = dict(execution, head_sha=approved['source_sha'])
+            loaded={'request':{'mode':request['mode'],'changed_services':request['changed_services'],
+                               'gis_first_install':request.get('gis_first_install') is True},
+                    'approved':approved,'execution':execution,'workspace':str(workspace)}
+            authorization={'action':'authorize','operation':session.operation,'artifact_id':42,'token':'fixture',
+                           'resource_context':session.context}
+            original_read=cohort._read
+            def read(path,*args,**kwargs):
+                return request if path==cohort._request_record(session) else original_read(path,*args,**kwargs)
             with patch.object(prereq, 'run_prepare', original), \
                  patch.object(bridge_root, 'INSTALLED', installed), \
                  patch.object(actions, '_idle'), \
                  patch.object(actions, '_dispatcher', return_value=(17, execution)), \
                  patch.object(actions, '_report', side_effect=report), \
-                 patch.object(source_authority, 'capture_source', side_effect=source), \
                  patch.object(bridge_root, 'Kube', return_value=stage.kube), \
-                 patch.object(runtime_stage.RolloutStage, 'capture', side_effect=capture):
-                if fault == 'missing-issuer':
-                    try:
-                        actions._prepare(request)
-                    except FileNotFoundError as exc:
-                        self.assertEqual(exc.filename, str(installed / 'prerequisite-inputs' / 'p3-issuer.json'))
-                        raise
-                    self.fail('missing issuer unexpectedly admitted')
-                else:
-                    with self.assertRaises(ReachedPolicy):
-                        actions._prepare(request)
+                 patch.object(runtime_stage.RolloutStage, 'capture', side_effect=capture), \
+                 patch.object(cohort,'capture_final_stage',side_effect=capture), \
+                 patch.object(cohort,'qualify_offnode'), \
+                 patch.object(cohort,'begin_continuation',return_value=(preservation_ref,loaded)), \
+                 patch.object(cohort,'load_prepared',return_value=loaded), \
+                 patch.object(cohort,'require_continuation'),patch.object(cohort,'_read',side_effect=read):
+                with self.assertRaises(ReachedPolicy):
+                    actions.execute(authorization)
             row = session.check()
             if not with_realtime:
                 self.assertEqual(row['phase'], 'prerequisites-captured')
@@ -95,7 +114,7 @@ class BridgePrerequisiteComposition(unittest.TestCase):
         fixture = staging_prerequisites_test.PrepareCompositionTests()
         with patch.object(prereq, 'run_prepare', side_effect=joined):
             if fault:
-                fixture._cold_prepare(fault)
+                fixture._cold_prepare(fault,bridge_missing=bridge_missing)
             else:
                 with self.assertRaises(Joined):
                     fixture._cold_prepare(realtime_source=with_realtime)
@@ -138,7 +157,10 @@ class BridgePrerequisiteComposition(unittest.TestCase):
              patch.object(realtime, '_create_database', side_effect=create_database), \
              patch.object(realtime, '_patch_secret', side_effect=patch_secret):
             receipt = realtime.run_prepare(actions, request, approved, execution, workspace, stage)
+            import staging_cohort_preservation as cohort
             target = {'tag': session.context['commit'], 'images': session.context['images'],
+                      'installation_sha256':session.installation.sha256,
+                      'cohort_preservation_sha256':prereq.digest(cohort.load_qualified(session)),
                       'prerequisites_sha256': prereq.digest(parent),
                       'realtime_bootstrap_sha256': realtime.digest(receipt)}
             session.advance_realtime_bootstrap(target, stage.old_images)
