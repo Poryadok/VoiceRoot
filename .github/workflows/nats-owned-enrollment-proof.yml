@@ -89,6 +89,7 @@ jobs:
             PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \
             VOICE_COHORT_RETAINED_ROOT="$work/runtime" TMPDIR="$work/runtime" \
             PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
-            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries)
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries \
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_qualified_continuation_reaches_c1_final_prepare)
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=normal)"
