@@ -358,6 +358,12 @@ class PrepareCompositionTests(unittest.TestCase):
             self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         self._cold_prepare(on_ready=ready,fixture_installation=installation)
 
+    def test_fixture_accepts_distinct_operation_before_session_admission(self):
+        def ready(actions,*args):
+            self.assertEqual(actions.tt_session.operation,'b'*12)
+            self.assertEqual(actions.tt_session.check()['operation'],'b'*12)
+        self._cold_prepare(on_ready=ready,fixture_operation='b'*12)
+
     def test_cold_prepare_executes_all_children_before_typed_capture(self):
         self._cold_prepare()
 
@@ -381,7 +387,7 @@ class PrepareCompositionTests(unittest.TestCase):
 
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
                       context_commit=None,full_source=False,strict_helpers=False,source_overrides=None,workspace_context=None,
-                      fixture_installation=None):
+                      fixture_installation=None,fixture_operation=None):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -393,7 +399,7 @@ class PrepareCompositionTests(unittest.TestCase):
         source_root=Path(os.environ.get('VOICE_TEST_SOURCE_ROOT',Path(__file__).resolve().parents[3]))
         if not (source_root/'deploy/staging/services.yaml').is_file():self.skipTest('requires actual source fixture')
         with (workspace_context or tempfile.TemporaryDirectory(dir='/root')) as folder, ExitStack() as stack:
-            root=Path(folder);installed=root/'installed';operation='a'*12
+            root=Path(folder);installed=root/'installed';operation=fixture_operation if fixture_operation is not None else 'a'*12
             workspace=installed/'sources'/operation;code=installed/'code';operator=installed/'prerequisite-inputs'
             for directory in (workspace,code/'fixture',installed/'source-authority',operator):directory.mkdir(parents=True,mode=0o700)
             relative=['deploy/staging/services.yaml','scripts/dev/migrations.py',
