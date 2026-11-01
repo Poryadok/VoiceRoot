@@ -15,7 +15,7 @@ from resource_claim_test import MemoryJournal, card, context
 
 class CohortInstallationJournalTests(unittest.TestCase):
     def test_story_composition_requires_scoped_source_and_parent(self):
-        import bridge_root
+        import bridge_root,staging_prerequisites as prerequisites
         c=context();session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal());session.admit(start=True)
         actions=SimpleNamespace(tt_session=session,installation=session.installation)
         approved={'source_sha':c['commit'],'source_files':{}};execution={'fixture':'execution'}
@@ -24,20 +24,28 @@ class CohortInstallationJournalTests(unittest.TestCase):
                 'approved_sha256':claim.digest(approved),'execution_sha256':claim.digest(execution)}
         plan={'schema':'voice-staging-prerequisites-plan-v3','installation_sha256':session.installation.sha256,
               'operation':session.operation,'context':c,'helper_sha256':session.helper,'source_capture_sha256':claim.digest(source),
-              'approved_sha256':claim.digest(approved),'execution_sha256':claim.digest(execution)}
+              'approved_sha256':claim.digest(approved),'execution_sha256':claim.digest(execution),'namespace_uid':'namespace',
+              'marker_sha256':'1'*64,'baseline_sha256':'2'*64,'actual_before':card(c)['observed']['images'],
+              'policy_before_sha256':'3'*64,'children':{slot:{} for slot in prerequisites.SLOTS},
+              'auxiliary_images':{},'renderer_authority_sha256':None,'previous_active_sha256':None}
+        prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':plan,
+                  'request':{'mode':'full','changed_services':[],'gis_first_install':False},'gis_authority_sha256':'4'*64}
         def read(path):
-            if path.name=='prepared.json':return {'plan':plan}
+            if path.name=='prepared.json':return prepared
             if path.name=='execution.json':return execution
             return source
-        with patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root.compiler,'compile_migrations',return_value=[]) as compile_plan:
-            self.assertEqual(bridge_root._cohort_story_composition(actions,{'mode':'full'},approved,Path('/unused'))[0],[])
-            for mutation in ('legacy','foreign-source','foreign-parent'):
+        with patch.object(bridge_root,'private_json',side_effect=read),patch.object(prerequisites,'_read_private',return_value=json.dumps(source).encode()), \
+             patch.object(bridge_root.compiler,'compile_migrations',return_value=[]) as compile_plan:
+            self.assertEqual(bridge_root._cohort_story_composition(actions,{'mode':'full','changed_services':[]},approved,Path('/unused'))[0],[])
+            for mutation in ('legacy','foreign-source','foreign-parent','unknown','missing'):
                 original_source=copy.deepcopy(source);original_plan=copy.deepcopy(plan)
                 if mutation=='legacy':source['schema']='voice-staging-source-capture-v1';del source['installation_sha256']
                 elif mutation=='foreign-source':source['installation_sha256']='f'*64
-                else:plan['installation_sha256']='f'*64
+                elif mutation=='foreign-parent':plan['installation_sha256']='f'*64
+                elif mutation=='unknown':plan['unexpected']=True
+                else:del plan['baseline_sha256']
                 with self.subTest(mutation=mutation),self.assertRaises(Blocked):
-                    bridge_root._cohort_story_composition(actions,{'mode':'full'},approved,Path('/unused'))
+                    bridge_root._cohort_story_composition(actions,{'mode':'full','changed_services':[]},approved,Path('/unused'))
                 source.clear();source.update(original_source);plan.clear();plan.update(original_plan)
             self.assertEqual(compile_plan.call_count,1)
 

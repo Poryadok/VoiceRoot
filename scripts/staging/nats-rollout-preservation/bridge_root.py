@@ -177,11 +177,18 @@ def _cohort_story_composition(actions,request,approved,workspace):
     """Bind pre-cut Story4/source8 descriptors to actual protected source inputs."""
     session=actions.tt_session
     parent=INSTALLED/'prerequisites'/session.operation
-    prepared=private_json(parent/'prepared.json');parent_plan=prepared['plan']
+    prepared=private_json(parent/'prepared.json');parent_plan=prepared.get('plan') if type(prepared) is dict else None
     execution=private_json(parent/'execution.json')
     receipt=private_json(INSTALLED/'source-authority'/(session.operation+'.json'))
     from apply import digest
-    if (actions.installation!=session.installation
+    import staging_prerequisites
+    if (type(prepared) is not dict or set(prepared)!={'schema','plan','request','gis_authority_sha256'}
+        or prepared.get('schema')!='voice-staging-prerequisites-prepared-v1'
+        or prepared.get('request')!={'mode':request.get('mode'),'changed_services':request.get('changed_services'),
+                                     'gis_first_install':request.get('gis_first_install') is True}
+        or not isinstance(prepared.get('gis_authority_sha256'),str)
+        or not re.fullmatch(r'[a-f0-9]{64}',prepared['gis_authority_sha256'])
+        or type(parent_plan) is not dict or actions.installation!=session.installation
         or receipt!={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,
         'context':session.context,'helper_sha256':session.helper,'approved_sha256':digest(approved),
         'execution_sha256':digest(execution)}
@@ -192,6 +199,7 @@ def _cohort_story_composition(actions,request,approved,workspace):
         or parent_plan.get('source_capture_sha256')!=digest(receipt)
         or parent_plan.get('approved_sha256')!=digest(approved) or parent_plan.get('execution_sha256')!=digest(execution)):
         raise Blocked('cohort_preflight_source_changed')
+    staging_prerequisites.validate_plan(parent_plan,session)
     def source_read(relative):
         name=str(relative).replace('\\','/')
         path=Path(workspace)/relative
