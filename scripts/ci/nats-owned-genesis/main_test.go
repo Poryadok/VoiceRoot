@@ -46,6 +46,10 @@ func TestFreshKeyMaterialBindsClaimsAndDecoratedSeed(t *testing.T) {
 	if e != nil || account.Subject != genesis.Account || account.Issuer != genesis.Operator {
 		t.Fatal("account binding invalid")
 	}
+	if account.Limits.AccountLimits != (jwt.AccountLimits{Conn: 64, LeafNodeConn: 64}) ||
+		account.Limits.NatsLimits != (jwt.NatsLimits{Subs: 1024, Data: 64 << 20, Payload: 1 << 20}) {
+		t.Fatal("fixture account and NATS limits changed")
+	}
 	system, e := jwt.DecodeAccountClaims(string(read("system-account.jwt")))
 	if e != nil || system.Subject != genesis.System || system.Issuer != genesis.Operator {
 		t.Fatal("system binding invalid")

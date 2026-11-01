@@ -20,6 +20,10 @@ sys.path.insert(0,str(ROOT/'scripts/staging/nats-known-baseline'))
 sys.path.insert(0,str(ROOT/'scripts/staging/nats-rollout-preservation'))
 import bootstrap_renewal
 import bootstrap_selection
+import bootstrap_auth
+import actor_auth
+import actor_permissions
+import actor_verification
 import guard
 from controller import Blocked
 from nats_contract_plan import digest
@@ -28,6 +32,31 @@ from resource_claim import InstallationAuthority,production_installation
 
 
 def sha(raw):return hashlib.sha256(raw).hexdigest()
+
+
+def failure_diagnostic(error):
+    """Only fixed labels, never exception text, paths, requests or credentials."""
+    if type(error) is actor_permissions.PermissionError:category='actor_permissions'
+    elif isinstance(error,PermissionError):category='os_permission'
+    elif isinstance(error,Blocked):category='blocked'
+    elif isinstance(error,OSError):category='os_error'
+    else:category='other'
+    stages={qualify.__code__:'admission',_qualify_in_fixture.__code__:'fixture',
+        enroll_owned.__code__:'enrollment',actor_verification.verify.__code__:'actor_verifier',
+        actor_permissions.evaluate.__code__:'permission_check',actor_auth.prove.__code__:'actor_auth',
+        bootstrap_auth.prove.__code__:'bootstrap_auth',bootstrap_renewal.invoke.__code__:'private_helper',
+        bootstrap_selection.select.__code__:'selection'}
+    stage='entry';tb=error.__traceback__
+    while tb is not None:
+        stage=stages.get(tb.tb_frame.f_code,stage);tb=tb.tb_next
+    result='stage='+stage+' category='+category
+    if type(error) is Blocked:
+        # Never render an exception: only this exact source-defined tuple is
+        # admitted, and all other values (including extra arguments) collapse.
+        reason=('actor_server_authentication_refused' if error.args==
+            ('existing_service_actor_server_authentication_refused',) else 'unspecified')
+        result+=' reason='+reason
+    return result
 
 
 class FixtureKube:
@@ -143,5 +172,5 @@ if __name__=='__main__':
         if len(sys.argv)!=4:raise ValueError('qualified_paths_required')
         qualify(Path(sys.argv[1]),Path(sys.argv[2]),Path(sys.argv[3]))
     except Exception as error:
-        print('owned_nats_enrollment=FAIL '+type(error).__name__,file=sys.stderr)
+        print('owned_nats_enrollment=FAIL '+failure_diagnostic(error),file=sys.stderr)
         sys.exit(1)

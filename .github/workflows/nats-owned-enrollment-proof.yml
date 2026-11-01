@@ -95,7 +95,7 @@ jobs:
           cleanup() {
             status=$?
             trap - EXIT
-            if [[ -d "$work" && ! -L "$work" && "$(sudo -n realpath -- "$work")" == "$work" ]]; then
+            if sudo -n test -d "$work" && ! sudo -n test -L "$work" && [[ "$(sudo -n realpath -- "$work")" == "$work" ]]; then
               if [[ "$status" != 0 ]]; then
                 # A timed-out create can complete after an empty inventory.
                 # Best-effort removal cannot prove terminality: retain all paths
@@ -121,13 +121,9 @@ jobs:
           git archive "$EXPECTED_SHA" | sudo -n tar -xf - -C "$work/source"
           sudo -n chmod -R a-w "$work/source"
           sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" before "$work/runtime"
-          sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/ci" \
-            env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/ci" \
-            python3 -m unittest nats_owned_enrollment_test nats_owned_runtime_cleanup_test nats_owned_broker_qualification_test
-          sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
-            env PYTHONDONTWRITEBYTECODE=1 \
-            PYTHONPATH="$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/staging/nats-known-baseline" \
-            python3 -m unittest scratch_inputs_test staging_cohort_auth_routing_test
+          sudo -n sh -eu -c 'cd "$1/scripts/ci"; exec env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest nats_owned_enrollment_test nats_owned_runtime_cleanup_test nats_owned_broker_qualification_test' sh "$work/source"
+          sudo -n sh -eu -c 'cd "$1/scripts/staging/nats-rollout-preservation"; exec env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$1/scripts/staging/nats-known-baseline" python3 -m unittest scratch_inputs_test staging_cohort_auth_routing_test actor_permissions_test.PermissionTests.test_complete_canonical_bootstrap_acl_accepts_exact_grants actor_permissions_test.PermissionTests.test_exact_allow_still_obeys_deny_and_missing_allow' sh "$work/source"
+          sudo -n env PYTHONDONTWRITEBYTECODE=1 python3 "$work/source/scripts/ci/nats_owned_workflow_privilege_test.py"
           python scripts/ci/staging_qualified_helpers.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-qualified"
           sudo -n install -m 0500 "$RUNNER_TEMP/owned-qualified/bootstrap-renewer" "$work/bin/bootstrap-renewer"
           docker run --rm --mount "type=bind,source=$work/source,target=/source,readonly" \
@@ -153,6 +149,8 @@ jobs:
           docker pull "$pg_image"
           migrate_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
           docker pull "$migrate_image"
+          # These custody tests require the staging-named group, local to this disposable VM.
+          sudo -n groupadd --force --system pmd
           sudo -n --preserve-env=RUNNER_ENVIRONMENT sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
             env \
             PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \

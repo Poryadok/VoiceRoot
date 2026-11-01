@@ -86,6 +86,12 @@ class _Union:
 
 
 def _compatible(required, allow, deny, budget):
+    # The identical validated language is a subset of its own allow union.
+    # This proof is valid only without denies; any deny requires full search.
+    # Charge each candidate and its full token count to the existing budget.
+    if not deny.patterns:
+        budget.spend(sum(1+len(candidate) for candidate in allow.patterns))
+        if required in allow.patterns:return
     # Exact finite quotient of the infinite token alphabet: every currently
     # relevant literal has its own class, and None denotes all other literals.
     # Product exploration finds any required word denied or absent from UNION

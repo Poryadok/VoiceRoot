@@ -517,7 +517,11 @@ func post(check bool) {
     fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
     fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
     fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
-    fixture.call(['go','build','-o',str(bundle/'story-current4-probe'),'./cmd/owned-story-probe'],cwd=source/'src/backend/story',env=env)
+    fixture.call(['go','build','-ldflags=-s -w','-o',str(bundle/'story-current4-probe'),'./cmd/owned-story-probe'],cwd=source/'src/backend/story',env=env)
+    # root_cli binds every capture member with a 16 MiB maximum.
+    for name in ('kernel','bootstrap-renewer','story-current4-probe'):
+        if (bundle/name).stat().st_size > 16 << 20:
+            raise RuntimeError('fixture_capture_binary_too_large')
     if a3_roster:
         fixture.call(['go','build','-o',str(bundle/'a3-client'),str(Path(__file__).parent/'testdata/a3_roster_client.go')],cwd=module,env=env)
     records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}

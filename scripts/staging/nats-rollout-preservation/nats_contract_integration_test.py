@@ -364,6 +364,23 @@ class HostedTransportTests(unittest.TestCase):
 
 
 class FixtureIsolationTest(unittest.TestCase):
+    def test_story_probe_is_compact_and_rejects_oversized_capture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory)
+            commands = []
+            def build(args, **kwargs):
+                commands.append(args)
+                output = Path(args[args.index('-o') + 1])
+                if output.name == 'story-current4-probe':
+                    output.write_bytes(b'\x7fELF' + b'X' * (16 << 20))
+                else:
+                    output.write_bytes(b'\x7fELFfixture')
+            with patch.object(integration.fixture, 'call', side_effect=build):
+                with self.assertRaisesRegex(RuntimeError, 'fixture_capture_binary_too_large'):
+                    integration.build_fixture_records(bundle)
+            story = next(args for args in commands if args[-1] == './cmd/owned-story-probe')
+            self.assertIn('-ldflags=-s -w', story)
+
     def test_capture_is_production_bundle_and_drivers_are_separate(self):
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory)

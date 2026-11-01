@@ -10,6 +10,25 @@ import nats_owned_runtime_cleanup as cleanup
 
 
 class Tests(unittest.TestCase):
+    def test_blocked_diagnostic_allows_only_fixed_actor_code(self):
+        try:raise harness.Blocked('existing_service_actor_server_authentication_refused')
+        except harness.Blocked as error:message=harness.failure_diagnostic(error)
+        self.assertEqual(message,'stage=entry category=blocked reason=actor_server_authentication_refused')
+        for args in [('SECRET_DO_NOT_PRINT',),('existing_service_actor_server_authentication_refused','SECRET_DO_NOT_PRINT')]:
+            try:raise harness.Blocked(*args)
+            except harness.Blocked as error:message=harness.failure_diagnostic(error)
+            self.assertEqual(message,'stage=entry category=blocked reason=unspecified')
+
+    def test_failure_diagnostics_are_fixed_and_distinguish_permission_types(self):
+        import actor_permissions
+        try:actor_permissions.evaluate({'secret':'DO_NOT_PRINT'}, {'pub':[],'sub':[]})
+        except actor_permissions.PermissionError as error:
+            message=harness.failure_diagnostic(error)
+        self.assertEqual(message,'stage=permission_check category=actor_permissions')
+        try:raise PermissionError('DO_NOT_PRINT')
+        except PermissionError as error:message=harness.failure_diagnostic(error)
+        self.assertEqual(message,'stage=entry category=os_permission')
+
     def test_runtime_failure_retains_private_files_until_external_reconcile(self):
         with tempfile.TemporaryDirectory(dir='/root') as temp:
             root=Path(temp);cid='a'*64;op='actor'+'b'*12;present=[cid];holder={}

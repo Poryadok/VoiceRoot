@@ -148,7 +148,11 @@ func run() {
 	operator := jwt.NewOperatorClaims(opPub)
 	operator.SystemAccount = systemPub
 	appClaim := jwt.NewAccountClaims(appPub)
-	appClaim.Limits = jwt.OperatorLimits{JetStreamLimits: jwt.JetStreamLimits{MemoryStorage: 1 << 30, DiskStorage: 1 << 30, Streams: 100, Consumer: 100, MaxAckPending: 10000}}
+	appClaim.Limits = jwt.OperatorLimits{
+		AccountLimits:   jwt.AccountLimits{Conn: 64, LeafNodeConn: 64},
+		NatsLimits:      jwt.NatsLimits{Subs: 1024, Data: 64 << 20, Payload: 1 << 20},
+		JetStreamLimits: jwt.JetStreamLimits{MemoryStorage: 1 << 30, DiskStorage: 1 << 30, Streams: 100, Consumer: 100, MaxAckPending: 10000},
+	}
 	out.write("operator.jwt", []byte(encoded(operator, op)))
 	out.write("account.jwt", []byte(encoded(appClaim, op)))
 	out.write("system-account.jwt", []byte(encoded(jwt.NewAccountClaims(systemPub), op)))
