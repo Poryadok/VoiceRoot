@@ -703,7 +703,7 @@ class Actions:
             if preserved_preflight['contract']!=parameters['contract'] or nats_authority is None:
                 raise Blocked('cohort_preserved_authority_changed')
             import nats_root_plan
-            current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
+            current=staging_cohort_preservation.successor_nats_authority(self.tt_session)
             if any(current[key]!=nats_authority[key] for key in ('plan','binding','scripts')):
                 raise Blocked('cohort_preserved_authority_changed')
             parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
@@ -802,7 +802,8 @@ class Actions:
             actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority,installation=self.installation)
             if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority,installation=self.installation)
             if nats_authority is not None:
-                current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
+                current=(staging_cohort_preservation.successor_nats_authority(self.tt_session) if cohort_ref is not None
+                    else nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation))
                 # Business records may advance, but config/consumer intent and
                 # dynamic subject ownership cannot change between plan/fence.
                 if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')

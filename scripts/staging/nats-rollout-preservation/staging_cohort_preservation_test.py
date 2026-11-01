@@ -18,6 +18,35 @@ import staging_cohort_preservation as preservation
 
 
 class CutEffectTests(unittest.TestCase):
+    def test_successor_native_transport_is_one_shot_and_lost_response_stays_pending(self):
+        import staging_cohort_preservation_runtime as runtime
+        from docker_runtime import NATS_IMAGE
+        for lost in (False,True):
+            with self.subTest(lost=lost),tempfile.TemporaryDirectory(dir='/root') as directory:
+                root=Path(directory);(root/'installed').mkdir(mode=0o700)
+                with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                    session,_=self.fixture(root,{'metadata':{'uid':'user'},'spec':{'replicas':1}})
+                    row=session.journal.read();row.update(phase='prerequisites-captured',target_sha256='d'*64)
+                    session.journal.save(row);session.expected_target='d'*64
+                    preservation._runtime_base(session).mkdir(mode=0o700)
+                    capability=object();session._cohort_native_capability=capability
+                    native=runtime.NativeRuntime(session,successor=capability);calls=[]
+                    def submit(argv,**kwargs):
+                        commands.authority_guard(argv);calls.append(argv)
+                        if lost:raise TimeoutError('lost')
+                        return b'[]'
+                    with resource_claim.command_scope(session.check),patch.object(preservation,'revalidate_paused'), \
+                         patch.object(preservation,'_phase_continuity'),patch.object(commands,'capture',side_effect=submit):
+                        with self.assertRaisesRegex(Exception,'cohort_native_command_invalid'):
+                            native._run(['rm','-f','foreign'])
+                        if lost:
+                            with self.assertRaises(TimeoutError):native._run(['image','inspect',NATS_IMAGE])
+                            with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                                native._run(['image','inspect',NATS_IMAGE])
+                        else:self.assertEqual(native._run(['image','inspect',NATS_IMAGE]),'[]')
+                        self.assertEqual(len(calls),1)
+                        self.assertIsNone(session._cohort_native_permit)
+
     def fixture(self, root, before,namespace_uid='namespace',preflight=None):
         c=context(); current=card(c)
         journal=resource_claim.RootJournal(root)
@@ -274,6 +303,31 @@ class CutEffectTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_successor_authority_requalifies_owned_copy(self):
+        import expired_proof
+        from staging_cohort_preservation_runtime import NativeRuntime
+        session=SimpleNamespace(operation='a'*12,_cohort_native_capability=None,_cohort_native_permit=None)
+        continuation={'cut':{'manifest':{'archive_sha256':'expected'}}}
+        with patch.object(preservation,'load_rollout_continuation',return_value=continuation), \
+             patch.object(preservation,'_runtime_base',return_value=Path('/fixed')), \
+             patch.object(preservation,'revalidate_paused'), \
+             patch.object(preservation,'_closed_copy_authority',return_value={'plan':'qualified'}) as qualify, \
+             patch.object(NativeRuntime,'__init__',return_value=None), \
+             patch.object(expired_proof,'observe_copy') as observe:
+            def execute(runtime,archive,manifest,label,verify_fence,validate,**kwargs):
+                self.assertEqual(archive,Path('/fixed/rollout-before.tar'))
+                self.assertEqual(manifest,continuation['cut']['manifest'])
+                verify_fence()
+                validate(runtime,'broker',{'snapshot':True},None,manifest,None)
+            observe.side_effect=execute
+            self.assertEqual(preservation.successor_nats_authority(session),{'plan':'qualified'})
+            qualify.assert_called_once()
+            self.assertIsNone(session._cohort_native_capability)
+            with patch.object(preservation,'load_rollout_continuation',side_effect=[continuation,{'cut':'changed'}]):
+                with self.assertRaisesRegex(Exception,'cohort_continuation_changed'):
+                    preservation.successor_nats_authority(session)
+            self.assertIsNone(session._cohort_native_capability)
+
     def test_stopped_hub_and_successor_session_reject_live_monitor_and_native_commands(self):
         """Document the fail-closed gap; this fixture does not prove a P2 continuation."""
         import nats_root_plan

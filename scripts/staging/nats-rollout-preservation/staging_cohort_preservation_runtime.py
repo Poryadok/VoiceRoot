@@ -353,10 +353,13 @@ def restore_command(session,argv,*,body=b'',timeout=120):
 
 class NativeRuntime(DockerRuntime):
     """Only private restored NATS copies, never mounting the live selected store."""
-    def __init__(self,session):
+    def __init__(self,session,*,successor=None):
         self.session=session
         super().__init__(owner._runtime_base(session),session.operation)
         self.captured={}
+        self.successor=successor
+        self.unresolved_create=False
+        self.unresolved_effect=False
 
     def _run(self,args,timeout=60,limit=1<<20):
         owner.revalidate_paused(self.session)
@@ -405,11 +408,18 @@ class NativeRuntime(DockerRuntime):
             if tail not in (['--entrypoint','/usr/local/bin/nats-server',NATS_IMAGE,'-c','/server.conf'],
                 ['--entrypoint','/kernel',NATS_IMAGE,'--phase','census']):raise Blocked('cohort_native_command_invalid')
         else:raise Blocked('cohort_native_command_invalid')
-        raw=owner._observation(self.session,'native',DOCKER+list(args),limit=limit,timeout=timeout)
+        if creating:self.unresolved_create=True
+        self.unresolved_effect=True
+        if self.successor is None:
+            raw=owner._observation(self.session,'native',DOCKER+list(args),limit=limit,timeout=timeout)
+        else:
+            raw=owner._successor_native_observation(self.session,self.successor,DOCKER+list(args),limit=limit,timeout=timeout)
         result=raw.decode('utf8').strip()
         if creating:
             if not re.fullmatch('[a-f0-9]{64}',result):raise Blocked('cohort_native_create_unknown')
             self.captured[creating]={'id':result,'name':creating}
             owner._write(owner._base(self.session)/('native-'+creating+'.json'),self.captured[creating])
+            self.unresolved_create=False
+        self.unresolved_effect=False
         owner.revalidate_paused(self.session)
         return result

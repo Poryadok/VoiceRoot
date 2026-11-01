@@ -77,6 +77,21 @@ class NativeTransportTests(unittest.TestCase):
                     self.assertTrue(readback['native_archive_verified'])
                     owner._no_pending(session)
                     native.no_operation_containers()
+                    # Continue through the actual successor permit and Docker
+                    # transport; only source/Kubernetes authority is synthetic.
+                    row=session.journal.read();row.update(phase='prerequisites-captured',target_sha256='d'*64)
+                    session.journal.save(row);session.expected_target='d'*64
+                    continuation={'cut':cut}
+                    with patch.object(owner,'load_rollout_continuation',return_value=continuation), \
+                         patch.object(owner,'_phase_continuity'), \
+                         patch.object(owner,'_closed_copy_authority',return_value={'plan':'qualified'}) as authority:
+                        self.assertEqual(owner.successor_nats_authority(session),{'plan':'qualified'})
+                        self.assertEqual(authority.call_count,1)
+                    owner._no_pending(session)
+                    remaining=subprocess.run(runtime.DOCKER+['ps','-a','--filter',
+                        'label=voice.known-nats.operation='+session.operation,'--format','{{.ID}}'],
+                        capture_output=True,check=True,timeout=20)
+                    self.assertEqual(remaining.stdout.strip(),b'')
 
 
 if __name__=='__main__':unittest.main()
