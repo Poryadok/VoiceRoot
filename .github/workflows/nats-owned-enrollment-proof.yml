@@ -1,0 +1,76 @@
+name: Owned NATS enrollment proof
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  owned-enrollment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Qualify isolated enrollment on exact source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          work=$(sudo -n mktemp -d /root/voice-owned-nats-ci.XXXXXXXX)
+          case "$work" in /root/voice-owned-nats-ci.*) ;; *) exit 1 ;; esac
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [[ -d "$work" && ! -L "$work" && "$(sudo -n realpath -- "$work")" == "$work" ]]; then
+              if [[ "$status" != 0 ]]; then
+                # A timed-out create can complete after an empty inventory.
+                # Best-effort removal cannot prove terminality: retain all paths
+                # until the disposable hosted VM is destroyed.
+                sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" after "$work/runtime" || true
+                echo 'OWNED_NATS_FAILED_FIXTURE_RETAINED_UNTIL_VM_DISPOSAL' >&2
+              elif sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" after "$work/runtime"; then
+                sudo -n rm -rf -- "$work" || status=1
+              else
+                echo 'OWNED_NATS_CONTAINER_RECONCILIATION_REQUIRED' >&2
+                status=1
+              fi
+            else
+              echo 'OWNED_NATS_FIXTURE_CLEANUP_UNCONFIRMED' >&2
+              status=1
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          sudo -n mkdir -m 700 "$work/source" "$work/bin" "$work/runtime"
+          git archive "$EXPECTED_SHA" | sudo -n tar -xf - -C "$work/source"
+          sudo -n chmod -R a-w "$work/source"
+          sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" before "$work/runtime"
+          (cd "$work/source/scripts/ci" && sudo -n env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest nats_owned_enrollment_test nats_owned_runtime_cleanup_test nats_owned_broker_qualification_test)
+          (cd "$work/source/scripts/staging/nats-rollout-preservation" && sudo -n env PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONPATH="$work/source/scripts/staging/nats-known-baseline" python3 -m unittest scratch_inputs_test staging_cohort_auth_routing_test)
+          python scripts/ci/staging_qualified_helpers.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-qualified"
+          sudo -n install -m 0500 "$RUNNER_TEMP/owned-qualified/bootstrap-renewer" "$work/bin/bootstrap-renewer"
+          docker run --rm --mount "type=bind,source=$work/source,target=/source,readonly" \
+            --mount "type=bind,source=$work/bin,target=/out" -w /source/src/backend/pkg \
+            golang@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c \
+            go build -trimpath -o /out/genesis /source/scripts/ci/nats-owned-genesis/main.go
+          sudo -n chmod 0500 "$work/bin/genesis"
+          docker pull nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          docker pull natsio/nats-box@sha256:abdc9f9f0120bb8adfbf674eb037d1551db55356eb198b7bd4ffed377f6950a6
+          sudo -n --preserve-env=RUNNER_ENVIRONMENT env PYTHONDONTWRITEBYTECODE=1 \
+            python3 "$work/source/scripts/ci/nats_owned_broker_qualification.py" "$work/bin/genesis" "$work/bin/bootstrap-renewer" "$work/runtime"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
