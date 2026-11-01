@@ -371,7 +371,7 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_existing_inventory_new_candidate_creates_only_release_policy(self):
         self._cold_prepare('c2-new-candidate')
 
-    def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None):
+    def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None):
         import os, shutil, subprocess, base64, yaml, uuid
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -540,6 +540,8 @@ class PrepareCompositionTests(unittest.TestCase):
                     self.assertEqual(writes,[]);result=original(s);events.append('preflight:'+slot);return result
                 stack.enter_context(patch.object(module,'preflight_payloads',side_effect=checked))
             request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
+            if on_ready is not None:
+                return on_ready(actions,request,approved,execution,workspace,stage,live,transport,get)
             if fault=='missing-issuer':
                 if bridge_missing is None:
                     with self.assertRaises(FileNotFoundError):prereq.prepare_inputs(actions,request,approved,execution,workspace)
