@@ -25,7 +25,8 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertEqual(result['status'], 'incomplete')
         self.assertEqual(set(result['shards']), {'policy', 'runtime', 'staging', 'proofs'})
         self.assertEqual({key: len(rows) for key, rows in result['shards'].items()},
-                         {'policy': 62, 'runtime': 23, 'staging': 34, 'proofs': 15})
+                         {'policy': 63, 'runtime': 23, 'staging': 34, 'proofs': 15})
+        self.assertTrue(any('local_staging_owned_tmp_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_matrix_inventory_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_private_test.py' in row['recipe'] for row in result['shards']['policy']))

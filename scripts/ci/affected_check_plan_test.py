@@ -530,7 +530,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                      'local_current_diff.py', 'local_current_diff_test.py',
                      'local_ci_routing.py', 'local_ci_routing_test.py',
                      'local_ci_matrix_inventory.py', 'local_ci_matrix_inventory_test.py',
-                     'local_nats_hosted_diagnostic.py', 'local_nats_hosted_diagnostic_test.py'):
+                     'local_nats_hosted_diagnostic.py', 'local_nats_hosted_diagnostic_test.py',
+                     'local_staging_owned_tmp.py', 'local_staging_owned_tmp_test.py'):
             with self.subTest(local_go=name):
                 self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
                 self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
@@ -544,6 +545,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
                      'local_auth_private.py', 'local_auth_private_test.py', 'local_auth_orchestration.py',
                      'local_compose_private.py', 'local_compose_private_test.py',
                      'local_nats_hosted_diagnostic.py', 'local_nats_hosted_diagnostic_test.py',
+                     'local_staging_owned_tmp.py', 'local_staging_owned_tmp_test.py',
                      'local_compose_bridge.py', 'local_compose_bridge_test.py',
                      'local_image_archive.py', 'local_image_archive_test.py',
                      'local_docker_owned.py', 'local_docker_owned_test.py',

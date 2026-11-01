@@ -715,6 +715,13 @@ The report is always `incomplete`: the remaining shards, registry tag drift, Go
 ziphash provenance, filesystem and disk bounds, crash and foreign-sentinel
 acceptance remain unproven. This diagnostic cannot authorize a PR handoff.
 
+The staging preservation script retains its hosted `/var/tmp` behavior by
+default. Its optional `--owned-temp-root <absolute-private-directory>` creates
+the fixture under a canonical, non-symlink, mode-0700 directory owned by the
+non-root caller. The caller must retain exclusive custody and arrange the same
+private path in its isolated Docker daemon; the option alone does not establish
+source identity, daemon isolation, or safe cleanup after a crash.
+
 When the plan selects `protobuf`, the local diagnostic runs Buf lint, format,
 breaking against the captured immutable base, verifies Go generated-code drift
 with a private Git index, checks the Auth proto copy, compiles Auth with a private Maven
