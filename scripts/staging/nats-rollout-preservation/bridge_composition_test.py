@@ -1005,6 +1005,14 @@ class CompositionTests(unittest.TestCase):
                 private_read=bridge_root.private_json
                 stack.enter_context(patch.object(bridge_root,'private_json',side_effect=lambda path:policy if path==workspace.parents[1]/'policy.json' else private_read(path)))
                 stack.enter_context(patch.object(cohort,'load_preflight',return_value={'enrollment':{},'nats':{'scripts':{},'plan':{},'binding':{}},'contract':contract,'services':[],'actor':None}))
+                # This composition fixture substitutes P2/NATS evidence; the
+                # real successor proof is exercised by its own native tests.
+                def synthetic_successor(current):
+                    self.assertIs(current,session)
+                    self.assertIn(current.check()['phase'],('prerequisites-captured','realtime-bootstrap','prepare'))
+                    cohort.revalidate_paused(current)
+                    return cohort.load_preflight(current)['nats']
+                successor=stack.enter_context(patch.object(cohort,'successor_nats_authority',side_effect=synthetic_successor))
                 stack.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
                 stack.enter_context(patch.object(bridge_root,'_cohort_story_composition',return_value={}))
                 stack.enter_context(patch.object(actor_root,'preflight',return_value=None))
@@ -1094,6 +1102,7 @@ class CompositionTests(unittest.TestCase):
                     else:
                         deep.result=actions.execute(public)
                     build.assert_called_once();prepare.assert_called_once()
+                if policy_case in ('missing','valid'):successor.assert_called_once_with(session)
                 if deep is None:
                     self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
                     self.assertEqual(session.check()['phase'],'prerequisites-captured')

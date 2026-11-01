@@ -730,6 +730,11 @@ class RootCompositionContract(unittest.TestCase):
                             plan = {'schema':'voice-staging-prerequisites-plan-v4',
                                 'preservation_sha256':resource_claim.digest(qualified), 'actual_before':old_images}
                             session.bind_prerequisites(plan, old_images)
+                        def synthetic_successor(current):
+                            self.assertIs(current, session)
+                            self.assertEqual(current.check()['phase'], 'prerequisites-captured')
+                            cohort.revalidate_paused(current)
+                            return cohort.load_preflight(current)['nats']
                         for seam in (patch.object(cohort, 'validate_plan'),
                             patch.object(cohort, 'load_qualified', return_value=qualified),
                             patch.object(cohort, 'load_prepared', return_value=loaded),
@@ -747,6 +752,7 @@ class RootCompositionContract(unittest.TestCase):
                             patch.object(prereq, 'load_capture', return_value=parent),
                             patch.object(prereq, 'load_gis_authority', return_value=None)):
                             stack.enter_context(seam)
+                        successor = stack.enter_context(patch.object(cohort, 'successor_nats_authority', side_effect=synthetic_successor))
                         session.bind_cohort_preservation(p2_plan,old_images)
                         authorization = {'action':'authorize', 'operation':operation, 'artifact_id':42,
                             'token':'fixture', 'resource_context':ctx}
@@ -757,6 +763,7 @@ class RootCompositionContract(unittest.TestCase):
                             with self.assertRaisesRegex(bridge_root.Blocked, 'realtime_bootstrap_candidate_changed'):
                                 actions.execute(authorization)
                             c1.assert_not_called()
+                        successor.assert_called_once_with(session)
                         return
                     state = actions._prepare(request)
                     self.assertEqual(captures.call_count, 2)
