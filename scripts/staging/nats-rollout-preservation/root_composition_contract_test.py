@@ -108,6 +108,9 @@ class RootCompositionContract(unittest.TestCase):
             runtime.mkdir(mode=0o700)
             manifests = runtime / 'apply-manifests.json'
             cohort._write(manifests, [])
+            manifest = {'archive_sha256': '6' * 64}
+            manifest_file = runtime / 'rollout-before-manifest.json'
+            cohort._write(manifest_file, manifest)
             target = {'tag': context['commit'], 'images': context['images'], 'mode': 'app-only',
                 'installation_sha256': session.installation.sha256, 'migration_sha256': cohort.digest([]),
                 'manifest_sha256': root_cli.public_code_sha(manifests),
@@ -118,11 +121,14 @@ class RootCompositionContract(unittest.TestCase):
                 session.advance_realtime_bootstrap(target, old)
             else:
                 session.advance_prerequisites_target(target, old)
-            preserved = {'cut': {}, 'provenance': {}, 'contract': {}, 'events': [], 'custody': custody}
+            preserved = {'cut': {'manifest': manifest, 'manifest_sha256': transaction.file_sha(manifest_file),
+                                 'census_sha256': '7' * 64},
+                         'provenance': {}, 'contract': {}, 'events': [], 'custody': custody}
             state = {**copy.deepcopy(preserved), 'target': target, 'operation': session.operation,
                 'resource_fence': session.binding(), 'migrations': [], 'phase': 'AWAITING_OFF_NODE',
                 'status': 'WAITING', 'prerequisites': capture, 'realtime_bootstrap': receipt,
-                'cohort_preservation': qualified}
+                'cohort_preservation': qualified, 'schema': 'nats-rollout-root-v2',
+                'installation_sha256': session.installation.sha256, 'migration_secret_metadata': {}}
             cohort._write(runtime / 'checkpoint.json', state)
             stack.enter_context(patch.object(cohort, 'load_rollout_continuation', return_value=preserved))
             # Source record is external to this unit; actual directory inventory is checked.
@@ -158,6 +164,35 @@ class RootCompositionContract(unittest.TestCase):
             cohort._write(continuation, changed)
             with self.assertRaisesRegex(cohort.Blocked, 'cohort_continuation_reconciliation_required'):
                 cohort.issue_final_admission(session, fixture.runtime, state, request)
+
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
+    def test_scoped_transaction_authorizes_both_realtime_bindings(self):
+        """Real final and migration guards; external P2, storage and Kube are fixtures."""
+        for receipt_kind in ('c1', 'c2'):
+            with self.subTest(receipt_kind=receipt_kind), self._scoped_final_admission_fixture(receipt_kind) as fixture:
+                stage = SimpleNamespace(operation=fixture.session.operation, expected={'namespace_uid': 'namespace'},
+                    snapshots={}, original_snapshots={}, old_images={}, service={}, final_path=Path('/fixture'),
+                    marker={'metadata': {'uid': 'marker', 'resourceVersion': '1'},
+                            'data': {'generation': 'new', 'previousGeneration': 'old', 'dataPVC': 'claim'}},
+                    final_claim={'metadata': {'name': 'claim', 'uid': 'claim-uid'}, 'spec': {'volumeName': 'pv'}},
+                    final_pv={'metadata': {'uid': 'pv-uid'}, 'spec': {'local': {'path': '/fixture'}}},
+                    verify_final_storage=Mock(), owned_marker=Mock(), prepared=Mock(),
+                    refence=Mock(return_value={'verified': True}))
+                with contextlib.ExitStack() as stack:
+                    for seam in (patch.object(transaction, 'verify_archive', return_value=True),
+                        patch.object(transaction, 'reconstruct', return_value=stage),
+                        patch.object(transaction, 'revalidate_inputs'),
+                        patch.object(transaction.migrations, 'preflight', return_value={}),
+                        patch.object(transaction.space_safeguards, 'before_migrate'),
+                        patch.object(transaction.space_safeguards, 'after_migrate', return_value={})):
+                        stack.enter_context(seam)
+                    cut = fixture.state['cut']
+                    result = transaction.authorize(None, fixture.runtime, fixture.state, cut['manifest']['archive_sha256'],
+                        cut['manifest_sha256'], {}, resource_session=fixture.session, cohort_request=fixture.request)
+                self.assertEqual(result['target'], fixture.target)
+                self.assertEqual(result['resource_fence'], fixture.session.binding())
+                self.assertEqual((fixture.state['phase'], fixture.state['status']), ('PAUSED_APPLY', 'WAITING'))
+                self.assertTrue((fixture.base / 'authorization-complete.json').is_file())
 
     def test_c2_protected_anchor_revalidates_actual_compiler_target_after_tt_bind(self):
         # Author fixture models a historical PASS; live PG/Kubernetes
