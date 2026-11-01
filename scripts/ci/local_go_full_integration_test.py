@@ -93,6 +93,8 @@ class FullGoTests(unittest.TestCase):
         self.assertEqual(subject.profile('gameintegration')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1'))
         self.assertEqual(subject.profile('role')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1',
                                                              'redis:7-alpine'))
+        self.assertEqual(subject.profile('messaging')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1',
+                                                                  'redis:7-alpine'))
         for service in ('controlledgame', 'moderation', 'social', 'subscription', 'story'):
             with self.subTest(service=service):
                 self.assertEqual(subject.profile(service)['images'], ('postgres:16-bookworm',))
@@ -122,13 +124,13 @@ class FullGoTests(unittest.TestCase):
             subject.chat.validate_archives({}, subject.profile(service)['images'])
             subject.chat.verify_images(owner, 'client', {}, subject.profile(service)['images'])
         owner.execute.assert_not_called()
-        for service in ('bot', 'user', 'chat', 'search', 'gameintegration', 'role'):
+        for service in ('bot', 'user', 'chat', 'search', 'gameintegration', 'role', 'messaging'):
             with self.subTest(service=service), self.assertRaises(ValueError):
                 subject.chat.validate_archives({}, subject.profile(service)['images'])
         with self.assertRaises(ValueError):
             subject.chat.validate_archives({'unexpected': {}}, subject.profile('realtime')['images'])
         with tempfile.TemporaryDirectory() as directory:
-            for service in ('gameintegration', 'role'):
+            for service in ('gameintegration', 'role', 'messaging'):
                 tags = subject.profile(service)['images']
                 archives = {tag: {'archive': str(Path(directory) / str(index)), 'archive_sha256': 'a' * 64,
                                   'image_id': 'sha256:' + 'b' * 64} for index, tag in enumerate(tags)}
@@ -142,7 +144,7 @@ class FullGoTests(unittest.TestCase):
             root = Path(directory)
             path = root / 'scripts/ci/go_integration_required.json'
             path.parent.mkdir(parents=True)
-            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role'):
+            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role', 'messaging'):
                 package = 'voice/backend/' + service
                 path.write_text(json.dumps({service: [[package, 'TestRequired']]}), encoding='utf-8')
                 self.assertEqual(subject.read_required(root, service, [package]), [[package, 'TestRequired']])
@@ -172,6 +174,28 @@ class FullGoTests(unittest.TestCase):
                  mock.patch.object(subject.chat, 'run_owned', return_value={'status': 'incomplete', 'source': source}):
                 report = subject.run('analytics', root, source['head'], output, 'helper', 'a' * 64, {})
             self.assertIn('tagged Analytics ClickHouse schema, fixture and dedicated job', report['unbound_inputs'])
+            self.assertEqual(report['status'], 'incomplete')
+
+    def test_messaging_report_keeps_dedicated_fixture_gaps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output, source = Path(directory) / 'output', {'head': 'a' * 40}
+            archives = {tag: {'archive': str(Path(directory) / str(i)), 'archive_sha256': 'b' * 64,
+                              'image_id': 'sha256:' + 'c' * 64}
+                        for i, tag in enumerate(subject.profile('messaging')['images'])}
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=Path(directory) / 'copy'), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={}), \
+                 mock.patch.object(subject, 'DockerCLI'), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host'), \
+                 mock.patch.object(subject.chat, 'publish_owner'), \
+                 mock.patch.object(subject.chat, 'run_owned', return_value={'status': 'incomplete', 'source': source}):
+                report = subject.run('messaging', root, source['head'], output, 'helper', 'a' * 64, archives)
+            self.assertIn('T16 cross-service, nonroot mounted-key, threadlist DSN and BE131 projection dedicated fixtures and jobs',
+                          report['unbound_inputs'])
             self.assertEqual(report['status'], 'incomplete')
 
     def test_chat_dispatch_keeps_existing_executor(self):
@@ -255,7 +279,7 @@ class FullGoTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         inventory = json.loads((root / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
         for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story',
-                        'realtime', 'analytics', 'user', 'gameintegration', 'role'):
+                        'realtime', 'analytics', 'user', 'gameintegration', 'role', 'messaging'):
             packages = sorted({item[0] for item in inventory[service]})
             with self.subTest(service=service):
                 required = subject.read_required(root, service, packages)
