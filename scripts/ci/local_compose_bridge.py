@@ -90,6 +90,7 @@ def run(plan, inputs, output):
               'limitations': ['fixed no-network fixture only', 'does not execute Voice Compose checks',
                               'helper, image and Compose tool provenance unverified',
                               'exclusive daemon, socket and evidence custody assumed',
+                              'journal is trusted producer evidence, not independent Docker or slot observation',
                               'concurrency and crash acceptance unverified']}
     (output / 'bridge.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     return report

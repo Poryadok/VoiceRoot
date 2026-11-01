@@ -46,6 +46,8 @@ class ComposeBridgeTests(unittest.TestCase):
             self.assertEqual(result['status'], 'incomplete')
             self.assertEqual(result['fixture_report'], 'fixture/diagnostic.json')
             self.assertEqual(result['selected_checks'], ['compose-config', 'compose-e2e'])
+            self.assertIn('journal is trusted producer evidence, not independent Docker or slot observation',
+                          result['limitations'])
             self.assertNotIn('checks', result)
             self.assertEqual(plan, {'checks': {'compose-e2e': ['test/live.dart'], 'compose-config': ['docker-compose.yml']}})
 

@@ -15,6 +15,7 @@ import affected_check_plan
 import local_ci_routing
 import local_auth_orchestration
 import local_chat_orchestration
+import local_compose_bridge
 import local_current_diff
 from local_docker_owned import OwnershipError
 import local_flutter_execution
@@ -93,7 +94,7 @@ def _validate_auth_report(result, source, inputs):
 
 
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
-        auth_inputs=None):
+        auth_inputs=None, compose_inputs=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -105,9 +106,20 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             _validate_chat_inputs(chat_inputs)
         if auth_inputs is not None:
             _validate_auth_inputs(auth_inputs)
+        if compose_inputs is not None:
+            local_compose_bridge.validate_inputs(compose_inputs)
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if compose_inputs is not None:
+            diagnostic = local_compose_bridge.run(plan, compose_inputs, output / 'compose-private')
+            expected = sorted(local_compose_bridge.CHECKS.intersection(plan['checks']))
+            if (not isinstance(diagnostic, dict) or not expected or
+                    diagnostic.get('schema') != 'voice-local-compose-bridge-v1' or
+                    diagnostic.get('status') != 'incomplete' or diagnostic.get('selected_checks') != expected or
+                    diagnostic.get('fixture_report') != 'fixture/diagnostic.json'):
+                raise ValueError('Compose fixture diagnostic did not match the selected checks')
+            report['compose_private_report'] = 'compose-private/bridge.json'
         if auth_inputs is not None:
             if 'backend-auth' not in plan['checks']:
                 raise ValueError('Auth diagnostic requires a planner-selected Auth integration')
@@ -250,6 +262,8 @@ def main():
     for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256',
                  'postgres-image-id', 'maven-image-id', 'maven-cache', 'maven-cache-sha256'):
         parser.add_argument('--auth-' + name, help='opt-in private Auth diagnostic input')
+    for name in ('helper', 'helper-sha256', 'postgres-archive', 'postgres-archive-sha256', 'postgres-image-id'):
+        parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     chat = {'helper': args.chat_helper, 'helper_sha256': args.chat_helper_sha256,
             'postgres_archive': args.chat_postgres_archive, 'postgres_archive_sha256': args.chat_postgres_archive_sha256,
@@ -258,9 +272,14 @@ def main():
             'postgres_archive': args.auth_postgres_archive, 'postgres_archive_sha256': args.auth_postgres_archive_sha256,
             'postgres_image_id': args.auth_postgres_image_id, 'maven_image_id': args.auth_maven_image_id,
             'maven_cache': args.auth_maven_cache, 'maven_cache_sha256': args.auth_maven_cache_sha256}
+    compose = {'helper': args.compose_helper, 'helper_sha256': args.compose_helper_sha256,
+               'postgres_archive': args.compose_postgres_archive,
+               'postgres_archive_sha256': args.compose_postgres_archive_sha256,
+               'postgres_image_id': args.compose_postgres_image_id}
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
-                 auth if any(value is not None for value in auth.values()) else None)
+                 auth if any(value is not None for value in auth.values()) else None,
+                 compose if any(value is not None for value in compose.values()) else None)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 
