@@ -378,6 +378,15 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_cold_prepare_executes_all_children_before_typed_capture(self):
         self._cold_prepare()
 
+    def test_publisher_ready_binds_actual_manifest_and_rejects_image_drift(self):
+        import staging_p3_prerequisites as p3
+        fixture=Path(__file__).parent/'fixtures'/'qualified-nginx'/'manifest.json'
+        manifest=hashlib.sha256(fixture.read_bytes()).hexdigest()
+        self.assertNotEqual(manifest,'d'*64)
+        self._cold_prepare(fixture_manifest=manifest)
+        with self.assertRaisesRegex(p3.PrerequisiteError,'staging P3 completion not qualified'):
+            self._cold_prepare(fixture_manifest=manifest,fixture_publisher_drift=True)
+
     def test_lost_app_cas_reply_never_completes_or_replays(self):
         self._cold_prepare('lost-app-reply')
 
@@ -398,7 +407,8 @@ class PrepareCompositionTests(unittest.TestCase):
 
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
                       context_commit=None,full_source=False,strict_helpers=False,source_overrides=None,workspace_context=None,
-                      fixture_installation=None,fixture_operation=None,fixture_candidate_images=None):
+                      fixture_installation=None,fixture_operation=None,fixture_candidate_images=None,
+                      fixture_manifest='d'*64,fixture_publisher_drift=False):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -539,11 +549,13 @@ class PrepareCompositionTests(unittest.TestCase):
                     'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-p3-principal-jwks','pod-template-hash':'abc12'}},'template':template}}]
                 ready['replicaset']=ready['replicasets']
                 spec=copy.deepcopy(dep['spec']['template']['spec']);spec.update(nodeName='pmdebook',serviceAccountName='default')
+                manifest=spec['containers'][0]['image'].rsplit('@',1)[-1]
+                image_id='sha256:'+'0'*64 if fixture_publisher_drift else manifest
                 spec['volumes'].append({'name':'kube-api-access-abc12','projected':{'defaultMode':420,'sources':[{'serviceAccountToken':{'expirationSeconds':3607,'path':'token'}},
                     {'configMap':{'name':'kube-root-ca.crt','items':[{'key':'ca.crt','path':'ca.crt'}]}},{'downwardAPI':{'items':[{'path':'namespace','fieldRef':{'apiVersion':'v1','fieldPath':'metadata.namespace'}}]}}]}})
                 spec['containers'][0]['volumeMounts'].append({'name':'kube-api-access-abc12','mountPath':'/var/run/secrets/kubernetes.io/serviceaccount','readOnly':True})
                 ready['pods']=[{'metadata':{'namespace':'voice-staging','uid':'pod','labels':{'app':'voice-p3-principal-jwks'},'ownerReferences':[{'kind':'ReplicaSet','uid':'rs','controller':True}]},'spec':spec,
-                    'status':{'phase':'Running','podIP':'10.2.0.8','conditions':[{'type':'Ready','status':'True'}],'containerStatuses':[{'name':'jwks','ready':True,'state':{'running':{}},'imageID':'docker-pullable://nginx@sha256:'+'d'*64}]}}]
+                    'status':{'phase':'Running','podIP':'10.2.0.8','conditions':[{'type':'Ready','status':'True'}],'containerStatuses':[{'name':'jwks','ready':True,'state':{'running':{}},'imageID':'docker-pullable://nginx@'+image_id}]}}]
                 ready['endpointslices']=[{'metadata':{'uid':'slice','namespace':'voice-staging','labels':{'kubernetes.io/service-name':'voice-p3-principal-jwks'},'ownerReferences':[{'kind':'Service','uid':live[('service','voice-p3-principal-jwks')]['metadata']['uid'],'controller':True}]},
                     'ports':[{'name':'https','port':8443,'protocol':'TCP'}],'endpoints':[{'addresses':['10.2.0.8'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':'pod','namespace':'voice-staging'}}]}]
             def transport(argv,*,body=b'',**kwargs):
@@ -588,7 +600,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid,'generation':session.installation.generation}
             stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
-                'index_sha256':'e'*64,'manifest_sha256':'d'*64,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+'d'*64})
+                'index_sha256':'e'*64,'manifest_sha256':fixture_manifest,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+fixture_manifest})
             stack.enter_context(patch.object(guard,'ROOT',root))
             if not strict_helpers:
                 stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
