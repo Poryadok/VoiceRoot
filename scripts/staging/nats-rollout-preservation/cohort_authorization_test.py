@@ -12,6 +12,38 @@ import resource_claim_test as fixture
 
 
 class CompletionAdmissionTests(unittest.TestCase):
+    def test_legacy_final_reader_rejects_resealed_extraneous_installation(self):
+        import datetime as dt
+        import staging_cohort_preservation as cohort
+        c=fixture.context();journal=fixture.MemoryJournal()
+        session=resource_claim.Session(c,'a'*12,'b'*64,lambda:fixture.card(c),journal);session.admit(start=True)
+        target={'fixture':'legacy'};journal.row.update(schema='voice-staging-resource-fence-v1',target_sha256=cohort.digest(target))
+        del journal.row['installation_sha256'];binding=session.binding()
+        request={'action':'authorize','operation':session.operation,'artifact_id':17}
+        intent={'authorize_request':request};lineage={'fixture':'lineage'}
+        record={'schema':'voice-staging-cohort-authorizing-v1','context':c,'helper_sha256':session.helper,
+                'target_sha256':cohort.digest(target),'request_sha256':cohort.digest(request),
+                'continuation_sha256':cohort.digest(intent),'lineage':lineage,'invariant':{},'events_before':[]}
+        authorization={'schema':'nats-rollout-preservation-v1','operation':session.operation,'target':target,
+                       'resource_fence':binding,'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}
+        state={'operation':session.operation,'phase':'PAUSED_APPLY','status':'WAITING','target':target,
+               'authorization':authorization,'events':[]}
+        def read(path,**kwargs):
+            if path.name=='checkpoint.json':return state
+            if path.name=='authorizing.json':return record
+            if path.name=='continuation.json':return intent
+            return {'schema':'voice-staging-cohort-authorization-complete-v1','operation':session.operation,
+                'authorizing_sha256':cohort.digest(record),'checkpoint_sha256':cohort.digest(state),
+                'authorization_sha256':cohort.digest(authorization),'request_sha256':cohort.digest(request),
+                'target_sha256':cohort.digest(target),'active_contract_sha256':None}
+        with patch.object(cohort,'_require_session'),patch.object(cohort,'_final_target',return_value=target), \
+             patch.object(cohort,'_read',side_effect=read),patch.object(cohort,'_lineage_snapshot',return_value=lineage), \
+             patch.object(guard,'protected_receipt',side_effect=lambda *a,**k:authorization):
+            self.assertEqual(cohort.final_authorization_result(session,request)['status'],'WAITING')
+            authorization['installation_sha256']=session.installation.sha256
+            with self.assertRaisesRegex(cohort.Blocked,'cohort_final_completion_changed'):
+                cohort.final_authorization_result(session,request)
+
     def test_legacy_completion_rejects_extraneous_installation(self):
         import staging_cohort_preservation as cohort
         c=fixture.context();journal=fixture.MemoryJournal()
