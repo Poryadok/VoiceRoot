@@ -19,7 +19,7 @@ class FullAuthInputsTests(unittest.TestCase):
         with mock.patch.object(subject.common, '_verify_file') as verify:
             subject.validate_images(items)
         self.assertEqual(verify.call_count, len(subject.IMAGE_TAGS))
-        for mutation in ('missing', 'extra', 'relative', 'digest', 'identity', 'unknown', 'duplicate-id'):
+        for mutation in ('missing', 'extra', 'relative', 'digest', 'identity', 'unknown'):
             bad = self.inputs(); first = next(iter(bad))
             if mutation == 'missing': bad.pop(first)
             if mutation == 'extra': bad['foreign:latest'] = bad[first]
@@ -27,9 +27,27 @@ class FullAuthInputsTests(unittest.TestCase):
             if mutation == 'digest': bad[first]['sha256'] = 'bad'
             if mutation == 'identity': bad[first]['image_id'] = 'sha256:bad'
             if mutation == 'unknown': bad[first]['extra'] = 'unexpected'
-            if mutation == 'duplicate-id': bad[list(bad)[1]]['image_id'] = bad[first]['image_id']
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 subject.validate_images(bad)
+
+    def test_duplicate_image_id_uses_journaled_alias_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); owner = mock.Mock(); owner.directory = root / 'owner'; owner.directory.mkdir()
+            images = self.inputs()
+            first, second = subject.IMAGE_TAGS[:2]
+            images[second]['image_id'] = images[first]['image_id']
+            for index, tag in enumerate(subject.IMAGE_TAGS):
+                path = root / ('source-' + str(index)); path.write_bytes(b'archive')
+                images[tag]['archive'] = str(path)
+            output = root / 'out'; output.mkdir()
+            with mock.patch.object(subject.common, '_verify_file'):
+                subject.validate_images(images)
+                result = subject.load_images(owner, 'daemon', images, output)
+            self.assertEqual(owner.load_canonical_rootless_image.call_count, 4)
+            self.assertEqual(owner.load_canonical_rootless_alias.call_count, 1)
+            args = owner.load_canonical_rootless_alias.call_args.args
+            self.assertEqual((args[4], args[5]), (first, second))
+            self.assertEqual(result[second]['image_id'], result[first]['image_id'])
 
     def test_public_run_uses_broker_and_rejects_worker_failure(self):
         with tempfile.TemporaryDirectory() as directory:

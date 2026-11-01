@@ -29,7 +29,6 @@ IMAGE_TAGS = ('postgres:16-alpine', 'redis:7-alpine', 'redis:7.4-alpine',
 def validate_images(images):
     if not isinstance(images, dict) or set(images) != set(IMAGE_TAGS):
         raise ValueError('exact full Auth image inventory required')
-    identifiers = []
     for tag in IMAGE_TAGS:
         item = images[tag]
         if (not isinstance(item, dict) or set(item) != {'archive', 'sha256', 'image_id'} or
@@ -37,11 +36,32 @@ def validate_images(images):
                 not isinstance(item['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['sha256']) or
                 not isinstance(item['image_id'], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', item['image_id'])):
             raise ValueError('invalid full Auth image input')
-        identifiers.append(item['image_id'])
-    if len(set(identifiers)) != len(identifiers):
-        raise ValueError('duplicate image identities require unsupported alias handling')
     for item in images.values():
         common._verify_file(item['archive'], item['sha256'])
+
+
+def load_images(owner, daemon, images, output):
+    image_inputs, loaded = {}, {}
+    for index, tag in enumerate(IMAGE_TAGS):
+        item = images[tag]
+        common._verify_file(item['archive'], item['sha256'])
+        copied = owner.directory / ('image-' + str(index) + '.tar')
+        with Path(item['archive']).open('rb') as source_file, copied.open('xb') as target:
+            for block in iter(lambda: source_file.read(1024 * 1024), b''):
+                target.write(block)
+            target.flush(); os.fsync(target.fileno())
+        common._verify_file(item['archive'], item['sha256'])
+        common._verify_file(copied, item['sha256'])
+        with (output / ('image-' + str(index) + '.stdout')).open('xb') as out, \
+             (output / ('image-' + str(index) + '.stderr')).open('xb') as err:
+            if item['image_id'] in loaded:
+                owner.load_canonical_rootless_alias(daemon, copied, item['sha256'], item['image_id'],
+                                                    loaded[item['image_id']], tag, out, err, 300)
+            else:
+                owner.load_canonical_rootless_image(daemon, copied, item['sha256'], item['image_id'], tag, out, err, 300)
+                loaded[item['image_id']] = tag
+        image_inputs[tag] = {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
+    return image_inputs
 
 
 def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache, cache_digest, images):
@@ -81,21 +101,7 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
         owner.start_container(daemon)
         # Readiness validates the shared profile and exact network on each pass.
         local_auth_full.wait_daemon(owner, daemon, client)
-        image_inputs = {}
-        for index, tag in enumerate(IMAGE_TAGS):
-            item = images[tag]
-            common._verify_file(item['archive'], item['sha256'])
-            copied = owner.directory / ('image-' + str(index) + '.tar')
-            with Path(item['archive']).open('rb') as source_file, copied.open('xb') as target:
-                for block in iter(lambda: source_file.read(1024 * 1024), b''):
-                    target.write(block)
-                target.flush(); os.fsync(target.fileno())
-            common._verify_file(item['archive'], item['sha256'])
-            common._verify_file(copied, item['sha256'])
-            with (output / ('image-' + str(index) + '.stdout')).open('xb') as out, \
-                 (output / ('image-' + str(index) + '.stderr')).open('xb') as err:
-                owner.load_canonical_rootless_image(daemon, copied, item['sha256'], item['image_id'], tag, out, err, 300)
-            image_inputs[tag] = {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
+        image_inputs = load_images(owner, daemon, images, output)
         diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache, output / 'full')
         if diagnostic['maven_cache_sha256'] != cache_digest:
             raise ValueError('Maven cache changed during diagnostic')
