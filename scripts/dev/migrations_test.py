@@ -101,7 +101,7 @@ class MigrationContracts(unittest.TestCase):
         self.assertIn('game_integration_db', template)
         self.assertIn('docker.io/library/postgres@sha256:', template)
         self.assertIn('ON_ERROR_STOP=1', template)
-        for invariant in ('migration_version <> 32', 'migration_dirty', 'rolsuper', 'rolcreaterole',
+        for invariant in ('migration_version <> 33', 'migration_dirty', 'rolsuper', 'rolcreaterole',
                           'rolcreatedb', 'rolreplication', 'rolbypassrls', "'public', 'CREATE'",
                           "'TRUNCATE'", "'UPDATE'", 'REVOKE ALL PRIVILEGES ON TABLE public.schema_migrations',
                           "'public.schema_migrations', 'UPDATE'", "c.relname <> 'schema_migrations'",
