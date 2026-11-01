@@ -25,6 +25,7 @@ from local_docker_owned import OwnershipError
 import local_flutter_execution
 import local_go_plan
 import local_go_full_integration
+import local_golangci_execution
 import local_proto_execution
 from local_process_supervision import SupervisionError
 import local_source_snapshot
@@ -201,7 +202,7 @@ def _validate_full_go_report(result, service, source, inputs, output):
 
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
         auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None,
-        full_go_inputs=None):
+        full_go_inputs=None, lint_inputs=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -232,6 +233,16 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if lint_inputs is not None:
+            keys = {'go', 'go_sha256', 'lint', 'lint_sha256'}
+            if (not isinstance(lint_inputs, dict) or set(lint_inputs) != keys or
+                    any(not isinstance(lint_inputs[k], str) or not lint_inputs[k] for k in keys) or
+                    any(not Path(lint_inputs[k]).is_absolute() for k in ('go', 'lint')) or
+                    any(not re.fullmatch(r'[0-9a-f]{64}', lint_inputs[k]) for k in ('go_sha256', 'lint_sha256')) or
+                    'golangci' not in plan['checks']):
+                raise ValueError('planner-selected lint requires absolute tools and exact digests')
+            local_chat_orchestration._verify_file(lint_inputs['go'], lint_inputs['go_sha256'])
+            local_chat_orchestration._verify_file(lint_inputs['lint'], lint_inputs['lint_sha256'])
         selected_full_go = _validate_full_go_inputs(plan, full_go_inputs) if full_go_inputs is not None else []
         for service in selected_full_go:
             values = full_go_inputs[service]
@@ -354,6 +365,25 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                     diagnostic['r23'].get('skipped') != []):
                 raise ValueError('protobuf diagnostic failed or does not match the planned source and base')
             report['checks']['protobuf'] = {'status': 'diagnostic', 'report': 'protobuf/diagnostic.json'}
+        if lint_inputs is not None:
+            diagnostic = local_golangci_execution.run(root, plan, output / 'golangci', base=base, head_ref=head_ref,
+                                                      **lint_inputs)
+            expected_modules = local_golangci_execution.modules_for(plan)
+            commands = diagnostic.get('commands') if isinstance(diagnostic, dict) else None
+            expected = [(action, module) for action in ('resolve', 'lint') for module in expected_modules]
+            if (not isinstance(diagnostic, dict) or diagnostic.get('schema') != 'voice-local-golangci-diagnostic-v1' or
+                    diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
+                    diagnostic.get('modules') != expected_modules or not isinstance(commands, list) or
+                    diagnostic.get('tools') != {'go_sha256': lint_inputs['go_sha256'],
+                                                'golangci_sha256': lint_inputs['lint_sha256']} or
+                    diagnostic.get('platform') != {'goos': 'windows', 'goarch': 'amd64'} or
+                    any(not isinstance(row, dict) for row in commands) or
+                    [(row.get('action'), row.get('module')) for row in commands if isinstance(row, dict)] != expected or
+                    any(row.get('exit_code') != 0 or
+                        any(not isinstance(row.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', row[key])
+                            for key in ('stdout_sha256', 'stderr_sha256')) for row in commands)):
+                raise ValueError('lint diagnostic does not match selected source and module inventory')
+            report['golangci_report'] = 'golangci/diagnostic.json'
         if 'backend-go' in plan['checks']:
             services = plan['components']['go']
             diagnostic = local_go_plan.run(root, plan['source'], services, output / 'go', go_binary)
@@ -439,6 +469,8 @@ def main():
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
+    for name in ('go', 'go-sha256', 'lint', 'lint-sha256'):
+        parser.add_argument('--golangci-' + name, help='opt-in source-bound Go lint tool input')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')
     parser.add_argument('--chat-postgres-archive')
@@ -485,11 +517,14 @@ def main():
         if len(raw) > 1024 * 1024:
             raise ValueError('Go integration inputs exceed limit')
         full_go_inputs = json.loads(raw, object_pairs_hook=local_go_full_integration.chat._unique)
+    lint_inputs = {'go': args.golangci_go, 'go_sha256': args.golangci_go_sha256,
+                   'lint': args.golangci_lint, 'lint_sha256': args.golangci_lint_sha256}
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
                  compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images,
-                 full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs)
+                 full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs,
+                 lint_inputs if any(value is not None for value in lint_inputs.values()) else None)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

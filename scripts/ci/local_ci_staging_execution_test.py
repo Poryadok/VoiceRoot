@@ -55,7 +55,7 @@ class ExecutionTests(unittest.TestCase):
         journal.write_text(json.dumps({'version': 1, 'run_id': run, 'daemon': 'daemon-1', 'resources': resources}))
         (directory / 'identity.json').write_text(json.dumps({'source': 'a' * 40, 'daemon': 'daemon-1', 'journal': str(journal), 'slot': 0}))
         (directory / 'suite-counts.json').write_text(json.dumps({'shard': self.request['shard'],
-            'recipes': {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 73}[self.request['shard']],
+            'recipes': {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 74}[self.request['shard']],
             'hosted_go_tests': 1 if self.request['shard'] == 'staging' else 0,
             'hosted_policy_tests': 1 if self.request['shard'] == 'policy' else 0}))
         return SimpleNamespace(returncode=rc, stdout=output, stderr=b'')
@@ -84,7 +84,7 @@ class ExecutionTests(unittest.TestCase):
         self.request['assets']['kubectl'] = str(Path(self.tmp.name) / 'kubectl')
         with patch.object(staging.supervision, 'run_diagnostic', side_effect=lambda *a, **k: self.completed()):
             report = staging.run(self.request)
-        self.assertEqual((report['recipes'], report['hosted_policy_tests']), (73, 1))
+        self.assertEqual((report['recipes'], report['hosted_policy_tests']), (74, 1))
         self.request['output'] = str(Path(self.tmp.name) / 'policy-missing')
         def missing(*args, **kwargs):
             result = self.completed()

@@ -63,7 +63,7 @@ class StagingIntegrationTests(unittest.TestCase):
             receipt = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete',
                        'source': source['head'], 'base': 'c' * 40, 'shard': 'staging', 'recipes': 34, 'hosted_go_tests': 3, 'hosted_policy_tests': 0}
             proofs = dict(receipt, shard='proofs', recipes=15, hosted_go_tests=0)
-            policy = dict(proofs, shard='policy', recipes=73, hosted_policy_tests=1)
+            policy = dict(proofs, shard='policy', recipes=74, hosted_policy_tests=1)
             with patch.object(preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
                  patch.object(preflight.local_chat_orchestration, '_verify_file'), \
                  patch.object(preflight.local_ci_routing, 'run', return_value=routing), \
@@ -88,7 +88,7 @@ class StagingIntegrationTests(unittest.TestCase):
             common = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete', 'source': source['head'], 'base': 'c' * 40}
             receipts = [dict(common, shard='staging', recipes=34, hosted_go_tests=1, hosted_policy_tests=0),
                         dict(common, shard='proofs', recipes=15, hosted_go_tests=0, hosted_policy_tests=0),
-                        dict(common, shard='policy', recipes=73, hosted_go_tests=0, hosted_policy_tests=1),
+                        dict(common, shard='policy', recipes=74, hosted_go_tests=0, hosted_policy_tests=1),
                         dict(common, shard='runtime', recipes=23, hosted_go_tests=0, hosted_policy_tests=0)]
             images = {key: {'archive': str(Path(directory) / key), 'sha256': 'd' * 64,
                             'image_id': 'sha256:' + 'e' * 64} for key in ('postgres', 'docker_cli', 'python')}
