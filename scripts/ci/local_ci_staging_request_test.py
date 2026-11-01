@@ -46,6 +46,17 @@ class RequestTests(unittest.TestCase):
         with self.assertRaises(ValueError): staging.parse_assets(b'{"helper":"x","helper":"y"}')
         with self.assertRaises(ValueError): staging.parse_assets(b'{}')
         with self.assertRaises(ValueError): staging.parse_assets(json.dumps(dict(assets, helper='relative')).encode())
+        with self.assertRaises(ValueError): staging.parse_assets(json.dumps(dict(assets, kubectl='relative')).encode())
+
+    def test_policy_requires_kubectl_but_other_shards_remain_compatible(self):
+        assets = self.request['assets']
+        self.assertEqual(staging.validate(self.request), self.request)
+        with self.assertRaises(ValueError): staging.validate(dict(self.request, shard='policy'))
+        with_kubectl = dict(assets, kubectl=str(self.root.parent / 'kubectl'))
+        self.assertEqual(staging.parse_assets(json.dumps(with_kubectl).encode()), with_kubectl)
+        for shard in ('staging', 'proofs', 'policy'):
+            request = dict(self.request, shard=shard, assets=with_kubectl)
+            self.assertEqual(staging.validate(request), request)
 
     def test_runtime_requires_exact_pinned_image_records(self):
         parent = self.root.parent

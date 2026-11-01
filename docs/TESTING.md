@@ -673,7 +673,7 @@ When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
 the local inputs for experimental owned staging, proofs and policy shard executions. The JSON
 object must contain exactly the absolute paths `helper`, `jq`, `postgres_image`,
 `go_image`, `python_image`, `nats_image`, `nats_box_image`, `alpine_image`,
-`packages`, `wheel`, `preservation_go_cache`, and `staging_go_proxy`. The worker
+`packages`, `wheel`, `preservation_go_cache`, `staging_go_proxy`, and `kubectl` for the planner-selected policy shard. Direct staging, proofs and runtime requests retain their prior asset requirements. The worker
 requires its pinned byte hashes and image IDs, a clean checkout matching the
 planned commit and tree, and a full base SHA. Pinned client, Go, Node and Docker
 CLI images must already be present. Missing or mismatched inputs fail closed.
@@ -685,7 +685,10 @@ hosted CI, and startup, filesystem work and disk growth are not independently
 bounded. The maintained staging path has not yet passed a complete real run.
 The policy runner checks 69 recipes and the hosted compiled-source test, with
 source-pinned, individually identified Linux platform skips; any other skip
-fails closed. It uses the owned Python 3.12 client, which differs from the
+fails closed. The policy client requires the pinned Linux/amd64 kubectl v1.34.0
+binary (SHA-256 `cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c`)
+for the real loopback transport test. The hosted runner's kubectl version is
+not pinned by the workflow and has not been established. It uses the owned Python 3.12 client, which differs from the
 hosted step's default system Python. The policy path has not yet passed a
 complete real run. Without the runtime image inputs below, these runs omit runtime and leave `ci-script-tests`
 `not_run` and preflight incomplete even if the staging receipt is produced.

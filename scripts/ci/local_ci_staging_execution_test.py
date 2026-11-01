@@ -61,6 +61,7 @@ class ExecutionTests(unittest.TestCase):
 
     def test_policy_receipt_requires_hosted_tests(self):
         self.request['shard'] = 'policy'
+        self.request['assets']['kubectl'] = str(Path(self.tmp.name) / 'kubectl')
         with patch.object(staging.supervision, 'run_diagnostic', side_effect=lambda *a, **k: self.completed()):
             report = staging.run(self.request)
         self.assertEqual((report['recipes'], report['hosted_policy_tests']), (69, 1))
