@@ -201,6 +201,17 @@ class RestoreTransportTests(unittest.TestCase):
                                 authorization={'schema':'nats-rollout-preservation-v2',
                                     'installation_sha256':session.installation.sha256,
                                     'target':target,'resource_fence':session.binding()}
+                                for fault in ('legacy-schema','missing-installation','foreign-installation'):
+                                    with self.subTest(authorization_fault=fault):
+                                        rejected=copy.deepcopy(authorization)
+                                        if fault=='legacy-schema':rejected['schema']='nats-rollout-preservation-v1'
+                                        elif fault=='missing-installation':del rejected['installation_sha256']
+                                        else:rejected['installation_sha256']='f'*64
+                                        final['authorization']=rejected
+                                        with patch.object(guard,'protected_receipt',return_value=rejected):
+                                            with self.assertRaisesRegex(Exception,'cohort_final_authorization_incomplete'):
+                                                owner.complete_authorization(admission,session,base,final)
+                                        self.assertFalse((owner._base(session)/'authorization-complete.json').exists())
                                 final['authorization']=authorization
                                 with patch.object(guard,'protected_receipt',return_value=authorization):
                                     owner.complete_authorization(admission,session,base,final)
