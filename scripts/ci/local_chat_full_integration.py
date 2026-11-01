@@ -71,12 +71,12 @@ def validate_events(events, packages, no_tests, required):
     return summary
 
 
-def verify_images(owner, client, identities):
-    if (not isinstance(identities, dict) or set(identities) != set(IMAGES) or
+def verify_images(owner, client, identities, image_tags=IMAGES):
+    if (not isinstance(identities, dict) or set(identities) != set(image_tags) or
             any(not isinstance(value, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', value)
                 for value in identities.values())):
-        raise ValueError('three explicit private image identities are required')
-    for tag in IMAGES:
+        raise ValueError('explicit private image identities must match the selected profile')
+    for tag in image_tags:
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             command = ['curl', '--silent', '--show-error', '--fail', '--max-time', '10',
                        '--unix-socket', '/socket/docker.sock',
@@ -92,32 +92,43 @@ def verify_images(owner, client, identities):
                 raise ValueError('private required image identity differs')
 
 
-def run_full(owner, daemon, client, root, source, source_copy, archive_digest, identities, output):
+def run_full(owner, daemon, client, root, source, source_copy, archive_digest, identities, output, *, service='chat'):
+    if service == 'chat':
+        module, image_tags, inventory_reader = MODULE, IMAGES, read_required
+        test_args = '-p 2'
+    elif service in ('bot', 'search'):
+        import local_go_full_integration as full_go
+        selected = full_go.profile(service)
+        module, image_tags = selected['module'], selected['images']
+        inventory_reader = lambda source_copy, packages: full_go.read_required(source_copy, service, packages)
+        test_args = '-p 1 -parallel 1'
+    else:
+        raise ValueError('unsupported Go service profile')
     root, output = Path(root).resolve(), Path(output).resolve()
     if output == root or root in output.parents or output.exists():
         raise ValueError('output must be new and outside source tree')
     address = local_chat_private.inspect_pair(owner, daemon, client)
-    verify_images(owner, client, identities)
+    verify_images(owner, client, identities, image_tags)
     output.mkdir(parents=True)
     inventory = local_go_execution.discover_packages(owner, client, root, source, source_copy,
-                                                      archive_digest, MODULE, output / 'inventory')
+                                                      archive_digest, module, output / 'inventory')
     packages = sorted(inventory['packages_with_tests'] + inventory['packages_without_tests'])
     snapshot.verify_materialized(root, source, source_copy)
-    required = read_required(source_copy, inventory['packages_with_tests'])
+    required = inventory_reader(source_copy, inventory['packages_with_tests'])
     inventory_path = Path(source_copy) / 'scripts/ci/go_integration_required.json'
     inventory_digest = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed before full Chat integration')
     if local_chat_private.inspect_pair(owner, daemon, client) != address:
         raise ValueError('private daemon address changed')
-    go = ('cd /workspace/source/src/backend/chat && '
+    go = ('cd /workspace/source/' + module + ' && '
                'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly '
                'GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
                'GOCACHE=/workspace/go-build GOMODCACHE=/workspace/go-mod '
                'DOCKER_HOST=unix:///socket/docker.sock TESTCONTAINERS_RYUK_DISABLED=true '
                'TESTCONTAINERS_HOST_OVERRIDE="$1" '
-               'go test -json -count=1 -timeout 20m -p 2 ./...')
-    command = ['bash', '-c', bounded_script(go), 'voice-chat-full', address]
+               'go test -json -count=1 -timeout 20m ' + test_args + ' ./...')
+    command = ['bash', '-c', bounded_script(go), 'voice-' + service + '-full', address]
     with (output / 'events.jsonl').open('xb') as out, (output / 'stderr.log').open('xb') as err:
         code = owner.execute(client, command, out, err, 1800)
     if ((output / 'events.jsonl').stat().st_size > EVENT_LIMIT or
@@ -127,24 +138,24 @@ def run_full(owner, daemon, client, root, source, source_copy, archive_digest, i
         raise ValueError('full Chat integration command failed')
     if local_chat_private.inspect_pair(owner, daemon, client) != address:
         raise ValueError('private daemon address changed')
-    verify_images(owner, client, identities)
+    verify_images(owner, client, identities, image_tags)
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed during full Chat integration')
-    local_go_execution._verify_modules(owner, client, MODULE)
+    local_go_execution._verify_modules(owner, client, module)
     local_go_execution._verify_workspace(owner, client, root, source, archive_digest)
     raw = (output / 'events.jsonl').read_bytes()
     events = receipts.read_events(raw.decode('utf-8'))
     summary = validate_events(events, packages, inventory['packages_without_tests'], required)
-    return {'schema': 'voice-local-chat-full-integration-v1', 'status': 'incomplete', 'source': source,
+    return {'schema': 'voice-local-' + service + '-full-integration-v1', 'status': 'incomplete', 'source': source,
             'command': command, 'exit_code': code, 'inventory': inventory,
             'required_count': len(required), 'required_inventory_sha256': inventory_digest,
             'events_sha256': hashlib.sha256(raw).hexdigest(), 'tests': summary, 'images': identities}
 
 
-def validate_archives(archives):
-    if not isinstance(archives, dict) or set(archives) != set(IMAGES):
-        raise ValueError('three explicit Chat image archives are required')
+def validate_archives(archives, image_tags=IMAGES):
+    if not isinstance(archives, dict) or set(archives) != set(image_tags):
+        raise ValueError('explicit image archives must match the selected profile')
     for item in archives.values():
         if (not isinstance(item, dict) or set(item) != {'archive', 'archive_sha256', 'image_id'} or
                 not isinstance(item['archive'], str) or not Path(item['archive']).is_absolute() or
@@ -153,9 +164,19 @@ def validate_archives(archives):
             raise ValueError('invalid Chat image archive identity')
 
 
-def run_owned(scheduled, engine, source, root, source_copy, output, helper, helper_digest, archives, acquisition):
+def run_owned(scheduled, engine, source, root, source_copy, output, helper, helper_digest, archives, acquisition,
+              *, service='chat'):
     owner, failure, result = scheduled.run, None, None
     try:
+        if service == 'chat':
+            image_tags, executor = IMAGES, run_full
+        elif service in ('bot', 'search'):
+            import local_go_full_integration as full_go
+            image_tags = full_go.profile(service)['images']
+            executor = lambda *args: full_go.run_profile(service, *args)
+        else:
+            raise ValueError('unsupported Go service profile')
+        validate_archives(archives, image_tags)
         network = owner.create_resource('network')
         mounts = {name: owner.create_resource('volume') for name in
                   ('/home/rootless/.local/share/docker', '/var/lib/docker', '/run/user/1000')}
@@ -171,7 +192,7 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
             lambda request: orchestration._create_daemon(helper, helper_digest, engine.rootless_creator_env(), request))
         owner.start_container(daemon)
         orchestration._wait_daemon(owner, daemon, client)
-        for index, tag in enumerate(IMAGES):
+        for index, tag in enumerate(image_tags):
             item = archives[tag]
             orchestration._verify_file(item['archive'], item['archive_sha256'])
             copied = owner.directory / ('image-' + str(index) + '.tar')
@@ -189,8 +210,8 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
         source_digest = local_go_execution.transfer_source(owner, client, root, source, source_copy, output / 'source.tar')
         local_go_execution.transfer_dependencies(owner, client, root, source, source_copy, source_digest,
                                                   acquisition, output / 'dependencies/download-cache.tar')
-        identities = {tag: archives[tag]['image_id'] for tag in IMAGES}
-        result = run_full(owner, daemon, client, root, source, source_copy, source_digest, identities, output / 'full')
+        identities = {tag: archives[tag]['image_id'] for tag in image_tags}
+        result = executor(owner, daemon, client, root, source, source_copy, source_digest, identities, output / 'full')
         result.update(slot=scheduled.slot, ownership_journal=str(owner.directory / 'ownership.json'),
                       source_archive_sha256=source_digest, go_image_id=image)
     except BaseException as error:

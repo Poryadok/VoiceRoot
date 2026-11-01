@@ -47,7 +47,7 @@ class FullChatTests(unittest.TestCase):
     def test_failed_setup_closes_owned_run_without_claiming_success(self):
         scheduled = mock.Mock()
         scheduled.run.create_resource.side_effect = RuntimeError('unavailable')
-        with self.assertRaisesRegex(RuntimeError, 'unavailable'):
+        with mock.patch.object(subject, 'validate_archives'), self.assertRaisesRegex(RuntimeError, 'unavailable'):
             subject.run_owned(scheduled, mock.Mock(), {}, Path('.'), Path('.'), Path('.'),
                               'helper', 'a' * 64, {}, {})
         scheduled.close.assert_called_once_with()
@@ -121,7 +121,7 @@ class FullChatTests(unittest.TestCase):
         for failure in (ValueError('output limit exceeded'), KeyboardInterrupt()):
             scheduled = mock.Mock()
             scheduled.run.create_resource.side_effect = failure
-            with self.subTest(failure=failure), self.assertRaises(type(failure)):
+            with self.subTest(failure=failure), mock.patch.object(subject, 'validate_archives'), self.assertRaises(type(failure)):
                 subject.run_owned(scheduled, mock.Mock(), {}, Path('.'), Path('.'), Path('.'),
                                   'helper', 'a' * 64, {}, {})
             scheduled.close.assert_called_once_with()
