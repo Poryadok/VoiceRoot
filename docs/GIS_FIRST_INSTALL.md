@@ -166,8 +166,11 @@ blocks the run. Secret bytes stay in process memory and Kubernetes request
 bodies; the private journal stores only source, UID/resourceVersion, job, and
 readiness evidence. The installer applies only the three GIS prerequisite
 Jobs and source-approved GIS Service/Deployment pair. It verifies migration
-version 31, guardedly starts that exact Deployment, and checks a ready
+version 32 and the authority singleton, triggers, and functions, guardedly starts
+that exact Deployment, and checks a ready
 EndpointSlice. On a later failure it removes only the unchanged pair owned by
 the journaled operation; additive database prerequisites are retained.
 Retrying with the same state path resumes the operation, while changed source
 or image is rejected.
+Historical version 31 receipts remain valid only with their original
+source-pinned version 31 verifier and migration set.
