@@ -72,5 +72,23 @@ jobs:
           docker pull natsio/nats-box@sha256:abdc9f9f0120bb8adfbf674eb037d1551db55356eb198b7bd4ffed377f6950a6
           sudo -n --preserve-env=RUNNER_ENVIRONMENT env PYTHONDONTWRITEBYTECODE=1 \
             python3 "$work/source/scripts/ci/nats_owned_broker_qualification.py" "$work/bin/genesis" "$work/bin/bootstrap-renewer" "$work/runtime"
+          # This component chain uses real PG/CMS and Session, with explicit
+          # synthetic NATS and GitHub boundaries; it is not full P2 proof.
+          python scripts/ci/staging_story_target8_helper.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-target8"
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          sudo -n mkdir -m 700 "$work/qualified"
+          sudo -n install -m 0400 "$RUNNER_TEMP/owned-qualified/kernel" "$RUNNER_TEMP/owned-qualified/bootstrap-renewer" \
+            "$RUNNER_TEMP/owned-qualified/story-current4-probe" "$RUNNER_TEMP/owned-qualified/provenance.json" "$work/qualified/"
+          sudo -n install -m 0400 "$RUNNER_TEMP/owned-target8/story-restored8-probe" "$work/qualified/"
+          sudo -n install -m 0400 "$RUNNER_TEMP/owned-target8/provenance.json" "$work/qualified/target8-provenance.json"
+          pg_image=$(PYTHONPATH="$work/source/scripts/dev" python -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["postgres"])')
+          docker pull "$pg_image"
+          migrate_image=$(PYTHONPATH="$work/source/scripts/dev" python -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
+          docker pull "$migrate_image"
+          (cd "$work/source/scripts/staging/nats-rollout-preservation" && sudo -n --preserve-env=RUNNER_ENVIRONMENT env \
+            PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \
+            VOICE_COHORT_RETAINED_ROOT="$work/runtime" TMPDIR="$work/runtime" \
+            PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries)
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=normal)"
