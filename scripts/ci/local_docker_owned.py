@@ -732,6 +732,27 @@ class OwnedRun:
         self._save()
         return result
 
+    def read_rootless_cgroup(self, name, stdout, stderr):
+        """Journal one fixed, read-only counter probe in an owned rootless workspace."""
+        self._validate(); self._check_daemon()
+        matches = [r for r in self.state['resources'] if r['kind'] == 'container' and r['name'] == name
+                   and r.get('profile') == 'rootless-workspace-v1' and r['state'] == 'ready']
+        if len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
+                                    for r in self.state['resources']):
+            raise OwnershipError('rootless counter probe is not ready')
+        item = matches[0]
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('rootless counter probe is not running')
+        item['state'] = 'executing'; self._save()
+        result = self.engine.execute(item['id'], ['sh', '-c', rootless.CGROUP_COUNTER_COMMAND], stdout, stderr, 30)
+        if type(result) is not int or not 0 <= result <= 255 or result == 125:
+            raise OwnershipError('invalid rootless counter probe result')
+        self._check_daemon()
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('rootless counter probe stopped')
+        item['state'] = 'ready'; self._save()
+        return result
+
     def load_canonical_rootless_image(self, name, archive_path, archive_sha256, image_id, image_tag,
                                       stdout, stderr, timeout=300):
         """Canonicalize a verified OCI archive before loading into the private daemon.
