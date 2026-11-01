@@ -22,7 +22,8 @@ class HostedPostgres:
         if sys.platform!='linux' or os.geteuid()!=0 or os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted':
             raise RuntimeError('disposable_hosted_linux_required')
         self.namespace_uid=namespace_uid;self.name='voice-cohort-source-'+secrets.token_hex(12)
-        self.cid=None;self.observed_cid=None;self.original_popen=subprocess.Popen
+        self.cid=None;self.observed_cid=None;self.create_uncertain=False;self.reconciliation_error=None
+        self.original_popen=subprocess.Popen
         self.rows,self.slices=self._objects()
 
     def _docker(self,*args,body=None):
@@ -52,6 +53,8 @@ class HostedPostgres:
         return ids[0]
 
     def _cleanup(self):
+        if self.create_uncertain:
+            raise RuntimeError('isolated_postgres_create_terminality_unknown')
         named=self._find()
         if self.cid is not None:
             by_id=self._ids('id='+self.cid)
@@ -76,6 +79,14 @@ class HostedPostgres:
         try:
             created=self._docker('create','--name',self.name,'--network','none','--label','voice.test.owner='+self.name,
                 '-e','POSTGRES_PASSWORD=isolated-test-only','-e','POSTGRES_USER=postgres',QUALIFIED_TOOLS['postgres']).decode().strip()
+        except BaseException as error:
+            # An empty scan does not prove the daemon stopped processing a
+            # lost create request. Preserve the unique name for reconciliation.
+            self.create_uncertain=True
+            try:self._find()
+            except BaseException as scan_error:self.reconciliation_error=scan_error
+            raise RuntimeError('isolated_postgres_reconciliation_required:'+self.name+':'+str(self.observed_cid)) from error
+        try:
             if not re.fullmatch('[a-f0-9]{64}',created):
                 raise RuntimeError('isolated_postgres_create_identity_invalid')
             self.cid=created
