@@ -2,6 +2,7 @@ package sourcecustody
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
+
+type permitCheckCancellationTrace struct {
+	armed    atomic.Bool
+	entered  chan struct{}
+	resume   chan struct{}
+	canceled chan bool
+}
+
+func (t *permitCheckCancellationTrace) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.HasPrefix(data.SQL, "SELECT state,epoch,source_id,") && t.armed.CompareAndSwap(true, false) {
+		close(t.entered)
+		<-t.resume
+		t.canceled <- ctx.Err() != nil
+	}
+	return ctx
+}
+
+func (*permitCheckCancellationTrace) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {
+}
 
 // An uncertain close must not let this controller issue another permit even
 // when its previous control connection is still usable.
@@ -54,6 +74,229 @@ func TestCustodyCleanShutdownStaysCleanAfterRejectedAcquire(t *testing.T) {
 	}
 	require.Error(t, err)
 	require.NoError(t, c.Shutdown(ctx), "a rejected acquire must not turn a clean shutdown into failure")
+}
+
+func TestCustodyCanceledAcquireDoesNotPoisonHealthyLeader(t *testing.T) {
+	ctx, control, _, binding, c := custodyFixture(t)
+	requestCtx, cancel := context.WithCancel(ctx)
+	c.mu.Lock()
+	locked := true
+	type result struct {
+		permit *Permit
+		err    error
+	}
+	done := make(chan result, 1)
+	joined := false
+	defer func() {
+		cancel()
+		if locked {
+			c.mu.Unlock()
+		}
+		if !joined {
+			outcome := <-done
+			if outcome.permit != nil {
+				_ = outcome.permit.Release(context.Background())
+			}
+		}
+	}()
+	go func() {
+		permit, err := c.Acquire(requestCtx, binding)
+		done <- result{permit: permit, err: err}
+	}()
+	require.Eventually(t, func() bool {
+		var held bool
+		return control.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND mode='ShareLock' AND granted AND objsubid=1 AND classid=($1::bigint >> 32)::oid AND objid=($1::bigint & 4294967295)::oid)`, permitKey).Scan(&held) == nil && held
+	}, 5*time.Second, 25*time.Millisecond)
+	cancel()
+	c.mu.Unlock()
+	locked = false
+	select {
+	case outcome := <-done:
+		joined = true
+		if outcome.permit != nil {
+			_ = outcome.permit.Release(ctx)
+		}
+		require.Nil(t, outcome.permit)
+		require.Error(t, outcome.err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled acquire did not return")
+	}
+	healthy, err := c.Acquire(ctx, binding)
+	require.NoError(t, err, "one canceled request must not poison the shared leader")
+	require.NoError(t, healthy.Release(ctx))
+}
+
+func TestCustodyCanceledPermitCheckDoesNotPoisonHealthyLeader(t *testing.T) {
+	ctx, _, _, binding, c := custodyFixture(t)
+	permit, err := c.Acquire(ctx, binding)
+	require.NoError(t, err)
+	defer func() { _ = permit.Release(context.Background()) }()
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	c.mu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			c.mu.Unlock()
+		}
+	}()
+	done := make(chan error, 1)
+	go func() { done <- permit.Check(requestCtx) }()
+	require.Eventually(t, func() bool {
+		if permit.mu.TryLock() {
+			permit.mu.Unlock()
+			return false
+		}
+		return true
+	}, 5*time.Second, 25*time.Millisecond)
+	cancel()
+	c.mu.Unlock()
+	locked = false
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled permit check did not return")
+	}
+	healthy, err := c.Acquire(ctx, binding)
+	require.NoError(t, err, "a canceled permit check must not poison the shared leader")
+	require.NoError(t, healthy.Release(ctx))
+}
+
+func TestCustodyCanceledPermitCheckDuringLeaderRead(t *testing.T) {
+	trace := &permitCheckCancellationTrace{entered: make(chan struct{}), resume: make(chan struct{}), canceled: make(chan bool, 1)}
+	ctx, _, _, binding, c := custodyFixtureTraced(t, false, trace)
+	permit, err := c.Acquire(ctx, binding)
+	require.NoError(t, err)
+	requestCtx, cancel := context.WithCancel(ctx)
+	var resumeOnce sync.Once
+	joined := false
+	done := make(chan error, 1)
+	defer func() {
+		cancel()
+		resumeOnce.Do(func() { close(trace.resume) })
+		if !joined {
+			<-done
+		}
+		_ = permit.Release(context.Background())
+	}()
+	trace.armed.Store(true)
+	go func() { done <- permit.Check(requestCtx) }()
+	select {
+	case <-trace.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("permit check did not reach the shared leader read")
+	}
+	cancel()
+	resumeOnce.Do(func() { close(trace.resume) })
+	require.False(t, <-trace.canceled, "request cancellation must not cancel shared observation")
+	select {
+	case err := <-done:
+		joined = true
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled permit check did not return")
+	}
+	healthy, err := c.Acquire(ctx, binding)
+	require.NoError(t, err)
+	require.NoError(t, healthy.Release(ctx))
+}
+
+func TestCustodyCanceledWaitDoesNotPoisonHealthyLeader(t *testing.T) {
+	ctx, _, _, _, c := custodyFixture(t)
+	require.NoError(t, c.CloseAdmission(ctx))
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	c.mu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			c.mu.Unlock()
+		}
+	}()
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- c.WaitPermits(requestCtx)
+	}()
+	<-started
+	cancel()
+	c.mu.Unlock()
+	locked = false
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled wait did not return")
+	}
+	require.NoError(t, c.Shutdown(ctx), "a canceled standalone wait must not poison the shared leader")
+}
+
+func TestCustodyCanceledWaitAfterBarrierReleasesLock(t *testing.T) {
+	ctx, control, _, _, c := custodyFixture(t)
+	require.NoError(t, c.CloseAdmission(ctx))
+	entered := make(chan struct{})
+	resume := make(chan struct{})
+	c.afterBarrier = func() { close(entered); <-resume }
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- c.WaitPermits(requestCtx) }()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		close(resume)
+		<-done
+		t.Fatal("wait did not acquire the barrier")
+	}
+	cancel()
+	close(resume)
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled barrier wait did not return")
+	}
+	c.afterBarrier = nil
+	var held bool
+	require.NoError(t, control.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted AND objsubid=1 AND classid=($1::bigint >> 32)::oid AND objid=($1::bigint & 4294967295)::oid)`, permitKey).Scan(&held))
+	require.False(t, held, "canceled wait must release its exclusive barrier")
+	require.NoError(t, c.Shutdown(ctx), "cancellation after the barrier must not poison the leader")
+}
+
+func TestCustodyCanceledReleaseStillCleansUp(t *testing.T) {
+	ctx, _, _, binding, c := custodyFixture(t)
+	permit, err := c.Acquire(ctx, binding)
+	require.NoError(t, err)
+	permit.mu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			permit.mu.Unlock()
+		}
+	}()
+	requestCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- permit.Release(requestCtx)
+	}()
+	<-started
+	cancel()
+	permit.mu.Unlock()
+	locked = false
+	select {
+	case err := <-done:
+		require.NoError(t, err, "cleanup must not inherit an expired request context")
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled release did not finish")
+	}
+	healthy, err := c.Acquire(ctx, binding)
+	require.NoError(t, err, "a canceled cleanup request must not poison healthy leadership")
+	require.NoError(t, healthy.Release(ctx))
 }
 
 func TestCustodyWaitRejectsChangedBinding(t *testing.T) {

@@ -203,12 +203,24 @@ func (c *Controller) Acquire(ctx context.Context, expected Binding) (*Permit, er
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.stopped || c.parent.Err() != nil {
+	if c.stopped || c.parent.Err() != nil || ctx.Err() != nil {
 		destroy(conn)
 		return nil, ErrUnavailable
 	}
-	if c.leader == nil || c.leader.Ping(ctx) != nil {
+	// Request cancellation must not cancel a query on the shared leadership
+	// session. A genuinely failed or timed-out leadership check still poisons it.
+	pingCtx, stopPing := context.WithTimeout(context.Background(), 3*time.Second)
+	leaderErr := ErrUnavailable
+	if c.leader != nil {
+		leaderErr = c.leader.Ping(pingCtx)
+	}
+	stopPing()
+	if leaderErr != nil {
 		c.poisonLocked()
+		destroy(conn)
+		return nil, ErrUnavailable
+	}
+	if ctx.Err() != nil || c.parent.Err() != nil {
 		destroy(conn)
 		return nil, ErrUnavailable
 	}
@@ -217,7 +229,7 @@ func (c *Controller) Acquire(ctx context.Context, expected Binding) (*Permit, er
 	var h, u uuid.UUID
 	var digest []byte
 	err = conn.QueryRow(ctx, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
-	if err != nil || state != "OPEN" || c.parent.Err() != nil || !same(expected, epoch, source, h, u, digest) {
+	if err != nil || state != "OPEN" || ctx.Err() != nil || c.parent.Err() != nil || !same(expected, epoch, source, h, u, digest) {
 		destroy(conn)
 		return nil, ErrUnavailable
 	}
@@ -321,7 +333,7 @@ func (c *Controller) WaitPermits(ctx context.Context) error {
 
 func (c *Controller) waitPermitPass(ctx context.Context) (bool, <-chan struct{}, error) {
 	c.mu.Lock()
-	if c.stopped || c.leader == nil {
+	if c.stopped || c.leader == nil || ctx.Err() != nil {
 		c.mu.Unlock()
 		return false, nil, ErrUnavailable
 	}
@@ -329,14 +341,16 @@ func (c *Controller) waitPermitPass(ctx context.Context) (bool, <-chan struct{},
 	var epoch int64
 	var h, u uuid.UUID
 	var digest []byte
-	err := c.leader.QueryRow(ctx, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
+	observe, stopObserve := context.WithTimeout(context.Background(), 3*time.Second)
+	err := c.leader.QueryRow(observe, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
+	stopObserve()
 	if err != nil || !same(c.binding, epoch, source, h, u, digest) {
 		c.poisonLocked()
 		c.mu.Unlock()
 		return false, nil, ErrUnavailable
 	}
 	c.mu.Unlock()
-	if state != "CLOSED" {
+	if state != "CLOSED" || ctx.Err() != nil {
 		return false, nil, ErrUnavailable
 	}
 	conn, err := c.pool.Acquire(ctx)
@@ -361,16 +375,18 @@ func (c *Controller) waitPermitPass(ctx context.Context) (bool, <-chan struct{},
 	// The leader can die or be shut down while the exclusive lock is waiting.
 	// Recheck under controller serialization before reporting a barrier result.
 	c.mu.Lock()
-	if c.stopped {
+	if c.stopped || ctx.Err() != nil {
 		c.mu.Unlock()
 		destroy(conn)
 		return false, nil, ErrUnavailable
 	}
-	valid := c.leader != nil && c.leader.Ping(ctx) == nil
+	observe, stopObserve = context.WithTimeout(context.Background(), 3*time.Second)
+	valid := c.leader != nil && c.leader.Ping(observe) == nil
 	if valid {
-		err = c.leader.QueryRow(ctx, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
+		err = c.leader.QueryRow(observe, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
 		valid = err == nil && state == "CLOSED" && same(c.binding, epoch, source, h, u, digest)
 	}
+	stopObserve()
 	if !valid {
 		c.poisonLocked()
 		c.mu.Unlock()
@@ -380,7 +396,10 @@ func (c *Controller) waitPermitPass(ctx context.Context) (bool, <-chan struct{},
 	done := c.active == 0
 	changed := c.changed
 	var unlocked bool
-	if err = conn.QueryRow(ctx, `SELECT pg_advisory_unlock($1::bigint)`, permitKey).Scan(&unlocked); err != nil || !unlocked {
+	cleanup, stopCleanup := context.WithTimeout(context.Background(), 3*time.Second)
+	err = conn.QueryRow(cleanup, `SELECT pg_advisory_unlock($1::bigint)`, permitKey).Scan(&unlocked)
+	stopCleanup()
+	if err != nil || !unlocked {
 		c.poisonLocked()
 		c.mu.Unlock()
 		destroy(conn)
@@ -388,6 +407,9 @@ func (c *Controller) waitPermitPass(ctx context.Context) (bool, <-chan struct{},
 	}
 	c.mu.Unlock()
 	conn.Release()
+	if ctx.Err() != nil {
+		return false, nil, ErrUnavailable
+	}
 	return done, changed, nil
 }
 
@@ -404,12 +426,16 @@ func (p *Permit) Release(ctx context.Context) error {
 	p.conn = nil
 	var unlocked bool
 	var err error
+	// Cleanup must still run if the caller expired while waiting for p.mu.
+	// An actual rollback or unlock failure remains an uncertain transition.
+	cleanup, stopCleanup := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCleanup()
 	if p.physicalTx != nil {
-		err = p.physicalTx.Rollback(ctx)
+		err = p.physicalTx.Rollback(cleanup)
 		p.physicalTx = nil
 	}
 	if err == nil {
-		err = conn.QueryRow(ctx, `SELECT pg_advisory_unlock_shared($1::bigint)`, permitKey).Scan(&unlocked)
+		err = conn.QueryRow(cleanup, `SELECT pg_advisory_unlock_shared($1::bigint)`, permitKey).Scan(&unlocked)
 	}
 	if err != nil || !unlocked {
 		destroy(conn)
@@ -446,16 +472,18 @@ func (p *Permit) Check(ctx context.Context) error {
 	c := p.owner
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.stopped || c.parent.Err() != nil {
+	if c.stopped || c.parent.Err() != nil || ctx.Err() != nil {
 		return ErrUnavailable
 	}
-	if c.leader == nil || c.leader.Ping(ctx) != nil || p.conn.Ping(ctx) != nil {
+	observe, stopObserve := context.WithTimeout(context.Background(), 3*time.Second)
+	defer stopObserve()
+	if c.leader == nil || c.leader.Ping(observe) != nil || p.conn.Ping(observe) != nil {
 		c.poisonLocked()
 		return ErrUnavailable
 	}
 	if p.physicalTx != nil && p.physical != (PhysicalSource{}) {
 		var physical PhysicalSource
-		if p.physicalTx.QueryRow(ctx, `SELECT system_identifier,database_name,database_oid FROM public.user_custody_physical_source WHERE source_id=$1 AND epoch=$2`, c.binding.SourceID, c.binding.Epoch).Scan(&physical.SystemIdentifier, &physical.Database, &physical.DatabaseOID) != nil || physical != p.physical {
+		if p.physicalTx.QueryRow(observe, `SELECT system_identifier,database_name,database_oid FROM public.user_custody_physical_source WHERE source_id=$1 AND epoch=$2`, c.binding.SourceID, c.binding.Epoch).Scan(&physical.SystemIdentifier, &physical.Database, &physical.DatabaseOID) != nil || physical != p.physical {
 			c.poisonLocked()
 			return ErrUnavailable
 		}
@@ -464,9 +492,12 @@ func (p *Permit) Check(ctx context.Context) error {
 	var epoch int64
 	var h, u uuid.UUID
 	var digest []byte
-	err := c.leader.QueryRow(ctx, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
+	err := c.leader.QueryRow(observe, `SELECT state,epoch,source_id,history_generation,user_source_generation,keyset_digest FROM public.user_custody_state WHERE singleton`).Scan(&state, &epoch, &source, &h, &u, &digest)
 	if err != nil || (state != "OPEN" && state != "CLOSED") || !same(c.binding, epoch, source, h, u, digest) {
 		c.poisonLocked()
+		return ErrUnavailable
+	}
+	if ctx.Err() != nil || c.parent.Err() != nil {
 		return ErrUnavailable
 	}
 	return nil

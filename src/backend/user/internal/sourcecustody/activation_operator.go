@@ -170,11 +170,15 @@ func (h *activationHandler) fenceOpenedLocked() error {
 		return ErrUnavailable
 	}
 	claim := *h.opened
-	h.opened = nil
 	// Once a transition starts, finish fencing even if the caller disconnects.
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	drainCtx, stopDrain := context.WithTimeout(context.Background(), 30*time.Second)
+	closeErr := h.controller.Shutdown(drainCtx)
+	stopDrain()
+	// A stalled permit must not consume the physical recovery budget. Shutdown
+	// poisons/releases this leader on an uncertain drain; recovery then obtains
+	// its own leadership lock and validates the physical binding independently.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	closeErr := h.controller.Shutdown(ctx)
 	request := CreationRequest{SourceID: claim.Binding.SourceID, Epoch: claim.Binding.Epoch, ControlSystemID: claim.ControlSystem, SourceSystemID: claim.Physical.SystemIdentifier, Database: claim.Physical.Database}
 	recoveryErr := RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
 	for errors.Is(recoveryErr, errRecoveryLeaderBusy) {
@@ -184,6 +188,9 @@ func (h *activationHandler) fenceOpenedLocked() error {
 		case <-time.After(25 * time.Millisecond):
 			recoveryErr = RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
 		}
+	}
+	if recoveryErr == nil {
+		h.opened = nil
 	}
 	if closeErr != nil || recoveryErr != nil {
 		h.controller.mu.Lock()

@@ -355,6 +355,57 @@ func TestActivationOperatorShutdownReportsFenceFailure(t *testing.T) {
 	require.NoError(t, observer.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname=$2) FROM pg_database WHERE oid=$1`, claim.Physical.DatabaseOID, claim.WriterRole).Scan(&allowed, &login))
 	require.True(t, allowed)
 	require.True(t, login)
+	require.NotNil(t, handler.opened, "failed physical recovery must retain its claim")
+	// A later recovery attempt can use restored maintenance access. It still
+	// reports the earlier uncertain shutdown even when fencing now succeeds.
+	handler.admin = observer
+	handler.mu.Lock()
+	retryErr := handler.fenceOpenedLocked()
+	handler.mu.Unlock()
+	require.Error(t, retryErr)
+	require.Nil(t, handler.opened)
+	var phase string
+	require.NoError(t, control.QueryRow(ctx, `SELECT phase FROM user_custody_creation WHERE singleton`).Scan(&phase))
+	require.Equal(t, "RECOVERED_CLOSED", phase)
+	require.NoError(t, observer.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname=$2) FROM pg_database WHERE oid=$1`, claim.Physical.DatabaseOID, claim.WriterRole).Scan(&allowed, &login))
+	require.False(t, allowed)
+	require.False(t, login)
+}
+
+func TestActivationOperatorFencesAfterPermitDrainTimeout(t *testing.T) {
+	ctx, control, admin, source, keys, controller, claim, public, _, _ := openSourceFixture(t)
+	require.NoError(t, controller.PrepareOpenSource(ctx, admin, claim, public))
+	require.NoError(t, controller.OpenQualified(ctx, admin, source, keys, claim, public))
+	held, _, err := controller.AcquireAttested(ctx, claim.Binding)
+	require.NoError(t, err)
+	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public, opened: &claim}
+	done := make(chan error, 1)
+	joined := false
+	defer func() {
+		_ = held.Release(context.Background())
+		if !joined {
+			<-done
+		}
+	}()
+	go func() {
+		handler.mu.Lock()
+		defer handler.mu.Unlock()
+		done <- handler.fenceOpenedLocked()
+	}()
+	select {
+	case err := <-done:
+		joined = true
+		require.Error(t, err, "a timed-out drain must not report a clean shutdown")
+	case <-time.After(80 * time.Second):
+		t.Fatal("shutdown did not finish its bounded drain and fence")
+	}
+	var phase string
+	require.NoError(t, control.QueryRow(ctx, `SELECT phase FROM user_custody_creation WHERE singleton`).Scan(&phase))
+	require.Equal(t, "RECOVERED_CLOSED", phase, "the physical fence must still run after the drain timeout")
+	var allowed, login bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname=$2) FROM pg_database WHERE oid=$1`, claim.Physical.DatabaseOID, claim.WriterRole).Scan(&allowed, &login))
+	require.False(t, allowed)
+	require.False(t, login)
 }
 
 func TestActivationOperatorConfigIsAllOrNothing(t *testing.T) {
