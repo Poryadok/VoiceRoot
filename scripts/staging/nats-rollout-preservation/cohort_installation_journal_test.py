@@ -14,6 +14,48 @@ from resource_claim_test import MemoryJournal, card, context
 
 
 class CohortInstallationJournalTests(unittest.TestCase):
+    def test_prepare_full_story_checks_nats_before_renderer_and_actor(self):
+        from contextlib import ExitStack
+        import bridge_root,actor_root,renderer_root,nats_root_plan,nats_contract_plan,migrations,source_plan,gis_existing_update
+        installation=claim.production_installation();actions=object.__new__(bridge_root.Actions)
+        actions._installation=installation;actions.code=Path('/fixture');actions.binding={}
+        image='registry/story@sha256:'+'c'*64;renderer='registry/renderer@sha256:'+'d'*64
+        stage=SimpleNamespace(snapshots={'voice-story':{'spec':{'template':{'spec':{'containers':[{'name':'story'}]}}}}},
+            old_images={'voice-story/story':image,bridge_root.HUB+'/nats-config-renderer':renderer},expected={})
+        previous={'operation':'b'*12,'input_target':{'mode':'full'},'target':{'images':{'voice-story/story':image}},
+                  'context':{'old_images':{'voice-story/story':image}},
+                  'renderer_authority':{'descriptor':{'images':{'target':renderer,'old':renderer}}}}
+        request={'mode':'full','changed_services':['story'],'nonce':'a'*64}
+        approved={'source_sha':'c'*40,'images':{'story':image,'nats-hub-config-renderer':renderer}}
+        prior={'schema':'fixture'}
+        enrollment={'schema':'voice-nats-bootstrap-enrollment-scoped-v4','previous_enrollment':prior,
+                    'previous_enrollment_sha256':nats_contract_plan.digest(prior),'installation_sha256':'f'*64,
+                    'binding':{},'secret':{},'credential_sha256':'a'*64,'verified':True,'auth_proof':{}}
+        def read(path):
+            if path.name=='policy.json':return {'s3_signing_endpoint':'fixture'}
+            if path.name=='active-contract.json':raise FileNotFoundError()
+            return enrollment if path.name=='bootstrap-enrollment-v4.json' else prior
+        kube=Mock();kube.get.return_value={'data':{'generation':'r20261031','dataPVC':'fixture'}}
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(migrations,'require_preserving_admission'))
+            stack.enter_context(patch.object(actions,'_idle'))
+            stack.enter_context(patch.object(actions,'_capture_source',return_value=(1,{},False,Path('/source'),approved)))
+            stack.enter_context(patch.object(bridge_root,'Kube',return_value=kube))
+            stack.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
+            stack.enter_context(patch.object(source_plan,'principal_publisher_source',return_value=False))
+            stack.enter_context(patch.object(gis_existing_update,'load_authority',return_value=None))
+            stack.enter_context(patch.object(bridge_root,'private_json',side_effect=read))
+            stack.enter_context(patch.object(bridge_root,'public_read',return_value=b'{"consumer_pairs":[]}'))
+            actor=stack.enter_context(patch.object(actor_root,'preflight',return_value={'fixture':'actor'}))
+            renderer_prove=stack.enter_context(patch.object(renderer_root,'prove',return_value={'fixture':'renderer'}))
+            validate=stack.enter_context(patch.object(bridge_root.transaction,'validate_full_story_rollback_schema',side_effect=RuntimeError('checked actor')))
+            with self.assertRaises(Blocked):actions._prepare(request,previous=previous)
+            actor.assert_not_called();renderer_prove.assert_not_called();validate.assert_not_called()
+            with patch.object(nats_root_plan,'preflight',return_value={'scripts':{}}):
+                with self.assertRaisesRegex(RuntimeError,'checked actor'):actions._prepare(request,previous=previous)
+            actor.assert_called_once();renderer_prove.assert_called_once()
+            validate.assert_called_once_with(previous,{'fixture':'actor'})
+
     def test_cohort_checks_enrollment_before_actor_effects(self):
         import bridge_root,actor_root,nats_root_plan,nats_contract_plan
         installation=claim.production_installation();c=context()

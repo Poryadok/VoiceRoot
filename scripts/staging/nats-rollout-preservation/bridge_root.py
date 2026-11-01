@@ -646,29 +646,11 @@ class Actions:
         self._report('contract-selection','COMPLETE')
         self._report('nats-preflight','STARTED')
         renderer_authority=None
-        if renderer_selected:
-            import renderer_root
-            renderer_image=approved['images']['nats-hub-config-renderer']
-            if previous is not None:
-                current_renderer=stage.old_images[HUB+'/nats-config-renderer']
-                expected_renderer=previous['renderer_authority']['descriptor']['images']['target']
-                if current_renderer!=expected_renderer and not source_authority.same_image_content(current_renderer,expected_renderer,image_deadline):
-                    raise Blocked('renderer_rollback_current_image_changed')
-                renderer_image=previous['renderer_authority']['descriptor']['images']['old']
-            if prerequisites is not None:
-                renderer_authority=staging_prerequisites.load_renderer(self.tt_session,stage)
-                if renderer_authority['descriptor']['images']['target']!=renderer_image:
-                    raise Blocked('staging_prerequisites_renderer_changed')
-            else:
-                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image,installation=self.installation)
         import actor_root
         if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
             raise Blocked('staging_prerequisites_capture_changed')
         if cohort_ref is not None:
             preserved_preflight=staging_cohort_preservation.load_preflight(self.tt_session)
-        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
-            raise Blocked('staging_prerequisites_capture_changed')
-        if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         nats_authority=None
         if cohort_ref is not None:
             enrollment=preserved_preflight['enrollment'];nats_authority=preserved_preflight['nats']
@@ -693,6 +675,21 @@ class Actions:
                 import nats_root_plan
                 nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
+        if renderer_selected:
+            import renderer_root
+            renderer_image=approved['images']['nats-hub-config-renderer']
+            if previous is not None:
+                current_renderer=stage.old_images[HUB+'/nats-config-renderer']
+                expected_renderer=previous['renderer_authority']['descriptor']['images']['target']
+                if current_renderer!=expected_renderer and not source_authority.same_image_content(current_renderer,expected_renderer,image_deadline):
+                    raise Blocked('renderer_rollback_current_image_changed')
+                renderer_image=previous['renderer_authority']['descriptor']['images']['old']
+            if prerequisites is not None:
+                renderer_authority=staging_prerequisites.load_renderer(self.tt_session,stage)
+                if renderer_authority['descriptor']['images']['target']!=renderer_image:
+                    raise Blocked('staging_prerequisites_renderer_changed')
+            else:
+                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image,installation=self.installation)
         if cohort_ref is None:
             actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,installation=self.installation)
         else:
@@ -705,6 +702,7 @@ class Actions:
             actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,
                 stores['app_before']['metadata'],current_secret['metadata'])
             staging_cohort_preservation.revalidate_paused(self.tt_session)
+        if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         self._report('nats-preflight','COMPLETE')
         realtime_receipt=None
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
