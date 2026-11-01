@@ -18,7 +18,7 @@ import (
 // retention and safe cleanup remain unimplemented production prerequisites.
 // Opener is the separately authenticated opening controller; Controller is
 // the restricted probe-publisher identity and cannot perform opening.
-type monitorSchemaRoles struct{ Admin, Owner, Opener, Controller, Responder string }
+type monitorSchemaRoles struct{ Admin, Owner, Opener, Controller, Responder, SystemOwner string }
 
 const monitorProbeFunctionBody = `
 BEGIN
@@ -57,7 +57,7 @@ CREATE TRIGGER user_custody_monitor_probe_validate BEFORE INSERT ON public.user_
 // role/catalog DDL or prepared changes. A production caller must establish
 // quiescence, hold appropriate locks, and qualify each fresh connection at use.
 func qualifyMonitorSchema(ctx context.Context, admin, opener, controller, responder *pgxpool.Conn, roles monitorSchemaRoles) error {
-	if ctx == nil || ctx.Err() != nil || admin == nil || opener == nil || controller == nil || responder == nil {
+	if ctx == nil || ctx.Err() != nil || admin == nil || opener == nil || controller == nil || responder == nil || !databaseName.MatchString(roles.SystemOwner) {
 		return ErrUnavailable
 	}
 	names := []string{roles.Admin, roles.Owner, roles.Opener, roles.Controller, roles.Responder}
@@ -250,7 +250,10 @@ func qualifyMonitorSchema(ctx context.Context, admin, opener, controller, respon
  AND NOT EXISTS(SELECT 1 FROM pg_roles r JOIN pg_class c ON c.relowner=r.oid WHERE r.rolname=ANY($1::text[]))
  AND NOT EXISTS(SELECT 1 FROM pg_roles r JOIN pg_proc p ON p.proowner=r.oid WHERE r.rolname=ANY($1::text[]))
  AND NOT EXISTS(SELECT 1 FROM pg_roles r JOIN pg_proc p ON true WHERE r.rolname=ANY($1::text[]) AND p.prosecdef AND has_function_privilege(r.oid,p.oid,'EXECUTE'))
- AND NOT EXISTS(SELECT 1 FROM pg_roles r JOIN pg_proc p ON true JOIN pg_namespace n ON n.oid=p.pronamespace WHERE r.rolname=ANY($1::text[]) AND n.nspname='pg_catalog' AND has_function_privilege(r.oid,p.oid,'EXECUTE') AND (p.proname=ANY($2::text[]) OR NOT EXISTS(SELECT 1 FROM aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')))`, []string{roles.Opener, roles.Controller, roles.Responder}, []string{"pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_stat_file", "pg_ls_logdir", "pg_ls_waldir", "pg_ls_archive_statusdir", "pg_ls_tmpdir", "pg_ls_replslotdir", "pg_ls_logicalmapdir", "pg_ls_logicalsnapdir", "lo_import", "lo_export", "pg_reload_conf", "pg_rotate_logfile", "pg_promote", "pg_create_restore_point", "pg_switch_wal", "pg_backup_start", "pg_backup_stop"}).Scan(&ok) != nil || !ok {
+ AND NOT EXISTS(SELECT 1 FROM pg_roles r JOIN pg_proc p ON true JOIN pg_namespace n ON n.oid=p.pronamespace WHERE r.rolname=ANY($1::text[]) AND n.nspname='pg_catalog' AND p.oid<>'pg_catalog.pg_control_system()'::regprocedure AND has_function_privilege(r.oid,p.oid,'EXECUTE') AND (p.proname=ANY($2::text[]) OR NOT EXISTS(SELECT 1 FROM aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE')))
+ AND has_function_privilege($3,'pg_catalog.pg_control_system()','EXECUTE') AND has_function_privilege($4,'pg_catalog.pg_control_system()','EXECUTE') AND has_function_privilege($5,'pg_catalog.pg_control_system()','EXECUTE')
+ AND EXISTS(SELECT 1 FROM pg_proc p JOIN pg_roles o ON o.oid=p.proowner JOIN pg_language l ON l.oid=p.prolang WHERE p.oid='pg_catalog.pg_control_system()'::regprocedure AND o.rolname=$7 AND o.rolsuper AND l.lanname='internal' AND p.prosrc='pg_control_system' AND NOT p.prosecdef)
+ AND NOT EXISTS(SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE p.oid='pg_catalog.pg_control_system()'::regprocedure AND (a.grantee=0 OR (a.grantee<>p.proowner AND (pg_get_userbyid(a.grantee)<>ALL($6::text[]) OR a.is_grantable))))`, []string{roles.Opener, roles.Controller, roles.Responder}, []string{"pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_stat_file", "pg_ls_logdir", "pg_ls_waldir", "pg_ls_archive_statusdir", "pg_ls_tmpdir", "pg_ls_replslotdir", "pg_ls_logicalmapdir", "pg_ls_logicalsnapdir", "lo_import", "lo_export", "pg_reload_conf", "pg_rotate_logfile", "pg_promote", "pg_create_restore_point", "pg_switch_wal", "pg_backup_start", "pg_backup_stop"}, roles.Controller, roles.Responder, roles.Opener, []string{roles.Opener, roles.Controller, roles.Responder}, roles.SystemOwner).Scan(&ok) != nil || !ok {
 		return ErrUnavailable
 	}
 	if tx.Commit(ctx) != nil {
