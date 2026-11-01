@@ -216,6 +216,38 @@ class ResourceTests(unittest.TestCase):
                 self.assertIsNone(session._prerequisite_readonly_permit)
                 with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(readonly)
 
+    def test_bound_cohort_prerequisites_allow_only_named_store_projection_reads(self):
+        import source_plan, source_plan_test
+        session,current,journal=self.fixture();session.admit(start=True)
+        journal.row.update(phase='prerequisites',target_sha256='d'*64,cohort_preservation_sha256='c'*64)
+        session.expected_target='d'*64;session._cohort_lineage='c'*64
+        prefix=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get']
+        for mode in ('app-only','full'):
+            kube,params=source_plan_test.SourceTests().canonical_fixture(mode)
+            original=kube.get
+            def guarded_get(kind,name):
+                session.check(prefix+[kind,name,'-o','json'])
+                return original(kind,name)
+            kube.get=guarded_get
+            self.assertIsInstance(source_plan.preservation_projection(source_plan_test.SOURCE,params,
+                source_plan_test.decoder,kube),dict)
+        for bad in (prefix+['Secret','unrelated','-o','json'],prefix+['Secret','-o','json'],
+                    prefix+['ClusterRole','voice-app-secrets','-o','json'],
+                    prefix+['Secret','voice-app-secrets','-o','yaml'],
+                    prefix+['Secret','voice-app-secrets','-o','json','--context=other'],
+                    ['kubectl','--namespace','voice-staging','get','Secret','voice-app-secrets','-o','json']):
+            with self.subTest(argv=bad),self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(bad)
+        for kind in ('ConfigMap','Deployment','StatefulSet','PersistentVolumeClaim','Service','Job','Pod'):
+            with self.subTest(kind=kind),self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(prefix+[kind,'voice-unrelated','-o','json'])
+        journal.row.pop('cohort_preservation_sha256');session._cohort_lineage=None
+        with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+            session.check(prefix+['Secret','voice-app-secrets','-o','json'])
+        journal.row['cohort_preservation_sha256']='c'*64;session._cohort_lineage='c'*64
+        journal.row['target_sha256']=None;session.expected_target=None
+        with self.assertRaises(RuntimeError):session.check(prefix+['Secret','voice-app-secrets','-o','json'])
+
     def test_prerequisite_binding_requires_baseline_and_durable_capture(self):
         session,current,journal=self.fixture();session.admit(start=True)
         actual=current['observed']['images'];qualified={'fixture':'qualified-p2'}
