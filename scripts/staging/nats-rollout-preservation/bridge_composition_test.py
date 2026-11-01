@@ -101,7 +101,7 @@ class CompositionTests(unittest.TestCase):
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
             through_workload=True,through_hub=True,through_storage=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False):
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False,final_prepare=False):
         import commands, compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -377,11 +377,28 @@ class CompositionTests(unittest.TestCase):
                             self.assertIsInstance(prepared,dict)
                             authorize={'action':'authorize','operation':actions.tt_session.operation,'token':'fixture',
                                 'artifact_id':42,'resource_context':actions.tt_session.context}
-                            with patch.object(actions,'_prepare',side_effect=ReachedFence):
-                                with self.assertRaises(ReachedFence):actions.execute(authorize)
-                            self.assertEqual(captured.load_qualified(actions.tt_session)['operation'],actions.tt_session.operation)
-                            self.assertEqual(captured.require_continuation(actions.tt_session,authorize)['qualified_sha256'],
-                                captured.digest(captured.load_qualified(actions.tt_session)))
+                            if final_prepare:
+                                # The only stop is after the actual continuation,
+                                # prerequisites, C1 and preserved final prepare.
+                                # NATS/GitHub and Kubernetes remain fixtures.
+                                with patch.object(bridge_root.transaction,'authorize',side_effect=ReachedFence) as stopped:
+                                    with self.assertRaises(ReachedFence):actions.execute(authorize)
+                                stopped.assert_called_once()
+                                self.assertIs(stopped.call_args.kwargs['resource_session'],actions.tt_session)
+                                self.assertEqual(stopped.call_args.kwargs['cohort_request'],authorize)
+                                final=captured._read(captured._runtime_base(actions.tt_session)/'checkpoint.json',limit=128<<20)
+                                self.assertEqual(final['operation'],actions.tt_session.operation)
+                                self.assertEqual(final['resource_fence'],actions.tt_session.binding())
+                                self.assertEqual(final['realtime_bootstrap']['schema'],'voice-staging-realtime-bootstrap-receipt-v2')
+                                self.assertEqual(final['target']['realtime_bootstrap_sha256'],captured.digest(final['realtime_bootstrap']))
+                                self.assertEqual(final['target']['prerequisites_sha256'],captured.digest(final['prerequisites']))
+                                self.assertEqual(final['target']['cohort_preservation_sha256'],captured.digest(final['cohort_preservation']))
+                            else:
+                                with patch.object(actions,'_prepare',side_effect=ReachedFence):
+                                    with self.assertRaises(ReachedFence):actions.execute(authorize)
+                                self.assertEqual(captured.load_qualified(actions.tt_session)['operation'],actions.tt_session.operation)
+                                self.assertEqual(captured.require_continuation(actions.tt_session,authorize)['qualified_sha256'],
+                                    captured.digest(captured.load_qualified(actions.tt_session)))
                             base=captured._base(actions.tt_session)
                             self.assertTrue((base/'precut.json').exists());self.assertTrue((base/'paused.json').exists())
                             self.assertTrue(captured._read(base/'stores.json')['claims'])
