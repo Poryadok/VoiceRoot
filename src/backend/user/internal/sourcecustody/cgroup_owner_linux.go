@@ -94,7 +94,7 @@ func (o *owner) identities() bool {
 		unix.Fstatat(o.child, "cgroup.procs", &childProcs, unix.AT_SYMLINK_NOFOLLOW) == nil && safeControl(&childProcs)
 }
 
-func (o *owner) control(name string, write bool, value string) (string, error) {
+func (o *owner) control(name string, write bool, value string) (result string, resultErr error) {
 	flags := unix.O_RDONLY
 	if write {
 		flags = unix.O_WRONLY
@@ -104,7 +104,11 @@ func (o *owner) control(name string, write bool, value string) (string, error) {
 		return "", errUnavailable
 	}
 	f := os.NewFile(uintptr(fd), name)
-	defer f.Close()
+	defer func() {
+		if f.Close() != nil {
+			result, resultErr = "", errUnavailable
+		}
+	}()
 	var s unix.Stat_t
 	if unix.Fstat(fd, &s) != nil || !safeControl(&s) || s.Dev != o.childStat.Dev {
 		return "", errUnavailable
