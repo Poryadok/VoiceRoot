@@ -37,15 +37,51 @@ def canonical_stores():
 class CompositionTests(unittest.TestCase):
     def test_public_prepare_binds_stores_before_enrollment_admission(self):
         """Synthetic source/Kube, real pre-cut and store projection; no P2 proof."""
+        self._exercise_public_precut(enrolled=False)
+
+    def test_public_prepare_selects_enrollment_before_broker_observation(self):
+        """The broker response remains an external fixture boundary."""
+        self._exercise_public_precut(enrolled=True)
+
+    def _exercise_public_precut(self,*,enrolled):
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
+        class ReachedBroker(Exception):
+            pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get):
             kube,params,policy=canonical_stores()
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
             stage.kube=kube;stage.service={}
             stage.marker['data'].update(generation=params['generation'],dataPVC=params['dataPVC'])
+            if enrolled:
+                import base64, bootstrap_selection, bootstrap_selection_test, nats_contract_plan as plan
+                _,previous,rows,installation=bootstrap_selection_test.owned_fixture()
+                self.assertEqual(actions.tt_session.installation,installation)
+                old_rows=[{'stream':stream,'durable':config['durable_name'],'config':dict(config,max_ack_pending=1000)}
+                    for stream,config in plan.V3_DECLARATIONS]
+                previous['auth_proof'].update(normalized_consumer=old_rows[0]['config'],
+                    normalized_consumer_sha256=plan.digest(old_rows[0]['config']),normalized_consumers=old_rows,
+                    normalized_consumers_sha256=plan.digest(old_rows))
+                current=copy.deepcopy(previous)
+                secret=copy.deepcopy(rows[current['secret']['name']]);secret['metadata'].update(name='voice-nats-bootstrap-contract-'+'b'*24,uid='v4-uid')
+                secret['data']['bootstrap.creds']=base64.b64encode(b'new-music-private-creds').decode()
+                rows[secret['metadata']['name']]=secret
+                current.update(schema='voice-nats-bootstrap-enrollment-scoped-v4',previous_enrollment=previous,
+                    previous_enrollment_sha256=plan.digest(previous),
+                    secret={k:secret['metadata'][k] for k in ('name','uid','resourceVersion')},
+                    credential_sha256=bootstrap_selection.credential_hash(secret))
+                current['binding']['previous_enrollment_sha256']=plan.digest(previous)
+                stream,config=plan.DECLARATIONS[-1]
+                normalized=old_rows+[{'stream':stream,'durable':config['durable_name'],'config':dict(config,max_ack_pending=1000)}]
+                current['auth_proof'].update(schema='voice-bootstrap-auth-v4',normalized_consumers=normalized,
+                    normalized_consumers_sha256=plan.digest(normalized))
+                cohort._write(guard.ROOT/'bootstrap-enrollment.json',previous)
+                cohort._write(guard.ROOT/'bootstrap-enrollment-v4.json',current)
+                for name,row in rows.items():kube.objects[('Secret',name)]=row
+                stage.marker['metadata'].update(uid='marker-uid',resourceVersion='4')
+                stage.marker['data']['generation']=installation.generation
             kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
             stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
@@ -53,6 +89,12 @@ class CompositionTests(unittest.TestCase):
             stage.expected['deployment_uids']['voice-user']=stage.snapshots['voice-user']['metadata']['uid']
             live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             live[('deployment','voice-user')]=copy.deepcopy(stage.snapshots['voice-user'])
+            if enrolled:
+                old_get=kube.get
+                def broker_boundary(kind,name):
+                    if (kind,name)==('deployment',bridge_root.HUB):raise ReachedBroker()
+                    return old_get(kind,name)
+                kube.get=broker_boundary
             original_run=kube.run
             pod={'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]}}
             kube.run=lambda args,body=None,timeout=30: ({'items':[pod]} if args==['get','pods','-o','json']
@@ -68,8 +110,11 @@ class CompositionTests(unittest.TestCase):
             with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder),\
                  patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)),\
                  patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source):
-                with self.assertRaisesRegex(cohort.Blocked,'enrolled_bootstrap_selection_refused'):
-                    actions.execute(request)
+                if enrolled:
+                    with self.assertRaises(ReachedBroker):actions.execute(request)
+                else:
+                    with self.assertRaisesRegex(cohort.Blocked,'enrolled_bootstrap_selection_refused'):
+                        actions.execute(request)
             base=cohort._base(actions.tt_session)
             self.assertTrue((base/'precut.json').exists())
             stores=cohort._read(base/'stores.json')
