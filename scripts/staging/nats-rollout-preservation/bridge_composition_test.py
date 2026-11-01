@@ -95,6 +95,35 @@ def synthetic_realtime_actor_credentials():
     return b'-----BEGIN NATS USER JWT-----\nheader.'+payload+b'.signature\n------END NATS USER JWT------\n'
 
 
+def fixture_realtime_secret_patch(session,live,kube,argv,body,checkpoint):
+    """Synthetic Kubernetes transport for the actual C1 pending CAS only."""
+    import base64,commands,realtime_bootstrap
+    expected=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','patch',
+        'secret','voice-app-secrets','--type=json','--patch-file=/dev/stdin','-o','name']
+    if argv!=expected or session.check().get('phase')!='realtime-bootstrap':
+        raise ValueError('fixture_c1_command_invalid')
+    commands.authority_guard(argv)
+    try:
+        before=live[('secret','voice-app-secrets')];plan=checkpoint['plan'];steps=checkpoint['steps']
+        pending={'status':'PENDING','request_sha256':realtime_bootstrap.digest({'kind':'secret','plan_sha256':realtime_bootstrap.digest(plan)}),
+            'before_sha256':realtime_bootstrap.digest(realtime_bootstrap._secret_identity(before))}
+        if (checkpoint['status']!='RUNNING' or plan['operation']!=session.operation
+            or set(steps)!={'role','database','secret'} or steps['role']['status']!='DONE'
+            or steps['database']['status']!='DONE' or steps['secret']!=pending):raise ValueError()
+        changes=json.loads(body);raw=base64.b64decode(changes[-1]['value'],validate=True)
+        prefix=b'postgres://realtime:';suffix=b'@voice-postgres:5432/realtime_db?sslmode=disable'
+        if not raw.startswith(prefix) or not raw.endswith(suffix):raise ValueError()
+        password=raw[len(prefix):-len(suffix)]
+        if changes!=realtime_bootstrap.secret_patch(before,password):raise ValueError()
+        after=copy.deepcopy(before);after['data']['REALTIME_DATABASE_URL']=changes[-1]['value']
+        after['metadata']['resourceVersion']=str(int(before['metadata']['resourceVersion'])+1)
+    except (KeyError,IndexError,TypeError,ValueError):
+        raise ValueError('fixture_c1_patch_invalid') from None
+    live[('secret','voice-app-secrets')]=after
+    kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(after)
+    return b'secret/voice-app-secrets\n'
+
+
 def monitor_pod_inventory(argv,through_hub,hub_released,monitor_pod):
     """Supply the synthetic NATS pod only while its drain is in progress."""
     if through_hub and not hub_released and argv[-3:]==['pods','-o','json']:
@@ -153,6 +182,71 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_real_c1_effect_uses_its_own_pending_checkpoint_for_fixture_cas(self):
+        import commands,realtime_bootstrap
+        from types import SimpleNamespace
+        session=SimpleNamespace(operation='a'*12,check=lambda:{'phase':'realtime-bootstrap'})
+        before={'metadata':{'name':'voice-app-secrets','namespace':'voice-staging','uid':'uid','resourceVersion':'7'},
+            'type':'Opaque','data':{'keep':'dmFsdWU='}}
+        live={('secret','voice-app-secrets'):copy.deepcopy(before)};kube=SimpleNamespace(objects={})
+        parent={'synthetic':'captured'}
+        plan={'schema':'voice-staging-realtime-bootstrap-v4','operation':session.operation,'actual_images':{},
+            'prerequisites_sha256':realtime_bootstrap.digest(parent)}
+        state={'status':'RUNNING','plan':plan,'steps':{'role':{'status':'DONE'},'database':{'status':'DONE'}}}
+        snapshots=[];password=b'fixture_password_0123456789ABCDEF'
+        observe=lambda:realtime_bootstrap._secret_identity(live[('secret','voice-app-secrets')])
+        request_hash=realtime_bootstrap.digest({'kind':'secret','plan_sha256':realtime_bootstrap.digest(plan)})
+        def capture(argv,*,body,**kwargs):
+            return fixture_realtime_secret_patch(session,live,kube,argv,body,snapshots[-1])
+        with patch.object(commands,'authority_guard',lambda *_:None), \
+             patch.object(commands,'capture',side_effect=capture), \
+             patch.object(realtime_bootstrap,'save',side_effect=lambda path,row:snapshots.append(copy.deepcopy(row))), \
+             patch('staging_prerequisites.load_capture',return_value=parent):
+            result=realtime_bootstrap._effect(session,Path('/unused'),state,'secret',observe(),request_hash,
+                lambda:realtime_bootstrap._patch_secret(before,password),observe,
+                lambda row:row['uid']=='uid' and row['resourceVersion']=='8')
+        self.assertEqual(result['resourceVersion'],'8')
+        self.assertEqual(snapshots[0]['steps']['secret']['status'],'PENDING')
+        self.assertEqual(snapshots[-1]['steps']['secret']['status'],'DONE')
+
+    def test_realtime_secret_fixture_uses_c1_pending_and_exact_cas(self):
+        import commands,realtime_bootstrap
+        from types import SimpleNamespace
+        before={'metadata':{'name':'voice-app-secrets','namespace':'voice-staging','uid':'uid','resourceVersion':'7'},
+            'type':'Opaque','data':{'keep':'dmFsdWU='}}
+        live={('secret','voice-app-secrets'):copy.deepcopy(before)};kube=SimpleNamespace(objects={})
+        session=SimpleNamespace(operation='a'*12,check=lambda:{'phase':'realtime-bootstrap'})
+        plan={'fixture':'c1','operation':session.operation}
+        checkpoint={'status':'RUNNING','plan':plan,'steps':{
+            'role':{'status':'DONE'},'database':{'status':'DONE'},
+            'secret':{'status':'PENDING','request_sha256':realtime_bootstrap.digest({'kind':'secret','plan_sha256':realtime_bootstrap.digest(plan)}),
+                'before_sha256':realtime_bootstrap.digest(realtime_bootstrap._secret_identity(before))}}}
+        argv=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','patch',
+            'secret','voice-app-secrets','--type=json','--patch-file=/dev/stdin','-o','name']
+        password=b'fixture_password_0123456789ABCDEF'
+        body=json.dumps(realtime_bootstrap.secret_patch(before,password),separators=(',',':')).encode()
+        with patch.object(commands,'authority_guard',lambda *_:None):
+            for fault in ('pending','cas','argv','role','operation','key','phase'):
+                bad=copy.deepcopy(checkpoint);bad_body=body;bad_argv=argv;bad_session=session
+                if fault=='pending':bad['steps']['secret']['status']='DONE'
+                elif fault=='cas':bad_body=body.replace(b'"value":"7"',b'"value":"8"')
+                elif fault=='argv':bad_argv=argv[:-1]+['json']
+                elif fault=='role':bad['steps']['role']['status']='PENDING'
+                elif fault=='operation':bad['plan']['operation']='foreign'
+                elif fault=='key':bad_body=body.replace(b'/data/REALTIME_DATABASE_URL',b'/data/UNRELATED')
+                else:bad_session=SimpleNamespace(operation=session.operation,check=lambda:{'phase':'prerequisites'})
+                with self.subTest(fault=fault),self.assertRaises(Exception):
+                    fixture_realtime_secret_patch(bad_session,live,kube,bad_argv,bad_body,bad)
+                self.assertEqual(live[('secret','voice-app-secrets')],before)
+            self.assertEqual(fixture_realtime_secret_patch(session,live,kube,argv,body,checkpoint),b'secret/voice-app-secrets\n')
+            with self.assertRaisesRegex(ValueError,'fixture_c1_patch_invalid'):
+                fixture_realtime_secret_patch(session,live,kube,argv,body,checkpoint)
+        after=live[('secret','voice-app-secrets')]
+        self.assertEqual(after['metadata']['resourceVersion'],'8')
+        self.assertEqual(after['data']['keep'],before['data']['keep'])
+        self.assertIn('REALTIME_DATABASE_URL',after['data'])
+        self.assertEqual(kube.objects[('Secret','voice-app-secrets')],after)
+
     def test_realtime_runtime_auth_routes_to_owned_loopback_with_unchanged_password(self):
         import commands,cohort_hosted_pg,realtime_bootstrap
         password=b'fixture_password_0123456789ABCDEF'
@@ -678,6 +772,9 @@ class CompositionTests(unittest.TestCase):
                         if 'patch' in argv:
                             index=argv.index('patch');kind=argv[index+1]
                             if qualify and kind=='secret' and argv[index+2]=='voice-app-secrets':
+                                if argv[-2:]==['-o','name']:
+                                    checkpoint=captured._read(guard.ROOT/'installed'/'realtime-bootstrap'/actions.tt_session.operation/'checkpoint.json')
+                                    return fixture_realtime_secret_patch(actions.tt_session,live,kube,argv,body,checkpoint)
                                 result=transport(argv,body=body,**kwargs)
                                 kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(live[('secret','voice-app-secrets')])
                                 return result
