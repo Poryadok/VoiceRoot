@@ -23,6 +23,19 @@ def suite(name, child='', skipped='0'):
 
 
 class FullAuthTests(unittest.TestCase):
+    def test_source_preparation_reports_fixed_phase_without_exception_text(self):
+        for failure, expected in (('transfer', 'Auth source transfer failed'),
+                                  ('normalize', 'Auth source normalization failed')):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                transfer = mock.Mock(side_effect=RuntimeError('private source detail') if failure == 'transfer' else None,
+                                     return_value='a' * 64)
+                normalize = mock.Mock(side_effect=RuntimeError('private archive detail') if failure == 'normalize' else None)
+                with mock.patch.object(subject.local_go_execution, 'transfer_source', transfer), \
+                     mock.patch.object(subject.selected, 'normalize_archive', normalize), \
+                     self.assertRaisesRegex(ValueError, '^' + expected + '$') as caught:
+                    subject.prepare_source(None, 'client', Path(directory), {}, Path(directory), Path(directory))
+                self.assertNotIn('private', str(caught.exception))
+
     def test_full_report_inventory_rejects_missing_failed_and_skipped_required(self):
         name = 'voice.backend.auth.RequiredTest'
         path = './TEST-' + name + '.xml'
@@ -53,6 +66,7 @@ class FullAuthTests(unittest.TestCase):
 
     def test_full_runner_executes_make_and_preserves_incomplete_status(self):
         name = 'voice.backend.auth.RequiredTest'
+        events = []
         raw = reports(('./TEST-' + name + '.xml', suite(name)))
         owner = mock.Mock()
         def execute(client, command, out, err, timeout, **kwargs):
@@ -73,10 +87,12 @@ class FullAuthTests(unittest.TestCase):
                  mock.patch.object(subject, 'required_suites', return_value={name}), \
                  mock.patch.object(subject.selected, 'cache_digest', return_value='b' * 64), \
                  mock.patch.object(subject.selected, 'normalize_archive', side_effect=lambda src, dst, digest: (dst.write_bytes(b'build'), 'd' * 64)[1]), \
-                 mock.patch.object(subject.local_go_execution, 'transfer_source', return_value='c' * 64), \
+                 mock.patch.object(subject.local_go_execution, 'transfer_source', side_effect=lambda *args: (events.append('transfer'), 'c' * 64)[1]), \
                  mock.patch.object(subject.local_go_execution, '_verify_workspace'), \
                  mock.patch.object(subject.selected, 'verify_build') as verify:
-                result = subject.run_full(owner, 'daemon', 'client', root, source, root / 'copy', cache, Path(directory) / 'out')
+                result = subject.run_full(owner, 'daemon', 'client', root, source, root / 'copy', cache, Path(directory) / 'out',
+                                          prepare_tools=lambda: events.append('tools'))
+        self.assertEqual(events, ['transfer', 'tools'])
         self.assertEqual(result['status'], 'incomplete')
         self.assertEqual(result['reports']['tests'], 1)
         self.assertEqual(verify.call_count, 2)
