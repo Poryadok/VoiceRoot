@@ -76,6 +76,12 @@ def monitor_pod_inventory(argv,through_hub,hub_released,monitor_pod):
     return None
 
 
+def postgres_capture_required(argv):
+    """Keep unrelated endpoint inventories on the synthetic Kube transport."""
+    return ('voice-postgres-0' in argv or argv[-5:]==[
+        'endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json'])
+
+
 class CompositionTests(unittest.TestCase):
     def test_public_fixture_aligns_app_secret_before_prerequisite_capture(self):
         import source_plan, source_plan_test, staging_gis_material
@@ -104,6 +110,19 @@ class CompositionTests(unittest.TestCase):
     def test_p3_pod_inventory_uses_prerequisite_fixture_after_hub_release(self):
         self._exercise_aligned_gis_preflight(post_hub_monitor=True)
 
+    def test_postgres_endpoint_selector_reaches_hosted_adapter(self):
+        import commands, cohort_hosted_pg, staging_prerequisites as prereq
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres)
+        adapter.slices={'items':[{'metadata':{'name':'synthetic-postgres-slice'}}]}
+        argv=prereq.KUBE_PREFIX+['get','endpointslices','-l',
+            'kubernetes.io/service-name=voice-postgres','-o','json']
+        self.assertTrue(postgres_capture_required(argv))
+        fallback=Mock(side_effect=AssertionError('postgres selection escaped fixture'))
+        with patch.object(commands,'authority_guard') as guard:
+            result=adapter.capture(argv,fallback=fallback)
+        self.assertEqual(json.loads(result),adapter.slices)
+        guard.assert_called_once_with(argv);fallback.assert_not_called()
+
     def _exercise_aligned_gis_preflight(self,*,drift=False,post_hub_monitor=False):
         import staging_prerequisites as prereq, staging_cohort_preservation as cohort
         import staging_prerequisites_test as fixture, staging_gis_material, stage_runtime, commands
@@ -127,16 +146,23 @@ class CompositionTests(unittest.TestCase):
                         with self.assertRaisesRegex(staging_gis_material.MaterialError,'staging_gis_preflight_invalid'):
                             prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
                 elif post_hub_monitor:
-                    monitor={'metadata':{'name':'synthetic-nats-monitor'}}; seen=[]
+                    monitor={'metadata':{'name':'synthetic-nats-monitor'}}; seen=[]; slices=[]
                     argv=prereq.KUBE_PREFIX+['get','pods','-o','json']
                     self.assertEqual(json.loads(monitor_pod_inventory(argv,True,False,monitor)),{'items':[monitor]})
+                    self.assertTrue(postgres_capture_required(prereq.KUBE_PREFIX+['get','endpointslices','-l',
+                        'kubernetes.io/service-name=voice-postgres','-o','json']))
+                    self.assertTrue(postgres_capture_required(prereq.KUBE_PREFIX+['exec','voice-postgres-0']))
+                    postgres_capture=Mock(side_effect=FileNotFoundError('synthetic host has no k3s'))
                     def captured(args,*,body=b'',**kwargs):
                         result=monitor_pod_inventory(args,True,True,monitor)
                         if args[-3:]==['pods','-o','json']:seen.append(args)
+                        if args[-3:]==['endpointslices','-o','json']:slices.append(args)
+                        if postgres_capture_required(args):return postgres_capture(args)
                         return result if result is not None else transport(args,body=body,**kwargs)
                     with patch.object(commands,'capture',side_effect=captured),patch.object(stage_runtime,'capture',side_effect=captured):
                         prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
-                    self.assertGreaterEqual(len(seen),2)
+                    self.assertGreaterEqual(len(seen),2);self.assertGreaterEqual(len(slices),2)
+                    postgres_capture.assert_not_called()
                 else:prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
             if drift:self.assertNotIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
             else:self.assertIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
@@ -391,7 +417,7 @@ class CompositionTests(unittest.TestCase):
                         inventory=monitor_pod_inventory(argv,through_hub,flags['hub_released'],
                             live.get(('pod',monitor_pod['metadata']['name'])))
                         if inventory is not None:return inventory
-                        if postgres is not None and ('voice-postgres-0' in argv or 'endpointslices' in argv):
+                        if postgres is not None and postgres_capture_required(argv):
                             return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
                         if 'jsonpath-as-json=' in ' '.join(argv):
                             name=argv[argv.index('secret')+1];meta=live[('secret',name)]['metadata']
