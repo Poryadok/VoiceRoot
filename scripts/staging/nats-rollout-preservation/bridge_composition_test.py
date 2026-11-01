@@ -695,6 +695,7 @@ class CompositionTests(unittest.TestCase):
         """Join the synthetic full inventory to the real resource session."""
         import staging_prerequisites_test as fixtures, staging_prerequisites as prereq
         import staging_cohort_preservation as cohort
+        class ReachedPolicy(Exception):pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             _,_,_,_,old,catalog=self._compiler_catalog_stage('app-only')
             stage.snapshots=copy.deepcopy(catalog.snapshots)
@@ -717,18 +718,36 @@ class CompositionTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(patch.object(cohort,'load_qualified',return_value=qualified))
                 stack.enter_context(patch.object(cohort,'capture_stage',return_value=stage))
-                stack.enter_context(patch.object(cohort,'capture_final_stage',return_value=stage))
                 stack.enter_context(patch.object(cohort,'load_auxiliary_successor',return_value=None))
                 stack.enter_context(patch.object(cohort,'revalidate_paused'))
                 with patch.object(cohort,'validate_plan'):
                     session.bind_cohort_preservation(p2_plan,stage.old_images)
-                receipt=prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+                def final_stage(_session):
+                    receipt=prereq._checkpoint(session)['receipt']
+                    stage.snapshots['voice-p3-principal-jwks']=copy.deepcopy(live[('deployment','voice-p3-principal-jwks')])
+                    stage.original_snapshots=copy.deepcopy(stage.snapshots)
+                    stage.expected['deployment_uids']['voice-p3-principal-jwks']=stage.snapshots['voice-p3-principal-jwks']['metadata']['uid']
+                    stage.old_images=receipt['actual_after']
+                    return stage
+                loaded={'request':{'mode':request['mode'],'changed_services':request['changed_services'],'gis_first_install':True},
+                    'approved':approved,'execution':execution,'workspace':str(workspace)}
+                public={'action':'authorize','operation':session.operation,'token':'fixture','artifact_id':42,'resource_context':session.context}
+                source_request=dict(request,nonce=session.operation+'a'*52)
+                real_read=cohort._read
+                def read(path,*args,**kwargs):
+                    return source_request if path==cohort._request_record(session) else real_read(path,*args,**kwargs)
+                def report(name,status):
+                    if (name,status)==('policy-validation','STARTED'):raise ReachedPolicy()
+                stack.enter_context(patch.object(bridge_root,'INSTALLED',workspace.parents[1]))
+                stack.enter_context(patch.object(cohort,'qualify_offnode'))
+                stack.enter_context(patch.object(cohort,'begin_continuation',return_value=(qualified,loaded)))
+                stack.enter_context(patch.object(cohort,'load_prepared',return_value=loaded))
+                stack.enter_context(patch.object(cohort,'require_continuation'))
+                stack.enter_context(patch.object(cohort,'_read',side_effect=read))
+                stack.enter_context(patch.object(cohort,'capture_final_stage',side_effect=final_stage))
+                stack.enter_context(patch.object(actions,'_report',side_effect=report))
+                with self.assertRaises(ReachedPolicy):actions.execute(public)
                 self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
-                stage.snapshots['voice-p3-principal-jwks']=copy.deepcopy(live[('deployment','voice-p3-principal-jwks')])
-                stage.original_snapshots=copy.deepcopy(stage.snapshots)
-                stage.expected['deployment_uids']['voice-p3-principal-jwks']=stage.snapshots['voice-p3-principal-jwks']['metadata']['uid']
-                stage.old_images=receipt['actual_after']
-                session.capture_prerequisites(stage)
                 self.assertEqual(session.check()['phase'],'prerequisites-captured')
         fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run)
 
