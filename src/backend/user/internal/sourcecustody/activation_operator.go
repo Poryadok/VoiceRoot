@@ -117,31 +117,7 @@ func (h *activationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		if h.opened == nil {
-			http.Error(w, "unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		claim := *h.opened
-		h.opened = nil
-		// Once an authenticated transition starts, do not abandon fencing if
-		// the operator disconnects. No later grant may use this leader.
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		closeErr := h.controller.Shutdown(ctx)
-		request := CreationRequest{SourceID: claim.Binding.SourceID, Epoch: claim.Binding.Epoch, ControlSystemID: claim.ControlSystem, SourceSystemID: claim.Physical.SystemIdentifier, Database: claim.Physical.Database}
-		recoveryErr := RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
-		for errors.Is(recoveryErr, errRecoveryLeaderBusy) {
-			select {
-			case <-ctx.Done():
-				recoveryErr = ErrUnavailable
-			case <-time.After(25 * time.Millisecond):
-				recoveryErr = RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
-			}
-		}
-		if closeErr != nil || recoveryErr != nil {
-			h.controller.mu.Lock()
-			h.controller.poisonLocked()
-			h.controller.mu.Unlock()
+		if h.fenceOpenedLocked() != nil {
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -185,6 +161,37 @@ func (h *activationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.opened = &claim
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// fenceOpenedLocked is shared by the authenticated close endpoint and orderly
+// server cleanup. The caller holds h.mu until the transition is complete.
+func (h *activationHandler) fenceOpenedLocked() error {
+	if h.opened == nil {
+		return ErrUnavailable
+	}
+	claim := *h.opened
+	h.opened = nil
+	// Once a transition starts, finish fencing even if the caller disconnects.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	closeErr := h.controller.Shutdown(ctx)
+	request := CreationRequest{SourceID: claim.Binding.SourceID, Epoch: claim.Binding.Epoch, ControlSystemID: claim.ControlSystem, SourceSystemID: claim.Physical.SystemIdentifier, Database: claim.Physical.Database}
+	recoveryErr := RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
+	for errors.Is(recoveryErr, errRecoveryLeaderBusy) {
+		select {
+		case <-ctx.Done():
+			recoveryErr = ErrUnavailable
+		case <-time.After(25 * time.Millisecond):
+			recoveryErr = RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
+		}
+	}
+	if closeErr != nil || recoveryErr != nil {
+		h.controller.mu.Lock()
+		h.controller.poisonLocked()
+		h.controller.mu.Unlock()
+		return ErrUnavailable
+	}
+	return nil
 }
 
 // A cancellation between the two operations still requires a durable close
@@ -312,7 +319,21 @@ func (op *activationOperator) close() error {
 	if err != nil {
 		_ = op.server.Close()
 	}
+	var fenceErr error
+	handler, ok := op.server.Handler.(*activationHandler)
+	if !ok {
+		fenceErr = ErrUnavailable
+	} else {
+		handler.mu.Lock()
+		if handler.opened != nil {
+			fenceErr = handler.fenceOpenedLocked()
+		}
+		handler.mu.Unlock()
+	}
 	op.admin.Close()
 	op.source.Close()
-	return err
+	if err != nil || fenceErr != nil {
+		return ErrUnavailable
+	}
+	return nil
 }

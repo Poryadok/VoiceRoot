@@ -277,6 +277,79 @@ func TestActivationOperatorCloseFinishesAfterCallerDisconnects(t *testing.T) {
 	require.False(t, login)
 }
 
+func TestActivationOperatorShutdownFencesOpenedSource(t *testing.T) {
+	ctx, control, admin, source, keys, controller, claim, public, _, _ := openSourceFixture(t)
+	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public}
+	encoded, err := json.Marshal(claim)
+	require.NoError(t, err)
+	request := httptest.NewRequest(http.MethodPost, "https://operator/open", bytes.NewReader(encoded))
+	request.Header.Set("Content-Type", "application/json")
+	request.TLS = &tls.ConnectionState{HandshakeComplete: true, VerifiedChains: [][]*x509.Certificate{{{}}}}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	require.Equal(t, http.StatusNoContent, response.Code)
+	observer, err := pgxpool.NewWithConfig(ctx, admin.Config().Copy())
+	require.NoError(t, err)
+	defer observer.Close()
+	op := &activationOperator{server: &http.Server{Handler: handler}, admin: admin, source: source}
+	held, _, err := controller.AcquireAttested(ctx, claim.Binding)
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() { done <- op.close() }()
+	joined := false
+	defer func() {
+		_ = held.Release(context.Background())
+		if !joined {
+			<-done
+		}
+	}()
+	require.Eventually(t, func() bool {
+		var state string
+		return control.QueryRow(ctx, `SELECT state FROM user_custody_state WHERE singleton`).Scan(&state) == nil && state == "CLOSED"
+	}, 5*time.Second, 25*time.Millisecond)
+	select {
+	case err := <-done:
+		joined = true
+		t.Fatalf("operator shutdown returned while a capture permit was held: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	require.NoError(t, held.Release(ctx))
+	select {
+	case err := <-done:
+		joined = true
+		require.NoError(t, err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("operator shutdown did not fence after the permit drained")
+	}
+	var phase string
+	require.NoError(t, control.QueryRow(ctx, `SELECT phase FROM user_custody_creation WHERE singleton`).Scan(&phase))
+	require.Equal(t, "RECOVERED_CLOSED", phase)
+	var allowed, login bool
+	require.NoError(t, observer.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname=$2) FROM pg_database WHERE oid=$1`, claim.Physical.DatabaseOID, claim.WriterRole).Scan(&allowed, &login))
+	require.False(t, allowed)
+	require.False(t, login)
+}
+
+func TestActivationOperatorShutdownReportsFenceFailure(t *testing.T) {
+	ctx, control, admin, source, keys, controller, claim, public, _, _ := openSourceFixture(t)
+	require.NoError(t, controller.PrepareOpenSource(ctx, admin, claim, public))
+	require.NoError(t, controller.OpenQualified(ctx, admin, source, keys, claim, public))
+	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public, opened: &claim}
+	observer, err := pgxpool.NewWithConfig(ctx, admin.Config().Copy())
+	require.NoError(t, err)
+	defer observer.Close()
+	admin.Close()
+	op := &activationOperator{server: &http.Server{Handler: handler}, admin: admin, source: source}
+	require.Error(t, op.close(), "shutdown must report an incomplete physical fence")
+	var state string
+	require.NoError(t, control.QueryRow(ctx, `SELECT state FROM user_custody_state WHERE singleton`).Scan(&state))
+	require.Equal(t, "CLOSED", state)
+	var allowed, login bool
+	require.NoError(t, observer.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname=$2) FROM pg_database WHERE oid=$1`, claim.Physical.DatabaseOID, claim.WriterRole).Scan(&allowed, &login))
+	require.True(t, allowed)
+	require.True(t, login)
+}
+
 func TestActivationOperatorConfigIsAllOrNothing(t *testing.T) {
 	values := map[string]string{}
 	lookup := func(key string) (string, bool) { value, ok := values[key]; return value, ok }

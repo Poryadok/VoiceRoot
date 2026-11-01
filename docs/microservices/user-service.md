@@ -54,7 +54,11 @@ Ed25519-signed decision that binds separately retained source/restore, writer
 deployment and Auth evidence digests. Authenticated `POST /close` closes admission, drains
 outstanding permits, stops that leader, fences its source and writer sessions,
 and exits the controller; a later opening needs recovery and a new decision.
-Once started, fencing continues even if the operator disconnects. The offline
+Once started, fencing continues even if the operator disconnects. Orderly
+operator-enabled server shutdown also attempts the same drain and physical
+fence before releasing its database connections, and reports failure if the
+fence cannot be completed. Forced termination cannot perform this cleanup.
+The offline
 `sourcecustody sign-open` command reads a
 reviewed JSON decision on stdin and a PKCS#8 Ed25519 private key from
 `CUSTODY_OPERATOR_SIGNER_PRIVATE_KEY_FILE`; it writes the signed decision to
