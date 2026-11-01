@@ -137,14 +137,19 @@ class PublicRecoveryTests(unittest.TestCase):
         import bootstrap_auth as auth,hashlib
         from dataclasses import replace
         from bootstrap_selection_test import owned_fixture
+        from docker_runtime import DockerRuntime, LABEL
         from nats_contract_actor import Actor
         from nats_contract_plan import DECLARATIONS,digest
         from rollout_census_test import stream,consumer,ACCOUNT
+        seen_operations=set()
         for mode in ('ordinary','get','denied','census-drift'):
             with self.subTest(mode=mode),tempfile.TemporaryDirectory() as folder:
                 configs={};requests=[];runs=[];trees=[0]
                 class Runtime:
-                    def __init__(self,*args):self.base=Path(args[0]);self.owned={'proof':{'id':'d'*64}}
+                    no_operation_containers=DockerRuntime.no_operation_containers
+                    def __init__(self,*args):
+                        self.base=Path(args[0]);self.operation=args[1];self.owned={'proof':{'id':'d'*64}}
+                        operations.append(self.operation)
                     def start_broker(self,*args):return 'proof'
                     def stop(self,*args):pass
                     def inspect(self,*args):return {'Id':'d'*64}
@@ -182,6 +187,7 @@ class PublicRecoveryTests(unittest.TestCase):
                     def info_config(self,name):return copy.deepcopy(configs['consumer' if '/' in name else name])
                 tokens={name:(ACCOUNT if name=='account.public' else 'synthetic-'+name).encode() for name in
                     ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
+                operations=[]
                 installation=replace(owned_fixture()[3],account_sha256=hashlib.sha256(ACCOUNT.encode()).hexdigest())
                 with patch.object(auth.guard,'ROOT',Path(folder)),patch.object(auth,'DockerRuntime',Runtime),patch.object(auth,'Actor',FixtureActor),patch.object(auth,'ready'),patch.object(auth,'secret_bytes',side_effect=lambda operator,key:tokens[key]):
                     if mode in ('denied','census-drift'):
@@ -190,7 +196,11 @@ class PublicRecoveryTests(unittest.TestCase):
                         result=auth.prove(b'synthetic retained identity',{},lambda:None,None if mode=='ordinary' else ['chat_events','absent_events','social_events'],installation=installation)
                         self.assertEqual('get_permissions' in result,mode=='get')
                         if mode=='get':self.assertEqual(result['get_permissions']['streams'],3)
-                    self.assertEqual(runs[-2:], [['rm','-f','d'*64],['ps','-a','--filter','id='+'d'*64,'--format','{{.ID}}']])
-                    self.assertEqual(list(Path(folder).iterdir()),[])
+                    self.assertEqual(len(operations),1)
+                    self.assertRegex(operations[0],r'^auth[0-9a-f]{12}$')
+                    self.assertNotIn(operations[0],seen_operations);seen_operations.add(operations[0])
+                    self.assertEqual(runs[-3:], [['rm','-f','d'*64],['ps','-a','--filter','id='+'d'*64,'--format','{{.ID}}'],
+                        ['ps','-a','--filter','label='+LABEL+'='+operations[0],'--format','{{.ID}}']])
+                    self.assertEqual(len(list(Path(folder).iterdir())),1 if mode in ('denied','census-drift') else 0)
                     get=[api for api in requests if api.startswith('$JS.API.STREAM.MSG.GET.')]
                     self.assertEqual(len(get),0 if mode=='ordinary' else 3)
