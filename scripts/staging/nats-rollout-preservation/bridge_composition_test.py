@@ -101,7 +101,7 @@ class CompositionTests(unittest.TestCase):
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
             through_workload=True,through_hub=True,through_storage=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False,final_prepare=False):
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False,final_prepare=False,final_admission=False):
         import commands, compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -371,21 +371,44 @@ class CompositionTests(unittest.TestCase):
                                     'artifact_id':artifact_id,'verified':True}
                             nats_patches.enter_context(patch.object(captured,'_capture_native',side_effect=synthetic_native))
                             nats_patches.enter_context(patch.object(captured,'_native_readback',return_value={'synthetic_nats_boundary':True}))
+                            # The tar bytes above are a named synthetic NATS boundary.
+                            nats_patches.enter_context(patch('native_store.verify_archive',return_value=True))
                             nats_patches.enter_context(patch.object(auxiliary,'resume',return_value=None))
                             nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
                             prepared=actions.execute(request)
                             self.assertIsInstance(prepared,dict)
                             authorize={'action':'authorize','operation':actions.tt_session.operation,'token':'fixture',
                                 'artifact_id':42,'resource_context':actions.tt_session.context}
-                            if final_prepare:
+                            if final_admission:
+                                # Call the actual issuer and validate its typed
+                                # capability, then stop before any migration.
+                                issue=captured.issue_final_admission;issued=[]
+                                def issue_then_stop(session,base,state,request):
+                                    altered=copy.deepcopy(state)
+                                    old=altered['target']['manifest_sha256']
+                                    altered['target']['manifest_sha256']=('0' if old[0]!='0' else '1')+old[1:]
+                                    with self.assertRaisesRegex(captured.Blocked,'cohort_final_target_changed'):
+                                        issue(session,base,altered,request)
+                                    self.assertFalse((captured._base(session)/'authorizing.json').exists())
+                                    handle=issue(session,base,state,request)
+                                    self.assertIs(type(handle),captured.QualifiedFinalAdmission)
+                                    captured._issued(handle,session,base,state)
+                                    issued.append(handle)
+                                    raise ReachedFence()
+                                with patch.object(captured,'issue_final_admission',side_effect=issue_then_stop) as issuer:
+                                    with self.assertRaises(ReachedFence):actions.execute(authorize)
+                                issuer.assert_called_once();self.assertEqual(len(issued),1)
+                                self.assertTrue((captured._base(actions.tt_session)/'authorizing.json').exists())
+                            if final_prepare or final_admission:
                                 # The only stop is after the actual continuation,
                                 # prerequisites, C1 and preserved final prepare.
                                 # NATS/GitHub and Kubernetes remain fixtures.
-                                with patch.object(bridge_root.transaction,'authorize',side_effect=ReachedFence) as stopped:
-                                    with self.assertRaises(ReachedFence):actions.execute(authorize)
-                                stopped.assert_called_once()
-                                self.assertIs(stopped.call_args.kwargs['resource_session'],actions.tt_session)
-                                self.assertEqual(stopped.call_args.kwargs['cohort_request'],authorize)
+                                if not final_admission:
+                                    with patch.object(bridge_root.transaction,'authorize',side_effect=ReachedFence) as stopped:
+                                        with self.assertRaises(ReachedFence):actions.execute(authorize)
+                                    stopped.assert_called_once()
+                                    self.assertIs(stopped.call_args.kwargs['resource_session'],actions.tt_session)
+                                    self.assertEqual(stopped.call_args.kwargs['cohort_request'],authorize)
                                 final=captured._read(captured._runtime_base(actions.tt_session)/'checkpoint.json',limit=128<<20)
                                 self.assertEqual(final['operation'],actions.tt_session.operation)
                                 self.assertEqual(final['resource_fence'],actions.tt_session.binding())

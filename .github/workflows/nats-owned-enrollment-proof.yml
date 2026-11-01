@@ -73,7 +73,8 @@ jobs:
           sudo -n --preserve-env=RUNNER_ENVIRONMENT env PYTHONDONTWRITEBYTECODE=1 \
             python3 "$work/source/scripts/ci/nats_owned_broker_qualification.py" "$work/bin/genesis" "$work/bin/bootstrap-renewer" "$work/runtime"
           # This component chain uses real PG/CMS and Session, with explicit
-          # synthetic NATS and GitHub boundaries; it is not full P2 proof.
+          # synthetic NATS archive/readback, Kubernetes and GitHub boundaries;
+          # it is not full P2 proof.
           python scripts/ci/staging_story_target8_helper.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-target8"
           python -m pip install --disable-pip-version-check PyYAML==6.0.3
           sudo -n mkdir -m 700 "$work/qualified"
@@ -90,6 +91,7 @@ jobs:
             VOICE_COHORT_RETAINED_ROOT="$work/runtime" TMPDIR="$work/runtime" \
             PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
             staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries \
-            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_qualified_continuation_reaches_c1_final_prepare)
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_qualified_continuation_reaches_c1_final_prepare \
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_c1_continuation_issues_typed_final_admission)
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=normal)"

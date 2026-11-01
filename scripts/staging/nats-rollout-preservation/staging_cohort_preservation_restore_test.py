@@ -116,8 +116,16 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get('VOICE_COHORT_DOCKER')=='1','isolated Docker fixture opt-in')
 class RestoreTransportTests(unittest.TestCase):
+    def test_public_c1_continuation_issues_typed_final_admission(self):
+        """Real issuer/PG/CMS/C1; NATS archive verification, GitHub and Kube are fixtures."""
+        from bridge_composition_test import CompositionTests
+        from cohort_hosted_pg import HostedPostgres
+        with HostedPostgres('00000000-0000-0000-0000-000000000001') as postgres:
+            CompositionTests._exercise_public_precut(self,enrolled=True,through_nats=True,through_fence=True,
+                through_workload=True,through_hub=True,through_storage=True,postgres=postgres,qualify=True,final_admission=True)
+
     def test_public_qualified_continuation_reaches_c1_final_prepare(self):
-        """PG/CMS and C1 are actual; NATS, GitHub and Kubernetes are fixtures."""
+        """PG/CMS and C1 are actual; NATS archive verification, GitHub and Kube are fixtures."""
         from bridge_composition_test import CompositionTests
         from cohort_hosted_pg import HostedPostgres
         with HostedPostgres('00000000-0000-0000-0000-000000000001') as postgres:
@@ -125,7 +133,7 @@ class RestoreTransportTests(unittest.TestCase):
                 through_workload=True,through_hub=True,through_storage=True,postgres=postgres,qualify=True,final_prepare=True)
 
     def test_public_prepare_to_qualified_continuation_with_external_boundaries(self):
-        """Real PG/CMS and Session; synthetic NATS and GitHub, stop before final prepare."""
+        """Real PG/CMS and Session; synthetic NATS archive/GitHub, stop before final prepare."""
         from bridge_composition_test import CompositionTests
         from cohort_hosted_pg import HostedPostgres
         with HostedPostgres('00000000-0000-0000-0000-000000000001') as postgres:
