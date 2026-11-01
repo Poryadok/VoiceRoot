@@ -53,13 +53,30 @@ func TestMaintenanceWindowWithRealAutovacuum(t *testing.T) {
 	_, err = target.Exec(ctx, `CREATE TABLE vacuum_probe WITH (autovacuum_vacuum_threshold=0,autovacuum_vacuum_scale_factor=0,autovacuum_analyze_threshold=1000000000) AS SELECT i,repeat(md5(i::text),32) payload FROM generate_series(1,50000) i; DELETE FROM vacuum_probe WHERE i%2=0`)
 	require.NoError(t, err)
 	var workerPID int32
-	require.Eventually(t, func() bool {
-		err := admin.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname='space_db' AND backend_type='autovacuum worker' LIMIT 1`).Scan(&workerPID)
-		return err == nil
-	}, 30*time.Second, 50*time.Millisecond, "requires real PostgreSQL autovacuum, never an application_name imitation")
-	require.NoError(t, check(), "real autovacuum must preserve the drained application's maintenance window")
 	var backendType, workerApplication string
-	require.NoError(t, admin.QueryRow(ctx, `SELECT backend_type,application_name FROM pg_stat_activity WHERE pid=$1 AND datname='space_db'`, workerPID).Scan(&backendType, &workerApplication), "same real worker must remain present across the successful check")
+	deadline := time.Now().Add(30 * time.Second)
+	observedAcrossCheck := false
+	for time.Now().Before(deadline) {
+		err = admin.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname='space_db' AND backend_type='autovacuum worker' LIMIT 1`).Scan(&workerPID)
+		if err == pgx.ErrNoRows {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		require.NoError(t, err)
+		require.NoError(t, check(), "real autovacuum must preserve the drained application's maintenance window")
+		err = admin.QueryRow(ctx, `SELECT backend_type,application_name FROM pg_stat_activity WHERE pid=$1 AND datname='space_db'`, workerPID).Scan(&backendType, &workerApplication)
+		if err == pgx.ErrNoRows {
+			// A real worker may finish during the check. Trigger another cycle;
+			// a vanished worker cannot satisfy the before/after proof.
+			_, err = target.Exec(ctx, `UPDATE vacuum_probe SET payload=payload WHERE i<=5000`)
+			require.NoError(t, err)
+			continue
+		}
+		require.NoError(t, err)
+		observedAcrossCheck = true
+		break
+	}
+	require.True(t, observedAcrossCheck, "same real autovacuum worker must remain present across the successful check")
 	require.Equal(t, "autovacuum worker", backendType)
 	require.NotEqual(t, applicationName, workerApplication)
 	t.Logf("same actual %s PID %d remained across successful production owner check", backendType, workerPID)
