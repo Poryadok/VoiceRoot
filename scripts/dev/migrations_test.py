@@ -101,7 +101,7 @@ class MigrationContracts(unittest.TestCase):
         self.assertIn('game_integration_db', template)
         self.assertIn('docker.io/library/postgres@sha256:', template)
         self.assertIn('ON_ERROR_STOP=1', template)
-        for invariant in ('migration_version <> 31', 'migration_dirty', 'rolsuper', 'rolcreaterole',
+        for invariant in ('migration_version <> 32', 'migration_dirty', 'rolsuper', 'rolcreaterole',
                           'rolcreatedb', 'rolreplication', 'rolbypassrls', "'public', 'CREATE'",
                           "'TRUNCATE'", "'UPDATE'", 'REVOKE ALL PRIVILEGES ON TABLE public.schema_migrations',
                           "'public.schema_migrations', 'UPDATE'", "c.relname <> 'schema_migrations'",
@@ -131,7 +131,7 @@ class MigrationContracts(unittest.TestCase):
         record = sql.split('SELECT json_build_object(', 1)[1].split(')::text', 1)[0]
         fields = [line.strip() for line in record.splitlines() if line.strip()]
         self.assertEqual(fields, [
-            "'schema', 'voice-gis-verifier-v1',",
+            "'schema', 'voice-gis-verifier-v2',",
             "'database', current_database(),",
             "'migration_version', version,",
             "'dirty', dirty,",
@@ -140,7 +140,10 @@ class MigrationContracts(unittest.TestCase):
             "'table_grants', 'select_insert_update_delete',",
             "'sequence_grants', 'usage_select',",
             "'ddl_denied', true,",
-            "'schema_ledger_runtime_mutation_denied', true",
+            "'schema_ledger_runtime_mutation_denied', true,",
+            "'authority_singleton_verified', true,",
+            "'authority_triggers_verified', true,",
+            "'authority_functions_verified', true",
         ])
         self.assertLess(sql.index('IF has_table_privilege(\'gameintegration_runtime\''),
                         sql.index('SELECT json_build_object('))

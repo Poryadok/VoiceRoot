@@ -119,7 +119,7 @@ class CompositionTests(unittest.TestCase):
                 policy={k:v for k,v in p.items() if k in optional};(installed/'policy.json').write_text(json.dumps(policy));(installed/'policy.json').chmod(0o600)
                 approved={'source_sha':p['tag'],'images':{name.removeprefix('voice-'):bridge_root.source_authority.REGISTRY+'/'+name.removeprefix('voice-')+'@sha256:'+'a'*64 for name in targets if name!='voice-p3-principal-jwks'}}
                 approved['images']['nats-hub-config-renderer']=renderer_repo+'@sha256:'+'d'*64
-                import renderer_root,renderer_transition,actor_root
+                import renderer_root,renderer_transition,actor_root,staging_prerequisites
                 def renderer_proof(kube,current,source_sha,image):
                     descriptor=renderer_transition.plan(current.snapshots[bridge_root.HUB],old[bridge_root.HUB+'/nats-config-renderer'],image,
                         source_sha,renderer_root.storage(current))
@@ -184,7 +184,8 @@ class CompositionTests(unittest.TestCase):
                     # This fixture tests compilation with its own producer; the
                     # bridge Kube above only models marker reads.
                     patches.enter_context(patch.object(compiler,'prebootstrap_image_inventory',return_value={'voice-gateway/gateway':old['voice-gateway/gateway']}))
-                    patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
+                    renderer=patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
+                    coordinator=patches.enter_context(patch.object(staging_prerequisites,'run_prepare',side_effect=AssertionError('unqualified coordinator invoked')))
                     patches.enter_context(patch.object(actor_root,'preflight',return_value=None))
                     patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
                     patches.enter_context(patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value))
@@ -203,7 +204,11 @@ class CompositionTests(unittest.TestCase):
                             actions._prepare({'nonce':'4'*64,'token':'private','mode':mode,'changed_services':[]})
                         prepare.assert_not_called()
                     (installed/'policy.json').write_text(json.dumps(policy))
+                    renderer.reset_mock()
                     result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
+                    if mode=='full':renderer.assert_called_once()
+                    else:renderer.assert_not_called()
+                    coordinator.assert_not_called()
                     # Required v4 admission cannot be bypassed by a private
                     # but malformed JSON file. Stop before compilation/fencing.
                     real_read=bridge_root.private_json

@@ -442,7 +442,7 @@ class Actions:
                     refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
                     if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,bootstrap_plan['secret'],realtime_receipt['secret'])
-                elif schema=='voice-staging-realtime-bootstrap-existing-v1':
+                elif schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
                     if realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
                     if refreshed!=actor_authority or realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:

@@ -18,13 +18,17 @@ def validate_plan(plan, session):
               'source_files_sha256', 'source_authority_sha256', 'execution_sha256', 'stage_sha256',
               'credential_sha256', 'actual_images', 'namespace_uid', 'postgres',
               'secret', 'active_marker_sha256'}
+    parented=isinstance(plan,dict) and plan.get('schema')=='voice-staging-realtime-bootstrap-v2'
+    if parented:fields.add('prerequisites_sha256')
     def nonempty(value):
         return isinstance(value, str) and bool(value)
     def meta(row, fields):
         return type(row) is dict and set(row) == fields and all(nonempty(v) for v in row.values())
     try:
         if (type(plan) is not dict or set(plan) != fields
-            or plan['schema'] != 'voice-staging-realtime-bootstrap-v1'
+            or plan['schema'] not in ('voice-staging-realtime-bootstrap-v1','voice-staging-realtime-bootstrap-v2')
+            or parented and (not isinstance(plan.get('prerequisites_sha256'),str)
+                or not re.fullmatch(r'[a-f0-9]{64}',plan['prerequisites_sha256']))
             or plan['operation'] != session.operation or plan['context'] != session.context
             or plan['helper_sha256'] != session.helper
             or not re.fullmatch(r'[a-f0-9]{12}', plan['operation'])
@@ -208,9 +212,41 @@ _CATALOG = b"""SELECT json_build_object(
 """
 
 
+def _capture_readonly(kind, credential=None):
+    """Issue only the fixed read-only SQL/identity observations."""
+    if kind=='catalog' and credential is None:
+        command=_COMMAND;body=_CATALOG;limit=65536
+    elif kind=='system_identifier' and credential is None:
+        command=_COMMAND;body=b'SELECT system_identifier FROM pg_control_system();\n';limit=256
+    elif kind=='admin_identity' and credential is None:
+        command=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec',
+            'voice-postgres-0','-c','postgres','--','sh','-ceu',_ADMIN_IDENTITY];body=b'';limit=256
+    elif kind=='runtime_auth' and isinstance(credential,bytes) and re.fullmatch(rb'[A-Za-z0-9_-]{32,128}',credential):
+        script=('IFS= read -r PGPASSWORD; export PGPASSWORD; '
+            'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
+            'exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
+        command=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','-i',
+            'voice-postgres-0','-c','postgres','--','sh','-ceu',script]
+        body=credential+b'\nSELECT current_user,current_database();\n';limit=256
+    else:raise Blocked('realtime_bootstrap_readonly_kind_invalid')
+    import resource_claim
+    session=getattr(commands.authority_guard,'__self__',None)
+    if isinstance(session,resource_claim.Session) and session.check().get('phase')=='prerequisites-captured':
+        import staging_prerequisites
+        staging_prerequisites.load_capture(session)
+        if session._prerequisite_readonly_permit is not None:raise Blocked('realtime_bootstrap_readonly_permit_busy')
+        session._prerequisite_readonly_permit=list(command)
+        try:
+            result=commands.capture(command,body=body,timeout=25,limit=limit,env=_ENV)
+            staging_prerequisites.load_capture(session)
+            return result
+        finally:session._prerequisite_readonly_permit=None
+    return commands.capture(command,body=body,timeout=25,limit=limit,env=_ENV)
+
+
 def _catalog():
     try:
-        return json.loads(commands.capture(_COMMAND, body=_CATALOG, timeout=25, limit=65536, env=_ENV))
+        return json.loads(_capture_readonly('catalog'))
     except (ValueError, TypeError):
         raise Blocked('realtime_bootstrap_catalog_invalid') from None
 
@@ -218,9 +254,7 @@ def _catalog():
 def _verify_admin(secret):
     try:
         password = base64.b64decode(secret['data']['POSTGRES_PASSWORD'], validate=True)
-        command = ['/usr/local/bin/k3s', 'kubectl', '--namespace', 'voice-staging', 'exec',
-                   'voice-postgres-0', '-c', 'postgres', '--', 'sh', '-ceu', _ADMIN_IDENTITY]
-        result = commands.capture(command, timeout=25, limit=256, env=_ENV).splitlines()
+        result = _capture_readonly('admin_identity').splitlines()
         if result != [b'voice', hashlib.sha256(password).hexdigest().encode()]: raise ValueError()
     except (KeyError, ValueError, TypeError):
         raise Blocked('realtime_bootstrap_admin_identity_invalid') from None
@@ -228,8 +262,7 @@ def _verify_admin(secret):
 
 def _system_identifier():
     try:
-        value = commands.capture(_COMMAND, body=b'SELECT system_identifier FROM pg_control_system();\n',
-                                 timeout=25, limit=256, env=_ENV).decode('ascii').strip()
+        value = _capture_readonly('system_identifier').decode('ascii').strip()
         if not re.fullmatch(r'[0-9]{1,20}', value): raise ValueError()
         return value
     except (UnicodeError, ValueError):
@@ -279,13 +312,7 @@ def _create_database(system_identifier, role_oid):
 def _verify_runtime_auth(password):
     if not isinstance(password, bytes) or not re.fullmatch(rb'[A-Za-z0-9_-]{32,128}', password):
         raise Blocked('realtime_bootstrap_credential_invalid')
-    script = ('IFS= read -r PGPASSWORD; export PGPASSWORD; '
-              'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
-              'exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
-    command = ['/usr/local/bin/k3s', 'kubectl', '--namespace', 'voice-staging', 'exec', '-i',
-               'voice-postgres-0', '-c', 'postgres', '--', 'sh', '-ceu', script]
-    result = commands.capture(command, body=password + b'\nSELECT current_user,current_database();\n',
-                              timeout=25, limit=256, env=_ENV)
+    result = _capture_readonly('runtime_auth',password)
     if result.strip() != b'realtime|realtime_db':
         raise Blocked('realtime_bootstrap_runtime_auth_invalid')
 
@@ -490,6 +517,11 @@ def _effect(session, path, state, name, before, request_sha256, submit, observe,
     save(path, state)
     session.check()
     if observe() != before: raise Blocked('realtime_bootstrap_before_changed')
+    if state['plan'].get('schema')=='voice-staging-realtime-bootstrap-v2':
+        import staging_prerequisites
+        parent=staging_prerequisites.load_capture(session,actual=state['plan']['actual_images'])
+        if digest(parent)!=state['plan']['prerequisites_sha256']:raise Blocked('realtime_bootstrap_parent_changed')
+        session.check()
     submit()
     session.check()
     after = observe()
@@ -517,6 +549,10 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
             or execution.get('head_sha') != approved['source_sha']):
             raise Blocked('realtime_bootstrap_authority_invalid')
         session.check()
+        parent=None
+        if session.check().get('phase')=='prerequisites-captured':
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(session,actual=stage.old_images)
         _verify_source_capture(session, approved, execution)
         helper_key = 'nats-rollout-preservation/realtime_bootstrap.py'
         helper_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -545,6 +581,9 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
                 'stage_sha256': digest(view), 'credential_sha256': hashlib.sha256(password).hexdigest(),
                 'actual_images': copy.deepcopy(stage.old_images), 'namespace_uid': namespace,
                 'postgres': pg, 'secret': _secret_identity(secret), 'active_marker_sha256': digest(view['marker'])}
+        if parent is not None:
+            plan['schema']='voice-staging-realtime-bootstrap-v2'
+            plan['prerequisites_sha256']=digest(parent)
         validate_plan(plan, session)
         base = _create_custody(guard.ROOT / 'installed', session.operation, password, secret)
         save(base / 'authority.json', {'approved': approved, 'execution': execution})
@@ -645,6 +684,10 @@ def validate_historical_checkpoint(checkpoint, rollout_pass_state):
         original = SimpleNamespace(context=binding['context'], operation=binding['operation'], helper=binding['helper_sha256'])
         plan, receipt, _, _ = _records(checkpoint, original)
         if rollout_pass_state['target'].get('realtime_bootstrap_sha256') != digest(receipt): raise ValueError()
+        if plan['schema']=='voice-staging-realtime-bootstrap-v2':
+            import staging_prerequisites
+            historical=staging_prerequisites.validate_historical_capture(original.operation)
+            if digest(historical)!=plan['prerequisites_sha256']:raise ValueError()
         return copy.deepcopy(plan), copy.deepcopy(receipt)
     except Exception:
         raise Blocked('realtime_bootstrap_historical_invalid') from None
@@ -667,6 +710,10 @@ def _load_completed(session, actual, rollout_target):
     view = json.loads(_read_private(base / 'stage.json'))
     password = _read_private(base / 'credential', limit=128)
     plan, receipt, final, initial_binding = _records(state, session)
+    if plan['schema']=='voice-staging-realtime-bootstrap-v2':
+        import staging_prerequisites
+        parent=staging_prerequisites.load_capture(session,actual=actual,rollout_target=rollout_target)
+        if digest(parent)!=plan['prerequisites_sha256']:raise Blocked('realtime_bootstrap_parent_changed')
     current = session.binding(); row = session.check()
     if row.get('phase') == 'realtime-bootstrap':
         if rollout_target is not None or current != initial_binding: raise Blocked('realtime_bootstrap_fence_changed')
