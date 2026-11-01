@@ -1,14 +1,17 @@
-"""Run affected-plan diagnostics or the narrow current-diff-only handoff.
+"""Run affected-plan diagnostics or the narrow current-diff/overlay handoff.
 
 The diagnostic mode remains incomplete. Handoff mode accepts only its fully
-executed current-diff-only plan; GitHub merge-candidate checks remain mandatory.
+executed current-diff and overlay plans; GitHub merge-candidate checks remain mandatory.
 The opt-in Auth case assumes trusted exclusive daemon/socket custody and does
 not authenticate images, helper or Maven cache, or establish crash coverage.
 """
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 
 import affected_check_plan
@@ -21,11 +24,12 @@ import local_ci_matrix_inventory
 import local_chat_orchestration
 import local_compose_bridge
 import local_current_diff
-from local_docker_owned import OwnershipError
+from local_docker_owned import DockerCLI, OwnedRun, OwnershipError
 import local_flutter_execution
 import local_go_plan
 import local_go_full_integration
 import local_golangci_execution
+import local_heavy_slots
 import local_overlay_execution
 import local_proto_execution
 from local_process_supervision import SupervisionError
@@ -49,8 +53,80 @@ def _handoff_refs(root, base, head, head_ref):
         raise ValueError('checkout or locally fetched PR refs differ')
 
 
-def run_handoff(root, base, head, head_ref, output):
-    """Execute and verify the complete current-diff-only local plan.
+def _bounded_file(path, limit):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
+        raise ValueError('overlay evidence file is unsafe or oversized')
+    raw = path.read_bytes()
+    if len(raw) > limit:
+        raise ValueError('overlay evidence file is oversized')
+    return raw
+
+
+def _verify_overlay_evidence(output, source, image_id, report):
+    """Recheck actual worker logs, source archive and exact owned cleanup."""
+    if (not isinstance(report, dict) or report.get('schema') != 'voice-local-overlay-diagnostic-v1' or
+            report.get('status') != 'incomplete' or report.get('source') != source or
+            report.get('image_id') != image_id or report.get('modules') != list(local_overlay_execution.MODULES) or
+            not isinstance(report.get('version'), str) or not re.fullmatch(r'Python 3\.12\.[0-9]+', report['version']) or
+            type(report.get('slot')) is not int or report['slot'] not in (0, 1)):
+        raise ValueError('overlay diagnostic identity differs')
+    summary = report.get('tests')
+    if (not isinstance(summary, dict) or type(summary.get('discovered')) is not int or type(summary.get('passed')) is not int or
+            summary['discovered'] < 1 or summary.get('passed') != summary['discovered'] or summary.get('skipped') != []):
+        raise ValueError('overlay test inventory differs')
+    discovery = _bounded_file(output / 'discovery.stdout', local_overlay_execution.OUTPUT_LIMIT)
+    stdout = _bounded_file(output / 'tests.stdout', local_overlay_execution.OUTPUT_LIMIT)
+    stderr = _bounded_file(output / 'tests.stderr', local_overlay_execution.OUTPUT_LIMIT)
+    if (local_overlay_execution.validate_discovery(discovery) != summary['discovered'] or
+            local_overlay_execution.validate_summary(stderr, 0, summary['discovered']) != summary['passed'] or
+            hashlib.sha256(stdout).hexdigest() != report.get('stdout_sha256') or
+            hashlib.sha256(stderr).hexdigest() != report.get('stderr_sha256')):
+        raise ValueError('overlay test logs differ from diagnostic')
+    archive = output / 'source.tar'
+    if archive.is_symlink() or not archive.is_file() or archive.stat().st_size > 2 * 1024**3:
+        raise ValueError('overlay source archive is unsafe or oversized')
+    digest = hashlib.sha256()
+    with archive.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    if digest.hexdigest() != report.get('source_archive_sha256'):
+        raise ValueError('overlay source archive differs')
+    journal = report.get('ownership_journal')
+    if not isinstance(journal, str):
+        raise ValueError('overlay ownership journal is missing')
+    parts = Path(journal).parts
+    if (len(parts) != 5 or parts[:3] != ('run', 'tmp', 'ci-local') or
+            not re.fullmatch(r'voiceci-[0-9a-f]{32}', parts[3]) or parts[4] != 'ownership.json'):
+        raise ValueError('overlay ownership journal path differs')
+    directory = (output / Path(*parts[:-1])).resolve()
+    if output.resolve() not in directory.parents:
+        raise ValueError('overlay ownership journal escapes output')
+    engine = DockerCLI()
+    owner = OwnedRun.load(directory, engine)
+    try:
+        resources = owner.state['resources']
+        if (sorted(item['kind'] for item in resources) != ['container', 'container', 'network', 'volume'] or
+                any(item['state'] != 'removed' or not item['id'] for item in resources) or
+                any(engine.exists(item['kind'], item['id']) for item in resources)):
+            raise ValueError('overlay owned resources were not removed')
+        owner._check_daemon()
+    finally:
+        owner.close()
+    slot_path = local_heavy_slots.host_slot_directory() / ('heavy-' + str(report['slot']) + '.lock')
+    if slot_path.is_symlink():
+        raise ValueError('overlay slot path is unsafe')
+    descriptor = os.open(slot_path, os.O_RDWR | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode) or not local_heavy_slots._try_lock(descriptor):
+            raise ValueError('overlay slot is not available')
+        if local_heavy_slots._marker(descriptor) != b'idle\n':
+            raise ValueError('overlay slot has not been released')
+    finally:
+        os.close(descriptor)
+
+
+def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None):
+    """Execute and verify a supported current-diff or overlay local plan.
 
     Other selected checks have no accepted evidence producer and fail closed.
     The caller must fetch origin immediately before invoking this function.
@@ -62,8 +138,13 @@ def run_handoff(root, base, head, head_ref, output):
         raise ValueError('handoff output must be new and outside the checkout')
     _handoff_refs(root, base, head, head_ref)
     plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
-    if set(plan.get('checks', {})) != {'current-diff-contract'}:
+    selected = set(plan.get('checks', {}))
+    if selected not in ({'current-diff-contract'}, {'current-diff-contract', 'match-squad-overlay'}):
         raise ValueError('unsupported selected checks prevent local handoff')
+    if ('match-squad-overlay' in selected and overlay_image_id != local_overlay_execution.PYTHON_IMAGE):
+        raise ValueError('pinned overlay image is required')
+    if 'match-squad-overlay' not in selected and overlay_image_id is not None:
+        raise ValueError('overlay image supplied for an unselected check')
     source = plan['source']
     if source.get('head') != head or source.get('changed_paths') or source.get('raw_mismatch_paths'):
         raise ValueError('handoff requires clean committed source')
@@ -73,6 +154,10 @@ def run_handoff(root, base, head, head_ref, output):
     if (proof.get('source') != source or contract.get('base') != base or
             contract.get('event_base') != base or contract.get('pr_head') != head):
         raise ValueError('merge-candidate proof differs from the plan')
+    if 'match-squad-overlay' in selected:
+        overlay = local_overlay_execution.run_supervised(root, plan, output / 'overlay', overlay_image_id,
+                                                          base=base, head_ref=head_ref)
+        _verify_overlay_evidence(output / 'overlay', source, overlay_image_id, overlay)
     if affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
         raise ValueError('source or selected checks changed during handoff verification')
     _handoff_refs(root, base, head, head_ref)
@@ -81,6 +166,11 @@ def run_handoff(root, base, head, head_ref, output):
               'checks': {'current-diff-contract': 'current-diff/diagnostic.json'},
               'limitations': ['locally fetched refs are not a live remote observation',
                               'GitHub merge-candidate checks remain mandatory']}
+    if 'match-squad-overlay' in selected:
+        report['checks']['match-squad-overlay'] = 'overlay/diagnostic.json'
+        report['limitations'].extend(['Python image publisher provenance is not authenticated',
+                                      'exclusive Docker daemon and socket custody is assumed',
+                                      'interruption and crash recovery acceptance is not established'])
     (output / 'handoff.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     return report
 
@@ -551,7 +641,7 @@ def main():
     parser.add_argument('--go', default='go', help='Go executable matching the pinned diagnostic image')
     parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
-    parser.add_argument('--handoff', action='store_true', help='run the supported complete current-diff-only handoff plan')
+    parser.add_argument('--handoff', action='store_true', help='run a supported complete current-diff or overlay handoff plan')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
@@ -572,10 +662,11 @@ def main():
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     if args.handoff:
-        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff'}
+        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'overlay_image_id'}
         if any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
-        report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output)
+        report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output,
+                             overlay_image_id=args.overlay_image_id)
         print(json.dumps(report, sort_keys=True))
         return 0
     chat = {'helper': args.chat_helper, 'helper_sha256': args.chat_helper_sha256,
