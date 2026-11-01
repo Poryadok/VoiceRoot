@@ -131,6 +131,8 @@ try {
     });
     assert.equal(serviceCalls()[n].env, n === 0 ? 'dev' : 'stage');
     assert.match(serviceCalls()[n].path, /^\/api\/v1\/auth\/oauth2\/authorize\?/);
+    // The fixture server and DevTools deliver their observations independently.
+    await until(() => networkApiCalls.length >= n + 1);
     assert.equal(networkApiCalls.length, n + 1);
   }
   const negatives = [
