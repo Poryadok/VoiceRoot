@@ -691,6 +691,47 @@ class CompositionTests(unittest.TestCase):
             expected={'generation':p['generation'],'source_claim':p['dataPVC'],'source_claim_uid':'pvc','source_pv_uid':'pv'})
         return kube,p,targets,renderer_repo,old,stage
 
+    def test_compiler_catalog_stage_with_real_prerequisite_session(self):
+        """Join the synthetic full inventory to the real resource session."""
+        import staging_prerequisites_test as fixtures, staging_prerequisites as prereq
+        import staging_cohort_preservation as cohort
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            _,_,_,_,old,catalog=self._compiler_catalog_stage('app-only')
+            stage.snapshots=copy.deepcopy(catalog.snapshots)
+            stage.snapshots.pop('voice-p3-principal-jwks')
+            old.pop('voice-p3-principal-jwks/jwks')
+            for name,row in stage.snapshots.items():
+                row['metadata'].setdefault('generation',1)
+                live[('deployment',name)]=copy.deepcopy(row)
+            stage.original_snapshots=copy.deepcopy(catalog.original_snapshots)
+            stage.old_images=copy.deepcopy(old)
+            stage.expected['deployment_uids']={name:row['metadata']['uid'] for name,row in stage.snapshots.items()}
+            card['observed']['images']=copy.deepcopy(old)
+            self.assertEqual(actions.tt_session.check()['phase'],'prepare')
+            prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            session=actions.tt_session
+            qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
+            p2_plan={'actual_before':stage.old_images,'candidate':{'commit':session.context['commit'],'images':session.context['images']}}
+            # P2 qualification is a synthetic boundary; Session checks and
+            # the prerequisite producer still run against the real journal.
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(cohort,'load_qualified',return_value=qualified))
+                stack.enter_context(patch.object(cohort,'capture_stage',return_value=stage))
+                stack.enter_context(patch.object(cohort,'capture_final_stage',return_value=stage))
+                stack.enter_context(patch.object(cohort,'load_auxiliary_successor',return_value=None))
+                stack.enter_context(patch.object(cohort,'revalidate_paused'))
+                with patch.object(cohort,'validate_plan'):
+                    session.bind_cohort_preservation(p2_plan,stage.old_images)
+                receipt=prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+                self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
+                stage.snapshots['voice-p3-principal-jwks']=copy.deepcopy(live[('deployment','voice-p3-principal-jwks')])
+                stage.original_snapshots=copy.deepcopy(stage.snapshots)
+                stage.expected['deployment_uids']['voice-p3-principal-jwks']=stage.snapshots['voice-p3-principal-jwks']['metadata']['uid']
+                stage.old_images=receipt['actual_after']
+                session.capture_prerequisites(stage)
+                self.assertEqual(session.check()['phase'],'prerequisites-captured')
+        fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run)
+
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
         import compiler, source_plan_test as fixtures
         from types import SimpleNamespace
