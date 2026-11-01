@@ -87,7 +87,7 @@ def p3_failure_locations(error):
     allowed={'staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
         'staging_prerequisites.py','resource_claim.py','stage_runtime.py',
         'bridge_composition_test.py','staging_prerequisites_test.py','cohort_hosted_pg.py',
-        'gis_existing_update.py','commands.py'}
+        'gis_existing_update.py','commands.py','realtime_bootstrap.py','realtime_bootstrap_existing.py'}
     kinds={ValueError:'ValueError',KeyError:'KeyError',TypeError:'TypeError',
         FileNotFoundError:'FileNotFoundError',RuntimeError:'RuntimeError',AssertionError:'AssertionError'}
     result=[];seen=set()
@@ -114,7 +114,34 @@ def report_p3_failure(original):
     return checked
 
 
+def report_realtime_failure(original):
+    """Report only bounded source locations and exception categories in fixtures."""
+    def checked(*args,**kwargs):
+        try:return original(*args,**kwargs)
+        except Exception as error:
+            import sys
+            print('REALTIME_FIXTURE_FAILURE '+json.dumps(p3_failure_locations(error),separators=(',',':')),
+                file=sys.stderr,flush=True)
+            raise
+    return checked
+
+
 class CompositionTests(unittest.TestCase):
+    def test_realtime_diagnostic_reports_suppressed_cause_without_private_data(self):
+        import contextlib,io
+        marker='private-synthetic-password'
+        def fail():
+            try:raise KeyError(marker)
+            except KeyError:raise RuntimeError(marker) from None
+        output=io.StringIO()
+        with contextlib.redirect_stderr(output):
+            with self.assertRaisesRegex(RuntimeError,marker):report_realtime_failure(fail)()
+        text=output.getvalue();self.assertNotIn(marker,text)
+        records=json.loads(text.removeprefix('REALTIME_FIXTURE_FAILURE '))
+        self.assertEqual([row['type'] for row in records],['RuntimeError','KeyError'])
+        self.assertTrue(all(all(row[0]=='bridge_composition_test.py' and isinstance(row[1],int)
+            for row in record['frames']) for record in records))
+
     def test_realtime_postgres_observation_consumes_exact_readonly_launch(self):
         import commands,cohort_hosted_pg,realtime_bootstrap,resource_claim,resource_claim_test
         import staging_cohort_preservation_pg as pg
@@ -570,8 +597,11 @@ class CompositionTests(unittest.TestCase):
                         if qualify:
                             import importlib,subprocess
                             import staging_p3_prerequisites as p3
+                            import realtime_bootstrap
                             nats_patches.enter_context(patch.object(p3,'verify_complete',
                                 side_effect=report_p3_failure(p3.verify_complete)))
+                            nats_patches.enter_context(patch.object(realtime_bootstrap,'run_prepare',
+                                side_effect=report_realtime_failure(realtime_bootstrap.run_prepare)))
                             captured=importlib.import_module('staging_cohort_preservation')
                             auxiliary=importlib.import_module('staging_cohort_preservation_auxiliary')
                             import github_custody
