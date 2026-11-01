@@ -382,9 +382,14 @@ class PrepareCompositionTests(unittest.TestCase):
             user=registry+'/user@sha256:'+'c'*64
             gis=registry+'/gameintegration@sha256:'+'a'*64
             self.assertEqual(approved['images'],{'user':user,'gameintegration':gis})
-            self.assertEqual(actions.tt_session.context['images'],{'voice-user/user':user,
-                'voice-gameintegration/gameintegration':gis})
+            self.assertEqual(actions.tt_session.context['images'],{'voice-gameintegration/gameintegration':gis})
             self.assertEqual(stage.old_images['voice-user/user'],registry+'/user@sha256:'+'b'*64)
+            auxiliary={'image_ref':'docker.io/library/nginx@sha256:'+'d'*64}
+            prereq._candidate_images(actions.tt_session,request,approved,workspace,stage,{},auxiliary,None,actions.code,{})
+            from types import SimpleNamespace
+            altered=SimpleNamespace(context={'images':{**actions.tt_session.context['images'],'voice-user/user':user}})
+            with self.assertRaisesRegex(bridge_root.Blocked,'realtime_bootstrap_candidate_changed'):
+                prereq._candidate_images(altered,request,approved,workspace,stage,{},auxiliary,None,actions.code,{})
             source=json.loads((workspace.parents[1]/'source-authority'/
                 (actions.tt_session.operation+'.json')).read_bytes())
             self.assertEqual(source['approved_sha256'],prereq.digest(approved))
@@ -487,7 +492,6 @@ class PrepareCompositionTests(unittest.TestCase):
                 user_image=bridge_root.source_authority.REGISTRY+'/user@sha256:'+'c'*64
                 context['images']=(copy.deepcopy(fixture_candidate_images) if fixture_candidate_images is not None
                                    else {'voice-gameintegration/gameintegration':game_image})
-                if fixture_complete_candidate:context['images']['voice-user/user']=user_image
             card=resource_claim_test.card(context)
             if fixture_complete_candidate:
                 if not strict_helpers or fixture_candidate_images is not None:raise ValueError('invalid complete candidate fixture')
