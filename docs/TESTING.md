@@ -691,6 +691,30 @@ image, helper and tool provenance, concurrent failures and crash recovery are
 not established by this diagnostic. Its journal check relies on the trusted
 producer and is not an independent Docker or slot observation.
 
+The standalone Windows-only `python -B scripts/ci/local_nats_hosted_diagnostic.py
+<request.json>` runs the two named hosted NATS scripts in an owned private
+daemon. The JSON object has exactly `root`, `source`, `source_copy`, `deps`,
+`deps_archive`, `output`, `helper`, `helper_hash`, `jq`, `jq_hash`, and `images`.
+`source` is a captured source identity and `source_copy` its verified private
+materialization; `deps` and `deps_archive` are the matching private Go dependency
+acquisition and archive. `images` is an ordered array of `[archive path,
+archive SHA-256, image ID, tag]` for `nats:2.12-alpine`,
+`natsio/nats-box:0.18.0`, and `alpine:3.22`. Helper, jq and image paths must be
+absolute; hashes and IDs must match the supplied files and images. The caller
+authenticates these inputs and controls the daemon, private socket, network and
+files throughout. Each script must produce its own expected marker without its
+skip marker, and source and inner resources are rechecked after each run. The
+worker and broker use isolated Python imports (`-I -S`); only an explicit set
+of project modules is available to the worker. The caller must trust the
+parent Python interpreter and its ambient import environment. The Windows
+diagnostic broker provides a bounded wait. A timeout or
+worker failure can leave a journal and slot needing explicit recovery; the
+broker does not prove generic Docker-daemon cancellation. Process startup,
+filesystem operations and temporary disk growth have separate bounds or none.
+The report is always `incomplete`: the remaining shards, registry tag drift, Go
+ziphash provenance, filesystem and disk bounds, crash and foreign-sentinel
+acceptance remain unproven. This diagnostic cannot authorize a PR handoff.
+
 When the plan selects `protobuf`, the local diagnostic runs Buf lint, format,
 breaking against the captured immutable base, verifies Go generated-code drift
 with a private Git index, checks the Auth proto copy, compiles Auth with a private Maven

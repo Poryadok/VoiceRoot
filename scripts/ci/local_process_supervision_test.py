@@ -16,6 +16,27 @@ import local_process_supervision as supervision
 
 class SupervisionTest(unittest.TestCase):
     @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_real_broker_ignores_python_environment_and_adjacent_shadows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = ('if __name__ == "__main__":\n'
+                     ' try:\n  import pwd\n except ImportError:\n  pass\n'
+                     ' try:\n  import grp\n except ImportError:\n  pass\n')
+            (root / 'local_process_supervision.py').write_text(
+                probe + Path(supervision.__file__).read_text(encoding='utf-8'), encoding='utf-8')
+            marker = root / 'injected'
+            for name in ('json.py', 'pathlib.py', 'sitecustomize.py', 'pwd.py', 'grp.py'):
+                (root / name).write_text('open(' + repr(str(marker)) + ', "w").write("bad")\n', encoding='utf-8')
+            program = ('import sys;sys.path.append(sys.argv[1]);import local_process_supervision as s;'
+                       'r=s.run_diagnostic([sys.executable,"-I","-S","-c","print(123)"],'
+                       'timeout=20,capture_output=True);assert r.returncode==0 and r.stdout.strip()==b"123"')
+            env = dict(os.environ, PYTHONPATH=str(root), PYTHONHOME=str(root))
+            result = subprocess.run([sys.executable, '-I', '-S', '-B', '-c', program, str(root)],
+                                    cwd=root, env=env, capture_output=True, timeout=30, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
     def test_private_input_is_exclusive_and_deleted_on_close(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(supervision.tempfile, 'gettempdir', return_value=directory):
