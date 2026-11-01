@@ -60,10 +60,11 @@ class HandoffGateTests(unittest.TestCase):
              patch.object(local_preflight, '_handoff_refs'), \
              patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_current_diff, 'run_merge_candidate', return_value={'source': self.source, 'contract': contract}), \
+             patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
              patch.object(local_preflight.local_overlay_execution, 'run_supervised', return_value={'diagnostic': 'value'}) as run, \
              patch.object(local_preflight, '_verify_overlay_evidence') as verify:
             report = local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output,
-                                                  overlay_image_id=image)
+                                                  overlay_image_id=image, overlay_kubectl='kubectl')
         run.assert_called_once()
         verify.assert_called_once_with(self.output / 'overlay', self.source, image, {'diagnostic': 'value'})
         self.assertEqual(set(report['checks']), {'current-diff-contract', 'match-squad-overlay'})
@@ -77,6 +78,17 @@ class HandoffGateTests(unittest.TestCase):
              patch.object(local_preflight.local_current_diff, 'run_merge_candidate') as current, \
              self.assertRaisesRegex(ValueError, 'pinned overlay image'):
             local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output)
+        current.assert_not_called()
+
+    def test_overlay_plan_requires_pinned_kubectl_before_execution(self):
+        plan = dict(self.plan, checks={'current-diff-contract': [], 'match-squad-overlay': []})
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs'), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_current_diff, 'run_merge_candidate') as current, \
+             self.assertRaisesRegex(ValueError, 'pinned overlay kubectl'):
+            local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output,
+                                        overlay_image_id=local_preflight.local_overlay_execution.PYTHON_IMAGE)
         current.assert_not_called()
 
 
@@ -93,11 +105,14 @@ class OverlayHandoffEvidenceTests(unittest.TestCase):
         (self.output / 'tests.stdout').write_bytes(self.stdout)
         (self.output / 'tests.stderr').write_bytes(self.stderr)
         (self.output / 'discovery.stdout').write_bytes(b'VOICE_OVERLAY_DISCOVERED=2\n')
+        (self.output / 'kubectl.stdout').write_bytes((local_preflight.local_overlay_execution.KUBECTL_SHA256 +
+                                                       '  /workspace/repo/tools/kubectl\n').encode())
         (self.output / 'source.tar').write_bytes(b'source')
         directory = self.output / 'run/tmp/ci-local' / ('voiceci-' + 'f' * 32)
         directory.mkdir(parents=True)
         self.report = {'schema': 'voice-local-overlay-diagnostic-v1', 'status': 'incomplete',
                        'source': self.source, 'image_id': self.image, 'version': 'Python 3.12.1',
+                       'kubectl_sha256': local_preflight.local_overlay_execution.KUBECTL_SHA256,
                        'modules': list(local_preflight.local_overlay_execution.MODULES), 'slot': 0,
                        'tests': {'discovered': 2, 'passed': 2, 'skipped': []},
                        'stdout_sha256': hashlib.sha256(self.stdout).hexdigest(),
@@ -122,6 +137,10 @@ class OverlayHandoffEvidenceTests(unittest.TestCase):
         self.owner.close.assert_called_once()
 
     def test_tampered_logs_resources_or_slot_fail_closed(self):
+        kubectl = self.output / 'kubectl.stdout'
+        original = kubectl.read_bytes(); kubectl.write_bytes(b'wrong tool\n')
+        with self.assertRaises(ValueError): self.verify()
+        kubectl.write_bytes(original)
         (self.output / 'tests.stderr').write_bytes(b'Ran 2 tests in 0.100s\n\nOK (skipped=1)\n')
         with self.assertRaises(ValueError): self.verify()
         (self.output / 'tests.stderr').write_bytes(self.stderr)
@@ -201,9 +220,10 @@ class HandoffRefsTest(unittest.TestCase):
 class LocalPreflightTests(unittest.TestCase):
     def test_overlay_opt_in_preserves_incomplete_and_hosted_check(self):
         plan = {'source': self.source, 'checks': {'match-squad-overlay': ['overlay']}}
-        inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE}
+        inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE, 'kubectl': 'kubectl'}
         diagnostic = {'schema': 'voice-local-overlay-diagnostic-v1', 'status': 'incomplete',
                       'source': self.source, 'image_id': inputs['image_id'], 'version': 'Python 3.12.1',
+                      'kubectl_sha256': local_preflight.local_overlay_execution.KUBECTL_SHA256,
                       'slot': 0, 'ownership_journal': 'run/tmp/ci-local/voiceci-test/ownership.json',
                       'modules': list(local_preflight.local_overlay_execution.MODULES),
                       'tests': {'discovered': 2, 'passed': 2, 'skipped': []},
@@ -220,7 +240,7 @@ class LocalPreflightTests(unittest.TestCase):
 
     def test_overlay_unselected_or_partial_refuses_before_worker(self):
         plan = {'source': self.source, 'checks': {}}
-        inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE}
+        inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE, 'kubectl': 'kubectl'}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_overlay_execution, 'run_supervised') as run:
             result = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',

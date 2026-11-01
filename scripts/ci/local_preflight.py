@@ -67,6 +67,7 @@ def _verify_overlay_evidence(output, source, image_id, report):
     if (not isinstance(report, dict) or report.get('schema') != 'voice-local-overlay-diagnostic-v1' or
             report.get('status') != 'incomplete' or report.get('source') != source or
             report.get('image_id') != image_id or report.get('modules') != list(local_overlay_execution.MODULES) or
+            report.get('kubectl_sha256') != local_overlay_execution.KUBECTL_SHA256 or
             not isinstance(report.get('version'), str) or not re.fullmatch(r'Python 3\.12\.[0-9]+', report['version']) or
             type(report.get('slot')) is not int or report['slot'] not in (0, 1)):
         raise ValueError('overlay diagnostic identity differs')
@@ -75,9 +76,11 @@ def _verify_overlay_evidence(output, source, image_id, report):
             summary['discovered'] < 1 or summary.get('passed') != summary['discovered'] or summary.get('skipped') != []):
         raise ValueError('overlay test inventory differs')
     discovery = _bounded_file(output / 'discovery.stdout', local_overlay_execution.OUTPUT_LIMIT)
+    kubectl = _bounded_file(output / 'kubectl.stdout', local_overlay_execution.OUTPUT_LIMIT)
     stdout = _bounded_file(output / 'tests.stdout', local_overlay_execution.OUTPUT_LIMIT)
     stderr = _bounded_file(output / 'tests.stderr', local_overlay_execution.OUTPUT_LIMIT)
-    if (local_overlay_execution.validate_discovery(discovery) != summary['discovered'] or
+    if (kubectl != (local_overlay_execution.KUBECTL_SHA256 + '  /workspace/repo/tools/kubectl\n').encode('ascii') or
+            local_overlay_execution.validate_discovery(discovery) != summary['discovered'] or
             local_overlay_execution.validate_summary(stderr, 0, summary['discovered']) != summary['passed'] or
             hashlib.sha256(stdout).hexdigest() != report.get('stdout_sha256') or
             hashlib.sha256(stderr).hexdigest() != report.get('stderr_sha256')):
@@ -125,7 +128,7 @@ def _verify_overlay_evidence(output, source, image_id, report):
         os.close(descriptor)
 
 
-def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None):
+def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None, overlay_kubectl=None):
     """Execute and verify a supported current-diff or overlay local plan.
 
     Other selected checks have no accepted evidence producer and fail closed.
@@ -143,8 +146,12 @@ def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None):
         raise ValueError('unsupported selected checks prevent local handoff')
     if ('match-squad-overlay' in selected and overlay_image_id != local_overlay_execution.PYTHON_IMAGE):
         raise ValueError('pinned overlay image is required')
-    if 'match-squad-overlay' not in selected and overlay_image_id is not None:
+    if 'match-squad-overlay' in selected and not overlay_kubectl:
+        raise ValueError('pinned overlay kubectl is required')
+    if 'match-squad-overlay' not in selected and (overlay_image_id is not None or overlay_kubectl is not None):
         raise ValueError('overlay image supplied for an unselected check')
+    if 'match-squad-overlay' in selected:
+        local_chat_orchestration._verify_file(overlay_kubectl, local_overlay_execution.KUBECTL_SHA256)
     source = plan['source']
     if source.get('head') != head or source.get('changed_paths') or source.get('raw_mismatch_paths'):
         raise ValueError('handoff requires clean committed source')
@@ -155,7 +162,7 @@ def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None):
             contract.get('event_base') != base or contract.get('pr_head') != head):
         raise ValueError('merge-candidate proof differs from the plan')
     if 'match-squad-overlay' in selected:
-        overlay = local_overlay_execution.run_supervised(root, plan, output / 'overlay', overlay_image_id,
+        overlay = local_overlay_execution.run_supervised(root, plan, output / 'overlay', overlay_image_id, overlay_kubectl,
                                                           base=base, head_ref=head_ref)
         _verify_overlay_evidence(output / 'overlay', source, overlay_image_id, overlay)
     if affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
@@ -383,8 +390,9 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
         if overlay_inputs is not None:
-            if (not isinstance(overlay_inputs, dict) or set(overlay_inputs) != {'image_id'} or
+            if (not isinstance(overlay_inputs, dict) or set(overlay_inputs) != {'image_id', 'kubectl'} or
                     overlay_inputs['image_id'] != local_overlay_execution.PYTHON_IMAGE or
+                    not overlay_inputs['kubectl'] or
                     'match-squad-overlay' not in plan['checks']):
                 raise ValueError('planner-selected overlay requires pinned Python image identity')
         if lint_inputs is not None:
@@ -528,6 +536,7 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                     diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
                     diagnostic.get('modules') != list(local_overlay_execution.MODULES) or
                     diagnostic.get('image_id') != overlay_inputs['image_id'] or
+                    diagnostic.get('kubectl_sha256') != local_overlay_execution.KUBECTL_SHA256 or
                     not isinstance(diagnostic.get('version'), str) or
                     not re.fullmatch(r'Python 3\.12\.[0-9]+', diagnostic['version']) or
                     type(diagnostic.get('slot')) is not int or diagnostic['slot'] not in (0, 1) or
@@ -648,6 +657,7 @@ def main():
     for name in ('go', 'go-sha256', 'lint', 'lint-sha256'):
         parser.add_argument('--golangci-' + name, help='opt-in source-bound Go lint tool input')
     parser.add_argument('--overlay-image-id', help='pinned Linux Python image ID for overlay diagnostic')
+    parser.add_argument('--overlay-kubectl', help='absolute path to the pinned Linux kubectl binary')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')
     parser.add_argument('--chat-postgres-archive')
@@ -662,11 +672,11 @@ def main():
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     if args.handoff:
-        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'overlay_image_id'}
+        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'overlay_image_id', 'overlay_kubectl'}
         if any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
         report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output,
-                             overlay_image_id=args.overlay_image_id)
+                             overlay_image_id=args.overlay_image_id, overlay_kubectl=args.overlay_kubectl)
         print(json.dumps(report, sort_keys=True))
         return 0
     chat = {'helper': args.chat_helper, 'helper_sha256': args.chat_helper_sha256,
@@ -704,7 +714,7 @@ def main():
         full_go_inputs = json.loads(raw, object_pairs_hook=local_go_full_integration.chat._unique)
     lint_inputs = {'go': args.golangci_go, 'go_sha256': args.golangci_go_sha256,
                    'lint': args.golangci_lint, 'lint_sha256': args.golangci_lint_sha256}
-    overlay_inputs = {'image_id': args.overlay_image_id}
+    overlay_inputs = {'image_id': args.overlay_image_id, 'kubectl': args.overlay_kubectl}
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
