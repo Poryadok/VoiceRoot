@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"math"
 	"sync"
 	"time"
 
@@ -87,7 +86,7 @@ func (s *supervisionSession) issue(nonce [32]byte) (supervisionProbe, error) {
 	if !s.advanceLocked(now) || nonce == [32]byte{} || s.pending.Sequence != 0 {
 		return empty, ErrUnavailable
 	}
-	if s.sequence == math.MaxInt64 {
+	if s.sequence >= maxMonitorProbeSequence {
 		s.revokeLocked()
 		return empty, ErrUnavailable
 	}
@@ -130,6 +129,14 @@ func (s *supervisionSession) accept(response MonitorResponse) error {
 		s.incarnation = response.Incarnation
 		s.armed = true
 		close(s.armedCh)
+	}
+	// The final valid heartbeat never extends admission. The responder can
+	// still publish STOP for this retained probe while recovery closes it.
+	if response.Sequence == maxMonitorProbeSequence {
+		s.lastAccepted = s.pending
+		s.pending = supervisionProbe{}
+		s.revokeLocked()
+		return nil
 	}
 	s.validUntil = s.pendingUntil
 	s.lastAccepted = s.pending

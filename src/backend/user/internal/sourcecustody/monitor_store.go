@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
-	"math"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +20,7 @@ type postgresResponseStore struct{ pool *pgxpool.Pool }
 // conflicting digest or malformed row is a failure, not a different decision.
 func (s *postgresResponseStore) ReadProbe(ctx context.Context, challenge, decision [32]byte, sequence uint64) (supervisionProbe, bool, error) {
 	var probe supervisionProbe
-	if s == nil || s.pool == nil || ctx == nil || ctx.Err() != nil || challenge == [32]byte{} || decision == [32]byte{} || sequence == 0 || sequence > math.MaxInt64 {
+	if s == nil || s.pool == nil || ctx == nil || ctx.Err() != nil || challenge == [32]byte{} || decision == [32]byte{} || sequence == 0 || sequence > maxMonitorProbeSequence {
 		return probe, false, ErrUnavailable
 	}
 	var digest, nonce []byte
@@ -41,7 +40,7 @@ func (s *postgresResponseStore) ReadProbe(ctx context.Context, challenge, decisi
 }
 
 func validProbe(p supervisionProbe) bool {
-	return p.Challenge != [32]byte{} && p.DecisionDigest != [32]byte{} && p.Nonce != [32]byte{} && p.Sequence > 0 && p.Sequence <= math.MaxInt64
+	return p.Challenge != [32]byte{} && p.DecisionDigest != [32]byte{} && p.Nonce != [32]byte{} && p.Sequence > 0 && p.Sequence <= maxMonitorProbeSequence
 }
 
 func (s *postgresProbeStore) PublishProbe(ctx context.Context, p supervisionProbe) error {

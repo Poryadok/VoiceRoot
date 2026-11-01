@@ -2,7 +2,6 @@ package sourcecustody
 
 import (
 	"context"
-	"math"
 	"time"
 )
 
@@ -71,7 +70,7 @@ func (w *monitorResponseWorker) step(ctx context.Context) error {
 	if err != nil || callErr != nil || ctx.Err() != nil || !checkHealth() {
 		return fail()
 	}
-	if w.next == math.MaxInt64 {
+	if w.next >= maxMonitorProbeSequence {
 		return fail()
 	}
 	w.next++

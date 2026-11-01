@@ -126,7 +126,7 @@ func TestMonitorResponseParserRejectsAuthenticMalformedWire(t *testing.T) {
 	for _, kind := range []MonitorResponseKind{MonitorHeartbeat, MonitorStop} {
 		response := monitorResponseFixture()
 		response.Kind = kind
-		response.Sequence = math.MaxInt64
+		response.Sequence = maxMonitorProbeSequence
 		signed, err := SignMonitorResponse(response, private)
 		require.NoError(t, err)
 		payload, err := MonitorResponsePayload(signed)
