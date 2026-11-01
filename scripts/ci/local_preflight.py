@@ -13,6 +13,8 @@ import subprocess
 
 import affected_check_plan
 import local_ci_routing
+import local_ci_staging_execution
+import local_ci_staging_request
 import local_auth_orchestration
 import local_chat_orchestration
 import local_compose_bridge
@@ -94,7 +96,7 @@ def _validate_auth_report(result, source, inputs):
 
 
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
-        auth_inputs=None, compose_inputs=None):
+        auth_inputs=None, compose_inputs=None, staging_assets=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -111,6 +113,8 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if staging_assets is not None and 'ci-script-tests' not in plan['checks']:
+            raise ValueError('staging assets require a planner-selected ci-script-tests check')
         if compose_inputs is not None:
             diagnostic = local_compose_bridge.run(plan, compose_inputs, output / 'compose-private')
             expected = sorted(local_compose_bridge.CHECKS.intersection(plan['checks']))
@@ -150,6 +154,19 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                      ('router', len(local_ci_routing.ROUTER_CASES))]):
                 raise ValueError('CI routing diagnostic did not match the planned source and inventory')
             report['ci_routing_report'] = 'ci-routing/diagnostic.json'
+            if staging_assets is not None:
+                source = plan['source']
+                request = {'root': str(root), 'output': str(output / 'ci-staging'),
+                           'commit': source['head'], 'tree': source['tree'], 'base': base,
+                           'assets': staging_assets}
+                diagnostic = local_ci_staging_execution.run(request)
+                if (diagnostic.get('schema') != 'voice-local-ci-staging-v1' or
+                        diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != source['head'] or
+                        diagnostic.get('base') != base or type(diagnostic.get('recipes')) is not int or diagnostic['recipes'] != 34 or
+                        type(diagnostic.get('hosted_go_tests')) is not int or diagnostic['hosted_go_tests'] < 1 or
+                        local_source_snapshot.capture(root, head) != source):
+                    raise ValueError('CI staging shard receipt or source identity differs')
+                report['ci_staging_report'] = 'ci-staging/diagnostic.json'
         if 'current-diff-contract' in plan['checks']:
             diagnostic = local_current_diff.run(root, plan['source'], base, output / 'current-diff')
             if (diagnostic.get('status') != 'diagnostic' or diagnostic.get('source') != plan['source'] or
@@ -233,7 +250,7 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                 report['checks'][name] = {'status': 'diagnostic', 'report': 'flutter/diagnostic.json'}
         if local_source_snapshot.capture(root, head) != plan['source']:
             raise ValueError('source changed during local preflight')
-    except (OSError, ValueError, KeyError, TypeError, OwnershipError, SupervisionError,
+    except (OSError, ValueError, KeyError, TypeError, OwnershipError, SupervisionError, local_ci_staging_execution.ExecutionError,
             subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         report['status'] = 'failed'
         if report['plan'] is None and isinstance(error, subprocess.CalledProcessError) and error.stderr:
@@ -254,6 +271,7 @@ def main():
     parser.add_argument('--go', default='go', help='Go executable matching the pinned diagnostic image')
     parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
+    parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging-shard input paths')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')
     parser.add_argument('--chat-postgres-archive')
@@ -276,10 +294,14 @@ def main():
                'postgres_archive': args.compose_postgres_archive,
                'postgres_archive_sha256': args.compose_postgres_archive_sha256,
                'postgres_image_id': args.compose_postgres_image_id}
+    staging_assets = None
+    if args.ci_staging_assets:
+        with Path(args.ci_staging_assets).open('rb') as stream:
+            staging_assets = local_ci_staging_request.parse_assets(stream.read(1024 * 1024 + 1))
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
-                 compose if any(value is not None for value in compose.values()) else None)
+                 compose if any(value is not None for value in compose.values()) else None, staging_assets)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

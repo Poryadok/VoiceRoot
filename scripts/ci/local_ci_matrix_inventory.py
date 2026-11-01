@@ -10,7 +10,7 @@ import re
 import sys
 
 
-MAKEFILE_SHA256 = '5fd3c61e7b10b5c843a4f27d7ec69fe950c003ca0f1104d69de7281700a6e967'
+MAKEFILE_SHA256 = '8ab72820a45482b7b1601cef9f2640ab8bd6b7a6693789886f33d31322ac5494'
 WORKFLOW_SHA256 = 'e036f5fc2b1a8241bd2728c7bc80e01fad9cf57d4f480dbf86dbc0852d21f4aa'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
 
