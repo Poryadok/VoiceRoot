@@ -47,7 +47,11 @@ class CompositionTests(unittest.TestCase):
         """NATS transport is synthetic; bootstrap and planner checks execute."""
         self._exercise_public_precut(enrolled=True,through_nats=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False):
+    def test_public_prepare_journals_fenced_marker_before_workload_cut(self):
+        """Stop the synthetic API at the first workload mutation."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False):
         import compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -55,11 +59,14 @@ class CompositionTests(unittest.TestCase):
             pass
         class ReachedInput(Exception):
             pass
+        class ReachedFence(Exception):
+            pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get):
             kube,params,policy=canonical_stores()
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
             stage.kube=kube;stage.service={}
+            params['dataPVC']=stage.expected['source_claim']
             stage.marker['data'].update(generation=params['generation'],dataPVC=params['dataPVC'])
             if enrolled:
                 import base64, bootstrap_selection, bootstrap_selection_test, nats_contract_plan as plan
@@ -131,7 +138,7 @@ class CompositionTests(unittest.TestCase):
                 def get_nats(kind,name):
                     if (kind,name)==('deployment',bridge_root.HUB):return copy.deepcopy(hub)
                     if (kind,name)==('replicaset','rs'):return copy.deepcopy(replica)
-                    if kind=='configmap' and name.startswith('voice-nats-') and name!='voice-nats-generation':raise ReachedInput()
+                    if not through_fence and kind=='configmap' and name.startswith('voice-nats-') and name!='voice-nats-generation':raise ReachedInput()
                     return old_get(kind,name)
                 kube.get=get_nats
                 old_run=kube.run
@@ -140,6 +147,32 @@ class CompositionTests(unittest.TestCase):
                     if args[:2]==['get','--raw']:return copy.deepcopy(tree)
                     return old_run(args,body=body,timeout=timeout)
                 kube.run=run_nats
+                if through_fence:
+                    import stage_runtime, commands
+                    from cohort_fake_kube import FakeKube
+                    contract=json.loads((actions.code/'nats-known-baseline'/'deployed-contract.json').read_bytes())
+                    scripts=Path(__file__).parent/'fixtures'/'cohort-captured-scripts'
+                    for entry in contract['scripts']:
+                        raw=(scripts/(entry['part']+'.sh')).read_bytes()
+                        self.assertEqual((len(raw),hashlib.sha256(raw).hexdigest()),(entry['bytes'],entry['sha256']))
+                        name='voice-nats-'+entry['part']+'-bootstrap'
+                        row={'metadata':{'name':name,'uid':entry['configMapUID'],
+                            'resourceVersion':entry['configMapResourceVersion']},'data':{'bootstrap.sh':raw.decode()}}
+                        kube.objects[('ConfigMap',name)]=row;live[('configmap',name)]=copy.deepcopy(row)
+                    for name,row in rows.items():live[('secret',name)]=copy.deepcopy(row)
+                    live[('secret','voice-nats-hub-tls-'+installation.generation)]={'metadata':{'uid':'tls-uid','resourceVersion':'1'}}
+                    fake=FakeKube({('configmap','voice-nats-generation'):stage.marker})
+                    def capture_fence(argv,*,body=b'',**kwargs):
+                        if 'patch' in argv:
+                            index=argv.index('patch');kind=argv[index+1]
+                            if kind=='deployment':raise ReachedFence()
+                            result=fake.capture_patch(argv,body=body,**kwargs)
+                            live[('configmap','voice-nats-generation')]=fake.get('configmap','voice-nats-generation')
+                            return result
+                        if 'jsonpath-as-json=' in ' '.join(argv):
+                            name=argv[argv.index('secret')+1];meta=live[('secret',name)]['metadata']
+                            return json.dumps([meta['uid'],meta['resourceVersion']]).encode()
+                        return transport(argv,body=body,**kwargs)
             saved=workspace.with_name(workspace.name+'-source-fixture');workspace.rename(saved)
             (installed/'source-authority'/(actions.tt_session.operation+'.json')).unlink()
             execution={**execution,'head_sha':actions.tt_session.context['commit']}
@@ -161,7 +194,12 @@ class CompositionTests(unittest.TestCase):
                     nats_patches.enter_context(patch.object(bootstrap_auth,'DockerRuntime',
                         side_effect=lambda base,operation:cohort_fake_nats.ScratchBroker(base,operation,'A'+'A'*55)))
                     nats_patches.enter_context(patch.object(bootstrap_auth,'Actor',cohort_fake_nats.ScratchActor))
-                    with self.assertRaises(ReachedInput):actions.execute(request)
+                    if through_fence:
+                        nats_patches.enter_context(patch.object(commands,'capture',side_effect=capture_fence))
+                        nats_patches.enter_context(patch.object(stage_runtime,'capture',side_effect=capture_fence))
+                        with self.assertRaises(ReachedFence):actions.execute(request)
+                    else:
+                        with self.assertRaises(ReachedInput):actions.execute(request)
                 elif enrolled:
                     with self.assertRaises(ReachedBroker):actions.execute(request)
                 else:
@@ -174,7 +212,12 @@ class CompositionTests(unittest.TestCase):
             self.assertTrue(stores['claims'])
             if through_nats:
                 self.assertIn('plan',cohort._read(base/'preflight.json')['nats'])
-            self.assertEqual(actions.tt_session.check()['phase'],'prepare')
+            if through_fence:
+                self.assertEqual(fake.get('configmap','voice-nats-generation')['data']['phase'],'rollout-capturing')
+                record=cohort._read(base/'effects'/'cut-configmap-voice-nats-generation.json')
+                self.assertEqual(record['status'],'DONE')
+                self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
+            else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         overrides=None
         if through_nats:
             source=Path(__file__).parent/'testdata'/'a3-roster-source'
