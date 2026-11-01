@@ -1,4 +1,7 @@
 import hashlib
+import json
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 import unittest
@@ -51,6 +54,35 @@ class WorkerBindingTests(unittest.TestCase):
                     self.assertEqual({kind: hashlib.sha256(data).hexdigest() for kind, data in wrappers.items()}, {
                         'bash': 'ebf2214ac2a6aaccc3d7f99903d103ed8623b2c65a7342ce3130f49a985401d8',
                         'python': '3d0cdaba229063d5a482328c75d3d5e53fb8daefab3806bcd92ff811c799d09d'})
+
+    def test_hosted_go_json_and_download_diagnostics_stay_separate(self):
+        bash = r'C:\Program Files\Git\bin\bash.exe' if Path(r'C:\Program Files\Git\bin\bash.exe').exists() else shutil.which('bash')
+        rows = [{'Action':'start','Package':'p'}, {'Action':'run','Package':'p','Test':'TestA'},
+                {'Action':'pass','Package':'p','Test':'TestA'}, {'Action':'pass','Package':'p'}]
+        payload = '\n'.join(json.dumps(row, separators=(',', ':')) for row in rows)
+        def run(fake):
+            return subprocess.run([bash, '-c', fake + '\n' + worker.hosted_go_script('.')],
+                                  capture_output=True, timeout=10)
+        result = run("go() { printf '%s\\n' '" + payload.replace('\n', "' '") + "'; echo 'go: downloading example' >&2; }")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, b'go: downloading example\n')
+        self.assertEqual(dispatch.validate_go_json(result.stdout, ['p']), 1)
+        failed = run("go() { echo 'go: failure' >&2; return 7; }")
+        self.assertEqual(failed.returncode, 7)
+        with self.assertRaises(ValueError): dispatch.validate_go_json(b'{malformed\n', ['p'])
+        with self.assertRaises(ValueError): dispatch.validate_go_json(b'{"Action":"skip","Package":"p"}\n', ['p'])
+        stderr_overflow = run('go() { head -c 16777218 /dev/zero >&2; }')
+        self.assertEqual(len(stderr_overflow.stderr), 16777217)
+        stdout_overflow = run('go() { head -c 16777218 /dev/zero; }')
+        self.assertEqual(len(stdout_overflow.stdout), 16777217)
+        with tempfile.TemporaryDirectory() as directory:
+            logs = Path(directory)
+            (logs / 'hosted-go.stdout').write_bytes(result.stdout)
+            (logs / 'hosted-go.stderr').write_bytes(result.stderr)
+            self.assertEqual(worker.validate_hosted_go_logs(logs, ['p'], dispatch), 1)
+            with (logs / 'hosted-go.stderr').open('wb') as stream: stream.truncate(16777217)
+            with self.assertRaisesRegex(RuntimeError, 'diagnostics exceeded'):
+                worker.validate_hosted_go_logs(logs, ['p'], dispatch)
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ import subprocess
 import os
 import secrets
 import re
+import shlex
 
 import local_ci_staging_request as request_contract
 import local_ci_matrix_inventory as matrix_inventory
@@ -98,6 +99,21 @@ def validate_preservation_output(output):
         re.search(rb'^FAILED(?:\s|\()', output, flags=re.MULTILINE) or output.splitlines().count(marker) != 1):
         raise RuntimeError('preservation output incomplete, skipped or too large')
     return [int(count) for count in summaries]
+
+
+def hosted_go_script(directory):
+    """Keep go test's JSON and diagnostics in separate bounded streams."""
+    return ('set -o pipefail; cd ' + shlex.quote(directory) + '; '
+            'exec 3> >(head -c 16777217 >&2); stderr_pid=$!; '
+            'go test -json -count=1 -timeout=90s ./... 2>&3 | head -c 16777217; '
+            'codes=("${PIPESTATUS[@]}"); exec 3>&-; wait "$stderr_pid" || exit 125; '
+            '[ "${codes[1]}" = 0 ] || exit 125; exit "${codes[0]}"')
+
+
+def validate_hosted_go_logs(output, packages, dispatch):
+    if (output / 'hosted-go.stderr').stat().st_size > 16 * 1024 * 1024:
+        raise RuntimeError('hosted Go diagnostics exceeded limit')
+    return dispatch.validate_go_json((output / 'hosted-go.stdout').read_bytes(), packages)
 
 def main():
     BASE.mkdir(exist_ok=False)
@@ -408,7 +424,6 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         expected_tools = [(node_hashes[0].split()[0],'/usr/local/bin/node'),(JQ_HASH,'/usr/local/bin/jq'),(wrapper_sha,'/usr/local/bin/docker'),(docker_cli_sha,'/usr/local/libexec/voice-ci-docker')]
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
         execute('make-dry-run',client,common+['make','-C','/workspace/repo','-n','BASH=/run/user/1000/adapter-root/bash-guard','ci-script-tests-' + SHARD])
-        import shlex
         lines = (BASE/'make-dry-run.stdout').read_text().splitlines()
         lines = [line for line in lines if not line.startswith('make: Entering directory') and not line.startswith('make: Leaving directory')]
         expected = [[('/run/user/1000/adapter-root/bash-guard' if kind == 'bash' else 'python3'),'/workspace/repo/'+path] for kind,path in recipes]
@@ -460,8 +475,8 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
                 if marker not in output.splitlines(): raise RuntimeError('required staging marker missing')
             execute('hosted-go-list',client,common+['bash','-ec','cd /workspace/repo/scripts/staging/nats-leaf-routing-test; go list ./...'],timeout=600)
             packages = (BASE/'hosted-go-list.stdout').read_text().splitlines()
-            execute('hosted-go',client,common+['bash','-ec','set -o pipefail; cd /workspace/repo/scripts/staging/nats-leaf-routing-test; go test -json -count=1 -timeout=90s ./... 2>&1 | head -c 16777217'],timeout=1200)
-            tests = dispatch.validate_go_json((BASE/'hosted-go.stdout').read_bytes(),packages)
+            execute('hosted-go',client,common+['bash','-ec',hosted_go_script('/workspace/repo/scripts/staging/nats-leaf-routing-test')],timeout=1200)
+            tests = validate_hosted_go_logs(BASE, packages, dispatch)
         execute('tools-after-hosted', client, ['sha256sum'] + [path for _,path in expected_tools])
         if (BASE/'tools-after-hosted.stdout').read_text().splitlines() != [digest + '  ' + path for digest,path in expected_tools]: raise RuntimeError('tools changed during hosted steps')
         (BASE / 'suite-counts.json').write_text(json.dumps({'shard':SHARD,'recipes':count,'hosted_go_tests':tests},indent=2))
