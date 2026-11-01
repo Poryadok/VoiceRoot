@@ -418,8 +418,11 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, stdi
     started = time.monotonic()
     result = None
     try:
+        bootstrap = ('import runpy,sys;sys.argv=sys.argv[1:];'
+                     'runpy.run_path(sys.argv[0],run_name="__main__")')
         process = _launch_atomic_windows(kernel, job, accounting,
-            [sys.executable, '-B', str(Path(__file__).resolve()), '--broker', address], None, env, None, None, broker=True)
+            [sys.executable, '-I', '-S', '-B', '-c', bootstrap,
+             str(Path(__file__).resolve()), '--broker', address], None, env, None, None, broker=True)
         ov = _winapi.ConnectNamedPipe(pipe, overlapped=True)
         try:
             remaining = max(0, int((timeout - (time.monotonic() - started)) * 1000))
