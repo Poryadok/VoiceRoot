@@ -95,6 +95,21 @@ class RootlessProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             profile.verify_selected_fields(changed, 'b' * 64, 'owned-daemon', 'owned-network', volumes, labels)
 
+    def test_workspace_profile_requires_exact_fourth_owned_mount(self):
+        item, labels, volumes = self.fixture()
+        volumes['/workspace'] = 'workspace-volume'
+        item['HostConfig']['Mounts'].append({'Type': 'volume', 'Source': 'workspace-volume', 'Target': '/workspace'})
+        item['Mounts'].append({'Type': 'volume', 'Name': 'workspace-volume', 'Destination': '/workspace', 'RW': True})
+        profile.verify_selected_fields(item, 'b' * 64, 'owned-daemon', 'owned-network', volumes, labels)
+        for mutation in ('name', 'read_only', 'unlisted', 'alias'):
+            changed, expected = copy.deepcopy(item), dict(volumes)
+            if mutation == 'name': changed['Mounts'][-1]['Name'] = 'foreign'
+            if mutation == 'read_only': changed['Mounts'][-1]['RW'] = False
+            if mutation == 'unlisted': changed['HostConfig']['Mounts'].append({'Type': 'bind', 'Source': '/', 'Target': '/host'})
+            if mutation == 'alias': expected['/workspace'] = expected['/run/user/1000']
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                profile.verify_selected_fields(changed, 'b' * 64, 'owned-daemon', 'owned-network', expected, labels)
+
     def test_rejects_missing_security_fields(self):
         item, labels, volumes = self.fixture()
         for key in ('Privileged', 'CapAdd', 'Binds', 'PortBindings', 'Devices', 'MaskedPaths'):

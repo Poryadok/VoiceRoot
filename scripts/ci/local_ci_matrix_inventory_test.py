@@ -1,5 +1,7 @@
 """No-execution tests for the four-shard inventory."""
 import tempfile
+import ast
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -7,6 +9,14 @@ import local_ci_matrix_inventory as inventory
 
 
 class MatrixInventoryTest(unittest.TestCase):
+    def test_worker_dispatcher_pin_matches_actual_source(self):
+        directory = Path(__file__).resolve().parent
+        tree = ast.parse((directory / 'local_ci_staging_worker.py').read_bytes())
+        pins = [node.value.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == 'dispatch_sha' and isinstance(node.value, ast.Constant)]
+        self.assertEqual(pins, [hashlib.sha256((directory / 'local_ci_staging_dispatch.py').read_bytes()).hexdigest()])
+
     def test_transitive_recipes_preserve_order_and_reject_missing_targets(self):
         text = 'shard: first second\n\techo shard\nfirst:\n\techo first\nsecond: first\n\techo second\n'
         rows = inventory.collect(text, 'shard')
@@ -25,12 +35,14 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertEqual(result['status'], 'incomplete')
         self.assertEqual(set(result['shards']), {'policy', 'runtime', 'staging', 'proofs'})
         self.assertEqual({key: len(rows) for key, rows in result['shards'].items()},
-                         {'policy': 69, 'runtime': 23, 'staging': 34, 'proofs': 15})
+                         inventory.SHARD_RECIPE_COUNTS)
         self.assertTrue(any('local_ci_staging_execution_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_staging_owned_tmp_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_matrix_inventory_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_private_test.py' in row['recipe'] for row in result['shards']['policy']))
+        self.assertTrue(any('local_auth_full_test.py' in row['recipe'] for row in result['shards']['policy']))
+        self.assertTrue(any('local_auth_full_orchestration_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_compose_bridge_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertIn('Makefile, workflow and snapshot root may follow links', result['omitted'])
         self.assertIn('hosted-only input files are not hashed', result['omitted'])

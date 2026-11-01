@@ -29,6 +29,7 @@ ENV = frozenset({
 COMMAND = ('dockerd', '--storage-driver=vfs', '--iptables=false', '--ip-masq=false',
            '--host=unix:///run/user/1000/docker.sock')
 TARGETS = frozenset({'/home/rootless/.local/share/docker', '/var/lib/docker', '/run/user/1000'})
+WORKSPACE_TARGETS = TARGETS | {'/workspace'}
 CONFIG_DEFAULTS = {
     'Domainname': '', 'AttachStdin': False, 'AttachStdout': False, 'AttachStderr': False,
     'ExposedPorts': {'2375/tcp': {}, '2376/tcp': {}}, 'Tty': False,
@@ -77,7 +78,7 @@ def verify_selected_fields(item, identifier, name, network, volumes, labels):
         if (not isinstance(item, dict) or not isinstance(identifier, str) or
                 not re.fullmatch(r'[0-9a-f]{64}', identifier) or not isinstance(name, str) or not name or
                 not isinstance(network, str) or not network or not isinstance(volumes, dict) or
-                set(volumes) != TARGETS or len(set(volumes.values())) != 3 or
+                set(volumes) not in (TARGETS, WORKSPACE_TARGETS) or len(set(volumes.values())) != len(volumes) or
                 any(not isinstance(v, str) or not v for v in volumes.values()) or
                 not isinstance(labels, dict) or not labels or
                 item['Id'] != identifier or item['Name'] != '/' + name or item['Image'] != IMAGE):
@@ -104,7 +105,7 @@ def verify_selected_fields(item, identifier, name, network, volumes, labels):
             raise ValueError('rootless resource or system path profile differs')
         configured = host['Mounts']
         mounts = item['Mounts']
-        if not isinstance(configured, list) or not isinstance(mounts, list) or len(configured) != 3 or len(mounts) != 3:
+        if not isinstance(configured, list) or not isinstance(mounts, list) or len(configured) != len(volumes) or len(mounts) != len(volumes):
             raise ValueError('rootless volume inventory differs')
         expected = {(target, volume) for target, volume in volumes.items()}
         config_mounts = {(entry['Target'], entry['Source']) for entry in configured

@@ -1,0 +1,221 @@
+"""Run full Auth make target in a private daemon; result is always incomplete.
+
+The caller must authenticate inputs and maintain exclusive daemon/socket and
+workspace custody. Missing images, tools or required reports fail closed.
+"""
+import argparse
+import ctypes
+import json
+import os
+from pathlib import Path
+import re
+import tempfile
+import sys
+
+from local_docker_owned import DockerCLI
+from local_docker_scheduled import ScheduledRun
+import local_auth_full
+import local_auth_private
+import local_chat_orchestration as common
+import local_rootless_profile as rootless
+import local_source_snapshot as snapshot
+import local_nats_hosted_diagnostic as bootstrap
+import local_process_supervision as supervision
+
+IMAGE_TAGS = ('postgres:16-alpine', 'redis:7-alpine', 'redis:7.4-alpine',
+              'nats:2.11-alpine', 'migrate/migrate:v4.18.1')
+
+
+def validate_images(images):
+    if not isinstance(images, dict) or set(images) != set(IMAGE_TAGS):
+        raise ValueError('exact full Auth image inventory required')
+    identifiers = []
+    for tag in IMAGE_TAGS:
+        item = images[tag]
+        if (not isinstance(item, dict) or set(item) != {'archive', 'sha256', 'image_id'} or
+                not isinstance(item['archive'], str) or not Path(item['archive']).is_absolute() or
+                not isinstance(item['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['sha256']) or
+                not isinstance(item['image_id'], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', item['image_id'])):
+            raise ValueError('invalid full Auth image input')
+        identifiers.append(item['image_id'])
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError('duplicate image identities require unsupported alias handling')
+    for item in images.values():
+        common._verify_file(item['archive'], item['sha256'])
+
+
+def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache, cache_digest, images):
+    _require_worker_job()
+    root, output = Path(root).resolve(), Path(output).resolve()
+    if output.exists() or output == root or root in output.parents:
+        raise ValueError('output must be new and outside source tree')
+    if not isinstance(client_image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', client_image_id):
+        raise ValueError('invalid Auth client image identity')
+    common._verify_file(helper, helper_digest)
+    common._verify_file(cache, cache_digest)
+    if local_auth_private.cache_digest(cache) != cache_digest:
+        raise ValueError('Maven cache identity differs')
+    validate_images(images)
+    source = snapshot.capture(root, head)
+    output.mkdir(parents=True)
+    source_copy = snapshot.materialize(root, source, output / 'source')
+    checkout = output / 'run'; checkout.mkdir()
+    engine = DockerCLI()
+    if engine._call('image', 'inspect', client_image_id, '--format', '{{.Id}}') != client_image_id:
+        raise ValueError('Auth client image identity differs')
+    scheduled = ScheduledRun.start_host(checkout, engine, 300)
+    owner = scheduled.run
+    failure, result = None, None
+    try:
+        network = owner.create_resource('network')
+        mounts = {target: owner.create_resource('volume') for target in sorted(rootless.WORKSPACE_TARGETS)}
+        client = owner.create_container(client_image_id, network,
+            {'/socket': mounts['/run/user/1000'], '/workspace': mounts['/workspace']}, [],
+            command=['sleep', 'infinity'], clear_entrypoint=True)
+        owner.start_container(client)
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            if owner.execute(client, ['chown', '1000:1000', '/socket'], out, err, 30):
+                raise ValueError('socket initialization failed')
+        daemon = owner.create_rootless_container(network, mounts,
+            lambda request: common._create_daemon(helper, helper_digest, engine.rootless_creator_env(), request))
+        owner.start_container(daemon)
+        # Readiness validates the shared profile and exact network on each pass.
+        local_auth_full.wait_daemon(owner, daemon, client)
+        image_inputs = {}
+        for index, tag in enumerate(IMAGE_TAGS):
+            item = images[tag]
+            common._verify_file(item['archive'], item['sha256'])
+            copied = owner.directory / ('image-' + str(index) + '.tar')
+            with Path(item['archive']).open('rb') as source_file, copied.open('xb') as target:
+                for block in iter(lambda: source_file.read(1024 * 1024), b''):
+                    target.write(block)
+                target.flush(); os.fsync(target.fileno())
+            common._verify_file(item['archive'], item['sha256'])
+            common._verify_file(copied, item['sha256'])
+            with (output / ('image-' + str(index) + '.stdout')).open('xb') as out, \
+                 (output / ('image-' + str(index) + '.stderr')).open('xb') as err:
+                owner.load_canonical_rootless_image(daemon, copied, item['sha256'], item['image_id'], tag, out, err, 300)
+            image_inputs[tag] = {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
+        diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache, output / 'full')
+        if diagnostic['maven_cache_sha256'] != cache_digest:
+            raise ValueError('Maven cache changed during diagnostic')
+        result = {'schema': 'voice-local-auth-full-orchestration-v1', 'status': 'incomplete',
+                  'diagnostic': diagnostic, 'slot': scheduled.slot,
+                  'ownership_journal': str((owner.directory / 'ownership.json').relative_to(output)),
+                  'inputs': {'creator_sha256': helper_digest, 'client_image_id': client_image_id,
+                             'maven_cache_sha256': cache_digest, 'images': image_inputs}}
+    except BaseException as error:
+        failure = error
+    common._finish(scheduled, failure)
+    if snapshot.capture(root, head) != source:
+        raise ValueError('source changed during full Auth cleanup')
+    (output / 'diagnostic.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    return result
+
+
+def _worker_command():
+    command = bootstrap._worker_command(Path(__file__))
+    original = repr(sorted(bootstrap.PROJECT_MODULES))
+    modules = bootstrap.PROJECT_MODULES | {'local_auth_full', 'local_auth_private', 'local_nats_hosted_diagnostic'}
+    if command[5].count(original) != 1:
+        raise ValueError('Auth worker import allowlist changed')
+    command[5] = command[5].replace(original, repr(sorted(modules)), 1)
+    return command
+
+
+def run(root, head, output, helper, helper_digest, client_image_id, cache, cache_digest, images):
+    """Run the owned worker through the Windows process broker, never inline."""
+    request = {'root': str(root), 'head': head, 'output': str(output), 'helper': str(helper),
+               'helper_digest': helper_digest, 'client_image_id': client_image_id, 'cache': str(cache),
+               'cache_digest': cache_digest, 'images': images}
+    raw = json.dumps(request, allow_nan=False, separators=(',', ':')).encode('utf-8')
+    if len(raw) > 1024 * 1024:
+        raise ValueError('Auth worker request exceeds limit')
+    try:
+        result = supervision.run_diagnostic(_worker_command(), timeout=10800, input=raw, capture_output=True, check=False)
+    except BaseException as error:
+        error.add_note('Auth worker cleanup may be uncertain; inspect its ownership journal and slot.')
+        raise
+    if result.returncode != 0:
+        raise ValueError('full Auth worker failed; inspect its journal before recovery')
+    try:
+        report = json.loads(result.stdout, object_pairs_hook=_object)
+        saved = json.loads((Path(output) / 'diagnostic.json').read_text(encoding='utf-8'), object_pairs_hook=_object)
+        if report != saved or report.get('status') != 'incomplete':
+            raise ValueError()
+    except (OSError, ValueError, TypeError, UnicodeError):
+        raise ValueError('full Auth worker returned invalid diagnostic') from None
+    return report
+
+
+def _object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate image manifest field')
+        result[key] = value
+    return result
+
+
+def read_images(path, digest):
+    common._verify_file(path, digest)
+    images = json.loads(Path(path).read_text(encoding='utf-8'), object_pairs_hook=_object)
+    common._verify_file(path, digest)
+    validate_images(images)
+    return images
+
+
+def _require_worker_job():
+    """Refuse an unfenced worker; this is not proof of exclusive job custody."""
+    if os.name != 'nt':
+        raise ValueError('Auth worker requires Windows job containment')
+    from ctypes import wintypes
+    class Basic(ctypes.Structure):
+        _fields_ = [('PerProcessUserTimeLimit', ctypes.c_longlong), ('PerJobUserTimeLimit', ctypes.c_longlong),
+                    ('LimitFlags', wintypes.DWORD), ('MinimumWorkingSetSize', ctypes.c_size_t),
+                    ('MaximumWorkingSetSize', ctypes.c_size_t), ('ActiveProcessLimit', wintypes.DWORD),
+                    ('Affinity', ctypes.c_size_t), ('PriorityClass', wintypes.DWORD), ('SchedulingClass', wintypes.DWORD)]
+    class IO(ctypes.Structure):
+        _fields_ = [(key, ctypes.c_ulonglong) for key in ('ReadOperationCount', 'WriteOperationCount',
+                    'OtherOperationCount', 'ReadTransferCount', 'WriteTransferCount', 'OtherTransferCount')]
+    class Extended(ctypes.Structure):
+        _fields_ = [('BasicLimitInformation', Basic), ('IoInfo', IO), ('ProcessMemoryLimit', ctypes.c_size_t),
+                    ('JobMemoryLimit', ctypes.c_size_t), ('PeakProcessMemoryUsed', ctypes.c_size_t),
+                    ('PeakJobMemoryUsed', ctypes.c_size_t)]
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.IsProcessInJob.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
+    kernel.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
+    in_job, limits = wintypes.BOOL(), Extended()
+    if (not kernel.IsProcessInJob(kernel.GetCurrentProcess(), None, ctypes.byref(in_job)) or not in_job.value or
+            not kernel.QueryInformationJobObject(None, 9, ctypes.byref(limits), ctypes.sizeof(limits), None) or
+            not limits.BasicLimitInformation.LimitFlags & 0x2000):
+        raise ValueError('Auth worker requires kill-on-close job containment')
+
+
+def main():
+    if sys.argv[1:] == ['--worker']:
+        _require_worker_job()
+        raw = sys.stdin.buffer.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ValueError('Auth worker request exceeds limit')
+        request = json.loads(raw, object_pairs_hook=_object)
+        if not isinstance(request, dict) or set(request) != {'root', 'head', 'output', 'helper', 'helper_digest',
+                'client_image_id', 'cache', 'cache_digest', 'images'}:
+            raise ValueError('invalid Auth worker request')
+        print(json.dumps(_run_owned(**request), sort_keys=True))
+        return 0
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ('head', 'output', 'helper', 'helper-sha256', 'client-image-id',
+                 'maven-cache', 'maven-cache-sha256', 'images', 'images-sha256'):
+        parser.add_argument('--' + name, required=True)
+    args = parser.parse_args()
+    images = read_images(args.images, args.images_sha256)
+    result = run(Path(__file__).resolve().parents[2], args.head, args.output, args.helper,
+                 args.helper_sha256, args.client_image_id, args.maven_cache, args.maven_cache_sha256, images)
+    print(json.dumps(result, sort_keys=True))
+    return 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
