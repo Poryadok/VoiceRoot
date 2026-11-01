@@ -674,6 +674,10 @@ subsequent Git/validator commands under a Windows Job with bounded output.
 Snapshot capture uses its own supervisor and does not bound its temporary files
 while they are written. On POSIX subprocess timeouts do not prove cleanup of
 descendants. The synthetic target does not prove the GitHub merge candidate.
+The local protobuf diagnostic uses the same Windows Job supervision for its
+Git, tool and test commands and limits each captured stream to 16 MiB, including
+the binary baseline archive. Exceeding that limit fails the diagnostic. POSIX
+subprocess timeouts likewise do not prove descendant cleanup.
 
 For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
 `--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and

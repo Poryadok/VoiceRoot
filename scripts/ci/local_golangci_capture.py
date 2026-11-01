@@ -5,15 +5,16 @@ import sys
 import threading
 
 LIMIT = 1024 * 1024
+MAX_LIMIT = 16 * 1024 * 1024
 
 
-def _drain(stream, target, child, overflow, failure):
+def _drain(stream, target, child, overflow, failure, limit):
     try:
         while True:
             block = stream.read(65536)
             if not block:
                 break
-            room = LIMIT - len(target)
+            room = limit - len(target)
             target.extend(block[:max(room, 0)])
             if len(block) > room:
                 overflow.set()
@@ -42,6 +43,15 @@ def _drain(stream, target, child, overflow, failure):
 def main(command):
     if not command:
         return 2
+    limit = LIMIT
+    if command[0].startswith('--limit='):
+        raw = command[0][len('--limit='):]
+        if not raw.isascii() or not raw.isdigit() or not 0 < int(raw) <= MAX_LIMIT:
+            return 2
+        limit = int(raw)
+        command = command[1:]
+        if not command:
+            return 2
     try:
         child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
     except OSError:
@@ -50,7 +60,7 @@ def main(command):
     buffers = [bytearray(), bytearray()]
     overflow = threading.Event()
     failure = threading.Event()
-    readers = [threading.Thread(target=_drain, args=(stream, target, child, overflow, failure), daemon=True)
+    readers = [threading.Thread(target=_drain, args=(stream, target, child, overflow, failure, limit), daemon=True)
                for stream, target in zip((child.stdout, child.stderr), buffers)]
     try:
         for reader in readers:

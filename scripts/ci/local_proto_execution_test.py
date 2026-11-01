@@ -1,13 +1,38 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import local_proto_execution as proto
 
 
 class LocalProtoExecutionTests(unittest.TestCase):
+    def test_command_uses_job_broker_and_propagates_timeout(self):
+        result = subprocess.CompletedProcess([], 0, b'\x00\xff', b'')
+        with mock.patch.object(proto, '_windows', return_value=True), \
+             mock.patch.object(proto.supervision, 'run_diagnostic', return_value=result) as broker:
+            actual = proto._execute(['git', 'archive'], timeout=120)
+        self.assertEqual(actual.stdout, b'\x00\xff')
+        self.assertEqual(broker.call_args.kwargs['timeout'], 120)
+        self.assertIn('--limit=16777216', broker.call_args.args[0])
+        with mock.patch.object(proto, '_windows', return_value=True), \
+             mock.patch.object(proto.supervision, 'run_diagnostic', side_effect=subprocess.TimeoutExpired('worker', 1)):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                proto._execute(['git', 'archive'], timeout=1)
+
+    def test_binary_archive_output_is_preserved_and_oversize_rejected(self):
+        binary = 'import sys; sys.stdout.buffer.write(b"\\x00\\xff" * 700000)'
+        result = proto._execute([sys.executable, '-c', binary], timeout=30)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b'\x00\xff' * 700000)
+        excess = 'import sys; sys.stdout.buffer.write(b"x" * 17000000)'
+        result = proto._execute([sys.executable, '-c', excess], timeout=30)
+        self.assertEqual(result.returncode, 125)
+        self.assertLessEqual(len(result.stdout), 16777216)
+
     def test_private_maven_options_allow_spaces_but_reject_unsafe_characters(self):
         options = proto.maven_options(Path('directory with spaces') / 'repository')
         self.assertIn('directory with spaces', options)

@@ -1,4 +1,8 @@
-"""Run source-bound Buf and R23 diagnostics without issuing a preflight pass."""
+"""Run source-bound Buf and R23 diagnostics without issuing a preflight pass.
+
+Windows child processes run in an owned Job with bounded captured output;
+POSIX timeout does not establish cleanup of descendants.
+"""
 import hashlib
 import json
 import os
@@ -6,15 +10,33 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 
 import go_integration_receipts
 import local_private_git
+import local_process_supervision as supervision
 import local_source_snapshot
 
 
+def _windows():
+    return os.name == 'nt'
+
+
+def _execute(command, *, cwd=None, env=None, input=None, timeout):
+    wrapper = Path(__file__).with_name('local_golangci_capture.py')
+    bounded = [sys.executable, '-B', str(wrapper), '--limit=16777216', *command]
+    if _windows():
+        return supervision.run_diagnostic(bounded, cwd=cwd, env=env, input=input,
+                                          timeout=timeout, capture_output=True, check=False)
+    return subprocess.run(bounded, cwd=cwd, env=env, input=input, timeout=timeout,
+                          capture_output=True, check=False)
+
+
 def _git(root, *args):
-    return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE, timeout=120).decode('utf-8').strip()
+    result = _execute(['git', '-C', str(root), *args], timeout=120)
+    result.check_returncode()
+    return result.stdout.decode('utf-8').strip()
 
 
 def _sha256(path):
@@ -33,9 +55,10 @@ def archive_baseline(root, base, destination):
         raise ValueError('base commit identity differs')
     destination.mkdir(parents=False, exist_ok=False)
     archive = destination.parent / 'base-protos.tar'
+    result = _execute(['git', '-C', str(root), 'archive', '--format=tar', base, 'protos'], timeout=120)
+    result.check_returncode()
     with archive.open('xb') as stream:
-        subprocess.run(['git', '-C', str(root), 'archive', '--format=tar', base, 'protos'],
-                       stdout=stream, stderr=subprocess.PIPE, timeout=120, check=True)
+        stream.write(result.stdout)
     names = set()
     with tarfile.open(archive, 'r:') as tar:
         for member in tar.getmembers():
@@ -134,19 +157,23 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
                    PATH=os.pathsep.join((str(go.parent), str(buf.parent), str(plugin.parent), str(grpc.parent),
                                          str(bash.parent), str(git.parent), str(maven.parent),
                                          str(java.parent), env.get('PATH', ''))))
-        go_version = subprocess.run([str(go), 'version'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
-        buf_version = subprocess.run([str(buf), '--version'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+        def probe(command):
+            result = _execute(command, env=env, timeout=30)
+            result.check_returncode()
+            return result.stdout.decode('utf-8').strip()
+        go_version = probe([str(go), 'version'])
+        buf_version = probe([str(buf), '--version'])
         if not go_version.startswith('go version go1.26.10 ') or buf_version != '1.50.0':
             raise ValueError('protobuf diagnostic requires Go 1.26.10 and Buf 1.50.0')
-        java_version = subprocess.run([str(javac), '-version'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
-        maven_version = subprocess.run([str(maven), '--version'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+        java_version = probe([str(javac), '-version'])
+        maven_version = probe([str(maven), '--version'])
         if not re.match(r'^javac 25(?:\.|$)', java_version) or not maven_version.startswith('Apache Maven 3.9.'):
             raise ValueError('protobuf diagnostic requires JDK 25 and Maven 3.9')
-        plugin_version = subprocess.run([str(plugin), '--version'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
-        grpc_version = subprocess.run([str(grpc), '--version'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+        plugin_version = probe([str(plugin), '--version'])
+        grpc_version = probe([str(grpc), '--version'])
         if not re.fullmatch(r'protoc-gen-go(?:\.exe)? v1\.36\.5', plugin_version) or grpc_version != 'protoc-gen-go-grpc 1.5.1':
             raise ValueError('protobuf diagnostic requires pinned Go protobuf generators')
-        goroot = subprocess.run([str(go), 'env', 'GOROOT'], env=env, capture_output=True, text=True, timeout=30, check=True).stdout.strip()
+        goroot = probe([str(go), 'env', 'GOROOT'])
         actual_go = (Path(goroot) / 'bin' / ('go.exe' if os.name == 'nt' else 'go')).resolve(strict=True)
         if actual_go != go:
             raise ValueError('Go executable is not the selected toolchain binary')
@@ -159,7 +186,7 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
                            'grpc': {'version': grpc_version, 'sha256': hashes['grpc']},
                            'bash': {'sha256': hashes['bash']}, 'git': {'sha256': hashes['git']}}
         snapshot = local_source_snapshot.materialize(root, source, output / 'source')
-        private_git = local_private_git.prepare(root, source, snapshot, output / 'fixture.git')
+        private_git = local_private_git.prepare(root, source, snapshot, output / 'fixture.git', runner=_execute)
         git_env = dict(env)
         git_env.update({key: value for key, value in private_git.items() if key.upper().startswith('GIT_')})
         git_env['BUF_GO_PB_CHECK_SKIP_SELF_TEST'] = '1'
@@ -175,7 +202,7 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
             ('r23-contract', [str(go), 'test', '-json', '-count=1', '-v', './...'], snapshot / 'protos/voice/r23_contract_test', env),
         ]
         for name, command, cwd, command_env in commands:
-            result = subprocess.run(command, cwd=cwd, env=command_env, capture_output=True, timeout=600, check=False)
+            result = _execute(command, cwd=cwd, env=command_env, timeout=600)
             (output / (name + '.stdout')).write_bytes(result.stdout)
             (output / (name + '.stderr')).write_bytes(result.stderr)
             report['commands'].append({'name': name, 'argv': command, 'exit_code': result.returncode,
@@ -194,7 +221,8 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
                 ('plugin', plugin), ('grpc', grpc), ('bash', bash), ('git', git))):
             raise ValueError('protobuf tool binary changed during diagnostic')
         report['status'] = 'incomplete'
-    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError, tarfile.TarError) as error:
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError, tarfile.TarError,
+            supervision.SupervisionError) as error:
         report['error'] = str(error)
     (output / 'diagnostic.json').write_text(json.dumps(report, indent=2, sort_keys=True), encoding='utf-8')
     return report
