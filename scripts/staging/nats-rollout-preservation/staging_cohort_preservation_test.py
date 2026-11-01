@@ -274,6 +274,22 @@ class CutEffectTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_stopped_hub_and_successor_session_reject_live_monitor_and_native_commands(self):
+        """Document the fail-closed gap; this fixture does not prove a P2 continuation."""
+        import nats_root_plan
+        from unittest.mock import Mock
+        kube=Mock()
+        kube.get.return_value={'metadata':{'name':nats_root_plan.HUB,'uid':'synthetic-hub'}}
+        kube.run.return_value={'items':[]}
+        with self.assertRaisesRegex(nats_root_plan.Blocked,'nats_migration_root_preflight_refused'):
+            nats_root_plan.monitor(kube)
+        kube.run.assert_called_once_with(['get','pods','-l','app='+nats_root_plan.HUB,'-o','json'])
+        plan={'fixture':'bound-p2'}
+        session=SimpleNamespace(check=lambda:{'phase':'prerequisites-captured','target_sha256':preservation.digest(plan)})
+        with patch.object(preservation,'load_plan',return_value=plan):
+            with self.assertRaisesRegex(preservation.Blocked,'cohort_binding_changed'):
+                preservation._guard(session)
+
     def test_guard_postgres_uses_exact_read_and_rejects_engine_drift(self):
         import realtime_bootstrap
         import staging_cohort_preservation_pg as pg
