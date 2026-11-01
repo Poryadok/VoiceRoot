@@ -48,6 +48,7 @@ def with_gis_server_defaults(kube):
 
 
 class RootCompositionContract(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
     def test_scoped_final_admission_rejects_changed_continuation(self):
         """Real journal and admission; qualified P2 and external custody are fixtures."""
         import staging_cohort_preservation as cohort
