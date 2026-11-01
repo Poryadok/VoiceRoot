@@ -27,7 +27,8 @@ _SHA = re.compile(r'[a-f0-9]{64}')
 _UUID = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 _RV = re.compile(r'[0-9]{1,20}')
 _VERIFIER_REVISIONS = {'4297373f6d91364da34f46f959d5df8ea07f71553ebaf52d048f48782f5da11c': 31,
-                       '9924cfc09d6c08c22e0d4b0b412f32cf212476ebfc4806b9fccc2c699f4dfd5e': 32}
+                       '9924cfc09d6c08c22e0d4b0b412f32cf212476ebfc4806b9fccc2c699f4dfd5e': 32,
+                       'bb230fc585ff4d8264e0edc7ec2a395e59c94794a437c13696939206676a8225': 33}
 _OPENSSL = '/usr/bin/openssl'
 _OPENSSL_ENV = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LC_ALL': 'C'}
 

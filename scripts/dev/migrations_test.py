@@ -131,7 +131,7 @@ class MigrationContracts(unittest.TestCase):
         record = sql.split('SELECT json_build_object(', 1)[1].split(')::text', 1)[0]
         fields = [line.strip() for line in record.splitlines() if line.strip()]
         self.assertEqual(fields, [
-            "'schema', 'voice-gis-verifier-v2',",
+            "'schema', 'voice-gis-verifier-v3',",
             "'database', current_database(),",
             "'migration_version', version,",
             "'dirty', dirty,",

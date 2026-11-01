@@ -6,14 +6,16 @@ export PGUSER=postgres PGDATABASE=game_integration_db GAME_INTEGRATION_DB_PASSWO
 psql -X -q -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE game_integration_db'
 psql -X -q -v ON_ERROR_STOP=1 -f "$fixture/provision.sql" >/dev/null
 for file in "$fixture"/migrations/*.up.sql; do
-  case "$file" in *000032_*) continue;; esac
+  case "$file" in *000032_*|*000033_*) continue;; esac
   psql -X -q -v ON_ERROR_STOP=1 -f "$file" >/dev/null
 done
-psql -X -q -v ON_ERROR_STOP=1 -c 'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(31,false)'
+psql -X -q -v ON_ERROR_STOP=1 -c 'CREATE TABLE schema_migrations(version bigint PRIMARY KEY, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(31,false)'
 psql -X -q -v ON_ERROR_STOP=1 -f "$fixture/migrations/000032_authority_source_revision.up.sql" >/dev/null
 psql -X -q -v ON_ERROR_STOP=1 -c 'UPDATE schema_migrations SET version=32,dirty=false'
+psql -X -q -v ON_ERROR_STOP=1 -f "$fixture/migrations/000033_restore_session_community_schema.up.sql" >/dev/null
+psql -X -q -v ON_ERROR_STOP=1 -c 'UPDATE schema_migrations SET version=33,dirty=false'
 psql -X -qAt -v ON_ERROR_STOP=1 -f "$fixture/verify.sql" > "$fixture/result.json"
-grep -q 'voice-gis-verifier-v2' "$fixture/result.json"
+grep -q 'voice-gis-verifier-v3' "$fixture/result.json"
 for field in authority_singleton_verified authority_triggers_verified authority_functions_verified; do
   grep -Eq '"'"$field"'"[[:space:]]*:[[:space:]]*true' "$fixture/result.json"
 done
@@ -24,6 +26,7 @@ expect_refusal() {
     exit 1
   fi
 }
+expect_refusal 'UPDATE schema_migrations SET version=32;'
 expect_refusal 'ALTER TABLE applications DISABLE TRIGGER gis_authority_changed;'
 expect_refusal 'ALTER TABLE gis_authority_revision DISABLE TRIGGER gis_authority_floor_change; DELETE FROM gis_authority_revision;'
 expect_refusal 'CREATE OR REPLACE FUNCTION gis_authority_changed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;'
@@ -69,4 +72,4 @@ if printf '%s\n' 'SET ROLE gameintegration_runtime; UPDATE gis_authority_revisio
   printf '%s\n' 'Runtime rewound the authority floor' >&2
   exit 1
 fi
-printf '%s\n' 'GIS revision 32 verifier fixture PASS'
+printf '%s\n' 'GIS revision 33 verifier fixture PASS'

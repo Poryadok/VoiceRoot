@@ -25,7 +25,7 @@ BEGIN
     SELECT count(*), max(version), bool_or(dirty)
       INTO migration_rows, migration_version, migration_dirty
       FROM schema_migrations;
-    IF migration_rows <> 1 OR migration_version <> 32 OR migration_dirty IS DISTINCT FROM false THEN
+    IF migration_rows <> 1 OR migration_version <> 33 OR migration_dirty IS DISTINCT FROM false THEN
         RAISE EXCEPTION 'GIS schema version is not clean at expected revision';
     END IF;
     IF has_table_privilege('gameintegration_runtime', 'public.schema_migrations', 'INSERT')
@@ -93,7 +93,7 @@ BEGIN
                       AND atttypid='boolean'::regtype AND attnotnull AND NOT attisdropped)
        OR NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid=authority_relation AND attname='revision'
                       AND atttypid='bigint'::regtype AND attnotnull AND NOT attisdropped)
-       OR (SELECT count(*) FROM pg_constraint WHERE conrelid=authority_relation)<>3
+       OR (SELECT count(*) FROM pg_constraint WHERE conrelid=authority_relation AND contype<>'n')<>3
        OR (SELECT count(*) FROM pg_constraint WHERE conrelid=authority_relation AND convalidated AND
            ((contype='p' AND pg_get_constraintdef(oid)='PRIMARY KEY (singleton)') OR
             (contype='c' AND pg_get_constraintdef(oid) IN ('CHECK (singleton)','CHECK ((revision > 0))'))))<>3
@@ -160,7 +160,7 @@ BEGIN
 END $$;
 
 SELECT json_build_object(
-    'schema', 'voice-gis-verifier-v2',
+    'schema', 'voice-gis-verifier-v3',
     'database', current_database(),
     'migration_version', version,
     'dirty', dirty,
