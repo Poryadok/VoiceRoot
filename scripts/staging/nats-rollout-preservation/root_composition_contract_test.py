@@ -194,6 +194,9 @@ class RootCompositionContract(unittest.TestCase):
             def prepare(self,value,args,kwargs,session,stage,kube,workspace,qualified,contract,public,stack):
                 import actor_root, nats_root_plan, gis_prerequisite
                 import nats_migration, nats_active_contract
+                captures=cohort.capture_final_stage
+                before_prepare=captures.call_count
+                owner.assertGreater(before_prepare,0)
                 runtime=self.root/('rollout-'+session.operation);runtime.mkdir(mode=0o700)
                 shutil.copyfile(Path(args[0])/'nats-known-baseline'/'kernel',runtime/'kernel')
                 manifest={'archive_sha256':'6'*64};manifest_file=runtime/'rollout-before-manifest.json'
@@ -264,6 +267,7 @@ class RootCompositionContract(unittest.TestCase):
                 cohort._write(self.root/'bootstrap-enrollment.json',self.enrollment)
                 actual_kwargs=dict(kwargs);ref=actual_kwargs.pop('preservation_ref')
                 state=root_cli.prepare_value(value,*args,_preservation_ref=ref,**actual_kwargs)
+                owner.assertGreater(captures.call_count,before_prepare)
                 self.state=state
                 self.cut=cut
                 stage.verify_final_storage=Mock();stage.owned_marker=Mock();stage.prepared=Mock()
