@@ -13,6 +13,7 @@ from controller import Blocked
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from scenario import ready
 import guard
+from actor_auth import AuthScratch
 
 def prove(credentials,operator,unchanged,required_get_streams=None,*,version='voice-bootstrap-auth-v4',installation=None):
     from resource_claim import require_installation
@@ -20,8 +21,8 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
     if version not in ('voice-bootstrap-auth-v4','voice-bootstrap-auth-v5'):raise Blocked('bootstrap_auth_version_invalid')
     declarations=V6_DECLARATIONS if version=='voice-bootstrap-auth-v5' else DECLARATIONS
     unchanged()
-    with tempfile.TemporaryDirectory(prefix='bootstrap-auth-',dir=guard.ROOT) as td:
-        base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
+    with AuthScratch('bootstrap-auth-',guard.ROOT) as scratch:
+        base=scratch.path;base.chmod(0o750);os.chown(base,0,65532)
         inputs=base/'inputs';inputs.mkdir(mode=0o750);os.chown(inputs,0,65532);inputs.chmod(0o750)
         for name,value in [('bootstrap.creds',credentials)]:
             p=inputs/name;p.write_bytes(value);p.chmod(0o440);os.chown(p,0,65532)
@@ -35,11 +36,15 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
         session=getattr(commands.authority_guard,'__self__',None)
         cohort_runtime=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
         if cohort_runtime:
+            scratch.hold() # Constructor may persist a journal before it returns.
             import staging_cohort_preservation
             runtime=staging_cohort_preservation.auth_runtime(session,base,'bootstrap')
         else:runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
+        scratch.hold()
+        completed=False
         try:
-            broker=runtime.start_broker('proof',store);ready(runtime,broker)
+            broker=runtime.start_broker('proof',store)
+            ready(runtime,broker)
             actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,unchanged,
                 **({'plan':{'schema':V6_SCHEMA,'migration_id':V6_MIGRATION_ID}} if version=='voice-bootstrap-auth-v5' else {}))
             stream_subjects={}
@@ -85,6 +90,7 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
                 'normalized_consumer_sha256':digest(legacy),'normalized_consumers':normalized_consumers,
                 'normalized_consumers_sha256':digest(normalized_consumers)}
             if get_proof is not None:result['get_permissions']=get_proof
+            completed=True
             return result
         finally:
             try:
@@ -93,3 +99,5 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
                     if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
             finally:
                 if cohort_runtime:runtime.finish_auth()
+            if not cohort_runtime:runtime.no_operation_containers()
+            if completed:scratch.release()
