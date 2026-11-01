@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,12 +29,154 @@ type monitorCancelTracer struct {
 }
 type monitorTraceKey struct{}
 
+type monitorTimingKey struct{}
+type monitorTimingEventKey struct{}
+type monitorTiming struct {
+	mu      sync.Mutex
+	started time.Time
+	events  []string
+}
+type monitorTimingEvent struct {
+	name  string
+	start time.Time
+}
+type monitorTimingTracer struct{}
+
+func (monitorTimingTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	trace, ok := ctx.Value(monitorTimingKey{}).(*monitorTiming)
+	if !ok {
+		return ctx
+	}
+	name := "other"
+	sql := strings.ToLower(strings.TrimSpace(data.SQL))
+	switch {
+	case strings.HasPrefix(sql, "begin"):
+		name = "begin"
+	case strings.HasPrefix(sql, "set local"):
+		name = "set-path"
+	case strings.HasPrefix(sql, "select pg_catalog.current_setting"):
+		name = "guard-path"
+	case strings.HasPrefix(sql, "select session_user"):
+		name = "guard-qualification"
+	case strings.HasPrefix(sql, "insert") && strings.Contains(sql, "user_custody_monitor_"):
+		name = "store-insert"
+	case strings.HasPrefix(sql, "select") && strings.Contains(sql, "user_custody_monitor_"):
+		name = "store-read"
+	case strings.HasPrefix(sql, "commit"):
+		name = "commit"
+	case strings.HasPrefix(sql, "rollback"):
+		name = "rollback"
+	}
+	now := time.Now()
+	trace.mu.Lock()
+	trace.events = append(trace.events, fmt.Sprintf("%s start +%s", name, now.Sub(trace.started)))
+	trace.mu.Unlock()
+	return context.WithValue(ctx, monitorTimingEventKey{}, monitorTimingEvent{name, now})
+}
+func (monitorTimingTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	trace, ok := ctx.Value(monitorTimingKey{}).(*monitorTiming)
+	if !ok {
+		return
+	}
+	event, ok := ctx.Value(monitorTimingEventKey{}).(monitorTimingEvent)
+	if !ok {
+		return
+	}
+	trace.mu.Lock()
+	trace.events = append(trace.events, fmt.Sprintf("%s end %s err=%v", event.name, time.Since(event.start), data.Err))
+	trace.mu.Unlock()
+}
+func timedMonitorCall(t *testing.T, ctx context.Context, name string, call func(context.Context) error) error {
+	t.Helper()
+	trace := &monitorTiming{started: time.Now()}
+	err := call(context.WithValue(ctx, monitorTimingKey{}, trace))
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	t.Logf("%s elapsed=%s err=%v stages=%v", name, time.Since(trace.started), err, trace.events)
+	return err
+}
+
+type timedProbeStore struct {
+	t     *testing.T
+	inner *postgresProbeStore
+}
+
+func (s timedProbeStore) PublishProbe(ctx context.Context, p supervisionProbe) error {
+	return timedMonitorCall(s.t, ctx, "publish probe", func(c context.Context) error { return s.inner.PublishProbe(c, p) })
+}
+func (s timedProbeStore) ReadResponses(ctx context.Context, current, last supervisionProbe) (rows []MonitorResponse, err error) {
+	err = timedMonitorCall(s.t, ctx, "read responses", func(c context.Context) error {
+		var e error
+		rows, e = s.inner.ReadResponses(c, current, last)
+		return e
+	})
+	return
+}
+
+type timedResponseStore struct {
+	t     *testing.T
+	inner *postgresResponseStore
+}
+
+func (s timedResponseStore) ReadProbe(ctx context.Context, challenge, decision [32]byte, sequence uint64) (p supervisionProbe, found bool, err error) {
+	err = timedMonitorCall(s.t, ctx, "read probe", func(c context.Context) error {
+		var e error
+		p, found, e = s.inner.ReadProbe(c, challenge, decision, sequence)
+		return e
+	})
+	return
+}
+func (s timedResponseStore) InsertExactResponse(ctx context.Context, r MonitorResponse) error {
+	return timedMonitorCall(s.t, ctx, "insert response", func(c context.Context) error { return s.inner.InsertExactResponse(c, r) })
+}
+
 // The wrapper deliberately holds a real PostgreSQL read past cancellation to
 // exercise the independent expiry path and rejection of a late result.
 type heldMonitorRead struct {
 	*postgresProbeStore
 	entered chan struct{}
 	release chan struct{}
+	once    sync.Once
+}
+
+func (s *heldMonitorRead) unblock() { s.once.Do(func() { close(s.release) }) }
+
+func startHeldRead(t *testing.T, ctx context.Context, poller *monitorPoller, held *heldMonitorRead) <-chan error {
+	t.Helper()
+	done := make(chan error, 1)
+	finished := make(chan struct{})
+	t.Cleanup(func() {
+		held.unblock()
+		select {
+		case <-finished:
+		case <-time.After(3 * time.Second):
+			t.Error("held poller did not exit during cleanup")
+		}
+	})
+	go func() { defer close(finished); done <- poller.step(ctx) }()
+	select {
+	case <-held.entered:
+	case err := <-done:
+		t.Fatalf("poller exited before held read: %v", err)
+	case <-ctx.Done():
+		t.Fatalf("waiting for held read: %v", ctx.Err())
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for held read")
+	}
+	return done
+}
+
+func awaitHeldResult(t *testing.T, ctx context.Context, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		t.Fatalf("waiting for held poller: %v", ctx.Err())
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for held poller")
+	}
+	return ErrUnavailable
 }
 
 func (s *heldMonitorRead) ReadResponses(_ context.Context, current, last supervisionProbe) ([]MonitorResponse, error) {
@@ -102,10 +246,22 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO monitor_controller,m
 				roleURL.User = url.UserPassword(user, password)
 				cfg, configErr := pinnedPostgresConfig(roleURL.String())
 				require.NoError(t, configErr)
+				cfg.ConnConfig.Tracer = monitorTimingTracer{}
+				// Test a small, explicitly prewarmed pool. It is not an exclusive
+				// runtime reservation or a guarantee against later connection loss.
+				cfg.MaxConns = 2
 				p, poolErr := pgxpool.NewWithConfig(ctx, cfg)
 				require.NoError(t, poolErr)
 				t.Cleanup(p.Close)
-				require.NoError(t, p.Ping(ctx))
+				first, acquireErr := p.Acquire(ctx)
+				require.NoError(t, acquireErr)
+				second, acquireErr := p.Acquire(ctx)
+				if acquireErr != nil {
+					first.Release()
+					require.NoError(t, acquireErr)
+				}
+				first.Release()
+				second.Release()
 				return p
 			}
 			controllerPool := rolePool("monitor_controller", "fixture_controller")
@@ -251,8 +407,8 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO monitor_controller,m
 			require.NoError(t, err)
 			monitor, err := newMonitorResponder(challenge, decision, uuid.New(), private)
 			require.NoError(t, err)
-			poller := newMonitorPoller(session, store, rand.Reader)
-			worker := newMonitorResponseWorker(monitor, responder, func(context.Context) error { return nil })
+			poller := newMonitorPoller(session, timedProbeStore{t, store}, rand.Reader)
+			worker := newMonitorResponseWorker(monitor, timedResponseStore{t, responder}, func(context.Context) error { return nil })
 			require.NoError(t, poller.step(ctx))
 			require.False(t, session.live())
 			require.NoError(t, worker.step(ctx))
@@ -301,7 +457,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO monitor_controller,m
 				require.NoError(t, e)
 				r, e := newMonitorResponder(supervisionNonce(tag), supervisionNonce(tag+1), uuid.New(), private)
 				require.NoError(t, e)
-				return s, newMonitorPoller(s, store, rand.Reader), newMonitorResponseWorker(r, responder, func(context.Context) error { return nil })
+				return s, newMonitorPoller(s, timedProbeStore{t, store}, rand.Reader), newMonitorResponseWorker(r, timedResponseStore{t, responder}, func(context.Context) error { return nil })
 			}
 			realSession, realPoller, realWorker := makeReal(40)
 			for cycle := 0; cycle < 4; cycle++ {
@@ -325,12 +481,10 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO monitor_controller,m
 			// call deadline, and cannot be hidden by the already accepted heartbeat.
 			held := &heldMonitorRead{postgresProbeStore: store, entered: make(chan struct{}), release: make(chan struct{})}
 			heldPoller := newMonitorPoller(realSession, held, rand.Reader)
-			stopDone := make(chan error, 1)
-			go func() { stopDone <- heldPoller.step(ctx) }()
-			<-held.entered
+			stopDone := startHeldRead(t, ctx, heldPoller, held)
 			require.NoError(t, realWorker.stop())
-			close(held.release)
-			require.NoError(t, <-stopDone)
+			held.unblock()
+			require.NoError(t, awaitHeldResult(t, ctx, stopDone))
 			require.False(t, realSession.live())
 
 			expSession, expPoller, expWorker := makeReal(50)
@@ -340,21 +494,35 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO monitor_controller,m
 			require.True(t, expSession.live())
 			expHeld := &heldMonitorRead{postgresProbeStore: store, entered: make(chan struct{}), release: make(chan struct{})}
 			expBlocked := newMonitorPoller(expSession, expHeld, rand.Reader)
-			blockedDone := make(chan error, 1)
-			go func() { blockedDone <- expBlocked.step(ctx) }()
-			<-expHeld.entered
+			blockedDone := startHeldRead(t, ctx, expBlocked, expHeld)
 			ticker := time.NewTicker(20 * time.Millisecond)
+			expiryCtx, cancelExpiry := context.WithCancel(ctx)
 			expiryDone := make(chan struct{})
-			go func() { supervisionExpiryLoop(ctx, expSession, ticker.C); close(expiryDone) }()
+			t.Cleanup(func() {
+				cancelExpiry()
+				ticker.Stop()
+				select {
+				case <-expiryDone:
+				case <-time.After(3 * time.Second):
+					t.Error("expiry loop did not exit during cleanup")
+				}
+			})
+			go func() { supervisionExpiryLoop(expiryCtx, expSession, ticker.C); close(expiryDone) }()
 			select {
 			case <-expSession.revoked():
 			case <-time.After(supervisionDeadline + time.Second):
 				t.Fatal("expiry blocked by database read")
 			}
 			ticker.Stop()
-			close(expHeld.release)
-			require.Error(t, <-blockedDone)
-			<-expiryDone
+			expHeld.unblock()
+			require.Error(t, awaitHeldResult(t, ctx, blockedDone))
+			select {
+			case <-expiryDone:
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case <-time.After(3 * time.Second):
+				t.Fatal("expiry loop did not exit")
+			}
 			require.False(t, expSession.live(), "late read cannot revive expired session")
 		})
 	}
