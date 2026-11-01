@@ -3,6 +3,7 @@ import copy
 import contextlib
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -142,7 +143,7 @@ class RootCompositionContract(unittest.TestCase):
         # boundaries; the typed receipt is synthetic, not a completed PASS.
         source = Path(source_plan_test.SOURCE)
         c2_mode = ordinary_fault == 'c2'
-        with tempfile.TemporaryDirectory(dir='/root' if c2_mode else None) as tmp:
+        with tempfile.TemporaryDirectory(dir='/root' if ordinary_fault is not None else None) as tmp:
             root = Path(tmp)
             if c2_mode:
                 import realtime_bootstrap_existing as c2
@@ -336,6 +337,7 @@ class RootCompositionContract(unittest.TestCase):
                 return copy.deepcopy(receipt)
             actions = object.__new__(bridge_root.Actions)
             actions.code = code; actions.binding = binding; actions.tt_session = session
+            actions._installation = session.installation
             execution = {'dispatcher_run_id': 17, 'head_sha': params['tag']}
             request = {'nonce': ('b' if c2_mode else 'a') * 64, 'token': 'synthetic', 'mode': 'app-only',
                        'changed_services': [], 'gis_first_install': True}
@@ -401,12 +403,73 @@ class RootCompositionContract(unittest.TestCase):
                     stack.enter_context(patch.object(stage_runtime, 'Kube', return_value=kube))
                 with resource_claim.command_scope(session.check):
                     if ordinary and not c2_mode:
+                        # Public continuation with a synthetic P2/prerequisite
+                        # boundary. Session, durable lineage and the candidate
+                        # inventory check below remain real; this is not a P2 proof.
+                        import staging_cohort_preservation as cohort
+                        import staging_prerequisites as prereq
+                        workspace = installed / 'sources' / operation
+                        workspace.mkdir()
+                        capture_source('fixture', 17, ctx['commit'], workspace)
+                        retained_request = dict(request, source_sha=ctx['commit'], resource_context=ctx)
+                        retained_request.pop('token')
+                        request_path = installed / 'cohort-requests' / (operation + '.json')
+                        request_path.parent.mkdir(mode=0o700)
+                        cohort._write(request_path, retained_request)
+                        p2_plan = dict.fromkeys(cohort.PLAN_FIELDS)
+                        p2_plan.update(schema=cohort.SCHEMA, operation=operation, context=ctx,
+                            helper_sha256=session.helper, actual_before=old_images,
+                            candidate={'commit':ctx['commit'], 'images':ctx['images']})
+                        checkpoint = installed / 'cohort-preservation' / operation / 'checkpoint.json'
+                        checkpoint.parent.mkdir(mode=0o700, parents=True)
+                        cohort._write(checkpoint, {'plan':p2_plan})
+                        qualified = {'fixture':'synthetic-qualified-p2'}
+                        loaded = {'request':{'mode':request['mode'], 'changed_services':request['changed_services'],
+                            'gis_first_install':False}, 'approved':approved, 'execution':execution,
+                            'workspace':str(workspace)}
+                        parent = {'fixture':'synthetic-prerequisites-capture'}
+                        preflight = {'contract':contract, 'enrollment':{}, 'services':[], 'actor':None,
+                            'nats':{'scripts':{}, 'plan':{'actions':[]}, 'binding':{}}}
+                        original_read = cohort._read
+                        app = copy.deepcopy(kube.objects[('Secret','voice-app-secrets')])
+                        def read_boundary(path, *args, **kwargs):
+                            if path.name == 'stores.json':return {'app_before':copy.deepcopy(app)}
+                            return original_read(path, *args, **kwargs)
+                        prior_get = kube.get
+                        def candidate_get(kind, name):
+                            if (kind,name)==('secret','voice-app-secrets'):return copy.deepcopy(app)
+                            return prior_get(kind,name)
+                        kube.get = candidate_get
+                        def prepare_parent(*args, **kwargs):
+                            plan = {'schema':'voice-staging-prerequisites-plan-v4',
+                                'preservation_sha256':resource_claim.digest(qualified), 'actual_before':old_images}
+                            session.bind_prerequisites(plan, old_images)
+                        for seam in (patch.object(cohort, 'validate_plan'),
+                            patch.object(cohort, 'load_qualified', return_value=qualified),
+                            patch.object(cohort, 'load_prepared', return_value=loaded),
+                            patch.object(cohort, 'qualify_offnode'),
+                            patch.object(cohort, 'begin_continuation', return_value=(qualified,loaded)),
+                            patch.object(cohort, 'require_continuation'),
+                            patch.object(cohort, 'capture_final_stage', return_value=stage),
+                            patch.object(cohort, 'load_preflight', return_value=preflight),
+                            patch.object(cohort, '_read', side_effect=read_boundary),
+                            patch.object(cohort, '_app_successor'), patch.object(cohort, 'revalidate_paused'),
+                            patch.object(bridge_root, '_cohort_story_composition', return_value=None),
+                            patch.object(prereq, 'validate_plan'),
+                            patch.object(prereq, 'run_prepare', side_effect=prepare_parent),
+                            patch.object(prereq, 'capture', return_value=parent),
+                            patch.object(prereq, 'load_capture', return_value=parent),
+                            patch.object(prereq, 'load_gis_authority', return_value=None)):
+                            stack.enter_context(seam)
+                        session.bind_cohort_preservation(p2_plan,old_images)
+                        authorization = {'action':'authorize', 'operation':operation, 'artifact_id':42,
+                            'token':'fixture', 'resource_context':ctx}
                         if ordinary_fault in ('none', 'missing_secret'):
-                            with self.assertRaises(ReachedC1): actions._prepare(request)
+                            with self.assertRaises(ReachedC1): actions.execute(authorization)
                             c1.assert_called_once()
                         else:
                             with self.assertRaisesRegex(bridge_root.Blocked, 'realtime_bootstrap_candidate_changed'):
-                                actions._prepare(request)
+                                actions.execute(authorization)
                             c1.assert_not_called()
                         return
                     state = actions._prepare(request)
@@ -477,6 +540,7 @@ class RootCompositionContract(unittest.TestCase):
     def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
         self._exercise_bridge('c2')
 
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'root-owned cohort lineage')
     def test_ordinary_candidate_inventory_is_exact_before_c1(self):
         for fault in ('none', 'backend', 'frontend', 'backend_admission', 'missing_secret'):
             with self.subTest(fault=fault): self._exercise_bridge(fault)
