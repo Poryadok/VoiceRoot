@@ -4,12 +4,64 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import p2_seeded_fixture as fixture
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_lost_fence_prevents_selected_restore(self):
+        from unittest.mock import Mock
+        for fault in ('session','writer'):
+            with self.subTest(fault=fault):
+                handle,session,stage=Mock(),Mock(),Mock()
+                session.check.return_value={'phase':'changed' if fault=='session' else 'cohort'}
+                if fault=='writer':stage.verify_final_storage.side_effect=RuntimeError('writer_reopened')
+                check=lambda:fixture._check_seed_boundary(handle,session,{'phase':'cohort'},stage)
+                with patch.object(fixture,'_restore_to_selected') as restore:
+                    with self.assertRaises(RuntimeError):
+                        fixture._restore_selected_after_fence(check,'archive','manifest','selected')
+                    restore.assert_not_called()
+
+    @unittest.skipUnless(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root custody')
+    def test_seed_rejects_changed_identity_before_selected_store(self):
+        sys.path.insert(0, str(Path(__file__).parent.parent/'nats-known-baseline'))
+        self.addCleanup(sys.path.pop, 0)
+        import bootstrap_selection
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'inputs').mkdir(mode=0o700)
+            (root/'inputs'/'bootstrap.creds').write_bytes(b'credential')
+            handle=fixture.Retained(root,None,lambda _:None)
+            handle.input_sha256={'fixture':'pin'};handle.seal_identity_custody()
+            handle.installation=SimpleNamespace(sha256='a'*64,generation='fixture')
+            handle.enrollment_v1={'fixture':'v1'}
+            handle.enrollment_v4={'credential_sha256':hashlib.sha256(b'credential').hexdigest()}
+            handle.kube=object();handle.identity_sha256=handle.identity_digest()
+            with patch.object(bootstrap_selection,'select'),patch.object(fixture,'require_hosted'):
+                handle.verify_identity()
+                import resource_claim, resource_claim_test
+                context=resource_claim_test.context();card=resource_claim_test.card(context)
+                foreign=resource_claim.Session(context,'a'*12,'b'*64,lambda:card,resource_claim_test.MemoryJournal())
+                foreign.admit(start=True)
+                for session in (None,foreign):
+                    with self.assertRaisesRegex(RuntimeError,'owned_fixture_session_changed'):
+                        fixture.seed_prepared(handle,None,session=session)
+                    self.assertIsNone(handle.store)
+                handle.installation=foreign.installation;handle.identity_sha256=handle.identity_digest()
+                with self.assertRaisesRegex(RuntimeError,'owned_fixture_stage_changed'):
+                    fixture.seed_prepared(handle,None,session=foreign)
+                self.assertIsNone(handle.store)
+                for change in ('enrollment','credential'):
+                    with self.subTest(change=change):
+                        if change=='enrollment':handle.enrollment_v1['fixture']='foreign'
+                        else:(root/'inputs'/'bootstrap.creds').write_bytes(b'foreign')
+                        with self.assertRaisesRegex(RuntimeError,'owned_fixture_identity_changed'):
+                            fixture.seed_prepared(handle,None,session=None)
+                        self.assertIsNone(handle.store)
+                        handle.enrollment_v1['fixture']='v1'
+                        (root/'inputs'/'bootstrap.creds').write_bytes(b'credential')
+
     def test_unapproved_host_is_rejected_before_touching_paths(self):
         for platform, uid, env in (('win32', 0, {}), ('linux', 1, {}),
                                    ('linux', 0, {}),
@@ -136,6 +188,11 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(runtime.removed,['a'*64])
             self.assertEqual(second.removed,['c'*64])
             self.assertTrue(path.is_dir())
+            # Identity setup can fail before any selected leaf exists.
+            early=fixture.Retained(base,None,lambda _:None);early.input_sha256={}
+            early.seal_identity_custody();early_runtime=Runtime('d');early.register(early_runtime)
+            fixture.reconcile_containers(early,lambda _:True)
+            self.assertEqual(early_runtime.removed,['d'*64])
 
 
 if __name__ == '__main__':

@@ -81,6 +81,33 @@ class Retained:
         self.claim = self.pv = self.hub = None
         self.binding_sha256 = None
         self._custody = None
+        self._identity_custody = None
+        self.identity_sha256 = None
+
+    def seal_identity_custody(self):
+        row = self.base.lstat()
+        self._identity_custody = (row.st_dev,row.st_ino,copy.deepcopy(self.input_sha256))
+
+    def verify_identity_custody(self):
+        if self._identity_custody is None:raise RuntimeError('owned_fixture_custody_unsealed')
+        _root_directory(self.base)
+        row = self.base.lstat()
+        if (row.st_dev,row.st_ino,self.input_sha256)!=self._identity_custody:
+            raise RuntimeError('owned_fixture_custody_changed')
+
+    def identity_digest(self):
+        from nats_contract_plan import digest
+        return digest({'installation_sha256':self.installation.sha256,'enrollment_v1':self.enrollment_v1,
+            'enrollment_v4':self.enrollment_v4,'input_sha256':self.input_sha256})
+
+    def verify_identity(self):
+        import bootstrap_selection
+        self.verify_identity_custody()
+        if self.identity_sha256 is None or self.identity_digest()!=self.identity_sha256:
+            raise RuntimeError('owned_fixture_identity_changed')
+        bootstrap_selection.select(self.kube,self.enrollment_v4,self.installation.generation,installation=self.installation)
+        if hashlib.sha256((self.base/'inputs/bootstrap.creds').read_bytes()).hexdigest()!=self.enrollment_v4['credential_sha256']:
+            raise RuntimeError('owned_fixture_identity_changed')
 
     def seal_custody(self):
         if self._custody is not None:
@@ -113,6 +140,7 @@ class Retained:
 
     def verify_binding(self):
         import bootstrap_selection
+        self.verify_identity()
         self.verify_custody()
         if self.binding_sha256 is None or self.binding_digest()!=self.binding_sha256:
             raise RuntimeError('owned_fixture_binding_changed')
@@ -333,6 +361,18 @@ def _restore_to_selected(archive, manifest, selected):
         if check.exists():check.unlink()
 
 
+def _restore_selected_after_fence(check, archive, manifest, selected):
+    check()
+    _restore_to_selected(archive,manifest,selected)
+
+
+def _check_seed_boundary(handle, session, row, stage):
+    handle.verify_identity()
+    if session.check()!=row:raise RuntimeError('owned_fixture_session_changed')
+    stage.verify_final_storage()
+    handle.verify_custody()
+
+
 def reconcile_containers(handle, assert_reconciled):
     """After caller reconciliation remove only exactly owned test containers.
 
@@ -346,7 +386,8 @@ def reconcile_containers(handle, assert_reconciled):
     """
     if not callable(assert_reconciled) or assert_reconciled(handle) is not True:
         raise RuntimeError('owned_fixture_reconciliation_required')
-    if handle.binding_sha256 is None:handle.verify_custody()
+    if handle._custody is None:handle.verify_identity_custody()
+    elif handle.binding_sha256 is None:handle.verify_custody()
     else:handle.verify_binding()
     from docker_runtime import LABEL
     inventories = []
@@ -373,21 +414,15 @@ def reconcile_containers(handle, assert_reconciled):
         runtime.no_operation_containers()
 
 
-def seed_owned(base, selected_path, claim, pv, hub, *, bundle_root, source_root, input_sha256, on_retained):
-    """Seed a fresh selected leaf; never delete it, including on failure.
+def prepare_owned_identity(base, *, bundle_root, source_root, input_sha256, on_retained):
+    """Create scoped enrollment before Session admission; retain on failure.
 
     Caller supplies input_sha256 derived from the reviewed captured source and
     pinned build provenance; hashes of untrusted observed files are insufficient.
-    Caller creates private `base`, an exclusive empty selected leaf with the
-    captured group/mode, and the exclusive guard.ROOT on a disposable hosted
+    Caller creates private `base` and the exclusive guard.ROOT on a disposable hosted
     VM. `on_retained(handle)` must durably retain custody before Docker calls.
     """
     require_hosted()
-    from stage_runtime import selected_store_descriptor, verify_selected_store_leaf
-    from docker_runtime import DockerRuntime, NATS_IMAGE
-    from native_store import archive_closed_store
-    from rollout_census import census, semantic
-    from scenario import ready
     import guard
     base = _root_directory(base,private=True)
     bundle_root = _root_directory(bundle_root)
@@ -401,22 +436,14 @@ def seed_owned(base, selected_path, claim, pv, hub, *, bundle_root, source_root,
     scripts = {role:_checked_file(source_root,
         'scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004/'+role+'-bootstrap.sh',
         input_sha256['source/'+role]) for role in roles}
-    selected_path = Path(selected_path)
-    require_external(base,selected_path)
-    descriptor = selected_store_descriptor(hub,claim,pv)
-    if (not selected_path.is_absolute() or selected_path.resolve(strict=True)!=selected_path
-        or descriptor['path']!=str(selected_path) or any(selected_path.iterdir())):
-        raise RuntimeError('owned_fixture_selected_store_invalid')
-    _verify_selected_path(selected_path,descriptor)
     _root_directory(guard.ROOT,private=True)
     if any(Path(guard.ROOT).iterdir()):
         raise RuntimeError('owned_fixture_guard_root_not_empty')
     if any(base.iterdir()) or not callable(on_retained):
         raise RuntimeError('owned_fixture_base_not_empty')
-    handle = Retained(base,selected_path,on_retained); handle.descriptor = copy.deepcopy(descriptor)
+    handle = Retained(base,None,on_retained)
     handle.input_sha256 = copy.deepcopy(input_sha256)
-    handle.claim,handle.pv,handle.hub = copy.deepcopy(claim),copy.deepcopy(pv),copy.deepcopy(hub)
-    handle.seal_custody()
+    handle.seal_identity_custody()
     on_retained(handle)
     import nats_contract_integration as contract
     contract.fixture.call([str(pinned['helper']),'prepare',str(base)])
@@ -434,6 +461,41 @@ def seed_owned(base, selected_path, claim, pv, hub, *, bundle_root, source_root,
         ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}}
     renewed = _identity(handle,old,operator)
     (base/'inputs/bootstrap.creds').write_bytes(renewed)
+    handle.identity_sha256=handle.identity_digest();handle.verify_identity();on_retained(handle)
+    return handle
+
+
+def seed_prepared(handle, stage, *, session):
+    """Seed the captured selected store using the previously enrolled identity."""
+    require_hosted()
+    from stage_runtime import selected_store_descriptor
+    from docker_runtime import DockerRuntime, NATS_IMAGE
+    from native_store import archive_closed_store
+    from rollout_census import census, semantic
+    from scenario import ready
+    from resource_claim import Session
+    from runtime_stage import RolloutStage, HUB
+    handle.verify_identity()
+    if not isinstance(session,Session) or session.installation.sha256!=handle.installation.sha256:
+        raise RuntimeError('owned_fixture_session_changed')
+    if not isinstance(stage,RolloutStage) or stage.operation!=session.operation:
+        raise RuntimeError('owned_fixture_stage_changed')
+    row=copy.deepcopy(session.check())
+    stage.verify_final_storage()
+    if handle._custody is not None:raise RuntimeError('owned_fixture_store_already_bound')
+    base=handle.base;selected_path=Path(stage.final_path)
+    claim,pv,hub=stage.final_claim,stage.final_pv,stage.snapshots[HUB]
+    require_external(base,selected_path)
+    descriptor=selected_store_descriptor(hub,claim,pv)
+    if (not selected_path.is_absolute() or selected_path.resolve(strict=True)!=selected_path
+        or descriptor['path']!=str(selected_path) or any(selected_path.iterdir())):
+        raise RuntimeError('owned_fixture_selected_store_invalid')
+    _verify_selected_path(selected_path,descriptor)
+    handle.store=selected_path;handle.descriptor=copy.deepcopy(descriptor)
+    handle.claim,handle.pv,handle.hub=copy.deepcopy(claim),copy.deepcopy(pv),copy.deepcopy(hub)
+    handle.seal_custody();handle._checkpoint(handle)
+    def still_fenced():
+        _check_seed_boundary(handle,session,row,stage)
     runtime = DockerRuntime(base,'ownedp2'+uuid.uuid4().hex[:12]);handle.runtime=runtime;handle.register(runtime)
     store = base/'seed-store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
     broker = runtime.start_broker('seed',store);ready(runtime,broker);runtime.bootstrap(broker)
@@ -448,11 +510,14 @@ def seed_owned(base, selected_path, claim, pv, hub, *, bundle_root, source_root,
     runtime.stop(broker)
     if runtime.inspect(broker)['State']['Running']:raise RuntimeError('owned_fixture_seed_not_closed')
     archive = base/'seed.tar';manifest = archive_closed_store(store,archive)
-    _restore_to_selected(archive,manifest,selected_path)
+    _restore_selected_after_fence(still_fenced,archive,manifest,selected_path)
     def closed():
+        still_fenced()
         if runtime.inspect(broker)['State']['Running']:raise RuntimeError('owned_fixture_seed_not_closed')
         _verify_selected_path(selected_path,descriptor)
+    still_fenced()
     runtime.allow_bound_store(selected_path,claim,pv,closed,descriptor=descriptor)
+    still_fenced()
     selected = runtime.start_broker('selected',selected_path);handle.broker = selected
     ready(runtime,selected)
     observed = census(runtime,selected,account)
@@ -460,7 +525,10 @@ def seed_owned(base, selected_path, claim, pv, hub, *, bundle_root, source_root,
     runtime.stop(selected)
     if runtime.inspect(selected)['State']['Running']:raise RuntimeError('owned_fixture_selected_not_closed')
     handle.census,handle.manifest = observed,manifest
+    still_fenced()
     handle.binding_sha256 = handle.binding_digest()
     handle.verify_binding()
-    on_retained(handle)
+    handle._checkpoint(handle)
     return handle
+
+
