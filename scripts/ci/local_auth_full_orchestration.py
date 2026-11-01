@@ -31,7 +31,11 @@ STAGES = frozenset({'source-copy', 'acquire-slot', 'resources', 'make-provisioni
 
 CGROUP_KEYS = ('pids_current', 'pids_max', 'pids_events_max', 'memory_current', 'memory_max',
                'memory_events_max', 'memory_events_oom', 'memory_events_oom_kill')
-CGROUP_UNAVAILABLE = frozenset({'probe command failed', 'counter format invalid', 'cgroup limits differ'})
+CGROUP_PROBE_FAILURES = {31: 'cgroup directory unavailable', 32: 'awk unavailable', 33: 'pids.current unavailable',
+                         34: 'pids.max unavailable', 35: 'pids.events unavailable', 36: 'memory.current unavailable',
+                         37: 'memory.max unavailable', 38: 'memory.events unavailable'}
+CGROUP_UNAVAILABLE = frozenset({'probe command failed', 'counter format invalid', 'cgroup limits differ'} |
+                               set(CGROUP_PROBE_FAILURES.values()))
 
 
 class CgroupUnavailable(ValueError):
@@ -46,8 +50,9 @@ def parse_cgroup_sample(raw):
 
 def sample_cgroup(owner, daemon):
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-        if owner.read_rootless_cgroup(daemon, out, err):
-            raise CgroupUnavailable('probe command failed')
+        code = owner.read_rootless_cgroup(daemon, out, err)
+        if code:
+            raise CgroupUnavailable(CGROUP_PROBE_FAILURES.get(code, 'probe command failed'))
         out.seek(0); raw = out.read(513)
     sample = parse_cgroup_sample(raw)
     if sample['pids_max'] != 256 or sample['memory_max'] != 512 * 1024 * 1024:
