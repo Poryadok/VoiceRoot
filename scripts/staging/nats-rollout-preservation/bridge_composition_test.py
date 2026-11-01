@@ -735,10 +735,19 @@ class CompositionTests(unittest.TestCase):
         source=base/'native';source.mkdir();(source/'record.blk').write_bytes(b'known synthetic record with pending ACK')
         manifest=native_store.archive_closed_store(source,base/'rollout-before.tar')
         (base/'rollout-before-manifest.json').write_text(json.dumps(manifest));(base/'rollout-before-manifest.json').chmod(0o600)
-        nonce='a'*64;state={'operation':nonce[:12],'phase':'AWAITING_OFF_NODE','status':'WAITING','fence_status':'VERIFIED',
-            'target':{'changed_services':['web'],'mode':'images-only','tag':'c'*40},
+        import resource_claim
+        from resource_claim_test import MemoryJournal,card,context,scoped_target
+        nonce='a'*64;c=context();helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
+        session=resource_claim.Session(c,nonce[:12],resource_claim.digest(helper),lambda:card(c),MemoryJournal())
+        session.admit(start=True)
+        target=scoped_target(c);target.update(changed_services=['web'],mode='images-only')
+        session.journal.row['target_sha256']=resource_claim.digest(target)
+        state={'schema':'nats-rollout-root-v2','installation_sha256':session.installation.sha256,
+            'resource_fence':session.binding(),'code_capture':helper,
+            'operation':nonce[:12],'phase':'AWAITING_OFF_NODE','status':'WAITING','fence_status':'VERIFIED',
+            'target':target,
             'cut':{'manifest':manifest,'manifest_sha256':hashlib.sha256((base/'rollout-before-manifest.json').read_bytes()).hexdigest(),'census_sha256':'d'*64}}
-        actions=object.__new__(bridge_root.Actions)
+        actions=object.__new__(bridge_root.Actions);actions._installation=session.installation
         with patch.object(bridge_root,'INSTALLED',installed),patch('grp.getgrnam',return_value=type('G',(),{'gr_gid':65532})()):
             exported=actions._encrypt(base,state,{'dispatcher_run_id':123,'head_sha':'c'*40})
         self.assertEqual(state['cipher_binding']['operation'],nonce[:12]);self.assertEqual(len(state['cipher_binding']['challenge']),32)
