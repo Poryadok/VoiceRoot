@@ -691,14 +691,15 @@ class CompositionTests(unittest.TestCase):
             expected={'generation':p['generation'],'source_claim':p['dataPVC'],'source_claim_uid':'pvc','source_pv_uid':'pv'})
         return kube,p,targets,renderer_repo,old,stage
 
-    def test_compiler_catalog_stage_with_real_prerequisite_session(self):
-        """Real compiler and session; P2, NATS, actor, Realtime and Kube are fixtures."""
+    def _exercise_catalog_compiler(self,mode,policy_case='valid'):
+        """Real compiler and session; P2, NATS, actor, renderer, Realtime and Kube are fixtures."""
         import staging_prerequisites_test as fixtures, staging_prerequisites as prereq
         import staging_cohort_preservation as cohort
-        import source_plan_test as source, actor_root, realtime_bootstrap, resource_claim_test
+        import source_plan_test as source, actor_root, realtime_bootstrap, resource_claim_test, renderer_root, renderer_transition
         class ReachedCompiler(Exception):pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
-            kube,parameters,targets,renderer_repo,old,catalog=self._compiler_catalog_stage('app-only')
+            request=dict(request,mode=mode,changed_services=[])
+            kube,parameters,targets,renderer_repo,old,catalog=self._compiler_catalog_stage(mode)
             stage.snapshots=copy.deepcopy(catalog.snapshots)
             stage.snapshots.pop('voice-p3-principal-jwks')
             stage.snapshots.pop('voice-gameintegration')
@@ -712,6 +713,12 @@ class CompositionTests(unittest.TestCase):
             stage.old_images=copy.deepcopy(old)
             stage.marker['data'].update(generation=parameters['generation'],dataPVC=parameters['dataPVC'])
             live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
+            stage.expected.update(generation=parameters['generation'],source_claim=parameters['dataPVC'])
+            stage.final_claim['metadata']['name']=parameters['dataPVC']
+            live[('pvc',parameters['dataPVC'])]=copy.deepcopy(stage.final_claim)
+            stage.final_path=Path('/var/lib/rancher/k3s/storage/pvc-'+stage.final_claim['metadata']['uid']+'_voice-staging_'+parameters['dataPVC'])
+            stage.final_pv['spec']['local']['path']=str(stage.final_path)
+            live[('pv',stage.final_claim['spec']['volumeName'])]=copy.deepcopy(stage.final_pv)
             stage.expected['deployment_uids']={name:row['metadata']['uid'] for name,row in stage.snapshots.items()}
             card['observed']['images']=copy.deepcopy(old)
             self.assertEqual(actions.tt_session.check()['phase'],'prepare')
@@ -721,7 +728,15 @@ class CompositionTests(unittest.TestCase):
             source_record=workspace.parents[1]/'source-authority'/(actions.tt_session.operation+'.json')
             source_value=json.loads(source_record.read_bytes());source_value['approved_sha256']=prereq.digest(approved)
             bridge_root.save(source_record,source_value)
-            prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            def renderer_proof(kube,current,source_sha,image,**kwargs):
+                descriptor=renderer_transition.plan(current.snapshots[bridge_root.HUB],old[bridge_root.HUB+'/nats-config-renderer'],image,
+                    source_sha,renderer_root.storage(current))
+                return {'descriptor':descriptor,'broker_image':old[bridge_root.HUB+'/nats'],
+                    'output':{'sha256':'e'*64,'bytes':10,'verified':True},'input_binding':{}}
+            with patch.object(renderer_root,'prove',side_effect=renderer_proof) as renderer,patch.object(renderer_root,'revalidate'):
+                prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            if mode=='full':renderer.assert_called_once()
+            else:renderer.assert_not_called()
             session=actions.tt_session
             qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
             p2_plan={'actual_before':stage.old_images,'candidate':{'commit':session.context['commit'],'images':session.context['images']}}
@@ -744,17 +759,19 @@ class CompositionTests(unittest.TestCase):
                 loaded={'request':{'mode':request['mode'],'changed_services':request['changed_services'],'gis_first_install':True},
                     'approved':approved,'execution':execution,'workspace':str(workspace)}
                 public={'action':'authorize','operation':session.operation,'token':'fixture','artifact_id':42,'resource_context':session.context}
-                source_request=dict(request,nonce=session.operation+'a'*52)
+                source_request=dict(request,nonce=session.operation+'a'*52,resource_context=session.context)
                 real_read=cohort._read
                 def read(path,*args,**kwargs):
                     if path==cohort._request_record(session):return source_request
                     if path.name=='stores.json':return {'app_before':{'metadata':{}}}
+                    if path.name=='archive-record.json':return {'catalog_ref':{}}
+                    if path.name=='qualified.json':return qualified
                     return real_read(path,*args,**kwargs)
                 stack.enter_context(patch.object(bridge_root,'INSTALLED',workspace.parents[1]))
                 stack.enter_context(patch.object(cohort,'qualify_offnode'))
-                stack.enter_context(patch.object(cohort,'begin_continuation',return_value=(qualified,loaded)))
                 stack.enter_context(patch.object(cohort,'load_prepared',return_value=loaded))
-                stack.enter_context(patch.object(cohort,'require_continuation'))
+                stack.enter_context(patch.object(cohort,'load_plan',return_value={'namespace_uid':'namespace','prerequisite_inputs_sha256':prepared['inputs_sha256']}))
+                stack.enter_context(patch.object(cohort,'_offnode_records',return_value={'artifact_id':42}))
                 stack.enter_context(patch.object(cohort,'_read',side_effect=read))
                 stack.enter_context(patch.object(cohort,'capture_final_stage',side_effect=final_stage))
                 contract={'scripts':[]}
@@ -765,6 +782,10 @@ class CompositionTests(unittest.TestCase):
                 contract_path.parent.mkdir(parents=True,exist_ok=True);contract_path.write_text(json.dumps(contract));contract_path.chmod(0o600)
                 policy={key:value for key,value in parameters.items() if key in {'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}}
                 policy['release_policy']['source_sha']=approved['source_sha']
+                if policy_case=='null':policy['release_policy']=None
+                elif policy_case=='empty':policy['release_policy']={}
+                elif policy_case=='wrong-source':policy['release_policy']['source_sha']='f'*40
+                elif policy_case=='missing':del policy['release_policy']
                 private_read=bridge_root.private_json
                 stack.enter_context(patch.object(bridge_root,'private_json',side_effect=lambda path:policy if path==workspace.parents[1]/'policy.json' else private_read(path)))
                 stack.enter_context(patch.object(cohort,'load_preflight',return_value={'enrollment':{},'nats':{'scripts':{},'plan':{},'binding':{}},'contract':contract,'services':[],'actor':None}))
@@ -772,14 +793,33 @@ class CompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(bridge_root,'_cohort_story_composition',return_value={}))
                 stack.enter_context(patch.object(actor_root,'preflight',return_value=None))
                 stack.enter_context(patch.object(cohort,'_base',return_value=workspace))
+                stack.callback(cohort._continuations.pop,session,None)
                 stack.enter_context(patch.object(cohort,'_app_successor'))
                 stack.enter_context(patch.object(cohort,'record_actor_successor'))
+                stack.enter_context(patch.object(renderer_root,'revalidate'))
                 bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
                 stack.enter_context(patch.object(realtime_bootstrap,'run_prepare',return_value=bootstrap))
                 stack.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap))
                 compiler_phase=[False]
                 def report(name,status):
-                    if (name,status)==('policy-validation','STARTED'):compiler_phase[0]=True
+                    if (name,status)==('policy-validation','STARTED'):
+                        compiler_phase[0]=True
+                    if (name,status)==('target-build','STARTED'):
+                        if mode=='full':
+                            import stage_runtime, staging_cohort_preservation_pg as pg
+                            engine={'pod':{'uid':'pod','container_id':'container','restart_count':0},
+                                'pvc':{'uid':'pvc'},'pv':{'uid':'pv'}}
+                            old_engine={'namespace_uid':'namespace','pod_uid':'pod','pvc_uid':'pvc','pv_uid':'pv',
+                                'container_id':'container','restart_count':0,'system_identifier':'12345'}
+                            # Synthetic P2 records and external PostgreSQL observations;
+                            # guard_postgres itself and Session.check remain real.
+                            stack.enter_context(patch.object(cohort,'_record',return_value={'engine':old_engine,'server_start':'fixture'}))
+                            stack.enter_context(patch.object(realtime_bootstrap,'engine_snapshot',return_value=('namespace',engine)))
+                            def postgres_identity(args,body=None,timeout=30):
+                                self.assertEqual(args,pg.IDENTITY_ARGS)
+                                session.check(pg.owner.PREFIX+args)
+                                return {'system_identifier':'12345','server_start':'fixture'}
+                            stack.enter_context(patch.object(stage_runtime.Kube,'_run',side_effect=postgres_identity))
                 stack.enter_context(patch.object(actions,'_report',side_effect=report))
                 def capture(args,body=b'',**kwargs):
                     import commands
@@ -794,145 +834,54 @@ class CompositionTests(unittest.TestCase):
                 stack.enter_context(patch('commands.capture',side_effect=capture))
                 stack.enter_context(patch.object(bridge_root.source_authority,'_head'))
                 def compiled(value,*args,**kwargs):
+                    import guard_test, datetime as dt, resource_claim, resource_claim_test
                     self.assertEqual(len(value['nonnats']['checks']),16)
-                    self.assertEqual(value['target']['mode'],'app-only')
-                    self.assertFalse(any(key.startswith(bridge_root.HUB+'/') for key in value['target']['images']))
+                    self.assertEqual(value['target']['mode'],mode)
+                    self.assertEqual(any(key.startswith(bridge_root.HUB+'/') for key in value['target']['images']),mode=='full')
                     self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in value['manifests']))
                     self.assertEqual(kwargs['realtime_bootstrap_receipt'],bootstrap)
                     self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(bootstrap))
+                    authorization=guard_test.receipt()
+                    authorization.update(schema='nats-rollout-preservation-v2',installation_sha256=session.installation.sha256,target=copy.deepcopy(value['target']),
+                        backup={'archive_sha256':'1'*64,'manifest_sha256':'2'*64,'census_sha256':'3'*64,'off_node_verified':True},
+                        expires_at=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat())
+                    # The downstream transaction normally computes this after
+                    # server-side GIS normalization; this sink does not run it.
+                    authorization['target']['gis_first_install_normalized_sha256']='4'*64
+                    authorization['target']['input_template_hashes']=dict(value['target']['template_hashes'])
+                    fence_context=copy.deepcopy(session.context);fence_context['images']=copy.deepcopy(authorization['target']['images'])
+                    authorization['resource_fence']={'schema':'voice-staging-resource-fence-v2',
+                        'context':fence_context,'operation':authorization['operation'],'installation_sha256':session.installation.sha256,
+                        'helper_sha256':'b'*64,'target_sha256':resource_claim.digest(authorization['target'])}
+                    bridge_root.guard.validate(authorization,value['target']['registry'],value['target']['tag'],mode,[],workspace,installation=session.installation)
                     raise ReachedCompiler()
-                stack.enter_context(patch.object(bridge_root.root_cli,'prepare_preserved_value',side_effect=compiled))
-                with self.assertRaises(ReachedCompiler):actions.execute(public)
+                prepare=stack.enter_context(patch.object(bridge_root.root_cli,'prepare_preserved_value',side_effect=compiled))
+                build=stack.enter_context(patch.object(bridge_root.compiler,'main',wraps=bridge_root.compiler.main))
+                if policy_case in ('null','empty','wrong-source'):
+                    with self.assertRaisesRegex(bridge_root.Blocked,'bridge_release_policy_invalid'):actions.execute(public)
+                    build.assert_not_called();prepare.assert_not_called()
+                elif policy_case=='missing':
+                    with self.assertRaisesRegex(ValueError,'release_policy_input_shape'):actions.execute(public)
+                    prepare.assert_not_called()
+                else:
+                    with self.assertRaises(ReachedCompiler):actions.execute(public)
+                    build.assert_called_once();prepare.assert_called_once()
                 self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
                 self.assertEqual(session.check()['phase'],'prerequisites-captured')
         context=resource_claim_test.context()
         context['images']={'voice-gameintegration/gameintegration':bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64}
+        if mode=='full':
+            context['images'].update({bridge_root.HUB+'/nats':'nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb',
+                bridge_root.HUB+'/nats-config-renderer':bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer@sha256:'+'d'*64})
         with patch.object(resource_claim_test,'context',return_value=context):
-            fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run,full_source=True,context_commit=source.TAG)
+            fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run,full_source=policy_case=='valid',context_commit=source.TAG)
 
     def test_root_prepare_full_and_app_only_actual_hub_catalog_reaches_canonical_compiler(self):
-        import compiler, source_plan_test as fixtures
-        from types import SimpleNamespace
-        root=Path('/var/lib/voice-nats-preservation');root.mkdir(exist_ok=True,mode=0o750)
         for mode in ('full','app-only'):
-            with self.subTest(mode=mode),tempfile.TemporaryDirectory(dir=root) as directory:
-                base=Path(directory);installed=base/'installed';(installed/'sources').mkdir(parents=True)
-                kube,p,targets,renderer_repo,old,stage=self._compiler_catalog_stage(mode)
-                snapshots=stage.snapshots
-                code=base/'code';(code/'nats-known-baseline').mkdir(parents=True)
-                contract={'scripts':[]}
-                for part in ('realtime','notification','search','analytics-chat'):
-                    raw=(fixtures.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')).read_bytes().split(b'---')[0]
-                    contract['scripts'].append({'part':part,'sha256':hashlib.sha256(fixtures.decoder(raw)['data']['bootstrap.sh'].encode()).hexdigest()})
-                (code/'nats-known-baseline/deployed-contract.json').write_text(json.dumps(contract))
-                optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}
-                policy={k:v for k,v in p.items() if k in optional};(installed/'policy.json').write_text(json.dumps(policy));(installed/'policy.json').chmod(0o600)
-                approved={'source_sha':p['tag'],'images':{name.removeprefix('voice-'):bridge_root.source_authority.REGISTRY+'/'+name.removeprefix('voice-')+'@sha256:'+'a'*64 for name in targets if name!='voice-p3-principal-jwks'}}
-                approved['images']['nats-hub-config-renderer']=renderer_repo+'@sha256:'+'d'*64
-                import renderer_root,renderer_transition,actor_root,staging_prerequisites
-                def renderer_proof(kube,current,source_sha,image):
-                    descriptor=renderer_transition.plan(current.snapshots[bridge_root.HUB],old[bridge_root.HUB+'/nats-config-renderer'],image,
-                        source_sha,renderer_root.storage(current))
-                    return {'descriptor':descriptor,'broker_image':old[bridge_root.HUB+'/nats'],
-                        'output':{'sha256':'e'*64,'bytes':10,'verified':True},'input_binding':{}}
-                def capture_source(token,run,sha,workspace):
-                    for relative in ('scripts','deploy','src/backend/migrations','src/backend/auth/src/main/resources/db/migration','docker/clickhouse/init'):
-                        shutil.copytree(fixtures.SOURCE/relative,workspace/relative,dirs_exist_ok=True)
-                    return approved
-                def capture(args,body=b'',**kwargs):
-                    if args[1]=='create':return json.dumps(fixtures.decoder(body)).encode()
-                    if args[3:5]==['get','--raw']:return json.dumps(kube.run(args[3:])).encode()
-                    return json.dumps(kube.run(args[3:],None if not body else json.loads(body))).encode() if args[3] in ('apply','exec') else json.dumps(kube.get(args[4],args[5])).encode()
-                reached=[]
-                def prepare_value(value,*args,**kwargs):
-                    import guard_test,datetime as dt
-                    self.assertEqual(kwargs['realtime_bootstrap_receipt'],bootstrap)
-                    self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(bootstrap))
-                    authorization=guard_test.receipt()
-                    authorization.update(schema='nats-rollout-preservation-v1',target=copy.deepcopy(value['target']),
-                        backup={'archive_sha256':'1'*64,'manifest_sha256':'2'*64,'census_sha256':'3'*64,'off_node_verified':True},
-                        expires_at=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat())
-                    authorization['target']['input_template_hashes']=dict(value['target']['template_hashes'])
-                    import resource_claim,resource_claim_test
-                    authorization['resource_fence']={'schema':'voice-staging-resource-fence-v1',
-                        'context':resource_claim_test.context(),'operation':authorization['operation'],
-                        'helper_sha256':'b'*64,'target_sha256':resource_claim.digest(authorization['target'])}
-                    bridge_root.guard.validate(authorization,value['target']['registry'],value['target']['tag'],mode,[],installed/'sources'/('a'*12))
-                    reached.append(value);op=args[2];operation=base/('rollout-'+op);operation.mkdir()
-                    return {'operation':op,'target':value['target']}
-                actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={};actions.tt_session=Mock()
-                actions.tt_session.context={'images':{'voice-gateway/gateway':old['voice-gateway/gateway']}}
-                if mode=='full':
-                    actions.tt_session.context['images'].update({bridge_root.HUB+'/nats':snapshots[bridge_root.HUB]['spec']['template']['spec']['containers'][0]['image'],
-                        bridge_root.HUB+'/nats-config-renderer':approved['images']['nats-hub-config-renderer']})
-                bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
-                import realtime_bootstrap
-                from nats_contract_plan import digest
-                prior={'fixture':'prior-enrollment'}
-                for filename,record in (
-                    ('bootstrap-enrollment.json',prior),
-                    ('bootstrap-enrollment-v4.json',{'schema':'voice-nats-bootstrap-enrollment-v4','previous_enrollment':prior,'previous_enrollment_sha256':digest(prior)}),
-                ):
-                    path=base/filename;path.write_text(json.dumps(record));path.chmod(0o600)
-                execution={'dispatcher_run_id':123,'head_sha':p['tag']}
-                with ExitStack() as patches:
-                    patches.enter_context(patch.object(bridge_root,'INSTALLED',installed))
-                    patches.enter_context(patch.object(bridge_root.guard,'ROOT',base))
-                    patches.enter_context(patch.object(actions,'_idle'))
-                    patches.enter_context(patch.object(actions,'_dispatcher',return_value=(123,execution)))
-                    patches.enter_context(patch.object(bridge_root.source_authority,'capture_source',capture_source))
-                    patches.enter_context(patch.object(bridge_root,'record_source_authority'))
-                    patches.enter_context(patch.object(realtime_bootstrap,'run_prepare',return_value=bootstrap))
-                    patches.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap,create=True))
-                    patches.enter_context(patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})))
-                    # This compiler fixture has no real Kubernetes GIS API; GIS
-                    # authority and actual capture are exercised separately.
-                    patches.enter_context(patch('gis_existing_update.load_authority',return_value=None))
-                    patches.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
-                    patches.enter_context(patch('commands.capture',side_effect=capture))
-                    patches.enter_context(patch.object(compiler,'capture',side_effect=capture))
-                    # This fixture tests compilation with its own producer; the
-                    # bridge Kube above only models marker reads.
-                    patches.enter_context(patch.object(compiler,'prebootstrap_image_inventory',return_value={'voice-gateway/gateway':old['voice-gateway/gateway']}))
-                    renderer=patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
-                    coordinator=patches.enter_context(patch.object(staging_prerequisites,'run_prepare',side_effect=AssertionError('unqualified coordinator invoked')))
-                    patches.enter_context(patch.object(actor_root,'preflight',return_value=None))
-                    patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
-                    patches.enter_context(patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value))
-                    patches.enter_context(patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state))
-                    for digit,invalid in (('1',None),('2',{}),('3',dict(p['release_policy'],source_sha='f'*40))):
-                        with self.subTest(release_policy=invalid):
-                            (installed/'policy.json').write_text(json.dumps(dict(policy,release_policy=invalid)))
-                            with patch.object(bridge_root.compiler,'main') as build,patch.object(bridge_root.root_cli,'prepare_value') as prepare:
-                                with self.assertRaisesRegex(bridge_root.Blocked,'bridge_release_policy_invalid'):
-                                    actions._prepare({'nonce':digit*64,'token':'private','mode':mode,'changed_services':[]})
-                                build.assert_not_called();prepare.assert_not_called()
-                    missing={key:value for key,value in policy.items() if key!='release_policy'}
-                    (installed/'policy.json').write_text(json.dumps(missing))
-                    with patch.object(bridge_root.root_cli,'prepare_value') as prepare:
-                        with self.assertRaisesRegex(ValueError,'release_policy_input_shape'):
-                            actions._prepare({'nonce':'4'*64,'token':'private','mode':mode,'changed_services':[]})
-                        prepare.assert_not_called()
-                    (installed/'policy.json').write_text(json.dumps(policy))
-                    renderer.reset_mock()
-                    result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
-                    if mode=='full':renderer.assert_called_once()
-                    else:renderer.assert_not_called()
-                    coordinator.assert_not_called()
-                    # Required v4 admission cannot be bypassed by a private
-                    # but malformed JSON file. Stop before compilation/fencing.
-                    real_read=bridge_root.private_json
-                    for digit,invalid in (('b',None),('c',[]),('d','invalid')):
-                        with self.subTest(enrollment=invalid):
-                            def read(path):
-                                return invalid if path.name=='bootstrap-enrollment-v4.json' else real_read(path)
-                            with patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root.compiler,'main') as build,patch.object(bridge_root.root_cli,'prepare_value') as prepare:
-                                with self.assertRaisesRegex(bridge_root.Blocked,'enrolled_bootstrap_selection_refused'):
-                                    actions._prepare({'nonce':digit*64,'token':'private','mode':mode,'changed_services':[]})
-                                build.assert_not_called();prepare.assert_not_called()
-                self.assertEqual(result['target']['mode'],mode);self.assertEqual(len(reached[0]['nonnats']['checks']),16)
-                self.assertEqual(any(key.startswith(bridge_root.HUB+'/') for key in result['target']['images']),mode=='full')
-                self.assertFalse(any(row['metadata']['name']==bridge_root.HUB for row in reached[0]['manifests']))
+            for policy_case in ('null','empty','wrong-source','missing','valid'):
+                with self.subTest(mode=mode,policy=policy_case):
+                    self._exercise_catalog_compiler(mode,policy_case)
+
     def test_actual_root_cipher_binding_twelve_hex_operation_reaches_remote_readback(self):
         root=Path('/var/lib/voice-nats-preservation');root.mkdir(exist_ok=True,mode=0o750)
         base=Path(tempfile.mkdtemp(prefix='composition-',dir=root));self.addCleanup(lambda:shutil.rmtree(base))
