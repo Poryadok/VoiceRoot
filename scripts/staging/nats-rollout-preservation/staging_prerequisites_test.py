@@ -393,7 +393,7 @@ class PrepareCompositionTests(unittest.TestCase):
             relative += [str(path.relative_to(source_root)) for path in (source_root/'src/backend/migrations/game_integration_db').glob('*.sql')]
             if realtime_source:relative += ['deploy/templates/migrate-realtime-db-job.yaml','src/backend/migrations/realtime_db/000001_admission.up.sql']
             if full_source:
-                for prefix in ('deploy','docker','scripts/staging','scripts/storage','src/backend/migrations',
+                for prefix in ('deploy','docker','scripts/staging','scripts/storage','scripts/dev','scripts/deploy','src/backend/migrations',
                                'src/backend/auth/src/main/resources/db/migration'):
                     relative.extend(str(path.relative_to(source_root)) for path in (source_root/prefix).rglob('*') if path.is_file())
                 relative=list(dict.fromkeys(relative))
