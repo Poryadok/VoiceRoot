@@ -130,6 +130,14 @@ func (h *activationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		closeErr := h.controller.Shutdown(ctx)
 		request := CreationRequest{SourceID: claim.Binding.SourceID, Epoch: claim.Binding.Epoch, ControlSystemID: claim.ControlSystem, SourceSystemID: claim.Physical.SystemIdentifier, Database: claim.Physical.Database}
 		recoveryErr := RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
+		for errors.Is(recoveryErr, errRecoveryLeaderBusy) {
+			select {
+			case <-ctx.Done():
+				recoveryErr = ErrUnavailable
+			case <-time.After(25 * time.Millisecond):
+				recoveryErr = RecoverInterruptedActivation(ctx, h.controller.pool, h.admin, request, claim.Physical, claim.WriterRole)
+			}
+		}
 		if closeErr != nil || recoveryErr != nil {
 			h.controller.mu.Lock()
 			h.controller.poisonLocked()

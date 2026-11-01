@@ -74,8 +74,18 @@ The `recover-activation` command also performs this operation with explicit
 physical-source and writer-role inputs. A new leader must receive a fresh
 challenge and new signed decision. `RECOVERY_REQUIRED` alone does not authorize
 reopening.
-Automatic external fencing on process loss and a complete deployed Ban proof
-remain open; do not enable this path without those controls. See
+The optional, separately operated `watch-activation` command uses the same
+explicit physical-source and writer-role inputs as `recover-activation`. After
+checking an active leader and its source binding, it emits `WATCHING`, monitors
+the leader lock, and holds that lock while it fences the source and writer after
+leader loss. It exits after recovery or on an error. If no leader is present at
+startup, it attempts recovery without emitting `WATCHING`.
+
+The monitor does not gate opening and cannot fence if it is itself absent or
+cannot reach either database. `WATCHING` is not proof of future supervision,
+exclusive custody or source continuity. Independent supervision, a safe
+admission gate, automatic fencing under monitor loss, and a complete deployed
+Ban proof remain open; do not enable this path without those controls. See
 [Backend gaps](../todo/backend.md#space).
 
 For an existing version-22 identity source, `quarantine-existing` first fences

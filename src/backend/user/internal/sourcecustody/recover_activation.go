@@ -2,11 +2,14 @@ package sourcecustody
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var errRecoveryLeaderBusy = fmt.Errorf("%w: recovery leader busy", ErrUnavailable)
 
 // RecoverInterruptedActivation closes admission, disables the independently
 // recorded writer, and fences the exact source. It does not requalify or reopen
@@ -28,7 +31,7 @@ func RecoverInterruptedActivation(ctx context.Context, control, maintenance *pgx
 	}
 	if !locked {
 		owner.Release()
-		return ErrUnavailable
+		return errRecoveryLeaderBusy
 	}
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 2*time.Second)
@@ -40,6 +43,13 @@ func RecoverInterruptedActivation(ctx context.Context, control, maintenance *pgx
 			owner.Release()
 		}
 	}()
+	return recoverActivationLocked(ctx, owner, control, maintenance, request, physical, writer)
+}
+
+// recoverActivationLocked requires the caller to retain leaderKey until it
+// returns. The independent monitor uses the same lock to prevent reopening
+// between detecting leader loss and completing the physical fence.
+func recoverActivationLocked(ctx context.Context, owner *pgxpool.Conn, control, maintenance *pgxpool.Pool, request CreationRequest, physical PhysicalSource, writer string) error {
 	var system, database string
 	var controlOID uint32
 	if owner.QueryRow(ctx, `SELECT system_identifier::text,current_database(),(SELECT oid FROM pg_database WHERE datname=current_database()) FROM pg_control_system()`).Scan(&system, &database, &controlOID) != nil || system != request.ControlSystemID || system == physical.SystemIdentifier || database != control.Config().ConnConfig.Database || controlOID == 0 {

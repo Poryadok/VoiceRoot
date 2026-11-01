@@ -104,7 +104,53 @@ func TestActivationOperatorRequiresMTLSAndSignedOneLeaderDecision(t *testing.T) 
 		t.Fatal("operator close returned while a capture permit was still held")
 	case <-time.After(150 * time.Millisecond):
 	}
+	// A separately running monitor may acquire leadership immediately after
+	// Shutdown releases it. Close must wait for that fence, not report a
+	// spurious failure while the competing recovery holds the lock.
+	monitorConn, err := control.Acquire(ctx)
+	require.NoError(t, err)
+	monitorPID := monitorConn.Conn().PgConn().PID()
+	waitCtx, stopWait := context.WithCancel(ctx)
+	lockResult := make(chan error, 1)
+	go func() {
+		_, lockErr := monitorConn.Exec(waitCtx, `SELECT pg_advisory_lock($1::bigint)`, leaderKey)
+		lockResult <- lockErr
+	}()
+	observed, acquired := false, false
+	t.Cleanup(func() {
+		stopWait()
+		if !observed {
+			acquired = <-lockResult == nil
+		}
+		if acquired {
+			_, _ = monitorConn.Exec(context.Background(), `SELECT pg_advisory_unlock($1::bigint)`, leaderKey)
+		}
+		monitorConn.Release()
+	})
+	require.Eventually(t, func() bool {
+		var waiting bool
+		return control.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted)`, monitorPID).Scan(&waiting) == nil && waiting
+	}, 5*time.Second, 25*time.Millisecond)
 	require.NoError(t, held.Release(ctx))
+	select {
+	case lockErr := <-lockResult:
+		observed = true
+		require.NoError(t, lockErr)
+		acquired = true
+	case <-time.After(5 * time.Second):
+		t.Fatal("monitor did not acquire leadership")
+	}
+	select {
+	case premature := <-result:
+		if premature.response != nil {
+			_ = premature.response.Body.Close()
+		}
+		t.Fatal("operator close failed while monitor held leadership")
+	case <-time.After(150 * time.Millisecond):
+	}
+	_, err = monitorConn.Exec(ctx, `SELECT pg_advisory_unlock($1::bigint)`, leaderKey)
+	require.NoError(t, err)
+	acquired = false
 	var closed *http.Response
 	select {
 	case outcome := <-result:

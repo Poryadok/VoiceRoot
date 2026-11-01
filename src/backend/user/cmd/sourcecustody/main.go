@@ -34,13 +34,16 @@ func main() {
 		if err == nil {
 			err = sourcecustody.RunCreation(ctx, cfg)
 		}
-	} else if len(os.Args) == 2 && (os.Args[1] == "inspect-writer-role" || os.Args[1] == "recover-activation") {
+	} else if len(os.Args) == 2 && (os.Args[1] == "inspect-writer-role" || os.Args[1] == "recover-activation" || os.Args[1] == "watch-activation") {
 		var cfg sourcecustody.WriterConfig
 		cfg, err = sourcecustody.LoadWriterConfig(os.LookupEnv)
 		if err == nil {
-			if os.Args[1] == "recover-activation" {
+			switch os.Args[1] {
+			case "watch-activation":
+				err = sourcecustody.WatchActivation(ctx, cfg, func() { fmt.Println("WATCHING") })
+			case "recover-activation":
 				err = sourcecustody.RunActivationRecovery(ctx, cfg)
-			} else {
+			default:
 				err = sourcecustody.RunWriterConfinement(ctx, cfg)
 			}
 		}
