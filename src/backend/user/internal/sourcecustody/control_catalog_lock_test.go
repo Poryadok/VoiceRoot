@@ -167,6 +167,20 @@ func TestControlCatalogLocksAcrossDatabases(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
+			// On PG16 authentication-time superuser authority survives ALTER
+			// ROLE; PG18 denies this particular escalation after demotion.
+			// Neither observation proves that retained sessions are fenced.
+			_, err = legacyConn.Exec(ctx, `SET SESSION AUTHORIZATION upgrade_admin`)
+			if version == "16-alpine" {
+				require.NoError(t, err)
+				var sessionUser string
+				require.NoError(t, legacyConn.QueryRow(ctx, `SELECT session_user`).Scan(&sessionUser))
+				require.Equal(t, "upgrade_admin", sessionUser)
+			} else {
+				var denial *pgconn.PgError
+				require.ErrorAs(t, err, &denial)
+				require.Equal(t, "42501", denial.Code)
+			}
 		})
 	}
 }
