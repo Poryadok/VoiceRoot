@@ -106,9 +106,11 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
         with patch.object(adapter,'_docker',side_effect=docker):
             with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as entered:adapter.__enter__()
             self.assertIn(adapter.name,str(entered.exception));self.assertIn('cid='+cid,str(entered.exception))
+            self.assertEqual(str(entered.exception.__cause__),'synthetic_inventory_unavailable')
             self.assertEqual(adapter.cid,cid)
             with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required') as exited:adapter.__exit__(None,None,None)
             self.assertIn(adapter.name,str(exited.exception));self.assertIn('cid='+cid,str(exited.exception))
+            self.assertEqual(str(exited.exception.__cause__),'synthetic_inventory_unavailable')
             self.assertEqual(adapter.cid,cid)
 
 
