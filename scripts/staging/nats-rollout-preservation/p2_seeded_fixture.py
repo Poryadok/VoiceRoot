@@ -83,6 +83,8 @@ class Retained:
         self._custody = None
         self._identity_custody = None
         self.identity_sha256 = None
+        self.private_seed = None
+        self.private_seed_sha256 = None
 
     def seal_identity_custody(self):
         row = self.base.lstat()
@@ -373,6 +375,25 @@ def _check_seed_boundary(handle, session, row, stage):
     handle.verify_custody()
 
 
+def _check_preflight_seed(session, stage, seed_census):
+    import staging_cohort_preservation as cohort
+    import transaction
+    from rollout_census import semantic, validate_snapshot
+    state=cohort._state(session)
+    live=transaction.require_original_live_census(stage,state['events'])
+    if semantic(validate_snapshot(live))!=semantic(validate_snapshot(seed_census)):
+        raise RuntimeError('owned_fixture_preflight_census_changed')
+
+
+def _check_private_seed(handle):
+    from native_store import verify_archive
+    from nats_contract_plan import digest
+    if (handle.private_seed is None or digest(handle.private_seed)!=handle.private_seed_sha256
+        or not verify_archive(handle.base/'seed.tar',handle.private_seed['manifest'])
+        or handle.runtime.inspect(handle.private_seed['broker'])['State']['Running']):
+        raise RuntimeError('owned_fixture_private_seed_changed')
+
+
 def reconcile_containers(handle, assert_reconciled):
     """After caller reconciliation remove only exactly owned test containers.
 
@@ -465,12 +486,44 @@ def prepare_owned_identity(base, *, bundle_root, source_root, input_sha256, on_r
     return handle
 
 
-def seed_prepared(handle, stage, *, session):
-    """Seed the captured selected store using the previously enrolled identity."""
+def prepare_private_seed(handle):
+    """Populate and close the private broker before a Session observes its census."""
     require_hosted()
-    from stage_runtime import selected_store_descriptor
     from docker_runtime import DockerRuntime, NATS_IMAGE
     from native_store import archive_closed_store
+    from rollout_census import census
+    from scenario import ready
+    from nats_contract_plan import digest
+    from types import SimpleNamespace
+    handle.verify_identity()
+    if handle.private_seed is not None:raise RuntimeError('owned_fixture_seed_already_prepared')
+    base=handle.base
+    runtime = DockerRuntime(base,'ownedp2'+uuid.uuid4().hex[:12]);handle.runtime=runtime;handle.register(runtime)
+    store = base/'seed-store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
+    broker = runtime.start_broker('seed',store);ready(runtime,broker);runtime.bootstrap(broker)
+    seeded = runtime.kernel(broker,'seed')/'fixture.json'
+    snapshot = base/'inputs/fixture.json';snapshot.write_bytes(seeded.read_bytes());snapshot.chmod(0o440);os.chown(snapshot,0,65532)
+    for suffix, command in (('baseline-record-seed','seed-contract'),('extra-seed','extra'),('record-verify','verify')):
+        _run_owned(runtime,suffix,NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel',command],broker)
+    account = (base/'inputs/account.public').read_text().strip()
+    tree=runtime.monitor_jsz(broker)
+    before = census(SimpleNamespace(monitor_jsz=lambda _:copy.deepcopy(tree)),broker,account)
+    if sum(row['state']['messages'] for row in before['streams']) != 9 or len(before['consumers']) != 45:
+        raise RuntimeError('owned_fixture_census_invalid')
+    runtime.stop(broker)
+    if runtime.inspect(broker)['State']['Running']:raise RuntimeError('owned_fixture_seed_not_closed')
+    archive = base/'seed.tar';manifest = archive_closed_store(store,archive)
+    handle.verify_identity()
+    handle.private_seed={'broker':broker,'account':account,'census':before,'monitor_tree':tree,'manifest':manifest}
+    handle.private_seed_sha256=digest(handle.private_seed)
+    handle._checkpoint(handle)
+    return {'census':copy.deepcopy(before),'monitor_tree':copy.deepcopy(tree)}
+
+
+def seed_prepared(handle, stage, *, session):
+    """Restore the pre-observed seed into the captured, fenced selected store."""
+    require_hosted()
+    from stage_runtime import selected_store_descriptor
     from rollout_census import census, semantic
     from scenario import ready
     from resource_claim import Session
@@ -480,8 +533,10 @@ def seed_prepared(handle, stage, *, session):
         raise RuntimeError('owned_fixture_session_changed')
     if not isinstance(stage,RolloutStage) or stage.operation!=session.operation:
         raise RuntimeError('owned_fixture_stage_changed')
+    _check_private_seed(handle)
     row=copy.deepcopy(session.check())
     stage.verify_final_storage()
+    _check_preflight_seed(session,stage,handle.private_seed['census'])
     if handle._custody is not None:raise RuntimeError('owned_fixture_store_already_bound')
     base=handle.base;selected_path=Path(stage.final_path)
     claim,pv,hub=stage.final_claim,stage.final_pv,stage.snapshots[HUB]
@@ -496,20 +551,11 @@ def seed_prepared(handle, stage, *, session):
     handle.seal_custody();handle._checkpoint(handle)
     def still_fenced():
         _check_seed_boundary(handle,session,row,stage)
-    runtime = DockerRuntime(base,'ownedp2'+uuid.uuid4().hex[:12]);handle.runtime=runtime;handle.register(runtime)
-    store = base/'seed-store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
-    broker = runtime.start_broker('seed',store);ready(runtime,broker);runtime.bootstrap(broker)
-    seeded = runtime.kernel(broker,'seed')/'fixture.json'
-    snapshot = base/'inputs/fixture.json';snapshot.write_bytes(seeded.read_bytes());snapshot.chmod(0o440);os.chown(snapshot,0,65532)
-    for suffix, command in (('baseline-record-seed','seed-contract'),('extra-seed','extra'),('record-verify','verify')):
-        _run_owned(runtime,suffix,NATS_IMAGE,[(base/'helper','/kernel',False),(base/'inputs','/inputs',False)],['/kernel',command],broker)
-    account = (base/'inputs/account.public').read_text().strip()
-    before = census(runtime,broker,account)
-    if sum(row['state']['messages'] for row in before['streams']) != 9 or len(before['consumers']) != 45:
-        raise RuntimeError('owned_fixture_census_invalid')
-    runtime.stop(broker)
+        _check_preflight_seed(session,stage,handle.private_seed['census'])
+        _check_private_seed(handle)
+    runtime=handle.runtime;broker=handle.private_seed['broker'];account=handle.private_seed['account']
+    before=handle.private_seed['census'];manifest=handle.private_seed['manifest'];archive=base/'seed.tar'
     if runtime.inspect(broker)['State']['Running']:raise RuntimeError('owned_fixture_seed_not_closed')
-    archive = base/'seed.tar';manifest = archive_closed_store(store,archive)
     _restore_selected_after_fence(still_fenced,archive,manifest,selected_path)
     def closed():
         still_fenced()

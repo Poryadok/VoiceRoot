@@ -11,6 +11,33 @@ import p2_seeded_fixture as fixture
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_changed_preflight_census_blocks_restore(self):
+        import staging_cohort_preservation as cohort, transaction, rollout_census
+        seed={'streams':[{'name':'seed'}], 'consumers':[]}
+        live={'streams':[{'name':'different'}], 'consumers':[]}
+        with patch.object(cohort,'_state',return_value={'events':[]}), \
+             patch.object(transaction,'require_original_live_census',return_value=live), \
+             patch.object(rollout_census,'validate_snapshot',side_effect=lambda value:value), \
+             patch.object(fixture,'_restore_to_selected') as restore:
+            check=lambda:fixture._check_preflight_seed(object(),object(),seed)
+            with self.assertRaisesRegex(RuntimeError,'owned_fixture_preflight_census_changed'):
+                fixture._restore_selected_after_fence(check,'archive','manifest','selected')
+            restore.assert_not_called()
+
+    def test_private_archive_or_broker_drift_blocks_use(self):
+        from unittest.mock import Mock
+        import native_store
+        from nats_contract_plan import digest
+        handle=fixture.Retained(Path('/unused'),None,lambda _:None)
+        handle.private_seed={'manifest':{},'broker':'seed','census':{}}
+        handle.private_seed_sha256=digest(handle.private_seed);handle.runtime=Mock()
+        for archive_ok,running in ((False,False),(True,True)):
+            with self.subTest(archive_ok=archive_ok,running=running), \
+                 patch.object(native_store,'verify_archive',return_value=archive_ok):
+                handle.runtime.inspect.return_value={'State':{'Running':running}}
+                with self.assertRaisesRegex(RuntimeError,'owned_fixture_private_seed_changed'):
+                    fixture._check_private_seed(handle)
+
     def test_lost_fence_prevents_selected_restore(self):
         from unittest.mock import Mock
         for fault in ('session','writer'):
@@ -51,6 +78,12 @@ class AdmissionTests(unittest.TestCase):
                 handle.installation=foreign.installation;handle.identity_sha256=handle.identity_digest()
                 with self.assertRaisesRegex(RuntimeError,'owned_fixture_stage_changed'):
                     fixture.seed_prepared(handle,None,session=foreign)
+                self.assertIsNone(handle.store)
+                from runtime_stage import RolloutStage
+                stage=object.__new__(RolloutStage);stage.operation=foreign.operation
+                handle.private_seed={'census':{'messages':9}};handle.private_seed_sha256='0'*64
+                with self.assertRaisesRegex(RuntimeError,'owned_fixture_private_seed_changed'):
+                    fixture.seed_prepared(handle,stage,session=foreign)
                 self.assertIsNone(handle.store)
                 for change in ('enrollment','credential'):
                     with self.subTest(change=change):
