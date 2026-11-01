@@ -7,6 +7,7 @@ owns the Session, the public action and all restore/custody assertions.
 import copy
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -29,11 +30,56 @@ class HostedPostgres:
         if result.returncode:raise RuntimeError('isolated_postgres_command_failed')
         return result.stdout
 
+    def _ids(self,selector):
+        raw=self._docker('ps','-a','--no-trunc','--filter',selector,'--format','{{.ID}}')
+        ids=raw.decode('ascii').splitlines()
+        if len(ids)>1 or any(not re.fullmatch('[a-f0-9]{64}',value) for value in ids):
+            raise RuntimeError('isolated_postgres_inventory_ambiguous')
+        return ids
+
+    def _verify(self,cid):
+        rows=json.loads(self._docker('inspect',cid))
+        if (not isinstance(rows,list) or len(rows)!=1 or rows[0].get('Id')!=cid
+            or rows[0].get('Name')!='/'+self.name
+            or rows[0].get('Config',{}).get('Labels',{}).get('voice.test.owner')!=self.name):
+            raise RuntimeError('isolated_postgres_identity_changed')
+
+    def _find(self):
+        ids=self._ids('name=^/'+self.name+'$')
+        if not ids:return None
+        self._verify(ids[0])
+        return ids[0]
+
+    def _cleanup(self):
+        named=self._find()
+        if self.cid is not None:
+            by_id=self._ids('id='+self.cid)
+            if by_id and (by_id!=[self.cid] or named!=self.cid):
+                raise RuntimeError('isolated_postgres_identity_changed')
+            if not by_id and named is not None:
+                raise RuntimeError('isolated_postgres_identity_changed')
+        elif named is not None:self.cid=named
+        if self.cid is not None and named is not None:
+            try:self._docker('rm','-f','-v',self.cid)
+            except BaseException:
+                if not self._ids('id='+self.cid) and self._find() is None:
+                    self.cid=None
+                    return
+                raise
+        if ((self.cid is not None and self._ids('id='+self.cid)) or self._find() is not None):
+            raise RuntimeError('isolated_postgres_cleanup_unconfirmed')
+        self.cid=None
+
     def __enter__(self):
         from auth_user_adoption_runtime import QUALIFIED_TOOLS
-        self.cid=self._docker('create','--name',self.name,'--network','none','--label','voice.test.owner='+self.name,
-            '-e','POSTGRES_PASSWORD=isolated-test-only','-e','POSTGRES_USER=postgres',QUALIFIED_TOOLS['postgres']).decode().strip()
         try:
+            created=self._docker('create','--name',self.name,'--network','none','--label','voice.test.owner='+self.name,
+                '-e','POSTGRES_PASSWORD=isolated-test-only','-e','POSTGRES_USER=postgres',QUALIFIED_TOOLS['postgres']).decode().strip()
+            if not re.fullmatch('[a-f0-9]{64}',created):
+                raise RuntimeError('isolated_postgres_create_identity_invalid')
+            self.cid=created
+            if self._find()!=self.cid:
+                raise RuntimeError('isolated_postgres_create_identity_invalid')
             self._docker('start',self.cid)
             deadline=time.monotonic()+60
             while time.monotonic()<deadline:
@@ -46,13 +92,13 @@ class HostedPostgres:
                 body=b"CREATE TABLE public.preservation_fixture(id integer PRIMARY KEY, value text); INSERT INTO public.preservation_fixture VALUES(1,'kept');")
             return self
         except BaseException:
-            self.__exit__(None,None,None)
+            try:self._cleanup()
+            except BaseException as cleanup:
+                raise RuntimeError('isolated_postgres_reconciliation_required:'+self.name) from cleanup
             raise
 
     def __exit__(self,*_args):
-        if self.cid is not None:
-            cid,self.cid=self.cid,None
-            self._docker('rm','-f','-v',cid)
+        self._cleanup()
 
     def _objects(self):
         def metadata(name,uid):return {'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1'}
