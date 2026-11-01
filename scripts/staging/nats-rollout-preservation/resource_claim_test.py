@@ -138,10 +138,17 @@ class ResourceTests(unittest.TestCase):
             session.check(ch)
             for bad in (ch[:-1]+['DROP DATABASE voice'],ch[:5]+['other-pod']+ch[6:],ch+['--context=other']):
                 with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
-            pg=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+source_plan.postgres_read_args('gateway_db')
-            session.check(pg)
-            for bad in (pg[:-1]+['DROP DATABASE voice'],pg[:5]+['other-pod']+pg[6:],pg+['--context=other']):
-                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            for pg_prefix in (['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'],
+                              ['kubectl','--namespace','voice-staging']):
+                for database in ('postgres','gateway_db'):
+                    pg=pg_prefix+source_plan.postgres_read_args(database)
+                    session.check(pg)
+                    for index in range(len(pg)):
+                        bad=pg.copy();bad[index]+='-altered'
+                        with self.subTest(argv=pg,index=index),self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                            session.check(bad)
+                    for bad in (pg+['--context=other'],pg[:-1],pg_prefix+['exec','other-pod','--','sh']):
+                        with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             fixed=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+identity.IDENTITY_ARGS
             session.check(fixed)
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(fixed+['altered'])
