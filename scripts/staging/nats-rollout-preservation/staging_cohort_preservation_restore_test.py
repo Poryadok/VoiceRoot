@@ -34,14 +34,15 @@ from auth_user_adoption_runtime import QUALIFIED_TOOLS
 
 class HostedPostgresLifecycleTests(unittest.TestCase):
     """Test-only Docker responses; this does not prove hosted isolation."""
-    def fixture(self,*,create_lost=False,remove_lost=None,foreign=False):
+    def fixture(self,*,create_lost=False,remove_lost=None,foreign=False,delayed=False):
         from cohort_hosted_pg import HostedPostgres
         adapter=object.__new__(HostedPostgres);adapter.name='voice-cohort-source-'+'a'*24
-        adapter.cid=None;adapter.observed_cid=None;adapter.original_popen=subprocess.Popen
+        adapter.cid=None;adapter.observed_cid=None;adapter.create_uncertain=False;adapter.reconciliation_error=None
+        adapter.original_popen=subprocess.Popen
         cid='b'*64;state={'exists':not create_lost,'removed':0}
         def docker(*args,body=None):
             if args[0]=='create':
-                state['exists']=True
+                state['exists']=not delayed
                 if create_lost:raise RuntimeError('synthetic_create_reply_lost')
                 return cid.encode()
             if args[:2]==('ps','-a'):
@@ -58,11 +59,22 @@ class HostedPostgresLifecycleTests(unittest.TestCase):
             raise AssertionError('unexpected fixture command')
         return adapter,cid,state,docker
 
-    def test_lost_create_reply_is_reconciled_by_exact_name_and_label(self):
+    def test_lost_create_reply_preserves_identity_for_reconciliation(self):
         adapter,cid,state,docker=self.fixture(create_lost=True)
         with patch.object(adapter,'_docker',side_effect=docker):
-            with self.assertRaisesRegex(RuntimeError,'synthetic_create_reply_lost'):adapter.__enter__()
-        self.assertFalse(state['exists']);self.assertEqual(state['removed'],1);self.assertIsNone(adapter.cid)
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required'):adapter.__enter__()
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_create_terminality_unknown'):adapter.__exit__(None,None,None)
+        self.assertTrue(state['exists']);self.assertEqual(state['removed'],0)
+        self.assertIsNone(adapter.cid);self.assertEqual(adapter.observed_cid,cid)
+
+    def test_delayed_create_after_empty_scan_still_requires_reconciliation(self):
+        adapter,cid,state,docker=self.fixture(create_lost=True,delayed=True)
+        with patch.object(adapter,'_docker',side_effect=docker):
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_reconciliation_required'):adapter.__enter__()
+            self.assertIsNone(adapter.observed_cid)
+            state['exists']=True
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_create_terminality_unknown'):adapter.__exit__(None,None,None)
+        self.assertTrue(state['exists']);self.assertEqual(state['removed'],0)
 
     def test_remove_failure_retains_identity_and_lost_success_is_reconciled(self):
         for fault in ('before','after'):
