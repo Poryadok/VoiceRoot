@@ -690,6 +690,13 @@ Caller-provided hashes identify bytes but do not authenticate tool or downloaded
 dependency provenance. This Windows diagnostic does not prove hosted Linux lint
 parity; the planner check remains `not_run`, and the result cannot authorize handoff.
 
+For planner-selected `match-squad-overlay`, `--overlay-image-id` opts into a
+Linux diagnostic using the pinned Python image already present on the owned
+daemon. It runs the selected source in a network-isolated container with a
+read-only source mount and checks the discovered test count and absence of skips.
+Image provenance, daemon custody and crash recovery are not established by this
+diagnostic. The check remains `not_run` and preflight remains incomplete.
+
 When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
 the local inputs for experimental owned staging, proofs and policy shard executions. The JSON
 object must contain exactly the absolute paths `helper`, `jq`, `postgres_image`,

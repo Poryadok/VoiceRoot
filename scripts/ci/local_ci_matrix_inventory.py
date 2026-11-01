@@ -10,10 +10,10 @@ import re
 import sys
 
 
-MAKEFILE_SHA256 = 'c141ff9ff807b05a9812aa8c4a14d163f25f917e95ca384f5c06a257bb1d8a86'
+MAKEFILE_SHA256 = '31bc23401258df4e266ae9b5ad40133468316282f731c50d4301490a38cd6b07'
 WORKFLOW_SHA256 = 'e036f5fc2b1a8241bd2728c7bc80e01fad9cf57d4f480dbf86dbc0852d21f4aa'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
-SHARD_RECIPE_COUNTS = {'policy': 75, 'runtime': 23, 'staging': 34, 'proofs': 15}
+SHARD_RECIPE_COUNTS = {'policy': 76, 'runtime': 23, 'staging': 34, 'proofs': 15}
 
 
 def _sha(data):

@@ -26,6 +26,7 @@ import local_flutter_execution
 import local_go_plan
 import local_go_full_integration
 import local_golangci_execution
+import local_overlay_execution
 import local_proto_execution
 from local_process_supervision import SupervisionError
 import local_source_snapshot
@@ -202,7 +203,7 @@ def _validate_full_go_report(result, service, source, inputs, output):
 
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
         auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None,
-        full_go_inputs=None, lint_inputs=None):
+        full_go_inputs=None, lint_inputs=None, overlay_inputs=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -233,6 +234,11 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if overlay_inputs is not None:
+            if (not isinstance(overlay_inputs, dict) or set(overlay_inputs) != {'image_id'} or
+                    overlay_inputs['image_id'] != local_overlay_execution.PYTHON_IMAGE or
+                    'match-squad-overlay' not in plan['checks']):
+                raise ValueError('planner-selected overlay requires pinned Python image identity')
         if lint_inputs is not None:
             keys = {'go', 'go_sha256', 'lint', 'lint_sha256'}
             if (not isinstance(lint_inputs, dict) or set(lint_inputs) != keys or
@@ -365,6 +371,27 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                     diagnostic['r23'].get('skipped') != []):
                 raise ValueError('protobuf diagnostic failed or does not match the planned source and base')
             report['checks']['protobuf'] = {'status': 'diagnostic', 'report': 'protobuf/diagnostic.json'}
+        if overlay_inputs is not None:
+            diagnostic = local_overlay_execution.run_supervised(root, plan, output / 'overlay', base=base,
+                                                                head_ref=head_ref, **overlay_inputs)
+            tests = diagnostic.get('tests') if isinstance(diagnostic, dict) else None
+            journal = diagnostic.get('ownership_journal') if isinstance(diagnostic, dict) else None
+            if (not isinstance(diagnostic, dict) or diagnostic.get('schema') != 'voice-local-overlay-diagnostic-v1' or
+                    diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
+                    diagnostic.get('modules') != list(local_overlay_execution.MODULES) or
+                    diagnostic.get('image_id') != overlay_inputs['image_id'] or
+                    not isinstance(diagnostic.get('version'), str) or
+                    not re.fullmatch(r'Python 3\.12\.[0-9]+', diagnostic['version']) or
+                    type(diagnostic.get('slot')) is not int or diagnostic['slot'] not in (0, 1) or
+                    not isinstance(journal, str) or Path(journal).is_absolute() or '..' in Path(journal).parts or
+                    not Path(journal).parts or Path(journal).parts[0] != 'run' or Path(journal).name != 'ownership.json' or
+                    not isinstance(tests, dict) or type(tests.get('discovered')) is not int or
+                    tests['discovered'] < 1 or tests.get('passed') != tests['discovered'] or tests.get('skipped') != [] or
+                    any(not isinstance(diagnostic.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', diagnostic[key])
+                        for key in ('stdout_sha256', 'stderr_sha256', 'source_archive_sha256')) or
+                    not isinstance(diagnostic.get('unbound_inputs'), list) or not diagnostic['unbound_inputs']):
+                raise ValueError('overlay diagnostic does not match selected source and inventory')
+            report['overlay_report'] = 'overlay/diagnostic.json'
         if lint_inputs is not None:
             diagnostic = local_golangci_execution.run(root, plan, output / 'golangci', base=base, head_ref=head_ref,
                                                       **lint_inputs)
@@ -471,6 +498,7 @@ def main():
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
     for name in ('go', 'go-sha256', 'lint', 'lint-sha256'):
         parser.add_argument('--golangci-' + name, help='opt-in source-bound Go lint tool input')
+    parser.add_argument('--overlay-image-id', help='pinned Linux Python image ID for overlay diagnostic')
     parser.add_argument('--chat-helper', help='explicit rootless creator executable path')
     parser.add_argument('--chat-helper-sha256')
     parser.add_argument('--chat-postgres-archive')
@@ -519,12 +547,14 @@ def main():
         full_go_inputs = json.loads(raw, object_pairs_hook=local_go_full_integration.chat._unique)
     lint_inputs = {'go': args.golangci_go, 'go_sha256': args.golangci_go_sha256,
                    'lint': args.golangci_lint, 'lint_sha256': args.golangci_lint_sha256}
+    overlay_inputs = {'image_id': args.overlay_image_id}
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter,
                  args.head_ref, args.go, args.buf, chat if any(value is not None for value in chat.values()) else None,
                  auth if any(value is not None for value in auth.values()) else None,
                  compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images,
                  full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs,
-                 lint_inputs if any(value is not None for value in lint_inputs.values()) else None)
+                 lint_inputs if any(value is not None for value in lint_inputs.values()) else None,
+                 overlay_inputs if any(value is not None for value in overlay_inputs.values()) else None)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 
