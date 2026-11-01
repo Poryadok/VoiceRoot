@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -44,6 +45,22 @@ func TestWatchActivationDetectsReplacementLeader(t *testing.T) {
 
 func TestWatchActivationReportsUnfencedReplacement(t *testing.T) {
 	watchActivationFixture(t, "replacement-timeout")
+}
+
+func TestWatchActivationRecoversLeaderLossDuringStartup(t *testing.T) {
+	watchActivationFixture(t, "startup-loss")
+}
+
+func TestWatchActivationStartupLossRejectsWrongPin(t *testing.T) {
+	watchActivationFixture(t, "startup-wrong-pin")
+}
+
+func TestWatchActivationRecoversCancelledStartupLeaderLoss(t *testing.T) {
+	watchActivationFixture(t, "startup-canceled")
+}
+
+func TestWatchActivationRecoversLossAfterVerification(t *testing.T) {
+	watchActivationFixture(t, "startup-after-verify")
 }
 
 func watchActivationFixture(t *testing.T, mode string) {
@@ -117,6 +134,74 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	held, _, err := controller.AcquireAttested(ctx, binding)
 	require.NoError(t, err)
 	defer func() { _ = held.Release(context.Background()) }()
+	if mode == "startup-loss" || mode == "startup-wrong-pin" || mode == "startup-canceled" || mode == "startup-after-verify" {
+		cfg := WriterConfig{Recovery: RecoveryConfig{ControlURL: controlURL, SourceAdminURL: adminURL, Request: request, Physical: physical}, WriterRole: "custody_app"}
+		watchCtx, stopWatch := context.WithCancel(ctx)
+		defer stopWatch()
+		if mode == "startup-wrong-pin" {
+			cfg.Recovery.Physical.DatabaseOID++
+		}
+		hookResult := make(chan error, 1)
+		afterProbe := func() {
+			_, err := control.Exec(ctx, `UPDATE user_custody_state SET state='CLOSED' WHERE singleton`)
+			if err == nil {
+				var terminated bool
+				err = control.QueryRow(ctx, `SELECT pg_terminate_backend($1,5000)`, controller.leader.Conn().PgConn().PID()).Scan(&terminated)
+				if err == nil && !terminated {
+					err = fmt.Errorf("leader was not terminated")
+				}
+			}
+			if mode == "startup-canceled" || mode == "startup-after-verify" {
+				stopWatch()
+			}
+			hookResult <- err
+		}
+		ready := make(chan struct{}, 1)
+		done := make(chan error, 1)
+		go func() {
+			if mode == "startup-after-verify" {
+				done <- watchActivation(watchCtx, cfg, func() { ready <- struct{}{} }, nil, afterProbe)
+			} else {
+				done <- watchActivation(watchCtx, cfg, func() { ready <- struct{}{} }, afterProbe, nil)
+			}
+		}()
+		select {
+		case err := <-hookResult:
+			require.NoError(t, err)
+		case <-time.After(15 * time.Second):
+			t.Fatal("monitor did not reach startup probe")
+		}
+		select {
+		case err := <-done:
+			if mode == "startup-wrong-pin" {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		case <-time.After(35 * time.Second):
+			t.Fatal("monitor did not fence after startup leader loss")
+		}
+		select {
+		case <-ready:
+			t.Fatal("monitor must not report readiness after leader loss")
+		default:
+		}
+		var phase string
+		var allowed, login bool
+		require.NoError(t, control.QueryRow(ctx, `SELECT phase FROM user_custody_creation WHERE singleton`).Scan(&phase))
+		require.NoError(t, admin.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname='custody_app') FROM pg_database WHERE oid=$1`, physical.DatabaseOID).Scan(&allowed, &login))
+		if mode == "startup-wrong-pin" {
+			require.Equal(t, "ACTIVE", phase)
+			require.True(t, allowed)
+			require.True(t, login)
+			return
+		}
+		require.Equal(t, "RECOVERED_CLOSED", phase)
+		require.False(t, allowed)
+		require.False(t, login)
+		require.Error(t, writer.Ping(ctx))
+		return
+	}
 	if mode != "leader-loss" {
 		watchCtx, stop := context.WithCancel(ctx)
 		defer stop()

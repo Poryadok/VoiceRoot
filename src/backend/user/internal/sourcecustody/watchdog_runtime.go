@@ -15,6 +15,10 @@ import (
 // Once leader loss is observed, the monitor holds the leader lock through the
 // complete physical fence, so another leader cannot reopen in the interval.
 func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) error {
+	return watchActivation(parent, cfg, ready, nil, nil)
+}
+
+func watchActivation(parent context.Context, cfg WriterConfig, ready func(), afterProbe, afterVerify func()) error {
 	r := cfg.Recovery
 	if parent == nil || parent.Err() != nil || ready == nil || !validControlURL(r.ControlURL) || !validControlURL(r.SourceAdminURL) || forbiddenPGEnvironment() || !databaseName.MatchString(cfg.WriterRole) || !sourceIDPattern.MatchString(r.Request.SourceID) || r.Request.Epoch <= 0 || !databaseName.MatchString(r.Request.Database) || !systemID.MatchString(r.Request.ControlSystemID) || !systemID.MatchString(r.Request.SourceSystemID) || r.Request.ControlSystemID == r.Request.SourceSystemID || r.Physical.SystemIdentifier != r.Request.SourceSystemID || r.Physical.Database != r.Request.Database || r.Physical.DatabaseOID == 0 {
 		return ErrUnavailable
@@ -68,8 +72,20 @@ func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) err
 		return err
 	}
 	if !locked {
+		if afterProbe != nil {
+			afterProbe()
+		}
 		if err = verifyWatchedActivation(parent, owner, control, maintenance, cfg); err != nil {
-			return err
+			// Verification can fail because the leader closed admission and
+			// disappeared after the first probe. Recover only if leadership is
+			// now ours; recovery independently validates the physical pin.
+			if probe() != nil || !locked {
+				return ErrUnavailable
+			}
+			goto fence
+		}
+		if afterVerify != nil {
+			afterVerify()
 		}
 		// Bind shutdown to the leader observed at readiness, including its
 		// backend start time so a recycled PID cannot identify a new process.
@@ -78,7 +94,7 @@ func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) err
 		if err = owner.QueryRow(parent, `SELECT a.pid,a.backend_start FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted`, leaderKey).Scan(&leaderPID, &leaderStarted); err != nil {
 			// The leader may have disappeared after verification. If its lock
 			// is now ours, fence rather than exiting without a monitor.
-			if !errors.Is(err, pgx.ErrNoRows) || probe() != nil || !locked {
+			if probe() != nil || !locked {
 				return ErrUnavailable
 			}
 			goto fence
