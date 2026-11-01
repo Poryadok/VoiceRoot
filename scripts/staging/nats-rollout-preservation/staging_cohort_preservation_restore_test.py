@@ -174,10 +174,10 @@ class RestoreTransportTests(unittest.TestCase):
                             prerequisite_dir=root/'installed'/'prerequisites'/session.operation
                             owner.private._private_directory(prerequisite_dir.parent);owner.private._private_directory(prerequisite_dir)
                             owner._write(prerequisite_dir/'capture.json',capture)
-                            target={'tag':session.context['commit'],'cohort_preservation_sha256':owner.digest(qualified),
+                            target={'tag':session.context['commit'],'mode':'app-only','cohort_preservation_sha256':owner.digest(qualified),
                                     'prerequisites_sha256':owner.digest(capture),'realtime_bootstrap_sha256':owner.digest(rt)}
                             final={**copy.deepcopy(continuation),'target':target,'phase':'AWAITING_OFF_NODE','status':'WAITING',
-                                   'cohort_preservation':qualified,'prerequisites':capture,'realtime_bootstrap':rt}
+                                   'cohort_preservation':qualified,'prerequisites':capture,'realtime_bootstrap':rt,'migrations':[]}
                             prepared['approved']={**approved,'source_sha':session.context['commit']}
                             with patch.object(owner,'_final_target',return_value=target), \
                                  patch.object(owner,'_lineage_snapshot',return_value={'fixture':'source-lineage'}), \
@@ -190,6 +190,20 @@ class RestoreTransportTests(unittest.TestCase):
                                 self.assertFalse((owner._base(session)/'authorizing.json').exists())
                                 admission=owner.issue_final_admission(session,base,final,request)
                                 self.assertIs(type(admission),owner.QualifiedFinalAdmission)
+                                from unittest.mock import Mock
+                                stage=Mock(operation=session.operation)
+                                final['phase']='DATABASE_MIGRATIONS'
+                                self.assertTrue(owner.validate_migration_admission(admission,session,base,final,stage,[],'app-only'))
+                                original_target=final['target'];final['target']=dict(original_target,tag='f'*40)
+                                with self.assertRaises(Exception):
+                                    owner.validate_migration_admission(admission,session,base,final,stage,[],'app-only')
+                                final['target']=original_target;final['phase']='PAUSED_APPLY'
+                                authorization={'target':target,'resource_fence':session.binding()}
+                                final['authorization']=authorization
+                                with patch.object(guard,'protected_receipt',return_value=authorization):
+                                    owner.complete_authorization(admission,session,base,final)
+                                    with self.assertRaisesRegex(Exception,'cohort_final_admission_not_issued'):
+                                        owner.complete_authorization(admission,session,base,final)
                             state=owner._state(session);original=copy.deepcopy(state)
                             state['events']=[{'foreign':'event'}];owner._save_state(session,state)
                             with self.assertRaisesRegex(Exception,'cohort_continuation_changed'):
