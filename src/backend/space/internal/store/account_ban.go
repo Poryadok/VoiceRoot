@@ -491,20 +491,28 @@ func (s *SpaceStore) BanAccount(ctx context.Context, in AccountBanInput) error {
 			if _, err = scoped.tx.Exec(ctx, `DELETE FROM space_members WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, in.SpaceID, profiles); err != nil {
 				return err
 			}
+			// Keep the original profile and statement order, including every row
+			// trigger, while sending the ordered statements in one batch.
+			retirements := &pgx.Batch{}
 			for _, profile := range profiles {
-				_, err = scoped.tx.Exec(ctx, `INSERT INTO space_account_ban_suppressions(space_id,profile_id,account_id,owner_generation,source_revision,episode_id,member_generation)
+				retirements.Queue(`INSERT INTO space_account_ban_suppressions(space_id,profile_id,account_id,owner_generation,source_revision,episode_id,member_generation)
  SELECT h.space_id,h.profile_id,$3,h.owner_generation,COALESCE(a.roster_source_revision,0),h.episode_id,h.generation FROM space_community_member_heads h
  LEFT JOIN community_owner_authority a ON a.space_id=h.space_id WHERE h.space_id=$1 AND h.profile_id=$2
  ON CONFLICT(space_id,profile_id) DO UPDATE SET owner_generation=EXCLUDED.owner_generation,source_revision=CASE WHEN EXCLUDED.owner_generation>space_account_ban_suppressions.owner_generation THEN EXCLUDED.source_revision ELSE GREATEST(space_account_ban_suppressions.source_revision,EXCLUDED.source_revision) END,episode_id=EXCLUDED.episode_id,member_generation=EXCLUDED.member_generation`, in.SpaceID, profile, in.AccountID)
-				if err != nil {
-					return err
+				retirements.Queue(`UPDATE community_roster_members SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, profile)
+				retirements.Queue(`DELETE FROM space_member_timeouts WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, profile)
+			}
+			retirementResults := scoped.tx.SendBatch(ctx, retirements)
+			defer retirementResults.Close()
+			for range profiles {
+				for range 3 {
+					if _, err = retirementResults.Exec(); err != nil {
+						return err
+					}
 				}
-				if _, err = scoped.tx.Exec(ctx, `UPDATE community_roster_members SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, profile); err != nil {
-					return err
-				}
-				if _, err = scoped.tx.Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, profile); err != nil {
-					return err
-				}
+			}
+			if err = retirementResults.Close(); err != nil {
+				return err
 			}
 			if _, err = scoped.tx.Exec(ctx, `INSERT INTO space_bans(space_id,account_id,banned_by_profile_id,reason) VALUES($1,$2,$3,$4) ON CONFLICT(space_id,account_id) DO UPDATE SET banned_by_profile_id=EXCLUDED.banned_by_profile_id,reason=EXCLUDED.reason,banned_at=clock_timestamp()`, in.SpaceID, in.AccountID, in.ActorProfileID, in.Reason); err != nil {
 				return err
