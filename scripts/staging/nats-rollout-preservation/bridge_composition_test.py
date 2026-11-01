@@ -115,6 +115,17 @@ def report_p3_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_qualified_public_fixture_requests_realtime_source_authority(self):
+        import staging_prerequisites_test as prerequisites
+        with tempfile.TemporaryDirectory(dir='/root') as retained, \
+             patch.dict(os.environ,{'VOICE_COHORT_RETAINED_ROOT':retained}), \
+             patch.object(prerequisites.PrepareCompositionTests,'_cold_prepare') as cold:
+            self._exercise_public_precut(enrolled=True,qualify=True)
+            self.assertIs(cold.call_args.kwargs['realtime_source'],True)
+            cold.reset_mock()
+            self._exercise_public_precut(enrolled=False,qualify=False)
+            self.assertIs(cold.call_args.kwargs['realtime_source'],False)
+
     def test_p3_failure_diagnostic_preserves_exception_without_sensitive_values(self):
         import contextlib,io
         marker='sensitive-fixture-value'
@@ -273,6 +284,9 @@ class CompositionTests(unittest.TestCase):
             pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             from docker_runtime import NATS_IMAGE
+            if qualify:
+                self.assertEqual(approved.get('schema'),'voice-source-authority-v1')
+                self.assertIs(approved.get('verified'),True)
             kube,params,policy=canonical_stores()
             if qualify:align_public_fixture_app_secret(kube,live)
             installed=workspace.parents[1]
@@ -661,7 +675,7 @@ class CompositionTests(unittest.TestCase):
             cohort.private._private_directory(retained)
             workspace_context=nullcontext(tempfile.mkdtemp(prefix='public-cohort-',dir=retained))
         prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
-            full_source=True,strict_helpers=True,source_overrides=overrides,workspace_context=workspace_context,
+            full_source=True,strict_helpers=True,realtime_source=qualify,source_overrides=overrides,workspace_context=workspace_context,
             fixture_complete_candidate=qualify)
 
     def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):

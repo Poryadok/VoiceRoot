@@ -283,6 +283,23 @@ class CatalogTests(unittest.TestCase):
                 bootstrap.run_prepare(SimpleNamespace(tt_session=None), {}, {}, {}, None, None)
             submit.assert_not_called()
 
+    def test_source_authority_metadata_is_required_before_source_recheck(self):
+        import resource_claim_test as fixtures
+        session, _, _ = fixtures.ResourceTests().fixture();session.admit(start=True)
+        actions=SimpleNamespace(tt_session=session,installation=session.installation)
+        request={'action':'prepare','mode':'full','nonce':session.operation+'b'*20}
+        execution={'head_sha':session.context['commit']}
+        approved={'source_sha':session.context['commit']}
+        with patch('commands.authority_guard',session.check), \
+             patch.object(bootstrap,'_verify_source_capture',side_effect=bootstrap.Blocked('source_checkpoint_reached')) as verify:
+            with self.assertRaisesRegex(bootstrap.Blocked,'realtime_bootstrap_authority_invalid'):
+                bootstrap.run_prepare(actions,request,approved,execution,None,None)
+            verify.assert_not_called()
+            approved.update(schema='voice-source-authority-v1',verified=True)
+            with self.assertRaisesRegex(bootstrap.Blocked,'source_checkpoint_reached'):
+                bootstrap.run_prepare(actions,request,approved,execution,None,None)
+            verify.assert_called_once_with(session,approved,execution)
+
     def test_wrong_installed_helper_map_and_wrong_transport_session_fail_before_sql(self):
         import guard
         import resource_claim_test as fixtures
