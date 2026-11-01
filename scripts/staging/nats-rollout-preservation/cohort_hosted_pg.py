@@ -15,6 +15,8 @@ import time
 
 
 DOCKER=['/usr/bin/docker','--host=unix:///var/run/docker.sock']
+ADMIN_USER='voice'
+ADMIN_PASSWORD='isolated-test-only'
 
 
 class HostedPostgres:
@@ -82,7 +84,7 @@ class HostedPostgres:
         from auth_user_adoption_runtime import QUALIFIED_TOOLS
         try:
             created=self._docker('create','--name',self.name,'--network','none','--label','voice.test.owner='+self.name,
-                '-e','POSTGRES_PASSWORD=isolated-test-only','-e','POSTGRES_USER=postgres',QUALIFIED_TOOLS['postgres']).decode().strip()
+                '-e','POSTGRES_PASSWORD='+ADMIN_PASSWORD,'-e','POSTGRES_USER='+ADMIN_USER,QUALIFIED_TOOLS['postgres']).decode().strip()
         except BaseException as error:
             # An empty scan does not prove the daemon stopped processing a
             # lost create request. Preserve the unique name for reconciliation.
@@ -99,12 +101,12 @@ class HostedPostgres:
             self._docker('start',self.cid)
             deadline=time.monotonic()+60
             while time.monotonic()<deadline:
-                result=subprocess.run(DOCKER+['exec',self.cid,'pg_isready','-h','127.0.0.1','-U','postgres'],
+                result=subprocess.run(DOCKER+['exec',self.cid,'pg_isready','-h','127.0.0.1','-U',ADMIN_USER],
                     stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
                 if result.returncode==0:break
                 time.sleep(.2)
             else:raise RuntimeError('isolated_postgres_not_ready')
-            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','postgres','-d','postgres',
+            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',
                 body=b"CREATE TABLE public.preservation_fixture(id integer PRIMARY KEY, value text); INSERT INTO public.preservation_fixture VALUES(1,'kept');")
             return self
         except BaseException:
@@ -149,16 +151,33 @@ class HostedPostgres:
         return copy.deepcopy(self.rows[(kind.lower(),name)])
 
     def capture(self,argv,*,body=b'',fallback,**kwargs):
-        import commands,staging_cohort_preservation_pg as pg
+        import commands,resource_claim,staging_cohort_preservation_pg as pg
+        def authorize():
+            guard=commands.authority_guard;session=getattr(guard,'__self__',None)
+            bound=type(session) is resource_claim.Session and getattr(guard,'__func__',None) is resource_claim.Session.check
+            privileged=bound and session._prerequisite_readonly_permit is not None
+            if bound:
+                launch=commands.launch_snapshot(argv,body,kwargs.get('timeout',30),kwargs.get('limit',2<<20),
+                    kwargs.get('env'),kwargs.get('pass_fds',()))
+                guard(argv,launch=launch)
+            else:guard(argv)
+            if privileged:
+                if commands.authority_guard!=guard:raise RuntimeError('staging_resource_guard_changed')
+                session.readonly_current()
         if argv[:len(pg.EXEC)]==pg.EXEC:
-            commands.authority_guard(argv)
+            authorize()
             return self._docker('exec','-i',self.cid,*argv[len(pg.EXEC):],body=body)
         identity=pg.owner.PREFIX+pg.IDENTITY_ARGS
         if argv==identity:
-            commands.authority_guard(argv)
+            authorize()
+            return self._docker('exec',self.cid,*argv[argv.index('--')+1:])
+        import realtime_bootstrap
+        admin=pg.owner.PREFIX+['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',realtime_bootstrap._ADMIN_IDENTITY]
+        if argv==admin and body==b'':
+            authorize()
             return self._docker('exec',self.cid,*argv[argv.index('--')+1:])
         if argv[-5:]==['endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json']:
-            commands.authority_guard(argv)
+            authorize()
             return json.dumps(self.slices).encode()
         return fallback(argv,body=body,**kwargs)
 

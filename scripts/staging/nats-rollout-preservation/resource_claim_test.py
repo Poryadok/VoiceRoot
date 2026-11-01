@@ -45,6 +45,22 @@ class MemoryJournal:
 
 
 class ResourceTests(unittest.TestCase):
+    def test_captured_prerequisites_allow_only_postgres_endpoint_slice_observation(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        journal.row.update(phase='prerequisites-captured',target_sha256='d'*64)
+        session.expected_target='d'*64
+        prefix=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']
+        query=prefix+['get','endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json']
+        session.check(query)
+        foreign=query.copy();foreign[3]='voice-other'
+        for changed in (query[:-3]+['kubernetes.io/service-name=other','-o','json'],query+['extra'],query[1:],foreign):
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(changed)
+        journal.row['phase']='prerequisites'
+        with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(query)
+        journal.row.update(phase='prerequisites-captured',target_sha256=None);session.expected_target=None
+        with self.assertRaisesRegex(RuntimeError,'staging_executor_fence_closed_or_changed'):session.check(query)
+
     def test_cohort_target_requires_exact_root_qualified_receipt(self):
         import sys
         from unittest.mock import Mock
