@@ -208,6 +208,7 @@ class AdmissionTests(unittest.TestCase):
                 def run(self,args,**kwargs):
                     if args[0]=='ps':
                         if args[3]=='label='+__import__('docker_runtime').LABEL+'='+self.operation:
+                            if '--no-trunc' not in args:raise AssertionError('full IDs required')
                             return '\n'.join(self.present)
                         return ''
                     if args[0]=='rm':self.removed.append(args[-1]);self.present.remove(args[-1]);return ''
@@ -223,6 +224,11 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(runtime.removed,[])
             self.assertEqual(second.removed,[])
             second.present.remove('b'*64)
+            second.present={'c'*12}
+            with self.assertRaisesRegex(RuntimeError,'owned_fixture_cleanup_uncertain'):
+                fixture.reconcile_containers(handle,lambda _:True)
+            self.assertEqual(runtime.removed,[])
+            second.present={'c'*64}
             fixture.reconcile_containers(handle,lambda _:True)
             self.assertEqual(runtime.removed,['a'*64])
             self.assertEqual(second.removed,['c'*64])

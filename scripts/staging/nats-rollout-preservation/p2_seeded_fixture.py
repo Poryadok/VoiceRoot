@@ -413,7 +413,7 @@ def reconcile_containers(handle, assert_reconciled):
     from docker_runtime import LABEL
     inventories = []
     for runtime in handle.runtimes:
-        rows = runtime.run(['ps','-a','--filter','label='+LABEL+'='+runtime.operation,'--format','{{.ID}}']).splitlines()
+        rows = runtime.run(['ps','-a','--filter','label='+LABEL+'='+runtime.operation,'--format','{{.ID}}','--no-trunc']).splitlines()
         if len(rows)!=len(set(rows)):
             raise RuntimeError('owned_fixture_cleanup_uncertain')
         known = {row['id']:name for name,row in runtime.owned.items()}
@@ -423,7 +423,7 @@ def reconcile_containers(handle, assert_reconciled):
         for container_id in rows:runtime.inspect(known[container_id])
         inventories.append((runtime,rows,known))
     for runtime,rows,known in inventories:
-        current = runtime.run(['ps','-a','--filter','label='+LABEL+'='+runtime.operation,'--format','{{.ID}}']).splitlines()
+        current = runtime.run(['ps','-a','--filter','label='+LABEL+'='+runtime.operation,'--format','{{.ID}}','--no-trunc']).splitlines()
         if len(current)!=len(set(current)) or set(current)!=set(rows):
             raise RuntimeError('owned_fixture_cleanup_uncertain')
         for container_id in rows:
