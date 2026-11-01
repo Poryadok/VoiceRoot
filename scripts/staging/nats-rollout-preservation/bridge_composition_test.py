@@ -7,13 +7,34 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from unittest.mock import Mock, patch
 import bridge_root
 import encrypted_cut
 import github_custody
 import github_custody_test as http
 import native_store
+
+
+@contextmanager
+def captured_cohort_modules(code,dev_root):
+    """Temporarily load captured modules; callers must run sequentially."""
+    import importlib.util,sys
+    with ExitStack() as stack:
+        stack.enter_context(patch.dict(sys.modules,{}))
+        for name,loaded in list(sys.modules.items()):
+            filename=getattr(loaded,'__file__',None)
+            if filename and Path(filename).resolve().is_relative_to(dev_root):
+                sys.modules.pop(name,None)
+        base=Path(code)/'nats-rollout-preservation'
+        for name in ('staging_cohort_preservation','staging_cohort_preservation_runtime',
+                     'staging_cohort_preservation_pg','staging_cohort_preservation_auxiliary',
+                     'staging_cohort_preservation_auth'):
+            spec=importlib.util.spec_from_file_location(name,base/(name+'.py'))
+            module=importlib.util.module_from_spec(spec)
+            stack.enter_context(patch.dict(sys.modules,{name:module}))
+            spec.loader.exec_module(module)
+        yield
 
 
 def canonical_stores():
@@ -35,6 +56,22 @@ def canonical_stores():
 
 
 class CompositionTests(unittest.TestCase):
+    def test_captured_module_mapping_is_restored_after_import_failure(self):
+        import sys
+        from types import SimpleNamespace
+        import staging_cohort_preservation as original
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);code=root/'code'/'nats-rollout-preservation';code.mkdir(parents=True)
+            dev=root/'dev';dev.mkdir()
+            (code/'staging_cohort_preservation.py').write_text('fixture = True\n')
+            (code/'staging_cohort_preservation_runtime.py').write_text("raise RuntimeError('synthetic import failure')\n")
+            sentinel=SimpleNamespace(__file__=str(dev/'sentinel.py'))
+            with patch.dict(sys.modules,{'fixture_dev_sentinel':sentinel}):
+                with self.assertRaisesRegex(RuntimeError,'synthetic import failure'):
+                    with captured_cohort_modules(root/'code',dev):pass
+                self.assertIs(sys.modules['fixture_dev_sentinel'],sentinel)
+                self.assertIs(sys.modules['staging_cohort_preservation'],original)
+
     def test_public_prepare_binds_stores_before_enrollment_admission(self):
         """Synthetic source/Kube, real pre-cut and store projection; no P2 proof."""
         self._exercise_public_precut(enrolled=False)
@@ -278,30 +315,11 @@ class CompositionTests(unittest.TestCase):
                  patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)),\
                  patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source),ExitStack() as nats_patches:
                 if through_nats:
-                    import importlib.util, sys
                     # Source-owned dynamic modules must be loaded from the
                     # captured tree even if unittest discovery imported their
                     # working-tree equivalents before this test started.
-                    nats_patches.enter_context(patch.dict(sys.modules,{}))
                     dev_root=Path(__file__).resolve().parents[2]/'dev'
-                    for name,loaded in list(sys.modules.items()):
-                        filename=getattr(loaded,'__file__',None)
-                        if filename and Path(filename).resolve().is_relative_to(dev_root):
-                            sys.modules.pop(name,None)
-                    captured=actions.code/'nats-rollout-preservation'/'staging_cohort_preservation.py'
-                    spec=importlib.util.spec_from_file_location('staging_cohort_preservation',captured)
-                    module=importlib.util.module_from_spec(spec)
-                    nats_patches.enter_context(patch.dict(sys.modules,{'staging_cohort_preservation':module}))
-                    spec.loader.exec_module(module)
-                    # These modules retain a reference to the owner at import
-                    # time. Bind the captured copies even when test discovery
-                    # imported the working-tree modules earlier.
-                    for name in ('staging_cohort_preservation_runtime','staging_cohort_preservation_pg',
-                                 'staging_cohort_preservation_auxiliary','staging_cohort_preservation_auth'):
-                        spec=importlib.util.spec_from_file_location(name,captured.with_name(name+'.py'))
-                        child=importlib.util.module_from_spec(spec)
-                        nats_patches.enter_context(patch.dict(sys.modules,{name:child}))
-                        spec.loader.exec_module(child)
+                    nats_patches.enter_context(captured_cohort_modules(actions.code,dev_root))
                     nats_patches.enter_context(patch.object(bootstrap_auth,'DockerRuntime',
                         side_effect=lambda base,operation:cohort_fake_nats.ScratchBroker(base,operation,'A'+'A'*55)))
                     nats_patches.enter_context(patch.object(bootstrap_auth,'Actor',cohort_fake_nats.ScratchActor))
