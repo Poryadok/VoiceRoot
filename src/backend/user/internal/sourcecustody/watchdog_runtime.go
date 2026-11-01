@@ -2,8 +2,10 @@ package sourcecustody
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -52,7 +54,9 @@ func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) err
 		}
 	}()
 	probe := func() error {
-		ctx, cancel := context.WithTimeout(parent, 3*time.Second)
+		// Finish an in-flight probe even if shutdown arrives, so the monitor
+		// can perform its bounded fence instead of abandoning an uncertain lock.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if owner.QueryRow(ctx, `SELECT pg_try_advisory_lock($1::bigint)`, leaderKey).Scan(&locked) != nil {
 			uncertain = true
@@ -67,13 +71,48 @@ func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) err
 		if err = verifyWatchedActivation(parent, owner, control, maintenance, cfg); err != nil {
 			return err
 		}
+		// Bind shutdown to the leader observed at readiness, including its
+		// backend start time so a recycled PID cannot identify a new process.
+		var leaderPID int32
+		var leaderStarted time.Time
+		if err = owner.QueryRow(parent, `SELECT a.pid,a.backend_start FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted`, leaderKey).Scan(&leaderPID, &leaderStarted); err != nil {
+			// The leader may have disappeared after verification. If its lock
+			// is now ours, fence rather than exiting without a monitor.
+			if !errors.Is(err, pgx.ErrNoRows) || probe() != nil || !locked {
+				return ErrUnavailable
+			}
+			goto fence
+		}
 		ready()
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 		for !locked {
 			select {
 			case <-parent.Done():
-				return ErrUnavailable
+				// A normal monitor stop must not leave its observed leader
+				// serving without this monitor. Do not terminate a replacement
+				// leader if the old backend has already disappeared.
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				var terminated bool
+				err = owner.QueryRow(ctx, `SELECT pg_terminate_backend(a.pid) FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted AND a.pid=$2 AND a.backend_start=$3`, leaderKey, leaderPID, leaderStarted).Scan(&terminated)
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) || err == nil && !terminated {
+					return ErrUnavailable
+				}
+				for !locked {
+					if owner.QueryRow(ctx, `SELECT pg_try_advisory_lock($1::bigint)`, leaderKey).Scan(&locked) != nil {
+						uncertain = true
+						return ErrUnavailable
+					}
+					if !locked {
+						select {
+						case <-ctx.Done():
+							return ErrUnavailable
+						case <-ticker.C:
+						}
+					}
+				}
+				return recoverActivationLocked(ctx, owner, control, maintenance, r.Request, r.Physical, cfg.WriterRole)
 			case <-ticker.C:
 				if err = probe(); err != nil {
 					return err
@@ -81,6 +120,7 @@ func WatchActivation(parent context.Context, cfg WriterConfig, ready func()) err
 			}
 		}
 	}
+fence:
 	// Do not abandon an initiated fence merely because the caller disconnects.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

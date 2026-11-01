@@ -27,6 +27,19 @@ import (
 // A separately running monitor must fence the actual writer after the control
 // leader disappears. This fixture proves no deployment or external supervision.
 func TestWatchActivationFencesWriterAfterLeaderLoss(t *testing.T) {
+	watchActivationFixture(t, "leader-loss")
+}
+
+func TestWatchActivationFencesWriterOnShutdown(t *testing.T) {
+	watchActivationFixture(t, "shutdown")
+}
+
+func TestWatchActivationShutdownDoesNotTerminateReplacementLeader(t *testing.T) {
+	watchActivationFixture(t, "replacement")
+}
+
+func watchActivationFixture(t *testing.T, mode string) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("requires isolated TLS PostgreSQL servers and a child process")
 	}
@@ -96,6 +109,90 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	held, _, err := controller.AcquireAttested(ctx, binding)
 	require.NoError(t, err)
 	defer func() { _ = held.Release(context.Background()) }()
+	if mode != "leader-loss" {
+		watchCtx, stop := context.WithCancel(ctx)
+		defer stop()
+		ready := make(chan struct{})
+		done := make(chan error, 1)
+		cfg := WriterConfig{Recovery: RecoveryConfig{ControlURL: controlURL, SourceAdminURL: adminURL, Request: request, Physical: physical}, WriterRole: "custody_app"}
+		go func() { done <- WatchActivation(watchCtx, cfg, func() { close(ready) }) }()
+		select {
+		case <-ready:
+		case err := <-done:
+			t.Fatalf("monitor exited before readiness: %v", err)
+		case <-time.After(15 * time.Second):
+			t.Fatal("monitor did not become ready")
+		}
+		if mode == "replacement" {
+			replacement, err := control.Acquire(ctx)
+			require.NoError(t, err)
+			waitingCtx, cancelWait := context.WithCancel(ctx)
+			lockResult := make(chan error, 1)
+			joined, ownsLock := false, false
+			go func() {
+				_, err := replacement.Exec(waitingCtx, `SELECT pg_advisory_lock($1::bigint)`, leaderKey)
+				lockResult <- err
+			}()
+			defer func() {
+				cancelWait()
+				if !joined {
+					ownsLock = <-lockResult == nil
+				}
+				if ownsLock {
+					cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					_, _ = replacement.Exec(cleanup, `SELECT pg_advisory_unlock($1::bigint)`, leaderKey)
+					cancel()
+				}
+				replacement.Release()
+			}()
+			observer, err := pgxpool.NewWithConfig(ctx, control.Config().Copy())
+			require.NoError(t, err)
+			defer observer.Close()
+			require.Eventually(t, func() bool {
+				var waiting bool
+				return observer.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted)`, replacement.Conn().PgConn().PID()).Scan(&waiting) == nil && waiting
+			}, 10*time.Second, 25*time.Millisecond)
+			var terminated bool
+			require.NoError(t, observer.QueryRow(ctx, `SELECT pg_terminate_backend($1)`, controller.leader.Conn().PgConn().PID()).Scan(&terminated))
+			require.True(t, terminated)
+			select {
+			case err := <-lockResult:
+				joined = true
+				require.NoError(t, err)
+				ownsLock = true
+			case <-time.After(10 * time.Second):
+				t.Fatal("replacement leader did not acquire the lock")
+			}
+			stop()
+			select {
+			case err := <-done:
+				t.Fatalf("monitor returned while replacement held the lock: %v", err)
+			case <-time.After(300 * time.Millisecond):
+			}
+			require.NoError(t, replacement.Ping(ctx), "shutdown must not terminate the replacement leader")
+			var unlocked bool
+			require.NoError(t, replacement.QueryRow(ctx, `SELECT pg_advisory_unlock($1::bigint)`, leaderKey).Scan(&unlocked))
+			require.True(t, unlocked)
+			ownsLock = false
+		} else {
+			stop()
+		}
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(35 * time.Second):
+			t.Fatal("monitor did not fence on shutdown")
+		}
+		var phase string
+		require.NoError(t, control.QueryRow(ctx, `SELECT phase FROM user_custody_creation WHERE singleton`).Scan(&phase))
+		require.Equal(t, "RECOVERED_CLOSED", phase)
+		var allowed, login bool
+		require.NoError(t, admin.QueryRow(ctx, `SELECT datallowconn,(SELECT rolcanlogin FROM pg_roles WHERE rolname='custody_app') FROM pg_database WHERE oid=$1`, physical.DatabaseOID).Scan(&allowed, &login))
+		require.False(t, allowed)
+		require.False(t, login)
+		require.Error(t, writer.Ping(ctx), "already authenticated writer must be terminated")
+		return
+	}
 	binary := filepath.Join(t.TempDir(), "sourcecustody.exe")
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "../../cmd/sourcecustody")
 	output, err := build.CombinedOutput()

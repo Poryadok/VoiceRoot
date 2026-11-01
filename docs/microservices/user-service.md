@@ -80,6 +80,11 @@ checking an active leader and its source binding, it emits `WATCHING`, monitors
 the leader lock, and holds that lock while it fences the source and writer after
 leader loss. It exits after recovery or on an error. If no leader is present at
 startup, it attempts recovery without emitting `WATCHING`.
+On a normal stop after `WATCHING`, it attempts to terminate the same observed
+leader session and fence the source before exiting. It does not terminate a
+replacement leader, and reports failure if it cannot obtain the lock and fence
+within the bounded shutdown period. Operators must allow time for this work;
+forced termination cannot perform it.
 
 The monitor does not gate opening and cannot fence if it is itself absent or
 cannot reach either database. `WATCHING` is not proof of future supervision,
