@@ -96,6 +96,23 @@ class FullAuthInputsTests(unittest.TestCase):
                 subject.run(root, 'a' * 40, root / 'failed', root / 'helper', 'b' * 64,
                             'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, images)
 
+    def test_failure_summary_is_allowlisted_and_never_exposes_worker_text(self):
+        self.assertEqual(subject.failure_category(b'Traceback\nValueError: canonical Auth make target failed\nsecret=abc'),
+                         'canonical Auth target failed')
+        self.assertEqual(subject.failure_category(b'unknown secret=abc'), 'unclassified worker failure')
+        self.assertEqual(subject.failure_category(b'ValueError: GNU Make provisioning or client compatibility check failed\n'),
+                         'GNU Make provisioning or compatibility failed')
+        self.assertEqual(subject.failure_category(b'\xff' * 1048577), 'unclassified worker failure')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            failed = subprocess.CompletedProcess([], 1, b'', b'ValueError: canonical Auth make target failed\nsecret=abc')
+            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=failed):
+                with self.assertRaises(ValueError) as caught:
+                    subject.run(root, 'a' * 40, root / 'out', root / 'helper', 'b' * 64,
+                                'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
+            self.assertIn('canonical Auth target failed', str(caught.exception))
+            self.assertNotIn('secret', str(caught.exception))
+
     def test_worker_entry_refuses_unfenced_invocation_before_owned_work(self):
         with mock.patch.object(subject.sys, 'argv', ['worker', '--worker']), \
              mock.patch.object(subject, '_require_worker_job', side_effect=ValueError('unfenced')), \

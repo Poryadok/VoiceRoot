@@ -171,6 +171,22 @@ def _worker_command():
     return command
 
 
+def failure_category(stderr):
+    """Return only fixed labels, never worker output or test-controlled text."""
+    if not isinstance(stderr, bytes) or len(stderr) > 1024 * 1024:
+        return 'unclassified worker failure'
+    known = {
+        b'canonical Auth make target failed': 'canonical Auth target failed',
+        b'GNU Make provisioning or client compatibility check failed': 'GNU Make provisioning or compatibility failed',
+        b'GNU Make copy identity or version differs in client': 'GNU Make identity check failed',
+        b'pinned GNU Make source image is unavailable or has the wrong platform': 'GNU Make source image unavailable',
+        b'private Docker socket did not become ready': 'private Docker socket unavailable',
+    }
+    matches = [label for message, label in known.items()
+               if re.search(rb'(?m)^ValueError: ' + re.escape(message) + rb'\r?$', stderr)]
+    return matches[0] if len(matches) == 1 else 'unclassified worker failure'
+
+
 def run(root, head, output, helper, helper_digest, client_image_id, cache, cache_digest, images):
     """Run the owned worker through the Windows process broker, never inline."""
     request = {'root': str(root), 'head': head, 'output': str(output), 'helper': str(helper),
@@ -185,7 +201,8 @@ def run(root, head, output, helper, helper_digest, client_image_id, cache, cache
         error.add_note('Auth worker cleanup may be uncertain; inspect its ownership journal and slot.')
         raise
     if result.returncode != 0:
-        raise ValueError('full Auth worker failed; inspect its journal before recovery')
+        raise ValueError('full Auth worker failed (' + failure_category(result.stderr) +
+                         '); inspect its journal before recovery')
     try:
         report = json.loads(result.stdout, object_pairs_hook=_object)
         saved = json.loads((Path(output) / 'diagnostic.json').read_text(encoding='utf-8'), object_pairs_hook=_object)
