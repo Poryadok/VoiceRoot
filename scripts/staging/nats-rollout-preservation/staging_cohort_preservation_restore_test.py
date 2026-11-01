@@ -165,6 +165,31 @@ class RestoreTransportTests(unittest.TestCase):
                             continuation=owner.load_rollout_continuation(session)
                             self.assertEqual(continuation,{'cut':cut,'custody':custody,
                                 'provenance':{'external_nats_source_fixture':True},'contract':{},'events':[]})
+                            # Keep the real qualified receipt and continuation;
+                            # compiler target and downstream C1/prerequisite
+                            # records are synthetic boundary fixtures here.
+                            import realtime_bootstrap
+                            capture={'fixture':'prerequisite-capture'}
+                            rt={'schema':'voice-staging-realtime-bootstrap-receipt-v2','fixture':'realtime'}
+                            prerequisite_dir=root/'installed'/'prerequisites'/session.operation
+                            owner.private._private_directory(prerequisite_dir.parent);owner.private._private_directory(prerequisite_dir)
+                            owner._write(prerequisite_dir/'capture.json',capture)
+                            target={'tag':session.context['commit'],'cohort_preservation_sha256':owner.digest(qualified),
+                                    'prerequisites_sha256':owner.digest(capture),'realtime_bootstrap_sha256':owner.digest(rt)}
+                            final={**copy.deepcopy(continuation),'target':target,'phase':'AWAITING_OFF_NODE','status':'WAITING',
+                                   'cohort_preservation':qualified,'prerequisites':capture,'realtime_bootstrap':rt}
+                            prepared['approved']={**approved,'source_sha':session.context['commit']}
+                            with patch.object(owner,'_final_target',return_value=target), \
+                                 patch.object(owner,'_lineage_snapshot',return_value={'fixture':'source-lineage'}), \
+                                 patch.object(owner,'load_prepared',return_value=prepared), \
+                                 patch.object(owner.private,'load_capture',return_value=capture), \
+                                 patch.object(realtime_bootstrap,'load_completed',return_value=rt):
+                                bad=copy.deepcopy(final);bad['custody']={'fixture':'foreign'}
+                                with self.assertRaisesRegex(Exception,'cohort_final_lineage_changed'):
+                                    owner.issue_final_admission(session,base,bad,request)
+                                self.assertFalse((owner._base(session)/'authorizing.json').exists())
+                                admission=owner.issue_final_admission(session,base,final,request)
+                                self.assertIs(type(admission),owner.QualifiedFinalAdmission)
                             state=owner._state(session);original=copy.deepcopy(state)
                             state['events']=[{'foreign':'event'}];owner._save_state(session,state)
                             with self.assertRaisesRegex(Exception,'cohort_continuation_changed'):
