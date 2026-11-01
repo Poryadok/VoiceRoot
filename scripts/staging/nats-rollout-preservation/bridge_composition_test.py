@@ -113,6 +113,7 @@ class CompositionTests(unittest.TestCase):
         class ReachedFence(Exception):
             pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            from docker_runtime import NATS_IMAGE
             kube,params,policy=canonical_stores()
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
@@ -155,8 +156,9 @@ class CompositionTests(unittest.TestCase):
             kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
             kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
             stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
+            stage.old_images['voice-user/nats-leaf']=NATS_IMAGE
+            card['observed']['images']=copy.deepcopy(stage.old_images)
             if through_hub:
-                from docker_runtime import NATS_IMAGE
                 if through_storage:
                     import os,uuid
                     if not Path('/.dockerenv').exists() and os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted':

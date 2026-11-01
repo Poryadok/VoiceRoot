@@ -380,6 +380,7 @@ class PrepareCompositionTests(unittest.TestCase):
         import staging_p3_prerequisites as p3
         import staging_p3_prerequisites_crypto as crypto
         import staging_release_policy_prepare as policy
+        if strict_helpers and not full_source:raise ValueError('strict fixture requires the captured source tree')
         source_root=Path(os.environ.get('VOICE_TEST_SOURCE_ROOT',Path(__file__).resolve().parents[3]))
         if not (source_root/'deploy/staging/services.yaml').is_file():self.skipTest('requires actual source fixture')
         with tempfile.TemporaryDirectory(dir='/root') as folder, ExitStack() as stack:
@@ -430,6 +431,9 @@ class PrepareCompositionTests(unittest.TestCase):
             save(code/'capture-manifest.json',manifest)
             context=resource_claim_test.context()
             if context_commit is not None:context['commit']=context_commit
+            if strict_helpers:
+                game_image=bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64
+                context['images']={'voice-gameintegration/gameintegration':game_image}
             card=resource_claim_test.card(context)
             if strict_helpers:
                 import bootstrap_selection_test
@@ -440,13 +444,14 @@ class PrepareCompositionTests(unittest.TestCase):
             session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal,installation=installation)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
+            if strict_helpers:approved['images']['gameintegration']=game_image
             if not strict_helpers:
                 approved['source_files']['scripts/staging/'+helper]=manifest[helper]
                 approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
             if realtime_source:
                 approved.update(schema='voice-source-authority-v1',verified=True)
                 approved['source_files']['scripts/staging/nats-rollout-preservation/realtime_bootstrap.py']=manifest['nats-rollout-preservation/realtime_bootstrap.py']
-            approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
+            if not strict_helpers:approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
             execution={'fixture':'source selected by real bridge capture, modeled here'}
             if realtime_source:execution['head_sha']=context['commit']
             source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':operation,'context':context,'helper_sha256':session.helper,
@@ -560,10 +565,19 @@ class PrepareCompositionTests(unittest.TestCase):
             if not strict_helpers:
                 stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
                 stack.enter_context(patch.object(prereq,'BINARY_PINS',{}))
-            stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
+            if strict_helpers:
+                original_collector=prereq._source_module
+                metadata_dir=Path(__file__).parent/'fixtures'/'qualified-nginx'
+                def offline_collector(authority,source):
+                    module=original_collector(authority,source)
+                    module.collect=lambda:{name:(metadata_dir/(name+'.json')).read_bytes() for name in ('index','manifest','config')}
+                    return module
+                stack.enter_context(patch.object(prereq,'_source_module',side_effect=offline_collector))
+            else:stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
             stack.enter_context(patch.object(runtime_stage.RolloutStage,'capture',return_value=stage))
-            stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
-            stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
+            if not strict_helpers:
+                stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
+                stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
             stack.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get));stack.enter_context(patch.object(commands,'capture',side_effect=transport))
             stack.enter_context(patch.object(compiler,'capture',side_effect=transport));stack.enter_context(patch.object(stage_runtime,'capture',side_effect=transport))
             stack.enter_context(patch.object(p3,'probe_jwks',return_value=None));stack.enter_context(resource_claim.command_scope(session.check))
