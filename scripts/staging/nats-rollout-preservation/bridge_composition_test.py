@@ -69,6 +69,13 @@ def align_public_fixture_app_secret(kube,live):
     kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(combined)
 
 
+def monitor_pod_inventory(argv,through_hub,hub_released,monitor_pod):
+    """Supply the synthetic NATS pod only while its drain is in progress."""
+    if through_hub and not hub_released and argv[-3:]==['pods','-o','json']:
+        return json.dumps({'items':[monitor_pod]}).encode()
+    return None
+
+
 class CompositionTests(unittest.TestCase):
     def test_public_fixture_aligns_app_secret_before_prerequisite_capture(self):
         import source_plan, source_plan_test, staging_gis_material
@@ -94,9 +101,12 @@ class CompositionTests(unittest.TestCase):
     def test_changed_app_secret_still_refuses_before_prerequisite_patch(self):
         self._exercise_aligned_gis_preflight(drift=True)
 
-    def _exercise_aligned_gis_preflight(self,*,drift=False):
+    def test_p3_pod_inventory_uses_prerequisite_fixture_after_hub_release(self):
+        self._exercise_aligned_gis_preflight(post_hub_monitor=True)
+
+    def _exercise_aligned_gis_preflight(self,*,drift=False,post_hub_monitor=False):
         import staging_prerequisites as prereq, staging_cohort_preservation as cohort
-        import staging_prerequisites_test as fixture, staging_gis_material, stage_runtime
+        import staging_prerequisites_test as fixture, staging_gis_material, stage_runtime, commands
         def ready(actions,request,approved,execution,workspace,stage,live,transport,get,card):
             kube,_,_=canonical_stores()
             align_public_fixture_app_secret(kube,live)
@@ -116,6 +126,17 @@ class CompositionTests(unittest.TestCase):
                     with patch.object(stage_runtime.Kube,'get',side_effect=changed_get):
                         with self.assertRaisesRegex(staging_gis_material.MaterialError,'staging_gis_preflight_invalid'):
                             prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+                elif post_hub_monitor:
+                    monitor={'metadata':{'name':'synthetic-nats-monitor'}}; seen=[]
+                    argv=prereq.KUBE_PREFIX+['get','pods','-o','json']
+                    self.assertEqual(json.loads(monitor_pod_inventory(argv,True,False,monitor)),{'items':[monitor]})
+                    def captured(args,*,body=b'',**kwargs):
+                        result=monitor_pod_inventory(args,True,True,monitor)
+                        if args[-3:]==['pods','-o','json']:seen.append(args)
+                        return result if result is not None else transport(args,body=body,**kwargs)
+                    with patch.object(commands,'capture',side_effect=captured),patch.object(stage_runtime,'capture',side_effect=captured):
+                        prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+                    self.assertGreaterEqual(len(seen),2)
                 else:prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
             if drift:self.assertNotIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
             else:self.assertIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
@@ -367,8 +388,9 @@ class CompositionTests(unittest.TestCase):
                         if through_hub and 'exec' in argv and 'wget' in argv:
                             commands.authority_guard(argv)
                             return json.dumps(tree).encode()
-                        if through_hub and argv[-3:]==['pods','-o','json']:
-                            return json.dumps({'items':[live[('pod',monitor_pod['metadata']['name'])]]}).encode()
+                        inventory=monitor_pod_inventory(argv,through_hub,flags['hub_released'],
+                            live.get(('pod',monitor_pod['metadata']['name'])))
+                        if inventory is not None:return inventory
                         if postgres is not None and ('voice-postgres-0' in argv or 'endpointslices' in argv):
                             return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
                         if 'jsonpath-as-json=' in ' '.join(argv):
