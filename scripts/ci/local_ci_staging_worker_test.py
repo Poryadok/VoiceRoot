@@ -57,6 +57,17 @@ class WorkerBindingTests(unittest.TestCase):
             path.write_bytes(b'changed')
             with self.assertRaises(ValueError): worker.verify_policy_kubectl(path)
 
+    def test_phase0_inputs_require_both_exact_hashes(self):
+        root = Path(self.tmp.name)
+        jdk, compose = root / 'jdk', root / 'compose'
+        jdk.write_bytes(b'jdk'); compose.write_bytes(b'compose')
+        with patch.object(worker, 'PHASE0_JDK_HASH', hashlib.sha256(b'jdk').hexdigest()), \
+             patch.object(worker, 'PHASE0_COMPOSE_HASH', hashlib.sha256(b'compose').hexdigest()):
+            worker.verify_phase0_inputs({'phase0_jdk': jdk, 'phase0_compose': compose})
+            compose.write_bytes(b'corrupt')
+            with self.assertRaises(ValueError):
+                worker.verify_phase0_inputs({'phase0_jdk': jdk, 'phase0_compose': compose})
+
     def test_host_identity_and_cleanliness_fail_closed(self):
         good = [b'a' * 40 + b'\n', b'b' * 40 + b'\n', b'']
         with patch.object(worker, 'host_git', side_effect=good): worker.verify_host()

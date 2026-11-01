@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,31 @@ def rows():
     return [{'recipe':'$(BASH) "$(ROOT)/'+(m.PRESERVATION if i == 0 else 'scripts/ci/test%d.sh'%i)+'"'} for i in range(34)]
 
 class DispatchTests(unittest.TestCase):
+    def test_phase0_complementary_proof_binds_exact_source_and_tests(self):
+        root = Path(__file__).resolve().parents[2]
+        proof_id = '__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid'
+        normal_id = '__main__.FixtureTests.test_general_fixture_inputs_remain_readable_by_the_test_user'
+        skipped = (f'test_cleanup_restores_service_owned_fixture_for_real_caller_uid ({proof_id}) ... skipped '
+                   "'requires Linux root to exercise real service and caller UIDs'\n")
+        normal = f'test_general_fixture_inputs_remain_readable_by_the_test_user ({normal_id}) ... ok\n'
+        tree = ast.parse((root / 'scripts/ci/phase0-fixture_test.py').read_text(encoding='utf-8'))
+        names = [f'__main__.{cls.name}.{method.name}' for cls in tree.body if isinstance(cls, ast.ClassDef)
+                 for method in cls.body if isinstance(method, ast.FunctionDef) and method.name.startswith('test_')]
+        others = ''.join(f'{name.rsplit(".", 1)[1]} ({name}) ... ok\n'
+                         for name in names if name not in (normal_id, proof_id))
+        suite = (normal + others + skipped + '\nRan 78 tests in 1s\n\nOK (skipped=1)\n').encode()
+        proof = (f'test_cleanup_restores_service_owned_fixture_for_real_caller_uid ({proof_id}) ... ok\n'
+                 '\nRan 1 test in 1s\n\nOK\n').encode()
+        m.validate_phase0_proof(root, suite, proof)
+        with self.assertRaises(ValueError): m.validate_make_log(suite, shard='runtime')
+        m.validate_make_log(suite, shard='runtime', phase0_proof_verified=True)
+        with self.assertRaises(ValueError): m.validate_make_log(suite + b'\nother skipped\n', shard='runtime', phase0_proof_verified=True)
+        for bad_suite, bad_proof in ((suite, b'Ran 1 test in 1s\nOK\n'),
+                                     (suite.replace(b'... ok', b'... skipped', 1), proof),
+                                     (suite, proof.replace(b'... ok', b'... skipped')),
+                                     (suite.replace(b'Ran 78 tests', b'Ran 77 tests'), proof)):
+            with self.assertRaises(ValueError):
+                m.validate_phase0_proof(root, bad_suite, bad_proof)
     def test_policy_skip_logger_records_real_test_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

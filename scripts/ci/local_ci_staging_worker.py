@@ -26,6 +26,8 @@ NODE_IMAGE = 'sha256:9214e73b07d3828f371e8d5d8bfebdfa1b0625c3c82253a4cbd09d9c00e
 GO_IMAGE = 'sha256:a9daab691df2dfe118e5c6d3d6bd8fd6767ea2c9bf8fa3c9356161055dd7b97d'
 PYTHON_CLIENT = 'sha256:61d53b56a648da09aa966c5cc46a7e751aea2b38d01f33b04456a9f289685be9'
 CLI_IMAGE = 'sha256:7691a001d1bf70d960395ef367f9f008db5f8d7d18556b2b88303596a4384d51'
+PHASE0_JDK_HASH = request_contract.PHASE0_JDK_HASH
+PHASE0_COMPOSE_HASH = request_contract.PHASE0_COMPOSE_HASH
 from local_docker_owned import DockerCLI
 from local_docker_scheduled import ScheduledRun
 import local_chat_orchestration as chat
@@ -36,6 +38,11 @@ import local_source_snapshot as snapshot
 
 def verify_policy_kubectl(path):
     chat._verify_file(path, KUBECTL_HASH)
+
+
+def verify_phase0_inputs(assets):
+    chat._verify_file(assets['phase0_jdk'], PHASE0_JDK_HASH)
+    chat._verify_file(assets['phase0_compose'], PHASE0_COMPOSE_HASH)
 
 
 def configure(request):
@@ -133,6 +140,8 @@ def main():
     BASE.mkdir(exist_ok=False)
     chat._verify_file(HELPER, HELPER_HASH)
     chat._verify_file(JQ, JQ_HASH)
+    if SHARD == 'runtime':
+        verify_phase0_inputs(ASSETS)
     if SHARD == 'policy': verify_policy_kubectl(ASSETS['kubectl'])
     engine = DockerCLI()
     daemon_id = engine.daemon()
@@ -308,7 +317,7 @@ def main():
             raise RuntimeError('client package output exceeded limit')
         import importlib.util
         dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        dispatch_sha = '3dd045d98e2e1cad0ccce50131a3bdcd6bb1adb42556df58700df9590687e0a1'
+        dispatch_sha = 'f8ebcfc2332f439d72ffc64c324a12af0328a8fc9d40fa96789815bcfcb4ccf3'
         chat._verify_file(dispatch_path, dispatch_sha)
         spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
         dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
@@ -351,6 +360,49 @@ def main():
             if (BASE/'runtime-source-hash.stdout').read_text().split()[0] != source_hash:
                 raise RuntimeError('runtime source transfer differs')
             execute('runtime-source-extract', client, ['sh','-ec','mkdir /run/user/1000/source-mirror; tar --no-same-owner -xf /run/user/1000/source.tar -C /run/user/1000/source-mirror; tar -df /run/user/1000/source.tar -C /run/user/1000/source-mirror'], timeout=300)
+            # The proof has a separate owned source volume and network-none client.
+            # A loader holds no daemon socket and receives the exact Git archive.
+            proof_network = owner.create_resource('network')
+            proof_source = owner.create_resource('volume')
+            loader = owner.create_container(PYTHON_CLIENT, proof_network, {'/phase0-source': proof_source}, [], command=['sleep', 'infinity'])
+            owner.start_container(loader)
+            with source_tar.open('rb') as stream:
+                execute('phase0-source-transfer', loader, ['sh','-ec','set -C; cat > /tmp/source.tar'], timeout=300, stdin=stream)
+            execute('phase0-source-hash', loader, ['sha256sum', '/tmp/source.tar'])
+            if (BASE/'phase0-source-hash.stdout').read_text().split()[0] != source_hash:
+                raise RuntimeError('phase0 source transfer differs')
+            execute('phase0-source-extract', loader, ['sh','-ec','tar --no-same-owner -xf /tmp/source.tar -C /phase0-source; tar -df /tmp/source.tar -C /phase0-source'], timeout=300)
+            phase0 = owner.create_phase0_container(PYTHON_CLIENT, proof_source)
+            owner.start_container(phase0)
+            phase0_wheel_sha = 'ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc'
+            chat._verify_file(ASSETS['wheel'], phase0_wheel_sha)
+            with ASSETS['wheel'].open('rb') as stream:
+                execute('phase0-wheel-transfer', phase0, ['sh','-ec','set -C; cat > /tmp/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl'], timeout=120, stdin=stream)
+            chat._verify_file(ASSETS['wheel'], phase0_wheel_sha)
+            execute('phase0-wheel-hash', phase0, ['sha256sum','/tmp/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl'])
+            if (BASE/'phase0-wheel-hash.stdout').read_text().split()[0] != phase0_wheel_sha:
+                raise RuntimeError('phase0 wheel transfer differs')
+            execute('phase0-wheel-install', phase0, ['python3','-m','pip','install','--no-index','--disable-pip-version-check','/tmp/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl'], timeout=120)
+            for label, target in (('phase0-user', client), ('phase0-root', phase0)):
+                with ASSETS['phase0_jdk'].open('rb') as stream:
+                    execute(label+'-jdk-transfer', target, ['sh','-ec','set -C; cat > /tmp/phase0-jdk.tar.gz'], timeout=300, stdin=stream)
+                chat._verify_file(ASSETS['phase0_jdk'], PHASE0_JDK_HASH)
+                execute(label+'-jdk-hash', target, ['sha256sum','/tmp/phase0-jdk.tar.gz'])
+                if (BASE/(label+'-jdk-hash.stdout')).read_text().split()[0] != PHASE0_JDK_HASH:
+                    raise RuntimeError('phase0 JDK transfer differs')
+                execute(label+'-jdk-install', target, ['sh','-ec','mkdir /opt/phase0-jdk; tar -xzf /tmp/phase0-jdk.tar.gz --no-same-owner --strip-components=1 -C /opt/phase0-jdk; ln -s /opt/phase0-jdk/bin/keytool /usr/local/bin/keytool; keytool -help >/dev/null 2>&1'], timeout=300)
+            with ASSETS['phase0_compose'].open('rb') as stream:
+                execute('phase0-compose-transfer', client, ['sh','-ec','mkdir -p /usr/local/libexec/docker/cli-plugins; set -C; cat > /usr/local/libexec/docker/cli-plugins/docker-compose; chmod 555 /usr/local/libexec/docker/cli-plugins/docker-compose'], timeout=300, stdin=stream)
+            chat._verify_file(ASSETS['phase0_compose'], PHASE0_COMPOSE_HASH)
+            execute('phase0-compose-hash', client, ['sha256sum','/usr/local/libexec/docker/cli-plugins/docker-compose'])
+            if (BASE/'phase0-compose-hash.stdout').read_text().split()[0] != PHASE0_COMPOSE_HASH:
+                raise RuntimeError('phase0 Compose transfer differs')
+            execute('phase0-root-proof', phase0, ['bash','-ec',
+                'set -o pipefail; python3 /workspace/repo/scripts/ci/phase0-fixture_test.py '
+                '-k test_cleanup_restores_service_owned_fixture_for_real_caller_uid 2>&1 | head -c 16777217'], timeout=600)
+            if (BASE/'phase0-root-proof.stdout').stat().st_size > 16 * 1024 * 1024:
+                raise RuntimeError('phase0 root proof exceeded limit')
+            execute('phase0-source-after', loader, ['tar','-df','/tmp/source.tar','-C','/phase0-source'], timeout=300)
         (BASE / 'fixture-adapter.json').write_text(json.dumps({'canonical_argument_sha256':original_sha,
             'adapted_sha256':adapter_sha,'go_source_sha256':hashes}, indent=2))
         wrapper = """#!/bin/sh
@@ -506,6 +558,14 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         if SHARD == 'policy':
             execute('user-kubectl-check', client, common + ['sh','-ec','[ "$(command -v kubectl)" = /usr/local/bin/kubectl ]; [ ! -w /usr/local/bin/kubectl ]; sha256sum /usr/local/bin/kubectl; kubectl version --client'])
             if (BASE/'user-kubectl-check.stdout').read_text().splitlines()[0] != KUBECTL_HASH + '  /usr/local/bin/kubectl': raise RuntimeError('unprivileged kubectl differs')
+        if SHARD == 'runtime':
+            execute('phase0-user-tools', client, common + ['sh','-ec',
+                '[ "$(command -v keytool)" = /usr/local/bin/keytool ]; keytool -help >/dev/null 2>&1; '
+                '[ -z "$(find /opt/phase0-jdk -writable -print -quit)" ]; '
+                '[ ! -w /usr/local/libexec/docker/cli-plugins/docker-compose ]; '
+                'sha256sum /usr/local/libexec/docker/cli-plugins/docker-compose; docker compose version'])
+            if (BASE/'phase0-user-tools.stdout').read_text().splitlines()[0] != PHASE0_COMPOSE_HASH + '  /usr/local/libexec/docker/cli-plugins/docker-compose':
+                raise RuntimeError('unprivileged phase0 tools differ')
         execute('user-tool-check', client, common + ['sh','-ec','command -v go; go version; [ "$(command -v node)" = /usr/local/bin/node ]; node --version; [ "$(command -v jq)" = /usr/local/bin/jq ]; jq --version; [ "$(command -v docker)" = /usr/local/bin/docker ]; docker --version; [ ! -w /usr/local/bin ]; [ ! -w /usr/local/libexec ]; sha256sum /usr/local/bin/node /usr/local/bin/jq /usr/local/bin/docker /usr/local/libexec/voice-ci-docker; python3 --version; git --version; make --version | head -1; for x in bash openssl curl wget base64 tar timeout sha256sum awk sed; do command -v "$x"; done'])
         tool_output = (BASE/'user-tool-check.stdout').read_text()
         if SHARD == 'policy': tool_output += (BASE/'user-kubectl-check.stdout').read_text()
@@ -562,7 +622,11 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         if SHARD == 'staging' and cid_status != 0: raise RuntimeError('successful run lacks inner container identity')
         if SHARD in ('proofs', 'runtime', 'policy') and cid_status == 0: raise RuntimeError('unexpected preservation container')
         output = (BASE / 'preservation.stdout').read_bytes()
-        dispatch.validate_make_log(output, shard=SHARD)
+        if SHARD == 'runtime':
+            phase0_output = (BASE/'recipe-log-6.stdout').read_bytes()
+            proof_output = (BASE/'phase0-root-proof.stdout').read_bytes() + (BASE/'phase0-root-proof.stderr').read_bytes()
+            dispatch.validate_phase0_proof(ROOT, phase0_output, proof_output)
+        dispatch.validate_make_log(output, shard=SHARD, phase0_proof_verified=(SHARD == 'runtime'))
         count = dispatch.validate_events((BASE/'recipe-events.stdout').read_bytes(),recipes)
         skip_events = {}
         if SHARD == 'policy':
@@ -573,7 +637,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         for index in range(len(recipes)):
             data = (BASE/('recipe-log-'+str(index)+'.stdout')).read_bytes()
             if SHARD == 'policy': dispatch.validate_policy_recipe(index, data, skip_events.get(index, set()), expected_skips)
-            else: dispatch.validate_recipe(index,data,shard=SHARD)
+            elif SHARD != 'runtime' or index != 6: dispatch.validate_recipe(index,data,shard=SHARD)
         tests = 0
         if SHARD == 'staging':
             for marker in (b'PASS: hosted JWT resolver + TLS leaf + exact ACL proof', b'PASS: canonical hosted JWT/TLS bootstrap and least-privilege ACL proof', b'NATS_ROLLOUT_PRESERVATION=PASS valid-receipt-paused-apply-and-second-use-veto-all-modes'):

@@ -6,6 +6,42 @@ import shlex
 
 ROOT = '/workspace/repo/'
 PRESERVATION = 'scripts/ci/nats-rollout-preservation_test.sh'
+PHASE0_SOURCE_SHA256 = '3f7fde41dd779bfeb712265a475493160a47ecc748264d1f4505d369c8e70a49'
+PHASE0_ROOT_TEST = '__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid'
+PHASE0_USER_TEST = '__main__.FixtureTests.test_general_fixture_inputs_remain_readable_by_the_test_user'
+PHASE0_SKIP_REASON = 'requires Linux root to exercise real service and caller UIDs'
+
+
+def validate_phase0_proof(root, suite, proof):
+    """Bind the hosted UID-1000 suite's sole skip to its isolated root pass."""
+    source = (root / 'scripts/ci/phase0-fixture_test.py').read_bytes()
+    if hashlib.sha256(source).hexdigest() != PHASE0_SOURCE_SHA256:
+        raise ValueError('phase0 test source differs')
+    tree = ast.parse(source)
+    expected = {f'__main__.{cls.name}.{method.name}'.encode() for cls in tree.body if isinstance(cls, ast.ClassDef)
+                for method in cls.body if isinstance(method, ast.FunctionDef) and method.name.startswith('test_')}
+    if len(expected) != 78:
+        raise ValueError('phase0 test inventory differs')
+    def rows(data):
+        if not isinstance(data, bytes) or len(data) > 16 * 1024 * 1024:
+            raise ValueError('phase0 output exceeds limit')
+        events = re.findall(rb'(?m)^test_[^\r\n]* \((__main__\.[A-Za-z0-9_.]+)\) \.\.\. (ok|skipped \'[^\r\n]*\')\r?$', data)
+        if len(events) != len({event[0] for event in events}):
+            raise ValueError('duplicate phase0 test')
+        return dict(events)
+    observed = rows(suite)
+    root_result = rows(proof)
+    expected_skip = ("skipped '" + PHASE0_SKIP_REASON + "'").encode()
+    if (set(observed) != expected or observed.get(PHASE0_ROOT_TEST.encode()) != expected_skip or
+            observed.get(PHASE0_USER_TEST.encode()) != b'ok' or
+            sum(result != b'ok' for result in observed.values()) != 1 or
+            root_result != {PHASE0_ROOT_TEST.encode(): b'ok'} or
+            len(re.findall(rb'(?m)^Ran 78 tests in [^\r\n]+\r?$', suite)) != 1 or
+            len(re.findall(rb'(?m)^OK \(skipped=1\)\r?$', suite)) != 1 or
+            len(re.findall(rb'(?m)^Ran 1 test in [^\r\n]+\r?$', proof)) != 1 or
+            len(re.findall(rb'(?m)^OK\r?$', proof)) != 1 or
+            re.search(rb'(?m)^(?:FAIL|ERROR)', suite + b'\n' + proof)):
+        raise ValueError('phase0 complementary proof incomplete')
 
 
 def story_media_adapter(source, dockerfile, docker_cli_id, python_id):
@@ -110,8 +146,16 @@ def validate_events(data, recipes):
         raise ValueError('staging recipe execution incomplete or out of order')
     return len(recipes)
 
-def validate_make_log(data, *, shard='staging'):
-    if len(data) > 32*1024*1024 or (shard != 'policy' and re.search(rb'(?i)\bskip(?:ped)?\b', data)):
+def validate_make_log(data, *, shard='staging', phase0_proof_verified=False):
+    if len(data) > 32*1024*1024:
+        raise ValueError('staging Make output exceeded limit')
+    if shard == 'runtime' and phase0_proof_verified:
+        skip_line = (b'test_cleanup_restores_service_owned_fixture_for_real_caller_uid (' +
+                     PHASE0_ROOT_TEST.encode() + b") ... skipped '" + PHASE0_SKIP_REASON.encode() + b"'")
+        if data.splitlines().count(skip_line) != 1 or data.splitlines().count(b'OK (skipped=1)') != 1:
+            raise ValueError('phase0 hosted disposition differs')
+        data = b'\n'.join(line for line in data.splitlines() if line not in (skip_line, b'OK (skipped=1)'))
+    if shard != 'policy' and re.search(rb'(?i)\bskip(?:ped)?\b', data):
         raise ValueError('staging Make output skipped or exceeded limit')
 
 MARKERS = (

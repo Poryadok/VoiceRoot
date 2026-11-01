@@ -63,8 +63,11 @@ class RequestTests(unittest.TestCase):
         images = {name: {'archive': str(parent / name), 'sha256': 'd' * 64, 'image_id': 'sha256:' + 'e' * 64}
                   for name in ('postgres', 'docker_cli', 'python')}
         images['postgres']['image_id'] = 'sha256:75f5a96988cdf694a215073c3e9c001b706b371e2f94df3967f2efdec2787f6b'
-        request = dict(self.request, shard='runtime', runtime_images=images)
+        runtime_assets = dict(self.request['assets'], phase0_jdk=str(parent / 'jdk.tar.gz'),
+                              phase0_compose=str(parent / 'compose'))
+        request = dict(self.request, shard='runtime', runtime_images=images, assets=runtime_assets)
         self.assertEqual(staging.validate(request), request)
+        with self.assertRaises(ValueError): staging.validate(dict(request, assets=self.request['assets']))
         with self.assertRaises(ValueError): staging.validate(dict(self.request, shard='runtime'))
         for bad in (dict(images, postgres=dict(images['postgres'], image_id='sha256:' + 'f' * 64)),
                     dict(images, python=dict(images['python'], archive='relative')),

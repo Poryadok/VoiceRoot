@@ -87,6 +87,8 @@ class ExecutionTests(unittest.TestCase):
 
     def test_runtime_receipt_binds_all_23_recipes(self):
         self.request['shard'] = 'runtime'
+        self.request['assets'].update({name: str(Path(self.request['output']).parent / name)
+                                       for name in ('phase0_jdk', 'phase0_compose')})
         parent = Path(self.tmp.name)
         images = {key: {'archive': str(parent / key), 'sha256': 'd' * 64, 'image_id': 'sha256:' + 'e' * 64}
                   for key in ('postgres', 'docker_cli', 'python')}

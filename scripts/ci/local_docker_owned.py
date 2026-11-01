@@ -111,15 +111,21 @@ class DockerCLI:
                 if host.get('Privileged') or host.get('Binds'):
                     raise ValueError()
                 mounts = {}
+                readonly_mounts = []
                 for mount in value.get('Mounts', []):
                     if mount.get('Type') != 'volume' or mount.get('Destination') in mounts:
                         raise ValueError()
                     mounts[mount['Destination']] = mount['Name']
+                    if mount.get('RW') is False:
+                        readonly_mounts.append(mount['Destination'])
                 bindings = host.get('PortBindings') or {}
                 if bindings:
                     raise ValueError()
                 running = value.get('State', {}).get('Running')
                 if type(running) is not bool:
+                    raise ValueError()
+                networks = value.get('NetworkSettings', {}).get('Networks') or {}
+                if not isinstance(networks, dict):
                     raise ValueError()
                 if running:
                     actual = value.get('NetworkSettings', {}).get('Ports') or {}
@@ -127,8 +133,9 @@ class DockerCLI:
                         raise ValueError()
                 return {'id': identifier, 'name': value['Name'].removeprefix('/'), 'kind': kind,
                         'labels': value['Config'].get('Labels') or {}, 'image': value['Image'],
-                         'network': host['NetworkMode'], 'mounts': mounts, 'ports': [], 'running': running,
-                         'command': value['Config'].get('Cmd'), 'entrypoint': value['Config'].get('Entrypoint') or []}
+                         'network': host['NetworkMode'], 'mounts': mounts, 'readonly_mounts': sorted(readonly_mounts), 'ports': [], 'running': running,
+                         'command': value['Config'].get('Cmd'), 'entrypoint': value['Config'].get('Entrypoint') or [],
+                         'user': value['Config'].get('User') or '', 'network_attachments': sorted(networks)}
             else:
                 raise ValueError()
             return {'id': identifier, 'name': value['Name'], 'labels': value.get('Labels') or {}, 'kind': kind,
@@ -186,6 +193,13 @@ class DockerCLI:
             options.extend(('--mount', 'type=volume,source=' + volume + ',target=' + target))
         return self._call('container', 'create', '--name', name, '--network', network_id, *options,
                           image_id, *(command or []))
+
+    def create_phase0_container(self, name, labels, image_id, source_volume, command):
+        options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
+        return self._call('container', 'create', '--name', name, '--network', 'none',
+                          '--entrypoint', '', *options, '--mount',
+                          'type=volume,source=' + source_volume + ',target=/workspace/repo,readonly',
+                          image_id, *command)
 
     def start(self, identifier):
         self._call('container', 'start', identifier)
@@ -358,6 +372,8 @@ class OwnedRun:
                     keys.add('command')
                 if 'profile' in item:
                     keys.add('profile')
+                if 'readonly_mounts' in item:
+                    keys.add('readonly_mounts')
             if (set(item) != keys
                     or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'quarantined', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
@@ -377,21 +393,28 @@ class OwnedRun:
                 raise OwnershipError('invalid resource identity')
             if kind == 'container':
                 if (not isinstance(item['image'], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', item['image'])
-                        or not isinstance(item['network'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['network'])
+                        or not isinstance(item['network'], str) or not (re.fullmatch(r'[0-9a-f]{64}', item['network']) or (item.get('profile') == 'phase0-isolated-v1' and item['network'] == 'none'))
                         or not isinstance(item['mounts'], dict) or not isinstance(item['ports'], list)):
                     raise OwnershipError('invalid container specification')
                 self._validate_mounts_ports(item['mounts'], item['ports'])
                 if 'command' in item:
                     self._validate_command(item['command'])
-                if 'profile' in item and (item['profile'] != 'rootless-unix-v1' or 'command' in item
+                if item.get('profile') == 'rootless-unix-v1' and ('command' in item
                         or item['image'] != rootless.IMAGE or set(item['mounts']) != rootless.TARGETS
                         or len(set(item['mounts'].values())) != 3 or item['ports']):
                     raise OwnershipError('invalid rootless container profile')
+                if item.get('profile') == 'phase0-isolated-v1' and (item['network'] != 'none' or
+                        set(item['mounts']) != {'/workspace/repo'} or item.get('readonly_mounts') != ['/workspace/repo'] or
+                        item.get('command') != ['sleep', 'infinity'] or item['ports']):
+                    raise OwnershipError('invalid phase0 container profile')
+                if ('profile' in item and item['profile'] not in ('rootless-unix-v1', 'phase0-isolated-v1') or
+                        ('readonly_mounts' in item and item.get('profile') != 'phase0-isolated-v1')):
+                    raise OwnershipError('invalid container profile')
             names.add(item['name'])
         networks = {item['id'] for item in state['resources'] if item['kind'] == 'network' and item['id']}
         volumes = {item['name'] for item in state['resources'] if item['kind'] == 'volume'}
         for item in state['resources']:
-            if item['kind'] == 'container' and (item['network'] not in networks or
+            if item['kind'] == 'container' and ((item['network'] not in networks and item.get('profile') != 'phase0-isolated-v1') or
                                                 any(name not in volumes for name in item['mounts'].values())):
                 raise OwnershipError('container references a foreign resource')
             if item['kind'] == 'volume' and item['state'] == 'quarantined' and not any(
@@ -451,6 +474,11 @@ class OwnedRun:
         if item['kind'] == 'container' and any(observed.get(key) != item[key]
                                                for key in ('image', 'network', 'mounts', 'ports')):
             raise OwnershipError('Docker container specification changed')
+        if item.get('profile') == 'phase0-isolated-v1' and observed.get('readonly_mounts') != item['readonly_mounts']:
+            raise OwnershipError('phase0 source mount is not read-only')
+        if item.get('profile') == 'phase0-isolated-v1' and (observed.get('user') not in ('', '0', '0:0') or
+                observed.get('network_attachments') not in ([], ['none'])):
+            raise OwnershipError('phase0 user or network attachments differ')
         if item['kind'] == 'container' and 'command' in item and (
                 observed.get('command') != item['command'] or observed.get('entrypoint') != []):
             raise OwnershipError('Docker container command changed')
@@ -503,6 +531,37 @@ class OwnedRun:
                 (kind == 'network' and not re.fullmatch(r'[0-9a-f]{64}', identifier))
                 or (kind == 'volume' and identifier != item['name'])):
             raise OwnershipError('Docker creation identity is invalid')
+        self._inspect(dict(item, id=identifier))
+        item['id'], item['state'] = identifier, 'ready'
+        self._save()
+        return item['name']
+
+    def create_phase0_container(self, image_id, source_volume):
+        """Create an owned network-none client with one read-only source volume."""
+        self._validate()
+        self._check_daemon()
+        if (not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id) or
+                any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for r in self.state['resources'])):
+            raise OwnershipError('invalid phase0 image or unresolved operation')
+        volumes = [r for r in self.state['resources'] if r['kind'] == 'volume' and r['name'] == source_volume and r['state'] == 'ready']
+        if len(volumes) != 1:
+            raise OwnershipError('phase0 source volume is not owned')
+        image = self.engine.image(image_id)
+        if not isinstance(image, dict) or image.get('id') != image_id or image.get('volumes') != []:
+            raise OwnershipError('phase0 image identity or volumes differ')
+        self._inspect(volumes[0])
+        nonce = uuid.uuid4().hex
+        item = {'kind': 'container', 'name': self.run_id + '-container-' + nonce, 'nonce': nonce,
+                'id': '', 'state': 'creating', 'image': image_id, 'network': 'none',
+                'mounts': {'/workspace/repo': source_volume}, 'readonly_mounts': ['/workspace/repo'],
+                'ports': [], 'command': ['sleep', 'infinity'], 'profile': 'phase0-isolated-v1'}
+        self.state['resources'].append(item)
+        self._save()
+        labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': nonce, 'voice.ci.kind': 'container'}
+        identifier = self.engine.create_phase0_container(item['name'], labels, image_id, source_volume, item['command'])
+        self._check_daemon()
+        if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
+            raise OwnershipError('phase0 container identity is invalid')
         self._inspect(dict(item, id=identifier))
         item['id'], item['state'] = identifier, 'ready'
         self._save()
