@@ -44,8 +44,6 @@ class CompositionTests(unittest.TestCase):
             kube,params,policy=canonical_stores()
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
-            code=actions.code/'nats-known-baseline';code.mkdir()
-            (code/'deployed-contract.json').write_text('{}')
             stage.kube=kube;stage.service={}
             stage.marker['data'].update(generation=params['generation'],dataPVC=params['dataPVC'])
             kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
@@ -68,7 +66,8 @@ class CompositionTests(unittest.TestCase):
             self.assertEqual(stores['projection']['schema'],'voice-staging-store-projection-v1')
             self.assertTrue(stores['claims'])
             self.assertEqual(actions.tt_session.check()['phase'],'prepare')
-        prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,full_source=True)
+        prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
+            full_source=True,strict_helpers=True)
 
     def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
         """Source rendering and store binding are real; Kubernetes is synthetic."""

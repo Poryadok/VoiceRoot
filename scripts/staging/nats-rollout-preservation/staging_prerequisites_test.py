@@ -372,8 +372,8 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare('c2-new-candidate')
 
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
-                      context_commit=None,full_source=False):
-        import os, shutil, subprocess, base64, yaml, uuid
+                      context_commit=None,full_source=False,strict_helpers=False):
+        import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
         import staging_gis_material as gis
@@ -400,11 +400,13 @@ class PrepareCompositionTests(unittest.TestCase):
             for name in relative:
                 dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)
             helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
-            for path in (code/helper,workspace/'scripts/staging'/helper):
-                path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
+            if not strict_helpers:
+                for path in (code/helper,workspace/'scripts/staging'/helper):
+                    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
             resource_helper='nats-rollout-preservation/resource_claim.py'
-            for path in (code/resource_helper,workspace/'scripts/staging'/resource_helper):
-                path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
+            if not strict_helpers:
+                for path in (code/resource_helper,workspace/'scripts/staging'/resource_helper):
+                    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
             manifest={name:hashlib.sha256(helper_raw).hexdigest() for name in (helper,resource_helper)}
             if realtime_source:
                 name='nats-rollout-preservation/realtime_bootstrap.py'
@@ -412,6 +414,15 @@ class PrepareCompositionTests(unittest.TestCase):
                 for path in (code/name,workspace/'scripts/staging'/name):
                     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o600)
                 manifest[name]=hashlib.sha256(raw).hexdigest()
+            if strict_helpers:
+                import bundle
+                qualified=Path(os.environ.get('VOICE_QUALIFIED_BINARIES','/fixture/qualified-binaries'))
+                output=root/'qualified-bundle'
+                bundle.build(qualified/'kernel',output,qualified/'bootstrap-renewer',qualified/'story-current4-probe',
+                    story_target8=qualified/'story-restored8-probe')
+                with tarfile.open(output/'rollout-bundle.tar') as archive:
+                    archive.extractall(code,filter='data')
+                manifest=json.loads((code/'capture-manifest.json').read_bytes())
             save(code/'capture-manifest.json',manifest)
             context=resource_claim_test.context()
             if context_commit is not None:context['commit']=context_commit
@@ -419,8 +430,9 @@ class PrepareCompositionTests(unittest.TestCase):
             journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
-            approved['source_files']['scripts/staging/'+helper]=manifest[helper]
-            approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
+            if not strict_helpers:
+                approved['source_files']['scripts/staging/'+helper]=manifest[helper]
+                approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
             if realtime_source:
                 approved.update(schema='voice-source-authority-v1',verified=True)
                 approved['source_files']['scripts/staging/nats-rollout-preservation/realtime_bootstrap.py']=manifest['nats-rollout-preservation/realtime_bootstrap.py']
@@ -534,8 +546,11 @@ class PrepareCompositionTests(unittest.TestCase):
             stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
                 'index_sha256':'e'*64,'manifest_sha256':'d'*64,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+'d'*64})
-            stack.enter_context(patch.object(guard,'ROOT',root));stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
-            stack.enter_context(patch.object(prereq,'BINARY_PINS',{}));stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
+            stack.enter_context(patch.object(guard,'ROOT',root))
+            if not strict_helpers:
+                stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
+                stack.enter_context(patch.object(prereq,'BINARY_PINS',{}))
+            stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
             stack.enter_context(patch.object(runtime_stage.RolloutStage,'capture',return_value=stage))
             stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
             stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
