@@ -57,7 +57,8 @@ def wait_daemon(owner, daemon, client, timeout=60):
 
 
 def full_command(address):
-    return ['bash', '-c', 'set -eu; ulimit -f 8192; cd /workspace/build; exec env '
+    # Bound individual build artifacts while allowing protoc and JaCoCo output.
+    return ['bash', '-c', 'set -eu; ulimit -f 262144; cd /workspace/build; exec env '
             'PATH="/workspace/tools:$PATH" DOCKER_HOST=unix:///socket/docker.sock TESTCONTAINERS_RYUK_DISABLED=true '
             'TESTCONTAINERS_HOST_OVERRIDE="$1" VOICE_RELEASE_PROFILE=development '
             'MAVEN_ARGS="-o -ntp" MAVEN_OPTS="-Xmx512m -XX:ActiveProcessorCount=2 -Dmaven.repo.local=/workspace/m2" '

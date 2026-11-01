@@ -61,7 +61,8 @@ class FullAuthTests(unittest.TestCase):
         self.assertIn('make --no-print-directory auth-test-ci', command[2])
         self.assertIn('PATH="/workspace/tools:$PATH"', command[2])
         self.assertIn('MAVEN_ARGS="-o -ntp"', command[2])
-        self.assertIn('ulimit -f 8192', command[2])
+        # protoc in the pinned cache is about 9.2 MiB; keep room for build artifacts.
+        self.assertIn('ulimit -f 262144', command[2])
         self.assertNotIn('-Dtest=', command[2])
 
     def test_full_runner_executes_make_and_preserves_incomplete_status(self):
