@@ -998,6 +998,7 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
             save(Path(base)/'checkpoint.json',state)
             resume_authority()
         state['context']=context(stage)
+        save(Path(base)/'checkpoint.json',state)
         if publication is not None:publication(state,authority_guard=resume_authority)
         resume_authority()
         state['context']=context(stage);state['phase']='POST_RESTART';state['status']='PROVISIONAL_READY' if state.get('provisional') is not None else 'PASS';state['fence_status']='RELEASED'
