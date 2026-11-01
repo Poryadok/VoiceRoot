@@ -354,7 +354,7 @@ def _start_cut(actions,request,approved,execution,workspace):
     try:enrollment=root_main.private_json(guard.ROOT/'bootstrap-enrollment.json')
     except FileNotFoundError:enrollment=None
     provenance=root_main.capture_inputs(stage.kube,runtime,contract,stage.expected['generation'],bootstrap_enrollment=enrollment,installation=session.installation)
-    kernel=root_main.public_read(actions.code/'nats-known-baseline'/'kernel')
+    kernel=root_main.public_read(actions.code/'nats-known-baseline'/'kernel',32<<20)
     if hashlib.sha256(kernel).hexdigest()!=private.BINARY_PINS['nats-known-baseline/kernel']:
         raise Blocked('cohort_native_kernel_changed')
     private._private_write(runtime/'kernel',kernel)
