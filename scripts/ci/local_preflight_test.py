@@ -1,6 +1,7 @@
 """Behavioral tests for the planner-driven local preflight foundation."""
 import tempfile
 import subprocess
+import hashlib
 import json
 import os
 import shutil
@@ -50,6 +51,89 @@ class HandoffGateTests(unittest.TestCase):
         source = dict(self.source, changed_paths=['uncommitted.md'])
         with self.assertRaisesRegex(ValueError, 'clean committed source'):
             self.run_gate(plans=[dict(self.plan, source=source)])
+
+    def test_overlay_plan_executes_and_verifies_owned_evidence(self):
+        plan = dict(self.plan, checks={'current-diff-contract': [], 'match-squad-overlay': []})
+        contract = {'base': self.base, 'event_base': self.base, 'pr_head': self.head}
+        image = local_preflight.local_overlay_execution.PYTHON_IMAGE
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs'), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_current_diff, 'run_merge_candidate', return_value={'source': self.source, 'contract': contract}), \
+             patch.object(local_preflight.local_overlay_execution, 'run_supervised', return_value={'diagnostic': 'value'}) as run, \
+             patch.object(local_preflight, '_verify_overlay_evidence') as verify:
+            report = local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output,
+                                                  overlay_image_id=image)
+        run.assert_called_once()
+        verify.assert_called_once_with(self.output / 'overlay', self.source, image, {'diagnostic': 'value'})
+        self.assertEqual(set(report['checks']), {'current-diff-contract', 'match-squad-overlay'})
+        self.assertEqual(report['status'], 'complete')
+
+    def test_overlay_plan_requires_exact_image_before_execution(self):
+        plan = dict(self.plan, checks={'current-diff-contract': [], 'match-squad-overlay': []})
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs'), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_current_diff, 'run_merge_candidate') as current, \
+             self.assertRaisesRegex(ValueError, 'pinned overlay image'):
+            local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output)
+        current.assert_not_called()
+
+
+class OverlayHandoffEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.output = Path(self.temp.name) / 'overlay'; self.output.mkdir()
+        self.slot_dir = Path(self.temp.name) / 'slots'; self.slot_dir.mkdir()
+        (self.slot_dir / 'heavy-0.lock').write_bytes(b'\0idle\n')
+        self.source = {'head': 'a' * 40}
+        self.image = local_preflight.local_overlay_execution.PYTHON_IMAGE
+        self.stdout, self.stderr = b'', b'Ran 2 tests in 0.100s\n\nOK\n'
+        (self.output / 'tests.stdout').write_bytes(self.stdout)
+        (self.output / 'tests.stderr').write_bytes(self.stderr)
+        (self.output / 'discovery.stdout').write_bytes(b'VOICE_OVERLAY_DISCOVERED=2\n')
+        (self.output / 'source.tar').write_bytes(b'source')
+        directory = self.output / 'run/tmp/ci-local' / ('voiceci-' + 'f' * 32)
+        directory.mkdir(parents=True)
+        self.report = {'schema': 'voice-local-overlay-diagnostic-v1', 'status': 'incomplete',
+                       'source': self.source, 'image_id': self.image, 'version': 'Python 3.12.1',
+                       'modules': list(local_preflight.local_overlay_execution.MODULES), 'slot': 0,
+                       'tests': {'discovered': 2, 'passed': 2, 'skipped': []},
+                       'stdout_sha256': hashlib.sha256(self.stdout).hexdigest(),
+                       'stderr_sha256': hashlib.sha256(self.stderr).hexdigest(),
+                       'source_archive_sha256': hashlib.sha256(b'source').hexdigest(),
+                       'ownership_journal': str(Path('run/tmp/ci-local') / directory.name / 'ownership.json')}
+        self.owner = unittest.mock.Mock()
+        self.owner.state = {'resources': [{'kind': kind, 'state': 'removed', 'id': str(i)}
+                                           for i, kind in enumerate(('network', 'volume', 'container', 'container'))]}
+        self.engine = unittest.mock.Mock(); self.engine.exists.return_value = False
+
+    def verify(self):
+        with patch.object(local_preflight, 'DockerCLI', return_value=self.engine), \
+             patch.object(local_preflight.OwnedRun, 'load', return_value=self.owner), \
+             patch.object(local_preflight.local_heavy_slots, 'host_slot_directory', return_value=self.slot_dir):
+            return local_preflight._verify_overlay_evidence(self.output, self.source, self.image, self.report)
+
+    def test_exact_logs_archive_and_absent_owned_resources(self):
+        self.verify()
+        self.assertEqual(self.engine.exists.call_count, 4)
+        self.owner._check_daemon.assert_called_once()
+        self.owner.close.assert_called_once()
+
+    def test_tampered_logs_resources_or_slot_fail_closed(self):
+        (self.output / 'tests.stderr').write_bytes(b'Ran 2 tests in 0.100s\n\nOK (skipped=1)\n')
+        with self.assertRaises(ValueError): self.verify()
+        (self.output / 'tests.stderr').write_bytes(self.stderr)
+        self.engine.exists.return_value = True
+        with self.assertRaisesRegex(ValueError, 'resources'): self.verify()
+        self.engine.exists.return_value = False
+        (self.slot_dir / 'heavy-0.lock').write_bytes(b'\0busy:stale\n')
+        with self.assertRaisesRegex(ValueError, 'slot'): self.verify()
+
+    def test_boolean_pass_count_is_not_integer_evidence(self):
+        self.report['tests'] = {'discovered': 1, 'passed': True, 'skipped': []}
+        with self.assertRaisesRegex(ValueError, 'inventory'): self.verify()
 
 
 class HandoffRefsTest(unittest.TestCase):

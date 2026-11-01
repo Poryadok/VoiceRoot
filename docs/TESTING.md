@@ -669,14 +669,19 @@ pkg non-short job, integrations and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
-The Windows-only `--handoff` mode is currently limited to plans containing
-only `current-diff-contract` (for example, a documentation-only change). Fetch
+The Windows-only `--handoff` mode supports plans containing only
+`current-diff-contract`, or that check plus `match-squad-overlay`. Fetch
 `origin` immediately before running it, then supply the fetched master SHA,
 the clean committed PR head SHA, the PR branch name, and a new output directory
 outside the checkout. It verifies both locally fetched refs, rebuilds the plan,
 constructs the two-parent local merge candidate and executes the canonical
-contract, then checks the plan and refs again. It refuses a base that is not an
-ancestor of the head and every plan with additional selected checks. This is a
+contract, then checks the plan and refs again. For the overlay plan, supply
+`--overlay-image-id` with the pinned local Linux Python image ID. The command
+executes the selected tests and checks their logs, source archive, ownership
+journal, resource removal and slot release. The local image's publisher
+provenance and exclusive Docker daemon/socket custody remain assumptions;
+interruption and crash recovery acceptance is not established. It refuses a
+base that is not an ancestor of the head and any additional selected checks. This is a
 local handoff proof; fetched refs are not a live remote observation and the
 GitHub merge-candidate checks remain required. Run the command again after any
 source, base, head or selected-check change; do not reuse its JSON as a verifier.
