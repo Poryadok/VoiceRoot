@@ -115,6 +115,44 @@ def report_p3_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_realtime_postgres_observation_consumes_exact_readonly_launch(self):
+        import commands,cohort_hosted_pg,realtime_bootstrap,resource_claim,resource_claim_test
+        import staging_cohort_preservation_pg as pg
+        session,_,journal=resource_claim_test.ResourceTests().fixture();session.admit(start=True)
+        capture={'synthetic':'captured'};journal.row.update(phase='prerequisites-captured',target_sha256=resource_claim.digest(capture))
+        session.expected_target=resource_claim.digest(capture)
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='a'*64
+        with resource_claim.command_scope(session.check), \
+             patch('staging_prerequisites.load_capture',return_value=capture), \
+             patch.object(adapter,'_docker',return_value=b'123\n') as docker, \
+             patch.object(commands,'capture',side_effect=lambda argv,**kw:adapter.capture(argv,fallback=Mock(),**kw)):
+            self.assertEqual(realtime_bootstrap._system_identifier(),'123')
+            docker.assert_called_once_with('exec','-i',adapter.cid,*realtime_bootstrap._COMMAND[len(pg.EXEC):],
+                body=b'SELECT system_identifier FROM pg_control_system();\n')
+        with resource_claim.command_scope(session.check), \
+             patch('staging_prerequisites.load_capture',return_value=capture), \
+             patch.object(adapter,'_docker') as docker, \
+             patch.object(commands,'capture',side_effect=lambda argv,**kw:adapter.capture(argv,fallback=Mock(),**{**kw,'body':b'changed'})):
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_readonly_launch_changed'):
+                realtime_bootstrap._system_identifier()
+            docker.assert_not_called()
+
+    def test_realtime_admin_observation_reaches_owned_postgres_adapter(self):
+        import base64,commands,cohort_hosted_pg,realtime_bootstrap
+        from unittest.mock import call
+        password=cohort_hosted_pg.ADMIN_PASSWORD.encode()
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='a'*64
+        expected=cohort_hosted_pg.ADMIN_USER.encode()+b'\n'+hashlib.sha256(password).hexdigest().encode()+b'\n'
+        fallback=Mock(side_effect=AssertionError('postgres observation escaped fixture'))
+        with patch.object(commands,'authority_guard',lambda *_:None), \
+             patch.object(adapter,'_docker',return_value=expected) as docker, \
+             patch.object(commands,'capture',side_effect=lambda argv,**kw:adapter.capture(argv,fallback=fallback,**kw)):
+            realtime_bootstrap._verify_admin({'data':{'POSTGRES_PASSWORD':base64.b64encode(password).decode()}})
+            with self.assertRaisesRegex(realtime_bootstrap.Blocked,'realtime_bootstrap_admin_identity_invalid'):
+                realtime_bootstrap._verify_admin({'data':{'POSTGRES_PASSWORD':base64.b64encode(b'wrong').decode()}})
+        fallback.assert_not_called()
+        self.assertEqual(docker.call_args_list,[call('exec',adapter.cid,'sh','-ceu',realtime_bootstrap._ADMIN_IDENTITY)]*2)
+
     def test_qualified_public_fixture_requests_realtime_source_authority(self):
         import staging_prerequisites_test as prerequisites
         with tempfile.TemporaryDirectory(dir='/root') as retained, \
@@ -288,7 +326,11 @@ class CompositionTests(unittest.TestCase):
                 self.assertEqual(approved.get('schema'),'voice-source-authority-v1')
                 self.assertIs(approved.get('verified'),True)
             kube,params,policy=canonical_stores()
-            if qualify:align_public_fixture_app_secret(kube,live)
+            if qualify:
+                import base64,cohort_hosted_pg
+                live[('secret','voice-app-secrets')]['data']['POSTGRES_PASSWORD']=base64.b64encode(
+                    cohort_hosted_pg.ADMIN_PASSWORD.encode()).decode()
+                align_public_fixture_app_secret(kube,live)
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
             stage.kube=kube;stage.service={}
