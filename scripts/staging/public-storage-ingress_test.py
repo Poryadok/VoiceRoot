@@ -7,6 +7,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts/staging/nats-known-baseline'))
 sys.path.insert(0, str(ROOT / 'scripts/staging/nats-rollout-preservation'))
 import source_plan
 import source_plan_test as fixtures
