@@ -49,7 +49,14 @@ def failure_diagnostic(error):
     stage='entry';tb=error.__traceback__
     while tb is not None:
         stage=stages.get(tb.tb_frame.f_code,stage);tb=tb.tb_next
-    return 'stage='+stage+' category='+category
+    result='stage='+stage+' category='+category
+    if type(error) is Blocked:
+        # Never render an exception: only this exact source-defined tuple is
+        # admitted, and all other values (including extra arguments) collapse.
+        reason=('actor_server_authentication_refused' if error.args==
+            ('existing_service_actor_server_authentication_refused',) else 'unspecified')
+        result+=' reason='+reason
+    return result
 
 
 class FixtureKube:
