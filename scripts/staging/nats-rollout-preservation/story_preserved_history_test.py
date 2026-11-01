@@ -84,11 +84,14 @@ class PreservedHistoryTests(unittest.TestCase):
             witness.write_new(registry/(sha+'.json'),raw)
             write(registry/'selector.json',{'schema':'voice-story-preserved-target8-selector-v1','revision':1,
                 'entries':{key:{'witness_sha256':sha,'enabled':True,'revision':1}}})
-        records={'paused.json':{'protected':'all-paused'},'archive-record.json':archive,'native-cut.json':{'protected':'native'},
+        records={'paused.json':{'protected':'all-paused'},'archive-record.json':archive,'native-cut.json':{'manifest':{'archive_sha256':'a'*64},'manifest_sha256':'b'*64,'census_sha256':'c'*64},
             'local-restore.json':restores['local'],'offnode-restore.json':restores['offnode'],
             'offnode-custody.json':custody,'decrypted-restore.json':decrypted,'cipher-binding.json':binding,
             'precut.json':precut,'stores.json':stores,'preflight.json':preflight,
             'metadata.json':{'source':{'migrations':migrations,'roles':{'roles':[{'name':'actual_runtime','login':True}]}}}}
+        runtime=root/('rollout-'+operation)
+        write(runtime/'copy-checkpoint.json',cohort._copy_checkpoint(operation,records['native-cut.json'],resource_claim.production_installation(),False))
+        decrypted['members']={'copy-checkpoint.json':hashlib.sha256((runtime/'copy-checkpoint.json').read_bytes()).hexdigest()}
         for name,value in records.items():
             if not (base/name).exists():write(base/name,value)
         write(base/'effects'/'dump-story_db.json',dump)
@@ -181,7 +184,7 @@ class PreservedHistoryTests(unittest.TestCase):
                         else:changed['schema']='voice-staging-cohort-preservation-receipt-v1'
                         cohort.save(base/'qualified.json',changed)
                     expected=('cohort_history_changed' if fault in ('profile','missing_proof','extra','legacy_tag')
-                        else 'cohort_history_restore_changed' if fault=='cleanup'
+                        else 'cohort_restore_cleanup_changed' if fault=='cleanup'
                         else 'cohort_history_incomplete' if fault=='pending' or fault.startswith('auth_')
                         else 'story_compatibility_witness_invalid')
                     with self.assertRaisesRegex(Exception,expected):cohort.validate_historical_capture(operation)
