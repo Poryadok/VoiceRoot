@@ -795,7 +795,9 @@ source and Maven clients, and the Maven client checks dynamic-library availabili
 The image ID identifies local bytes but does not establish publisher provenance.
 The tool identity is checked again after execution. It executes `make auth-test-ci` offline against a private daemon,
 checks the captured Surefire reports, and records non-required skips. The
-caller must authenticate inputs and maintain exclusive daemon, socket and shared
+diagnostic's `stage.json` records only the last attempted fixed stage; it is
+not evidence that the stage succeeded or that owned resources were cleaned up.
+The caller must authenticate inputs and maintain exclusive daemon, socket and shared
 workspace custody. This diagnostic remains `incomplete`, keeps `backend-auth`
 `not_run`, and does not establish crash recovery or full preflight acceptance.
 
