@@ -153,6 +153,54 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_realtime_runtime_auth_routes_to_owned_loopback_with_unchanged_password(self):
+        import commands,cohort_hosted_pg,realtime_bootstrap
+        password=b'fixture_password_0123456789ABCDEF'
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='a'*64
+        local=('IFS= read -r PGPASSWORD; export PGPASSWORD; '
+            'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
+            'exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
+        fallback=Mock(side_effect=AssertionError('runtime auth escaped fixture'))
+        with patch.object(commands,'authority_guard',lambda *_:None), \
+             patch.object(adapter,'_docker',return_value=b'realtime|realtime_db\n') as docker, \
+             patch.object(commands,'capture',side_effect=lambda argv,**kw:adapter.capture(argv,fallback=fallback,**kw)):
+            realtime_bootstrap._verify_runtime_auth(password)
+        docker.assert_called_once_with('exec','-i',adapter.cid,'sh','-ceu',local,
+            body=password+b'\nSELECT current_user,current_database();\n')
+        fallback.assert_not_called()
+        wrong=b'W'*40
+        with patch.object(commands,'authority_guard',lambda *_:None), \
+             patch.object(adapter,'_docker',side_effect=RuntimeError('fixture_authentication_rejected')) as docker, \
+             patch.object(commands,'capture',side_effect=lambda argv,**kw:adapter.capture(argv,fallback=fallback,**kw)):
+            with self.assertRaisesRegex(RuntimeError,'fixture_authentication_rejected'):
+                realtime_bootstrap._verify_runtime_auth(wrong)
+            docker.assert_called_once_with('exec','-i',adapter.cid,'sh','-ceu',local,
+                body=wrong+b'\nSELECT current_user,current_database();\n')
+        import staging_cohort_preservation_pg as pg
+        original=local.replace('-h 127.0.0.1 ','-h voice-postgres ')
+        with patch.object(commands,'authority_guard',lambda *_:None),patch.object(adapter,'_docker') as docker:
+            with self.assertRaisesRegex(RuntimeError,'isolated_postgres_runtime_auth_invalid'):
+                adapter.capture(pg.EXEC+['sh','-ceu',original],body=b'short\nSELECT 1;\n',fallback=fallback)
+            docker.assert_not_called()
+            foreign=original.replace('voice-postgres','another-host')
+            adapter.capture(pg.EXEC+['sh','-ceu',foreign],body=b'unmodified',fallback=fallback)
+            docker.assert_called_once_with('exec','-i',adapter.cid,'sh','-ceu',foreign,body=b'unmodified')
+
+    def test_realtime_runtime_auth_checks_live_fence_before_loopback(self):
+        import commands,cohort_hosted_pg,realtime_bootstrap,resource_claim,resource_claim_test
+        session,current,journal=resource_claim_test.ResourceTests().fixture();session.admit(start=True)
+        journal.row.update(phase='realtime-bootstrap',target_sha256='d'*64);session.expected_target='d'*64
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='a'*64
+        password=b'fixture_password_0123456789ABCDEF'
+        with resource_claim.command_scope(session.check), \
+             patch.object(adapter,'_docker',return_value=b'realtime|realtime_db\n') as docker, \
+             patch.object(commands,'capture',side_effect=lambda argv,**kw:adapter.capture(argv,fallback=Mock(),**kw)):
+            realtime_bootstrap._verify_runtime_auth(password)
+            docker.assert_called_once();docker.reset_mock()
+            current['claim']='foreign'
+            with self.assertRaises(RuntimeError):realtime_bootstrap._verify_runtime_auth(password)
+            docker.assert_not_called()
+
     def test_realtime_actor_fixture_preserves_actual_mount_authority_checks(self):
         import actor_root,base64,bootstrap_selection_test,source_plan_test
         from types import SimpleNamespace
