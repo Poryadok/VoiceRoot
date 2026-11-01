@@ -88,6 +88,7 @@ class FullGoTests(unittest.TestCase):
         self.assertEqual(subject.profile('bot')['images'], ('postgres:16-bookworm', 'nats:2.10-alpine'))
         self.assertEqual(subject.profile('search')['images'], ('postgres:16-bookworm',))
         self.assertEqual(subject.profile('realtime')['images'], ())
+        self.assertEqual(subject.profile('analytics')['images'], ())
         self.assertEqual(subject.profile('user')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1'))
         self.assertEqual(subject.profile('gameintegration')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1'))
         self.assertEqual(subject.profile('role')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1',
@@ -115,10 +116,11 @@ class FullGoTests(unittest.TestCase):
                 with self.subTest(inventory=inventory), self.assertRaises(ValueError):
                     subject.read_required(root, 'bot', [package])
 
-    def test_empty_image_set_is_valid_only_for_realtime_profile(self):
+    def test_empty_image_set_is_valid_only_for_declared_profiles(self):
         owner = mock.Mock()
-        subject.chat.validate_archives({}, subject.profile('realtime')['images'])
-        subject.chat.verify_images(owner, 'client', {}, subject.profile('realtime')['images'])
+        for service in ('realtime', 'analytics'):
+            subject.chat.validate_archives({}, subject.profile(service)['images'])
+            subject.chat.verify_images(owner, 'client', {}, subject.profile(service)['images'])
         owner.execute.assert_not_called()
         for service in ('bot', 'user', 'chat', 'search', 'gameintegration', 'role'):
             with self.subTest(service=service), self.assertRaises(ValueError):
@@ -140,7 +142,7 @@ class FullGoTests(unittest.TestCase):
             root = Path(directory)
             path = root / 'scripts/ci/go_integration_required.json'
             path.parent.mkdir(parents=True)
-            for service in ('user', 'realtime', 'gameintegration', 'role'):
+            for service in ('user', 'realtime', 'analytics', 'gameintegration', 'role'):
                 package = 'voice/backend/' + service
                 path.write_text(json.dumps({service: [[package, 'TestRequired']]}), encoding='utf-8')
                 self.assertEqual(subject.read_required(root, service, [package]), [[package, 'TestRequired']])
@@ -151,6 +153,26 @@ class FullGoTests(unittest.TestCase):
                                         {tag: 'sha256:' + 'b' * 64 for tag in subject.profile(service)['images']},
                                         root / 'out')
                 self.assertEqual(run.call_args.kwargs, {'service': service})
+
+    def test_analytics_report_keeps_clickhouse_gap_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            output = Path(directory) / 'output'
+            source = {'head': 'a' * 40}
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=Path(directory) / 'copy'), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={}), \
+                 mock.patch.object(subject, 'DockerCLI'), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host'), \
+                 mock.patch.object(subject.chat, 'publish_owner'), \
+                 mock.patch.object(subject.chat, 'run_owned', return_value={'status': 'incomplete', 'source': source}):
+                report = subject.run('analytics', root, source['head'], output, 'helper', 'a' * 64, {})
+            self.assertIn('tagged Analytics ClickHouse schema, fixture and dedicated job', report['unbound_inputs'])
+            self.assertEqual(report['status'], 'incomplete')
 
     def test_chat_dispatch_keeps_existing_executor(self):
         with mock.patch.object(subject.auth_broker, '_require_worker_job'), \
@@ -233,12 +255,14 @@ class FullGoTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         inventory = json.loads((root / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
         for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story',
-                        'realtime', 'user', 'gameintegration', 'role'):
+                        'realtime', 'analytics', 'user', 'gameintegration', 'role'):
             packages = sorted({item[0] for item in inventory[service]})
             with self.subTest(service=service):
                 required = subject.read_required(root, service, packages)
                 self.assertEqual(required, inventory[service])
                 self.assertTrue(required)
+                if service == 'analytics':
+                    self.assertEqual(required, [['voice/backend/analytics/internal/adapters', 'TestMapperFromMessageSent']])
 
     def test_planner_selection_is_required_before_execution(self):
         source = {'head': 'a' * 40}

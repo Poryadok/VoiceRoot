@@ -28,7 +28,7 @@ USER_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1')
 ROLE_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1', 'redis:7-alpine')
 REALTIME_IMAGES = ()
 POSTGRES_SERVICES = frozenset({'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'})
-EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'gameintegration', 'role'}
+EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'analytics', 'gameintegration', 'role'}
 
 
 def profile(service):
@@ -44,8 +44,8 @@ def profile(service):
         return {'images': USER_IMAGES, 'module': 'src/backend/gameintegration'}
     if service == 'role':
         return {'images': ROLE_IMAGES, 'module': 'src/backend/role'}
-    if service == 'realtime':
-        return {'images': REALTIME_IMAGES, 'module': 'src/backend/realtime'}
+    if service in ('realtime', 'analytics'):
+        return {'images': REALTIME_IMAGES, 'module': 'src/backend/' + service}
     if service in POSTGRES_SERVICES:
         return {'images': SEARCH_IMAGES, 'module': 'src/backend/' + service}
     raise ValueError('unsupported Go integration service: image, tool and dedicated CI prerequisites require review')
@@ -146,6 +146,8 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
         result['unbound_inputs'].append('T30 Compose Chat and Game Integration dedicated fixtures and jobs')
     if service == 'role':
         result['unbound_inputs'].append('Role migration, bootstrap and tagged Role-Space dedicated fixtures and jobs')
+    if service == 'analytics':
+        result['unbound_inputs'].append('tagged Analytics ClickHouse schema, fixture and dedicated job')
     (output / 'diagnostic.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return result
 
