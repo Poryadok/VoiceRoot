@@ -82,7 +82,54 @@ def postgres_capture_required(argv):
         'endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json'])
 
 
+def p3_failure_locations(error):
+    """Return bounded code locations, never exception text or fixture data."""
+    allowed={'staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
+        'staging_prerequisites.py','resource_claim.py','stage_runtime.py',
+        'bridge_composition_test.py','staging_prerequisites_test.py','cohort_hosted_pg.py',
+        'gis_existing_update.py','commands.py'}
+    kinds={ValueError:'ValueError',KeyError:'KeyError',TypeError:'TypeError',
+        FileNotFoundError:'FileNotFoundError',RuntimeError:'RuntimeError',AssertionError:'AssertionError'}
+    result=[];seen=set()
+    for _ in range(8):
+        if error is None or id(error) in seen:break
+        seen.add(id(error));frames=[];tb=error.__traceback__
+        while tb is not None and len(frames)<32:
+            name=Path(tb.tb_frame.f_code.co_filename).name
+            if name in allowed:frames.append([name,tb.tb_lineno])
+            tb=tb.tb_next
+        result.append({'type':kinds.get(type(error),'Other'),'frames':frames})
+        error=error.__cause__ or error.__context__
+    return result
+
+
+def report_p3_failure(original):
+    def checked(*args,**kwargs):
+        try:return original(*args,**kwargs)
+        except Exception as error:
+            import sys
+            print('P3_FIXTURE_FAILURE '+json.dumps(p3_failure_locations(error),separators=(',',':')),
+                file=sys.stderr,flush=True)
+            raise
+    return checked
+
+
 class CompositionTests(unittest.TestCase):
+    def test_p3_failure_diagnostic_preserves_exception_without_sensitive_values(self):
+        import contextlib,io
+        marker='sensitive-fixture-value'
+        def fail():
+            try:raise KeyError(marker)
+            except KeyError:raise RuntimeError(marker) from None
+        output=io.StringIO()
+        with contextlib.redirect_stderr(output):
+            with self.assertRaisesRegex(RuntimeError,marker):report_p3_failure(fail)()
+        text=output.getvalue();self.assertNotIn(marker,text)
+        records=json.loads(text.removeprefix('P3_FIXTURE_FAILURE '))
+        self.assertEqual([row['type'] for row in records],['RuntimeError','KeyError'])
+        self.assertTrue(all(all(row[0]=='bridge_composition_test.py' and isinstance(row[1],int)
+            for row in record['frames']) for record in records))
+
     def test_public_fixture_aligns_app_secret_before_prerequisite_capture(self):
         import source_plan, source_plan_test, staging_gis_material
         kube,params,_=canonical_stores()
@@ -466,6 +513,9 @@ class CompositionTests(unittest.TestCase):
                             nats_patches.enter_context(patch.object(subprocess,'Popen',side_effect=postgres.popen))
                         if qualify:
                             import importlib,subprocess
+                            import staging_p3_prerequisites as p3
+                            nats_patches.enter_context(patch.object(p3,'verify_complete',
+                                side_effect=report_p3_failure(p3.verify_complete)))
                             captured=importlib.import_module('staging_cohort_preservation')
                             auxiliary=importlib.import_module('staging_cohort_preservation_auxiliary')
                             import github_custody
