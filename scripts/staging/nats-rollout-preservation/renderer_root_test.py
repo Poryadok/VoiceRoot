@@ -50,7 +50,8 @@ class RendererLiveTests(unittest.TestCase):
                 else:self.assertTrue(renderer_root.verify_live(stage,authority)['verified'])
 
     def test_real_stage_active_and_hub_running_identity_check_keeps_closed_gate(self):
-        import runtime_stage,stat,types
+        import runtime_stage,stat,types,hashlib,uuid,base64
+        from resource_claim import InstallationAuthority
         from pathlib import Path
         fake,pod,authority=self.fixture();kube=fake.kube
         expected=dict(fake.expected,namespace_uid='namespace',marker_uid='marker')
@@ -68,19 +69,21 @@ class RendererLiveTests(unittest.TestCase):
             return original_get(kind,name)
         kube.get.side_effect=get;authority['input_binding']={'fixed':'private'}
         stage.marker=copy.deepcopy(marker)
-        with patch.object(runtime_stage,'pv_storage_path',return_value='/selected'),patch('stage_runtime.pv_storage_path',return_value='/selected'),patch.object(runtime_stage.os,'open',return_value=7),patch.object(runtime_stage.os,'close'),patch.object(runtime_stage.os,'fstat',return_value=types.SimpleNamespace(st_uid=65532,st_gid=10000,st_mode=stat.S_IFDIR|0o2770)),patch.object(renderer_root,'inputs',return_value=({},authority['input_binding'])),patch.object(renderer_root,'capture',return_value=('d'*64+'  /etc/nats/nats.conf\n').encode()):
-            renderer_root.revalidate(kube,stage,authority)
+        account=b'synthetic-account';installation=InstallationAuthority('owned-isolated-v1',str(uuid.uuid4()),expected['generation'],hashlib.sha256(account).hexdigest(),'b'*64,'c'*64)
+        rows={'operator':{'data':{'account.public':base64.b64encode(account).decode()}}}
+        with patch.object(runtime_stage,'pv_storage_path',return_value='/selected'),patch('stage_runtime.pv_storage_path',return_value='/selected'),patch.object(runtime_stage.os,'open',return_value=7),patch.object(runtime_stage.os,'close'),patch.object(runtime_stage.os,'fstat',return_value=types.SimpleNamespace(st_uid=65532,st_gid=10000,st_mode=stat.S_IFDIR|0o2770)),patch.object(renderer_root,'inputs',return_value=(rows,authority['input_binding'])),patch.object(renderer_root,'capture',return_value=('d'*64+'  /etc/nats/nats.conf\n').encode()):
+            renderer_root.revalidate(kube,stage,authority,installation=installation)
             with self.assertRaises(Blocked):stage.verify_final_storage()
             marker['data']['phase']='rollout-verified';marker['data']['knownRolloutOperation']='a'*12
-            self.assertTrue(renderer_root.verify_live(stage,authority)['verified'])
+            self.assertTrue(renderer_root.verify_live(stage,authority,installation=installation)['verified'])
             for gid,mode in ((65532,0o2770),(10000,0o2777)):
                 with self.subTest(gid=gid,mode=mode),patch.object(runtime_stage.os,'fstat',return_value=types.SimpleNamespace(st_uid=65532,st_gid=gid,st_mode=stat.S_IFDIR|mode)):
-                    with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority)
+                    with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority,installation=installation)
             stage.final_claim['metadata']['uid']='changed'
-            with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority)
+            with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority,installation=installation)
             stage.final_claim['metadata']['uid']='pvc'
             marker['data']['generation']='changed'
-            with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority)
+            with self.assertRaises(Blocked):renderer_root.revalidate(kube,stage,authority,installation=installation)
 
     def fixture(self):
         repo='ghcr.io/poryadok/voiceroot/nats-hub-config-renderer'
@@ -268,7 +271,8 @@ class RendererImageAcquisitionTests(unittest.TestCase):
 
 class RendererScratchCustodyTests(unittest.TestCase):
     def test_actual_prove_keeps_fixed_group_read_custody_under_service_umask(self):
-        import base64,os,stat,tempfile
+        import base64,os,stat,tempfile,hashlib,uuid
+        from resource_claim import InstallationAuthority
         from pathlib import Path
         stage,_,authority=RendererLiveTests().fixture()
         hub=stage.snapshots[HUB]
@@ -276,6 +280,7 @@ class RendererScratchCustodyTests(unittest.TestCase):
             HUB+'/nats':authority['broker_image']}
         tokens={key:('synthetic-'+key).encode() for key in
             ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
+        installation=InstallationAuthority('owned-isolated-v1',str(uuid.uuid4()),stage.expected['generation'],hashlib.sha256(tokens['account.public']).hexdigest(),'b'*64,'c'*64)
         tls={key:('synthetic-'+key).encode() for key in ('tls.crt','tls.key','ca.crt')}
         encode=lambda values:{'data':{key:base64.b64encode(value).decode() for key,value in values.items()}}
         rows={'operator':encode(tokens),'tls':encode(tls),
@@ -306,7 +311,7 @@ class RendererScratchCustodyTests(unittest.TestCase):
                      patch.object(renderer_root,'image_identity',return_value={}), \
                      patch.object(renderer_root,'revalidate'), \
                      patch.object(renderer_root.renderer_execution,'prove',side_effect=isolated):
-                    result=renderer_root.prove(stage.kube,stage,'e'*40,authority['descriptor']['images']['target'])
+                    result=renderer_root.prove(stage.kube,stage,'e'*40,authority['descriptor']['images']['target'],installation=installation)
                 self.assertTrue(result['output']['verified'])
                 self.assertEqual(observed,[True])
                 self.assertEqual(list(Path(td).iterdir()),[])

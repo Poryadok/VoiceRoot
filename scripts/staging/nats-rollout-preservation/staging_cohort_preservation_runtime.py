@@ -4,6 +4,8 @@ import json
 import re
 import time
 import hashlib
+import io
+import tarfile
 from pathlib import Path
 from docker_runtime import DockerRuntime,NATS_IMAGE,LABEL
 import guard
@@ -122,7 +124,7 @@ class RestoreJournal:
 
     def begin(self,kind,name,labels):
         path,value=_resources(self.session)
-        if (kind not in ('postgres','migrate') or not re.fullmatch('voice-media-restore-[a-f0-9]{32}',name)
+        if (kind not in ('postgres','migrate','story','story-probe') or not re.fullmatch('voice-media-restore-[a-f0-9]{32}',name)
             or labels!={'voice.test.owner':name} or name in value['resources']
             or any(v['status'] in ('PENDING','UNCERTAIN') for v in value['resources'].values())):
             raise Blocked('cohort_restore_resource_invalid')
@@ -158,6 +160,46 @@ class RestoreJournal:
         owner.save(path,value)
 
 
+STORY_HEALTH='i=0; while [ "$i" -lt 45 ]; do if wget -q -O - http://127.0.0.1:8080/health; then exit 0; fi; i=$((i+1)); sleep 1; done; exit 1'
+
+
+def story_create(name,postgres,image,kind,dsn,baseline=0,unrelated=0,mode='positive'):
+    """A closed executable envelope; no host paths, mounts or arbitrary commands."""
+    if (not re.fullmatch('voice-media-restore-[a-f0-9]{32}',name)
+        or not re.fullmatch('[a-f0-9]{64}',postgres) or not re.fullmatch('sha256:[a-f0-9]{64}',image)
+        or not isinstance(dsn,str) or not re.fullmatch(r'postgres://[a-z_][a-z0-9_]{0,31}:[a-f0-9]{48}@127\.0\.0\.1:5432/story_db\?sslmode=disable',dsn)
+        or kind not in ('story','story-probe') or type(baseline) is not int or not 0<=baseline<2**63
+        or type(unrelated) is not int or not 0<=unrelated<2**63 or mode not in ('positive','invalid','wrong')):
+        raise Blocked('cohort_story_command_invalid')
+    args=['create','--name',name,'--network','container:'+postgres,'--label','voice.test.owner='+name,
+        '--user','65532:65532','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges',
+        '--pids-limit=128','--memory=512m','--cpus=1']
+    if kind=='story':
+        if baseline or unrelated or mode!='positive':raise Blocked('cohort_story_command_invalid')
+        return args+['-e','DATABASE_URL='+dsn,'-e','LISTEN_ADDR=:8080','-e','STORY_GRPC_LISTEN=:9090',
+            '-e','USER_GRPC_ADDR=127.0.0.1:9091','--entrypoint','/service',image]
+    return args+['-e','FIXTURE_STORY='+dsn,'-e','FIXTURE_BASELINE_STORIES='+('invalid' if mode=='invalid' else str(baseline)),
+        '-e','FIXTURE_BASELINE_UNRELATED='+str(unrelated),'--entrypoint','/tmp/voice-story-restored8-probe',image]+(['wrong'] if mode=='wrong' else [])
+
+
+def _story_create_check(args,resource,targets,tools):
+    try:
+        postgres=args[4].removeprefix('container:')
+        if (postgres not in targets or targets[postgres]['kind']!='postgres' or targets[postgres]['status']!='ACTIVE'):
+            raise ValueError()
+        kind=resource['kind'];env={args[i+1].split('=',1)[0]:args[i+1].split('=',1)[1]
+            for i,v in enumerate(args[:-1]) if v=='-e'}
+        image=args[-2] if args[-1]=='wrong' else args[-1]
+        allowed={tools['ids'][key] for key in tools['images'] if re.fullmatch('story[0-9]+',key)}
+        if image not in allowed:raise ValueError()
+        mode='wrong' if args[-1]=='wrong' else ('invalid' if env.get('FIXTURE_BASELINE_STORIES')=='invalid' else 'positive')
+        baseline=0 if mode=='invalid' else int(env.get('FIXTURE_BASELINE_STORIES','0'))
+        unrelated=int(env.get('FIXTURE_BASELINE_UNRELATED','0'))
+        expected=story_create(args[2],postgres,image,kind,env['DATABASE_URL' if kind=='story' else 'FIXTURE_STORY'],baseline,unrelated,mode)
+        if args!=expected:raise ValueError()
+    except (IndexError,KeyError,TypeError,ValueError):raise Blocked('cohort_story_create_invalid') from None
+
+
 def _command(session,argv,body):
     if not isinstance(argv,(list,tuple)) or any(not isinstance(a,str) or '\0' in a for a in argv):
         raise Blocked('cohort_restore_command_invalid')
@@ -178,20 +220,36 @@ def _command(session,argv,body):
         kind='image'
     elif len(args)>=9 and args[0:2]==['create','--name']:
         name=args[2];resource=state['resources'].get(name)
-        if (resource is None or resource['status']!='PENDING' or resource['cid'] is not None or body
-            or args[3:7]!=['--network','none','--label','voice.test.owner='+name] or args[-1] not in image_ids):
+        if resource is None or resource['status']!='PENDING' or resource['cid'] is not None or body:
             raise Blocked('cohort_restore_create_invalid')
-        options=args[7:-1]
-        if resource['kind']=='migrate':
-            if options!=['--entrypoint','/bin/true'] or args[-1]!=tools['ids']['migrate']:raise Blocked('cohort_restore_create_invalid')
-        elif (len(options)!=4 or options[::2]!=['-e','-e']
-            or not re.fullmatch(r'POSTGRES_USER=voice_cohort_[a-f0-9]{24}',options[1])
-            or not re.fullmatch(r'POSTGRES_PASSWORD_FILE=/tmp/voice-cohort-password-[a-f0-9]{32}',options[3])
-            or args[-1]!=tools['ids']['postgres']):raise Blocked('cohort_restore_create_invalid')
+        if resource['kind'] in ('story','story-probe'):
+            _story_create_check(args,resource,targets,tools)
+            archive=owner.load_backup_archive(session)
+            metadata=owner.load_metadata(session,archive['metadata_ref'])['source']
+            context,_=owner.story_restore_inputs(session,archive['binding'],metadata,args[4].removeprefix('container:'))
+            dsn=[args[index+1].split('=',1)[1] for index,value in enumerate(args[:-1])
+                if value=='-e' and args[index+1].split('=',1)[0] in ('DATABASE_URL','FIXTURE_STORY')]
+            if len(dsn)!=1 or dsn[0].split('://',1)[1].split(':',1)[0]!=context['runtime_user']:
+                raise Blocked('cohort_story_runtime_identity_changed')
+        else:
+            if args[3:7]!=['--network','none','--label','voice.test.owner='+name] or args[-1] not in image_ids:
+                raise Blocked('cohort_restore_create_invalid')
+            options=args[7:-1]
+            if resource['kind']=='migrate':
+                if options!=['--entrypoint','/bin/true'] or args[-1]!=tools['ids']['migrate']:raise Blocked('cohort_restore_create_invalid')
+            elif (len(options)!=4 or options[::2]!=['-e','-e']
+                or not re.fullmatch(r'POSTGRES_USER=voice_cohort_[a-f0-9]{24}',options[1])
+                or not re.fullmatch(r'POSTGRES_PASSWORD_FILE=/tmp/voice-cohort-password-[a-f0-9]{32}',options[3])
+                or args[-1]!=tools['ids']['postgres']):raise Blocked('cohort_restore_create_invalid')
         kind='create'
-    elif len(args)==2 and args[0] in ('inspect','start') and args[1] in targets:
+    elif len(args)==2 and args[0] in ('inspect','start','wait','logs') and args[1] in targets:
         resource=targets[args[1]];kind=args[0]
         if body or resource['status'] not in ('OBSERVED','ACTIVE','REMOVING'):raise Blocked('cohort_restore_command_invalid')
+        if kind in ('wait','logs') and (resource['kind']!='story-probe' or resource['status']!='ACTIVE'):
+            raise Blocked('cohort_story_command_invalid')
+    elif len(args)==4 and args[:3]==['stop','--time','5'] and args[3] in targets:
+        resource=targets[args[3]]
+        if body or resource['kind']!='story' or resource['status']!='ACTIVE':raise Blocked('cohort_story_command_invalid')
     elif len(args)==4 and args[:3]==['rm','-f','-v'] and args[3] in targets:
         resource=targets[args[3]]
         if body or resource['status']!='REMOVING':raise Blocked('cohort_restore_cleanup_invalid')
@@ -199,6 +257,17 @@ def _command(session,argv,body):
         if args[1]=='-':
             match=re.fullmatch(r'([a-f0-9]{64}):/tmp/',args[2]);cid=match.group(1) if match else None
             if cid not in targets or not body:raise Blocked('cohort_restore_copy_invalid')
+            if targets[cid]['kind']=='story-probe':
+                import story_fixture
+                try:
+                    with tarfile.open(fileobj=io.BytesIO(body),mode='r:') as archive:
+                        members=archive.getmembers()
+                        if (len(members)!=1 or members[0].name!='voice-story-restored8-probe' or not members[0].isfile()
+                            or members[0].mode!=0o555 or not 0<members[0].size<=32<<20
+                            or hashlib.sha256(archive.extractfile(members[0]).read()).hexdigest()!=story_fixture.PRESERVED_CALLER_SHA256):
+                            raise ValueError()
+                except (ValueError,tarfile.TarError):raise Blocked('cohort_story_caller_changed') from None
+            elif targets[cid]['kind']!='postgres':raise Blocked('cohort_restore_copy_invalid')
         else:
             match=re.fullmatch(r'([a-f0-9]{64}):/usr/local/bin/migrate',args[1]);cid=match.group(1) if match else None
             if cid not in targets or targets[cid]['kind']!='migrate' or args[2]!='-' or body:raise Blocked('cohort_restore_copy_invalid')
@@ -209,7 +278,10 @@ def _command(session,argv,body):
         if tail[:2]==['-e','PGOPTIONS=-c search_path=pg_catalog,public']:tail=tail[2:]
         if len(tail)<2 or tail[0] not in targets or targets[tail[0]]['status']!='ACTIVE':raise Blocked('cohort_restore_exec_invalid')
         resource=targets[tail[0]]
-        if tail[1] not in ('psql','pg_restore','sh','rm'):raise Blocked('cohort_restore_exec_invalid')
+        if resource['kind']=='story':
+            if body or tail[1:] not in (['sha256sum','/service'],['sh','-ec',STORY_HEALTH]):raise Blocked('cohort_story_exec_invalid')
+            return DOCKER+args,path,state,resource,kind
+        if resource['kind']!='postgres' or tail[1] not in ('psql','pg_restore','sh','rm'):raise Blocked('cohort_restore_exec_invalid')
         # These commands run only inside a verified network-none anonymous-volume
         # clone; they cannot address a live workload, host path, or Docker socket.
         if tail[1]=='rm' and (len(tail)!=5 or tail[2:4]!=['-f','--'] or not re.fullmatch(r'/tmp/voice-cohort-password-[a-f0-9]{32}',tail[4])):
@@ -241,7 +313,8 @@ def restore_command(session,argv,*,body=b'',timeout=120):
         tools=owner._read(owner._base(session)/'restore-tools.json')
         fixed_tool=(len(tail)==6 and tail[:2]==['exec','-i'] and tail[3:]==['sh','-ec',
             'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate'])
-        if not fixed_tool or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256'):
+        fixed_probe=(len(tail)==3 and tail[:2]==['cp','-'] and resource is not None and resource['kind']=='story-probe')
+        if not fixed_probe and (not fixed_tool or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256')):
             raise Blocked('cohort_restore_body_limit')
     result=owner._observation(session,'restore',argv,body,limit=80<<20,timeout=timeout)
     if owner._read(path)!=state:raise Blocked('cohort_restore_journal_changed')
@@ -256,16 +329,23 @@ def restore_command(session,argv,*,body=b'',timeout=120):
     elif kind=='create':
         cid=result.decode('ascii').strip()
         if not re.fullmatch('[a-f0-9]{64}',cid):raise Blocked('cohort_restore_create_unknown')
-        resource.update(cid=cid,status='OBSERVED',image=argv[-1]);owner.save(path,state)
+        resource.update(cid=cid,status='OBSERVED',image=(argv[-2] if argv[-1]=='wrong' else argv[-1]));owner.save(path,state)
+        if resource['kind'] in ('story','story-probe'):
+            resource.update(network=tail[4],create_args=tail);owner.save(path,state)
     elif kind=='inspect':
         rows=json.loads(result)
         if (len(rows)!=1 or rows[0].get('Id')!=resource['cid'] or rows[0].get('Image')!=resource['image']
             or rows[0].get('Config',{}).get('Labels',{}).get('voice.test.owner')!=resource['name']
-            or rows[0].get('HostConfig',{}).get('NetworkMode')!='none' or rows[0].get('HostConfig',{}).get('Privileged')
+            or rows[0].get('HostConfig',{}).get('NetworkMode')!=resource.get('network','none') or rows[0].get('HostConfig',{}).get('Privileged')
             or rows[0].get('HostConfig',{}).get('PortBindings') or rows[0].get('HostConfig',{}).get('Binds')
             or any(v.get('Type')!='volume' for v in rows[0].get('Mounts',[]))):raise Blocked('cohort_restore_identity_changed')
         volumes=rows[0].get('Mounts',[])
-        if resource['kind']=='postgres' and (len(volumes)!=1 or volumes[0].get('Destination')!='/var/lib/postgresql/data') or resource['kind']=='migrate' and volumes:
+        if resource['kind'] in ('story','story-probe'):
+            host=rows[0].get('HostConfig',{});config=rows[0].get('Config',{})
+            if (config.get('User')!='65532:65532' or host.get('ReadonlyRootfs') is not True
+                or host.get('CapDrop')!=['ALL'] or 'no-new-privileges' not in host.get('SecurityOpt',[])):
+                raise Blocked('cohort_story_isolation_changed')
+        if resource['kind']=='postgres' and (len(volumes)!=1 or volumes[0].get('Destination')!='/var/lib/postgresql/data') or resource['kind']!='postgres' and volumes:
             raise Blocked('cohort_restore_volume_changed')
         resource.update(inspected=True,volumes=[v['Name'] for v in volumes]);owner.save(path,state)
     return result

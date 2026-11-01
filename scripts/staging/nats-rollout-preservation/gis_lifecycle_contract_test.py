@@ -83,7 +83,7 @@ class GISLifecycleContract(unittest.TestCase):
         return compiler.compile_target(source, [desired], 'ghcr.io/poryadok/voiceroot',
             'a' * 40, 'images-only', ['gameintegration'],
             {'voice-gameintegration/gameintegration': self.new_image}, {},
-            set(stage.snapshots), ())
+            set(stage.snapshots), ('deploy/staging/services.yaml',))
 
     def test_two_real_captures_and_compiler_bind_paused_pair_before_mutation(self):
         first, second = self.capture(), self.capture()
@@ -327,6 +327,7 @@ class GISLifecycleContract(unittest.TestCase):
 
     def test_unproved_wiring_finish_cannot_destroy_first_install_anchor(self):
         kube, state, receipt = fixtures.first_install()
+        state['schema'] = 'nats-rollout-root-v1'
         state['context'] = {'expected': {'namespace_uid': receipt['namespace_uid'],
             'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
         state['target']['manifest_sha256'] = '9' * 64
@@ -342,6 +343,7 @@ class GISLifecycleContract(unittest.TestCase):
             def save(path, value):
                 Path(path).write_text(json.dumps(value), encoding='utf-8')
             actions = object.__new__(bridge_root.Actions)
+            actions._installation = resource_claim.production_installation()
             with patch.object(bridge_root, 'INSTALLED', installed), patch.object(guard, 'ROOT', root), \
                     patch.object(bridge_root, 'private_json', side_effect=read), \
                     patch.object(bridge_root, 'save', side_effect=save):
@@ -360,6 +362,7 @@ class GISLifecycleContract(unittest.TestCase):
 
     def test_replaying_old_finish_does_not_replace_later_active_release(self):
         _, first, receipt = fixtures.first_install()
+        first['schema'] = 'nats-rollout-root-v1'
         first['context'] = {'expected': {'namespace_uid': receipt['namespace_uid'],
             'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
         first['target']['manifest_sha256'] = '9' * 64
@@ -378,6 +381,7 @@ class GISLifecycleContract(unittest.TestCase):
             def save(path, value):
                 Path(path).write_text(json.dumps(value), encoding='utf-8')
             actions = object.__new__(bridge_root.Actions)
+            actions._installation = resource_claim.production_installation()
             with patch.object(bridge_root, 'INSTALLED', installed), patch.object(guard, 'ROOT', root), \
                     patch.object(bridge_root, 'private_json', side_effect=read), \
                     patch.object(bridge_root, 'save', side_effect=save):
@@ -397,6 +401,7 @@ class GISLifecycleContract(unittest.TestCase):
 
     def test_same_operation_replay_is_noop_only_for_exact_release(self):
         _, state, receipt = fixtures.first_install()
+        state['schema'] = 'nats-rollout-root-v1'
         state['context'] = {'expected': {'namespace_uid': receipt['namespace_uid'],
             'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
         state['target']['manifest_sha256'] = '9' * 64
@@ -412,6 +417,7 @@ class GISLifecycleContract(unittest.TestCase):
             def save(path, value):
                 Path(path).write_text(json.dumps(value), encoding='utf-8')
             actions = object.__new__(bridge_root.Actions)
+            actions._installation = resource_claim.production_installation()
             with patch.object(bridge_root, 'INSTALLED', installed), patch.object(guard, 'ROOT', root), \
                     patch.object(bridge_root, 'private_json', side_effect=read), \
                     patch.object(bridge_root, 'save', side_effect=save) as save_mock:
@@ -576,6 +582,8 @@ class GISLifecycleContract(unittest.TestCase):
                         kube.service_account['metadata']['resourceVersion'] = '2'
                     return {}
                 resource = Mock()
+                resource.installation = resource_claim.production_installation()
+                pack['target']['installation_sha256'] = resource.installation.sha256
                 resource.binding.return_value = {'fixture': 'tt-bound'}
                 with patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read), \
                         patch.object(transaction, 'private_json', side_effect=read), \
@@ -654,6 +662,7 @@ class GISLifecycleContract(unittest.TestCase):
                 resource = resource_claim.Session(context, '123456abcdef', 'a' * 64,
                     lambda: copy.deepcopy(card), journal)
                 resource.admit(start=True)
+                pack['target']['installation_sha256'] = resource.installation.sha256
                 bind_target = resource.bind_target
                 def bind(tag, images, old_images, target_hash):
                     order.append('tt-bind')
@@ -755,6 +764,7 @@ class GISLifecycleContract(unittest.TestCase):
             session = resource_claim.Session(ctx, '123456abcdef', gis.digest(helper),
                 lambda: copy.deepcopy(card), resource_claim_test.MemoryJournal())
             session.admit(start=True)
+            pack['target']['installation_sha256'] = session.installation.sha256
             cut = {'manifest': {'archive_sha256': '6' * 64}, 'census': {'fixture': 'cut'}}
             cut['census_sha256'] = gis.digest(cut['census'])
             def fence(stage):
@@ -793,7 +803,7 @@ class GISLifecycleContract(unittest.TestCase):
                 self.assertEqual(session.binding()['target_sha256'], gis.digest(state['target']))
                 existing.verify_phase(bound, kube, 'paused-old')
                 authorization = transaction.authorize(kube, base, state, cut['manifest']['archive_sha256'],
-                    state['cut']['manifest_sha256'], {})
+                    state['cut']['manifest_sha256'], {}, resource_session=session)
                 self.assertEqual((state['phase'], state['status']), ('PAUSED_APPLY', 'WAITING'))
                 self.assertEqual(state['gis_binding'], bound)
                 self.assertEqual(authorization['target'], state['target'])
@@ -1417,7 +1427,7 @@ class GISLifecycleContract(unittest.TestCase):
             authorization = {'operation': binding['operation'], 'target': target, 'backup': backup,
                 'namespace_uid': self.binding['namespace_uid']}
             nonce = 'f' * 64
-            state = {'operation': binding['operation'], 'cut': cut, 'target': target,
+            state = {'schema': 'nats-rollout-root-v1', 'operation': binding['operation'], 'cut': cut, 'target': target,
                 'authorization': authorization, 'cipher_binding': binding, 'custody': custody,
                 'gis_binding': copy.deepcopy(self.binding),
                 'context': {'expected': {'namespace_uid': authorization['namespace_uid'],
@@ -1512,7 +1522,10 @@ class GISLifecycleContract(unittest.TestCase):
                 state['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(state['authorization'])
                 state.update(phase='PAUSED_APPLY', status='WAITING', fence_status='VERIFIED', provenance={})
                 anchor = {'operation': first_state['operation'], 'receipt_sha256': first_receipt['receipt_sha256']}
-                active = {'gis_first_install_transition': anchor}
+                active = {'operation': first_state['operation'],
+                    'namespace_uid': first_receipt['namespace_uid'],
+                    'pvc_uid': '00000000-0000-0000-0000-000000000012',
+                    'target_sha256': '9' * 64, 'gis_first_install_transition': anchor}
                 state['gis_expected_active'] = copy.deepcopy(active)
                 root = Path(tmp)
                 original_dir = root / ('rollout-' + first_state['operation'])
@@ -1617,6 +1630,7 @@ class GISLifecycleContract(unittest.TestCase):
                 # Finish executed with controlled external Kube/NATS/storage seams.
                 self.assertEqual(json.loads(durable.read_text(encoding='utf-8')), state)
                 actions = object.__new__(bridge_root.Actions)
+                actions._installation = resource_claim.production_installation()
                 actions.binding = copy.deepcopy(helper)
                 with patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
                         patch.object(root_cli, 'ROOT', root), patch.object(bridge_root, 'Kube', return_value=ready_kube):

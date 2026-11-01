@@ -1,5 +1,5 @@
 """Affected existing service actors: approved ACL, original mounted authority."""
-import base64,json,re,time
+import base64,copy,json,re,time
 from pathlib import Path
 from urllib.parse import urlsplit,parse_qs,unquote
 import actor_auth,actor_verification
@@ -17,6 +17,11 @@ STORY_UP={
     '000002_visibility_audience.up.sql':'63b9d54da053d0e9143bf09d993c123d7d479423452b92eb61f247e9e4a2ef16',
     '000003_hidden_from_feed.up.sql':'fe5396f4cb89865f12a31e1e79e7a993f9f9d4346f692539e9ab087b9776be0c',
     '000004_archive_purge_outbox.up.sql':'09117f527f298eceecbc7affbe940dc2d419c927e2ef349738c0e6229b01ecf1'}
+STORY_P2_UP={**STORY_UP,
+    '000005_lfp_consent_journal.up.sql':'a0b23aa978ae94b7fe74cd5b96286e54b0a5f7da04d634565cc9f0e92423f2be',
+    '000006_lfp_actor_provenance.up.sql':'073cba0ddf42ddc74072546b095ac9799e836464fb0a3c237b865e5c5bcc73f8',
+    '000007_media_reference_intents.up.sql':'80216c1e8e27fbb0d7728e06304876e72b8cfddf782b92ea85f31c760c84426f',
+    '000008_reference_inventory.up.sql':'18c405c4ce24c323f9005a6634000e8341e4d5c748c86894c2628919ac89236c'}
 def fail():raise Blocked('existing_service_actor_authority_changed')
 def identity(row):return {k:row['metadata'][k] for k in ('name','uid','resourceVersion')}
 def public_user(credentials,role):
@@ -121,10 +126,57 @@ STORY_SCHEMA_ARGS=('exec','voice-postgres-0','-c','postgres','--','sh','-ceu',ST
 
 def story_schema(kube,source,stage):
     """Fixed compatible candidate schema; isolated fixture PASS is not input."""
-    import space_authority
     folder=Path(source)/'src/backend/migrations/story_db'
     hashes={path.name:hash_bytes(path.read_bytes()) for path in folder.glob('*.up.sql')}
     if hashes!=STORY_UP:fail()
+    return _story_database(kube,stage,hashes)
+
+def story_schema_p2(kube,source,stage,plan,binding):
+    """Describe exact candidate8 and actual baseline4, without qualifying8.
+
+    The caller authenticates this binding to the protected source receipt and
+    producer inputs. A descriptor is never final migration or image admission.
+    """
+    canonical=lambda value:hash_bytes(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode())
+    try:
+        fields={'operation','source_sha','source_capture_sha256','helper_sha256','context_sha256','migration_plan_sha256'}
+        if type(binding) is not dict or set(binding)!=fields:fail()
+        for key,length in (('operation',12),('source_sha',40),('source_capture_sha256',64),
+                           ('helper_sha256',64),('context_sha256',64),('migration_plan_sha256',64)):
+            if not isinstance(binding[key],str) or not re.fullmatch('[a-f0-9]{'+str(length)+'}',binding[key]):fail()
+        if type(plan) is not list or canonical(plan)!=binding['migration_plan_sha256']:fail()
+        bound=copy.deepcopy(binding)
+        if stage.operation!=bound['operation']:fail()
+        rows=[row for row in plan if row['database']=='story']
+        if len(rows)!=1:fail()
+        selected=rows[0];folder=Path(source)/'src/backend/migrations/story_db'
+        names=set(STORY_P2_UP)|{name.replace('.up.sql','.down.sql') for name in STORY_P2_UP if not name.startswith('000001_')}
+        paths={path.name:path for path in folder.iterdir() if path.suffix=='.sql'}
+        if set(paths)!=names or any(path.is_symlink() or not path.is_file() for path in paths.values()):fail()
+        files={name:path.read_bytes().decode('utf-8') for name,path in paths.items()}
+        hashes={name:hash_bytes(raw.encode()) for name,raw in files.items()}
+        ups={name:sha for name,sha in hashes.items() if name.endswith('.up.sql')}
+        if ups!=STORY_P2_UP or selected['files']!=files or selected['hashes']!=hashes:fail()
+        image=stage.old_images['voice-story/story']
+        if not isinstance(image,str) or not re.fullmatch(r'ghcr\.io/poryadok/voiceroot/story@sha256:[a-f0-9]{64}',image):fail()
+    except (KeyError,TypeError,ValueError,UnicodeError,OSError,AttributeError):fail()
+    baseline=_story_database(kube,stage,dict(STORY_UP))
+    # Fresh DB/secret/config observations above cannot authorize a different
+    # source plan or retained image introduced while SQL was being observed.
+    if (binding!=bound or canonical(plan)!=bound['migration_plan_sha256']
+        or stage.operation!=bound['operation'] or stage.old_images['voice-story/story']!=image):fail()
+    try:
+        after={path.name:path for path in folder.iterdir() if path.suffix=='.sql'}
+        if (set(after)!=names or any(path.is_symlink() or not path.is_file() for path in after.values())
+            or {name:path.read_bytes().decode('utf-8') for name,path in after.items()}!=files):fail()
+    except (OSError,UnicodeError):fail()
+    return {'schema':'voice-story-baseline4-target8-composition-v1',
+        'baseline':baseline,'candidate':{'version':8,'up_sha256':ups,'migration_files_sha256':canonical(hashes)},
+        'retained_image':image,'binding':bound}
+
+def _story_database(kube,stage,hashes):
+    """Shared actual clean4/DSN/PG/secret checks; source profiles stay separate."""
+    import space_authority
     try:
         snapshot=stage.snapshots['voice-story'];metadata=snapshot['metadata']
         if (metadata['name']!='voice-story' or metadata['namespace']!='voice-staging'
@@ -158,10 +210,20 @@ def story_schema(kube,source,stage):
         'database_url_sha256':hash_bytes(raw),'postgres_user_sha256':hash_bytes(user.encode()),
         'database_reference_sha256':hash_bytes(json.dumps(wanted,sort_keys=True,separators=(',',':')).encode())}
 
-def preflight(kube,source,code,binding,stage,services,decoder):
+def preflight(kube,source,code,binding,stage,services,decoder,*,story_composition=None,installation=None):
+    from resource_claim import require_installation
+    installation=require_installation(installation)
     roles=sorted(ROLES.intersection(services))
     if not roles:return None
-    schema=story_schema(kube,source,stage) if 'story' in roles else None
+    if stage.expected['generation']!=installation.generation:fail()
+    generation=stage.expected['generation']
+    operator=kube.get('secret','voice-nats-operator-'+generation)
+    account=secret_bytes(operator,'account.public').decode().strip()
+    if hash_bytes(account.encode())!=installation.account_sha256:fail()
+    def schema_read():
+        if story_composition is None:return story_schema(kube,source,stage)
+        return story_schema_p2(kube,source,stage,*story_composition)
+    schema=schema_read() if 'story' in roles else None
     candidate=None
     if schema is not None:
         image=stage.old_images.get('voice-story/story')
@@ -169,24 +231,24 @@ def preflight(kube,source,code,binding,stage,services,decoder):
         snapshot=stage.snapshots['voice-story'];marker=kube.get('configmap',guard.MARKER)
         def story_unchanged():
             current=kube.get('deployment','voice-story')
-            if ({k:current['metadata'].get(k) for k in ('name','namespace','uid')}!={k:snapshot['metadata'].get(k) for k in ('name','namespace','uid')}
+            if (kube.get('secret','voice-nats-operator-'+generation)!=operator
+                or {k:current['metadata'].get(k) for k in ('name','namespace','uid')}!={k:snapshot['metadata'].get(k) for k in ('name','namespace','uid')}
                 or current['spec']!=snapshot['spec'] or kube.get('configmap',guard.MARKER)!=marker
-                or story_schema(kube,source,stage)!=schema):fail()
+                or schema_read()!=schema):fail()
         def automatic(child,config):
             return story_witness.ensure_content(child,config,
                 lambda:story_fixture.prove(child,config,source,code,binding,story_unchanged),story_unchanged)
         child,config,revision=story_content(image,automatic)
-        candidate={'schema':'voice-reviewed-story-compatible-pair-v1','image':image,'child_sha256':child,
+        candidate={'schema':('voice-reviewed-story-compatible-pair-v1' if story_composition is None
+            else 'voice-reviewed-story-baseline4-compatible-pair-v1'),'image':image,'child_sha256':child,
             'config_sha256':config,'component_source_sha':revision,'schema_sha256':hash_bytes(json.dumps(schema,sort_keys=True,separators=(',',':')).encode())}
         import story_witness
         selected=story_witness.approve_content((child,config,revision))
         if selected is not None:candidate['root_witness_authority']=selected
     raw=(Path(source)/ACL).read_bytes()
-    acl=source_grants(raw);generation=stage.expected['generation']
+    acl=source_grants(raw)
     secret_name='voice-nats-service-credentials-'+generation
-    operator=kube.get('secret','voice-nats-operator-'+generation);services_secret=kube.get('secret',secret_name)
-    account=secret_bytes(operator,'account.public').decode().strip()
-    if hash_bytes(account.encode())!=ACCOUNT_SHA:fail()
+    services_secret=kube.get('secret',secret_name)
     binary=Path(code)/'nats-rollout-preservation/bootstrap-renewer'
     binary_sha=binding['nats-rollout-preservation/bootstrap-renewer']
     captured={'operator':identity(operator),'services':identity(services_secret),
@@ -209,13 +271,34 @@ def preflight(kube,source,code,binding,stage,services,decoder):
     unchanged()
     if candidate is not None:
         candidate['actor_sha256']=hash_bytes(json.dumps({'binding':captured,'mount':mounts['story'],'proof':proofs['story']},sort_keys=True,separators=(',',':')).encode())
-    return {'schema':'voice-nats-service-actor-authority-v1','generation':generation,'source_acl_sha256':hash_bytes(raw),
+    return {'schema':'voice-nats-service-actor-authority-v2','installation_sha256':installation.sha256,'generation':generation,'source_acl_sha256':hash_bytes(raw),
         'roles':roles,'binding':captured,'mounts':mounts,'proofs':proofs,'story_schema':schema,'compatible_story_candidate':candidate}
 
-def revalidate(kube,source,code,binding,stage,services,decoder,previous,*,historical_code=None):
+def revalidate(kube,source,code,binding,stage,services,decoder,previous,*,historical_code=None,installation=None):
+    from resource_claim import require_installation,production_installation,require_production
+    installation=require_installation(installation)
+    if historical_code is not None:require_production(installation)
+    if previous is not None:
+        fields={'schema','generation','source_acl_sha256','roles','binding','mounts','proofs','story_schema','compatible_story_candidate'}
+        if type(previous) is not dict:fail()
+        if previous.get('schema')=='voice-nats-service-actor-authority-v2':
+            if set(previous)!=fields|{'installation_sha256'} or previous['installation_sha256']!=installation.sha256:fail()
+        elif previous.get('schema')=='voice-nats-service-actor-authority-v1':
+            if set(previous)!=fields or installation!=production_installation():fail()
+        else:fail()
     # Fresh private signed-time/revocation evaluation and actual scratch auth,
     # not a replay of prior booleans. No signing seed or event/ACK operation.
-    current=preflight(kube,source,code,binding,stage,services,decoder)
+    profile=previous.get('story_schema') if isinstance(previous,dict) else None
+    if isinstance(profile,dict) and profile.get('schema')=='voice-story-baseline4-target8-composition-v1':
+        if historical_code is not None:fail()
+        import compiler
+        # Source is still the complete captured tree, not a filtered baseline.
+        plan=compiler.compile_migrations(source,'app-only',lambda path:(Path(source)/path).read_bytes())
+        current=preflight(kube,source,code,binding,stage,services,decoder,
+            story_composition=(plan,profile.get('binding')),installation=installation)
+    else:current=preflight(kube,source,code,binding,stage,services,decoder,installation=installation)
+    if previous is not None and previous['schema']=='voice-nats-service-actor-authority-v1' and current is not None:
+        current=dict(current);current.pop('installation_sha256');current['schema']='voice-nats-service-actor-authority-v1'
     if historical_code is None:
         if current!=previous:fail()
         return

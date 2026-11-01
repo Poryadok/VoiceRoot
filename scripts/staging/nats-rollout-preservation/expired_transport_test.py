@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 import expired_transport as transport
 from expired_recovery_test import RecoveryAuthorityTests
+from preserved_upload_actions_test import bind_copy
 
 
 class TransportTests(unittest.TestCase):
@@ -23,6 +24,7 @@ class TransportTests(unittest.TestCase):
         self.state['context']={'marker':{'data':{'phase':'rollout-capturing'}}}
         self.base=Path(folder)/('rollout-'+self.state['operation']);self.base.mkdir(mode=0o750)
         os.chown(self.base,0,1000)
+        self.installation=bind_copy(self.base,self.state)
         self.slot=self.base/'expired-recovery-proofs'/self.execution['nonce'];self.slot.mkdir(parents=True,mode=0o700)
         original=b'synthetic original encrypted bytes';observed=b'synthetic observation encrypted bytes'
         self.state['cipher_binding'].update(cipher_bytes=len(original),cipher_sha256=hashlib.sha256(original).hexdigest())
@@ -92,7 +94,7 @@ class TransportTests(unittest.TestCase):
         with TemporaryDirectory() as folder:
             self.setup_files(folder)
             record,_=transport.export(self.base,self.state,self.slot,self.execution,self.cipher)
-            actions=object.__new__(bridge_root.Actions);actions.binding={};actions.code=Path(folder)/'code'
+            actions=object.__new__(bridge_root.Actions);actions.binding={};actions.code=Path(folder)/'code';actions._installation=self.installation
             state=copy.deepcopy(self.state);calls=[]
             def verify(token,binding,source,artifact):
                 return {'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',

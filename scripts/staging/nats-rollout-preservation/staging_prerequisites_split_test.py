@@ -14,6 +14,7 @@ class Planned(Exception):pass
 
 class PreparedInputsTests(unittest.TestCase):
     def test_actual_planner_returns_prepared_binding_before_any_kube_write(self):
+        prepare_inputs=parent.prepare_inputs
         def prepare(actions,request,approved,execution,workspace):
             calls=[];original=commands.capture.side_effect
             def capture(argv,**kwargs):
@@ -23,7 +24,7 @@ class PreparedInputsTests(unittest.TestCase):
             with patch.object(commands.capture,'side_effect',capture), \
                  patch.object(compiler.capture,'side_effect',capture), \
                  patch.object(stage_runtime.capture,'side_effect',capture):
-                result=parent.prepare_inputs(actions,request,approved,execution,workspace)
+                result=prepare_inputs(actions,request,approved,execution,workspace)
             record=json.loads((parent._base(actions.tt_session)/'prepared.json').read_bytes())
             self.assertEqual(result['inputs_sha256'],parent.digest(record))
             self.assertEqual(record['request'],{'mode':request['mode'],'changed_services':request['changed_services'],
@@ -32,7 +33,7 @@ class PreparedInputsTests(unittest.TestCase):
             self.assertEqual(calls,[])
             raise Planned()
         fixture=staging_prerequisites_test.PrepareCompositionTests()
-        with patch.object(parent,'run_prepare',side_effect=prepare),self.assertRaises(Planned):
+        with patch.object(parent,'prepare_inputs',side_effect=prepare),self.assertRaises(Planned):
             fixture._cold_prepare()
 
 

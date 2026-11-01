@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from unittest.mock import Mock, patch
 import bridge_root
 import encrypted_cut
@@ -16,10 +16,460 @@ import github_custody_test as http
 import native_store
 
 
+@contextmanager
+def captured_cohort_modules(code,dev_root):
+    """Temporarily load captured modules; callers must run sequentially."""
+    import importlib.util,sys
+    with ExitStack() as stack:
+        stack.enter_context(patch.dict(sys.modules,{}))
+        for name,loaded in list(sys.modules.items()):
+            filename=getattr(loaded,'__file__',None)
+            if filename and Path(filename).resolve().is_relative_to(dev_root):
+                sys.modules.pop(name,None)
+        base=Path(code)/'nats-rollout-preservation'
+        for name in ('staging_cohort_preservation','staging_cohort_preservation_runtime',
+                     'staging_cohort_preservation_pg','staging_cohort_preservation_auxiliary',
+                     'staging_cohort_preservation_auth'):
+            spec=importlib.util.spec_from_file_location(name,base/(name+'.py'))
+            module=importlib.util.module_from_spec(spec)
+            stack.enter_context(patch.dict(sys.modules,{name:module}))
+            spec.loader.exec_module(module)
+        yield
+
+
+def canonical_stores():
+    import source_plan_test as fixtures
+    kube,params=fixtures.SourceTests().canonical_fixture('app-only')
+    for (kind,name),claim in list(kube.objects.items()):
+        if kind!='PersistentVolumeClaim':continue
+        pvname=claim['spec']['volumeName']
+        kube.objects[('PersistentVolume',pvname)]={'apiVersion':'v1','kind':'PersistentVolume',
+            'metadata':{'name':pvname,'uid':'pv-'+claim['metadata']['uid'],'resourceVersion':'1'},
+            'spec':{'claimRef':{'uid':claim['metadata']['uid'],'name':name,'namespace':'voice-staging'}}}
+    get=kube.get
+    aliases={'pvc':'PersistentVolumeClaim','pv':'PersistentVolume','secret':'Secret',
+             'configmap':'ConfigMap','deployment':'Deployment'}
+    kube.get=lambda kind,name:get(aliases.get(kind,kind),name)
+    policy={key:value for key,value in params.items() if key not in
+        ('registry','tag','mode','changed_services','images','enrolled','generation','dataPVC')}
+    return kube,params,policy
+
+
 class CompositionTests(unittest.TestCase):
+    def test_captured_module_mapping_is_restored_after_import_failure(self):
+        import sys
+        from types import SimpleNamespace
+        import staging_cohort_preservation as original
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);code=root/'code'/'nats-rollout-preservation';code.mkdir(parents=True)
+            dev=root/'dev';dev.mkdir()
+            (code/'staging_cohort_preservation.py').write_text('fixture = True\n')
+            (code/'staging_cohort_preservation_runtime.py').write_text("raise RuntimeError('synthetic import failure')\n")
+            sentinel=SimpleNamespace(__file__=str(dev/'sentinel.py'))
+            with patch.dict(sys.modules,{'fixture_dev_sentinel':sentinel}):
+                with self.assertRaisesRegex(RuntimeError,'synthetic import failure'):
+                    with captured_cohort_modules(root/'code',dev):pass
+                self.assertIs(sys.modules['fixture_dev_sentinel'],sentinel)
+                self.assertIs(sys.modules['staging_cohort_preservation'],original)
+
+    def test_public_prepare_binds_stores_before_enrollment_admission(self):
+        """Synthetic source/Kube, real pre-cut and store projection; no P2 proof."""
+        self._exercise_public_precut(enrolled=False)
+
+    def test_public_prepare_selects_enrollment_before_broker_observation(self):
+        """The broker response remains an external fixture boundary."""
+        self._exercise_public_precut(enrolled=True)
+
+    def test_public_prepare_validates_nats_plan_before_captured_inputs(self):
+        """NATS transport is synthetic; bootstrap and planner checks execute."""
+        self._exercise_public_precut(enrolled=True,through_nats=True)
+
+    def test_public_prepare_journals_fenced_marker_before_workload_cut(self):
+        """Stop the synthetic API at the first workload mutation."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True)
+
+    def test_public_prepare_journals_client_cut_before_pod_drain(self):
+        """Stop the synthetic API at the first pod inventory."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,through_workload=True)
+
+    def test_public_prepare_journals_hub_shutdown_before_storage_recheck(self):
+        """Simulate Kubernetes pod termination; storage recheck is the boundary."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,through_workload=True,through_hub=True)
+
+    def test_public_prepare_rechecks_storage_before_postgres_capture(self):
+        """A private container store is real; Kubernetes and NATS are fixtures."""
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
+            through_workload=True,through_hub=True,through_storage=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None):
+        import commands, compiler, guard, staging_cohort_preservation as cohort
+        import staging_prerequisites_test as prerequisites
+        import source_plan_test as fixtures
+        actual_capture=commands.capture
+        class ReachedBroker(Exception):
+            pass
+        class ReachedInput(Exception):
+            pass
+        class ReachedFence(Exception):
+            pass
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            from docker_runtime import NATS_IMAGE
+            kube,params,policy=canonical_stores()
+            installed=workspace.parents[1]
+            (installed/'policy.json').write_text(json.dumps(policy))
+            stage.kube=kube;stage.service={}
+            params['dataPVC']=stage.expected['source_claim']
+            stage.marker['data'].update(generation=params['generation'],dataPVC=params['dataPVC'])
+            if enrolled:
+                import base64, bootstrap_selection, bootstrap_selection_test, nats_contract_plan as plan
+                _,previous,rows,installation=bootstrap_selection_test.owned_fixture()
+                self.assertEqual(actions.tt_session.installation,installation)
+                old_rows=[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)}
+                    for stream,config in plan.V3_DECLARATIONS]
+                previous['auth_proof'].update(normalized_consumer=old_rows[0]['config'],
+                    normalized_consumer_sha256=plan.digest(old_rows[0]['config']),normalized_consumers=old_rows,
+                    normalized_consumers_sha256=plan.digest(old_rows))
+                current=copy.deepcopy(previous)
+                secret=copy.deepcopy(rows[current['secret']['name']]);secret['metadata'].update(name='voice-nats-bootstrap-contract-'+'b'*24,uid='v4-uid')
+                secret['data']['bootstrap.creds']=base64.b64encode(b'new-music-private-creds').decode()
+                rows[secret['metadata']['name']]=secret
+                current.update(schema='voice-nats-bootstrap-enrollment-scoped-v4',previous_enrollment=previous,
+                    previous_enrollment_sha256=plan.digest(previous),
+                    secret={k:secret['metadata'][k] for k in ('name','uid','resourceVersion')},
+                    credential_sha256=bootstrap_selection.credential_hash(secret))
+                current['binding']['previous_enrollment_sha256']=plan.digest(previous)
+                stream,config=plan.DECLARATIONS[-1]
+                normalized=old_rows+[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)}]
+                current['auth_proof'].update(schema='voice-bootstrap-auth-v4',normalized_consumers=normalized,
+                    normalized_consumers_sha256=plan.digest(normalized))
+                cohort._write(guard.ROOT/'bootstrap-enrollment.json',previous)
+                cohort._write(guard.ROOT/'bootstrap-enrollment-v4.json',current)
+                for name,row in rows.items():kube.objects[('Secret',name)]=row
+                def secret_meta(name):
+                    if name.startswith('voice-nats-hub-tls-'):
+                        return {'uid':'tls-uid','resourceVersion':'1'}
+                    meta=kube.objects[('Secret',name)]['metadata']
+                    return {key:meta[key] for key in ('uid','resourceVersion')}
+                kube.secret_meta=secret_meta
+                stage.marker['metadata'].update(uid='marker-uid',resourceVersion='4')
+                stage.marker['data']['generation']=installation.generation
+            kube.objects[('ConfigMap','voice-nats-generation')]=copy.deepcopy(stage.marker)
+            kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
+            stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
+            stage.old_images['voice-user/nats-leaf']=NATS_IMAGE
+            card['observed']['images']=copy.deepcopy(stage.old_images)
+            if through_hub:
+                if through_storage:
+                    import os,uuid
+                    if not Path('/.dockerenv').exists() and os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted':
+                        raise RuntimeError('disposable_container_or_hosted_runner_required')
+                    claim_uid=str(uuid.uuid4());pv_uid=str(uuid.uuid4())
+                    stage.expected.update(source_claim_uid=claim_uid,source_pv_uid=pv_uid)
+                    stage.final_claim['metadata']['uid']=claim_uid
+                    stage.final_pv['metadata']['uid']=pv_uid
+                    stage.final_pv['spec']['claimRef']['uid']=claim_uid
+                    storage=Path('/var/lib/rancher/k3s/storage')/('pvc-'+claim_uid+'_voice-staging_'+stage.expected['source_claim'])
+                    storage.parent.mkdir(parents=True,exist_ok=True)
+                    storage.mkdir(mode=0o700);os.chown(storage,65532,10000);storage.chmod(0o2770)
+                    self.addCleanup(storage.rmdir)
+                    stage.final_path=storage;stage.final_pv['spec']['local']['path']=str(storage)
+                    live[('pvc',stage.expected['source_claim'])]=copy.deepcopy(stage.final_claim)
+                    live[('pv',stage.final_claim['spec']['volumeName'])]=copy.deepcopy(stage.final_pv)
+                hub={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':bridge_root.HUB,
+                    'namespace':'voice-staging','uid':'00000000-0000-4000-8000-000000000010','resourceVersion':'1','generation':1},
+                    'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'nats','image':NATS_IMAGE}]}}}}
+                if through_storage:
+                    spec=hub['spec']['template']['spec']
+                    spec['securityContext']={'fsGroup':10000,'fsGroupChangePolicy':'OnRootMismatch'}
+                    spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]
+                    spec['containers'][0].update(securityContext={'runAsUser':10000,'runAsGroup':10000,'runAsNonRoot':True},
+                        volumeMounts=[{'name':'jsdata','mountPath':'/data'}])
+                stage.snapshots[bridge_root.HUB]=copy.deepcopy(hub)
+                stage.expected['deployment_uids'][bridge_root.HUB]=hub['metadata']['uid']
+                stage.expected['marker_uid']=stage.marker['metadata']['uid']
+                stage.old_images[bridge_root.HUB+'/nats']=NATS_IMAGE
+                card['observed']['images']=copy.deepcopy(stage.old_images)
+                live[('deployment',bridge_root.HUB)]=copy.deepcopy(hub)
+            stage.original_snapshots=copy.deepcopy(stage.snapshots)
+            stage.expected['deployment_uids']['voice-user']=stage.snapshots['voice-user']['metadata']['uid']
+            live[('configmap','voice-nats-generation')]=copy.deepcopy(stage.marker)
+            live[('deployment','voice-user')]=copy.deepcopy(stage.snapshots['voice-user'])
+            if through_hub:live[('service','voice-nats')]=copy.deepcopy(stage.service)
+            if enrolled and not through_nats:
+                old_get=kube.get
+                def broker_boundary(kind,name):
+                    if (kind,name)==('deployment',bridge_root.HUB):raise ReachedBroker()
+                    return old_get(kind,name)
+                kube.get=broker_boundary
+            original_run=kube.run
+            pod={'spec':{'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]}}
+            kube.run=lambda args,body=None,timeout=30: ({'items':[pod]} if args==['get','pods','-o','json']
+                else original_run(args,body=body,timeout=timeout))
+            if through_nats:
+                import bootstrap_auth, nats_a3_roster_test, rollout_census_test
+                import cohort_fake_nats
+                stream_rows=nats_a3_roster_test.Planner().inputs(voice=10)[0]
+                detail=[]
+                for name,value in stream_rows.items():
+                    state={**value['state'],'bytes':100,'consumer_count':0}
+                    detail.append({'name':name,'created':rollout_census_test.CREATED,
+                        'config':value['config'],'state':state,'consumer_detail':[]})
+                tree={'streams':len(detail),'consumers':0,'messages':sum(x['state']['messages'] for x in detail),
+                    'bytes':sum(x['state']['bytes'] for x in detail),'total':1,
+                    'account_details':[{'id':'A'+'A'*55,'stream_detail':detail}]}
+                hub=copy.deepcopy(stage.snapshots[bridge_root.HUB]) if through_hub else {'metadata':{'name':bridge_root.HUB,'uid':'hub'}}
+                hub_uid=hub['metadata']['uid'];rs_uid='00000000-0000-4000-8000-000000000011' if through_hub else 'rs'
+                replica={'metadata':{'uid':rs_uid,'ownerReferences':[{'kind':'Deployment','uid':hub_uid,'controller':True}]}}
+                monitor_pod={'metadata':{'name':bridge_root.HUB+'-fixture','namespace':'voice-staging',
+                    'uid':'00000000-0000-4000-8000-000000000012','resourceVersion':'1',
+                    'ownerReferences':[{'kind':'ReplicaSet','name':'rs','uid':rs_uid,'controller':True}]},
+                    'spec':{'nodeName':'pmdebook','containers':[{'name':'nats','image':NATS_IMAGE}] if through_hub else [],
+                        'volumes':[{'persistentVolumeClaim':{'claimName':stage.expected['source_claim']}}]},
+                    'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}],
+                        'containerStatuses':[{'name':'nats','ready':True,'imageID':NATS_IMAGE,
+                            'containerID':'containerd://'+'c'*64,'restartCount':0,
+                            'state':{'running':{'startedAt':'2026-10-29T00:00:00Z'}}}] if through_hub else []}}
+                if through_hub:
+                    live[('replicaset','rs')]=copy.deepcopy(replica)
+                    live[('pod',monitor_pod['metadata']['name'])]=copy.deepcopy(monitor_pod)
+                    pod=copy.deepcopy(monitor_pod)
+                old_get=kube.get
+                def get_nats(kind,name):
+                    if (kind,name)==('deployment',bridge_root.HUB):return copy.deepcopy(hub)
+                    if (kind,name)==('replicaset','rs'):return copy.deepcopy(replica)
+                    if not through_fence and kind=='configmap' and name.startswith('voice-nats-') and name!='voice-nats-generation':raise ReachedInput()
+                    return old_get(kind,name)
+                kube.get=get_nats
+                old_run=kube.run
+                def run_nats(args,body=None,timeout=30):
+                    if args==['get','pods','-l','app='+bridge_root.HUB,'-o','json']:return {'items':[monitor_pod]}
+                    if args[:2]==['get','--raw']:return copy.deepcopy(tree)
+                    return old_run(args,body=body,timeout=timeout)
+                kube.run=run_nats
+                if through_fence:
+                    import stage_runtime, commands
+                    from cohort_fake_kube import FakeKube
+                    contract=json.loads((actions.code/'nats-known-baseline'/'deployed-contract.json').read_bytes())
+                    scripts=Path(__file__).parent/'fixtures'/'cohort-captured-scripts'
+                    for entry in contract['scripts']:
+                        raw=(scripts/(entry['part']+'.sh')).read_bytes()
+                        self.assertEqual((len(raw),hashlib.sha256(raw).hexdigest()),(entry['bytes'],entry['sha256']))
+                        name='voice-nats-'+entry['part']+'-bootstrap'
+                        row={'metadata':{'name':name,'uid':entry['configMapUID'],
+                            'resourceVersion':entry['configMapResourceVersion']},'data':{'bootstrap.sh':raw.decode()}}
+                        kube.objects[('ConfigMap',name)]=row;live[('configmap',name)]=copy.deepcopy(row)
+                    for name,row in rows.items():live[('secret',name)]=copy.deepcopy(row)
+                    live[('secret','voice-nats-hub-tls-'+installation.generation)]={'metadata':{'uid':'tls-uid','resourceVersion':'1'}}
+                    objects={('configmap','voice-nats-generation'):stage.marker,
+                        ('deployment','voice-user'):stage.snapshots['voice-user']}
+                    if through_hub:
+                        objects[('deployment',bridge_root.HUB)]=stage.snapshots[bridge_root.HUB]
+                        objects[('pod',monitor_pod['metadata']['name'])]=monitor_pod
+                    fake=FakeKube(objects);flags={'hub_released':False}
+                    def capture_fence(argv,*,body=b'',**kwargs):
+                        if through_storage and argv[:2]==['/usr/bin/docker','--host=unix:///var/run/docker.sock']:
+                            if postgres is None or (cohort._base(actions.tt_session)/'local-restore.json').exists():
+                                commands.authority_guard(argv)
+                                raise ReachedFence()
+                            return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
+                        if 'patch' in argv:
+                            index=argv.index('patch');kind=argv[index+1]
+                            if kind=='deployment' and not through_workload:raise ReachedFence()
+                            result=fake.capture_patch(argv,body=body,**kwargs)
+                            name=argv[index+2];live[(kind,name)]=fake.get(kind,name)
+                            if through_hub and kind=='deployment' and name==bridge_root.HUB:
+                                retained=fake.objects[('pod',monitor_pod['metadata']['name'])]
+                                retained['metadata']['deletionTimestamp']='2026-10-29T00:00:01Z'
+                                retained['status']['containerStatuses'][0]['state']={'terminated':{'exitCode':0,
+                                    'startedAt':'2026-10-29T00:00:00Z','finishedAt':'2026-10-29T00:00:01Z'}}
+                                live[('pod',monitor_pod['metadata']['name'])]=copy.deepcopy(retained)
+                            if through_hub and kind=='pod' and not live[(kind,name)]['metadata'].get('finalizers'):
+                                flags['hub_released']=True
+                            return result
+                        if through_workload and 'pods,replicasets' in argv:
+                            if through_hub:return json.dumps({'items':[]}).encode()
+                            raise ReachedFence()
+                        if through_hub and 'hpa,jobs,deployments' in argv:
+                            return json.dumps({'items':[]}).encode()
+                        if through_hub and 'version' in argv:
+                            commands.authority_guard(argv)
+                            return json.dumps({'serverVersion':{'major':'1','minor':'28'}}).encode()
+                        if through_hub and 'exec' in argv and 'wget' in argv:
+                            commands.authority_guard(argv)
+                            return json.dumps(tree).encode()
+                        if through_hub and argv[-3:]==['pods','-o','json']:
+                            return json.dumps({'items':[live[('pod',monitor_pod['metadata']['name'])]]}).encode()
+                        if postgres is not None and ('voice-postgres-0' in argv or 'endpointslices' in argv):
+                            return postgres.capture(argv,body=body,fallback=actual_capture,**kwargs)
+                        if 'jsonpath-as-json=' in ' '.join(argv):
+                            name=argv[argv.index('secret')+1];meta=live[('secret',name)]['metadata']
+                            return json.dumps([meta['uid'],meta['resourceVersion']]).encode()
+                        return transport(argv,body=body,**kwargs)
+            saved=workspace.with_name(workspace.name+'-source-fixture');workspace.rename(saved)
+            (installed/'source-authority'/(actions.tt_session.operation+'.json')).unlink()
+            execution={**execution,'head_sha':actions.tt_session.context['commit']}
+            request={**request,'action':'prepare','nonce':actions.tt_session.operation+'a'*52,
+                'source_sha':actions.tt_session.context['commit'],'resource_context':actions.tt_session.context,'token':'fixture'}
+            def capture_source(_token,_run,_sha,destination):
+                shutil.copytree(saved,destination,dirs_exist_ok=True)
+                return copy.deepcopy(approved)
+            with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder),\
+                 patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)),\
+                 patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source),ExitStack() as nats_patches:
+                if through_nats:
+                    # Source-owned dynamic modules must be loaded from the
+                    # captured tree even if unittest discovery imported their
+                    # working-tree equivalents before this test started.
+                    dev_root=Path(__file__).resolve().parents[2]/'dev'
+                    nats_patches.enter_context(captured_cohort_modules(actions.code,dev_root))
+                    nats_patches.enter_context(patch.object(bootstrap_auth,'DockerRuntime',
+                        side_effect=lambda base,operation:cohort_fake_nats.ScratchBroker(base,operation,'A'+'A'*55)))
+                    nats_patches.enter_context(patch.object(bootstrap_auth,'Actor',cohort_fake_nats.ScratchActor))
+                    if through_fence:
+                        nats_patches.enter_context(patch.object(commands,'capture',side_effect=capture_fence))
+                        nats_patches.enter_context(patch.object(stage_runtime,'capture',side_effect=capture_fence))
+                        if through_hub:
+                            def get_after_hub(kind,name):
+                                if flags['hub_released'] and not through_storage and kind=='pvc':raise ReachedFence()
+                                if postgres is not None and postgres.has_get(kind,name):return postgres.get(kind,name)
+                                if through_storage and postgres is None and flags['hub_released'] and kind=='statefulset' and name=='voice-postgres':raise ReachedFence()
+                                if through_storage and flags['hub_released'] and kind.lower()=='secret' and name=='voice-app-secrets':
+                                    commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                                    return copy.deepcopy(kube.objects[('Secret',name)])
+                                if through_storage and flags['hub_released'] and kind=='Deployment' and name in stage.snapshots:
+                                    commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                                    return copy.deepcopy(live[('deployment',name)])
+                                try:return get(kind,name)
+                                except KeyError:
+                                    return kube.get(kind,name)
+                            nats_patches.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get_after_hub))
+                        if postgres is not None:
+                            import subprocess
+                            nats_patches.enter_context(patch.object(subprocess,'Popen',side_effect=postgres.popen))
+                        with self.assertRaises(ReachedFence):actions.execute(request)
+                    else:
+                        with self.assertRaises(ReachedInput):actions.execute(request)
+                elif enrolled:
+                    with self.assertRaises(ReachedBroker):actions.execute(request)
+                else:
+                    with self.assertRaisesRegex(cohort.Blocked,'enrolled_bootstrap_selection_refused'):
+                        actions.execute(request)
+            base=cohort._base(actions.tt_session)
+            self.assertTrue((base/'precut.json').exists())
+            stores=cohort._read(base/'stores.json')
+            self.assertEqual(stores['projection']['schema'],'voice-staging-store-projection-v1')
+            self.assertTrue(stores['claims'])
+            if through_nats:
+                self.assertIn('plan',cohort._read(base/'preflight.json')['nats'])
+            if through_fence:
+                self.assertEqual(fake.get('configmap','voice-nats-generation')['data']['phase'],'rollout-capturing')
+                record=cohort._read(base/'effects'/'cut-configmap-voice-nats-generation.json')
+                self.assertEqual(record['status'],'DONE')
+                if through_workload:
+                    self.assertEqual(fake.get('deployment','voice-user')['spec']['replicas'],0)
+                    self.assertEqual(cohort._read(base/'effects'/'cut-deployment-voice-user.json')['status'],'DONE')
+                if through_hub:
+                    self.assertTrue(flags['hub_released'])
+                    self.assertEqual(fake.get('deployment',bridge_root.HUB)['spec']['replicas'],0)
+                    for suffix in ('retain','release'):
+                        self.assertEqual(cohort._read(base/'effects'/('cut-pod-'+monitor_pod['metadata']['name']+'-'+suffix+'.json'))['status'],'DONE')
+                if through_storage:
+                    self.assertTrue((base/'paused.json').exists())
+                    checkpoint=cohort._read(cohort._runtime_base(actions.tt_session)/'checkpoint.json')
+                    self.assertEqual((checkpoint['phase'],checkpoint['status']),('COHORT_BACKUP','BLOCKED'))
+                    if postgres is not None:
+                        restore=cohort._read(base/'local-restore.json')
+                        self.assertEqual(restore['status'],'COMPLETE')
+                        self.assertEqual(restore['proof']['cleanup'],'verified')
+                self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
+            else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
+        overrides=None
+        if through_nats:
+            source=Path(__file__).parent/'testdata'/'a3-roster-source'
+            overrides={f'deploy/templates/nats-{part}-bootstrap.yaml':source/f'deploy/templates/nats-{part}-bootstrap.yaml'
+                for part in ('realtime','analytics-chat','search','notification')}
+        prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
+            full_source=True,strict_helpers=True,source_overrides=overrides)
+
+    def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
+        """Source rendering and store binding are real; Kubernetes is synthetic."""
+        import commands, compiler, guard, resource_claim, resource_claim_test
+        import source_authority, source_plan, source_plan_test as fixtures
+        import staging_cohort_preservation as cohort
+        from types import SimpleNamespace
+        kube,params,policy=canonical_stores()
+        stage=SimpleNamespace(kube=kube,snapshots={},marker={'data':{'generation':params['generation'],'dataPVC':params['dataPVC']}})
+        context=resource_claim_test.context();context['commit']=fixtures.TAG
+        card=resource_claim_test.card(context)
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)),patch.object(guard,'ROOT',root),\
+                 patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder):
+                session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
+                session.admit(start=True)
+                cohort._write(root/'installed'/'policy.json',policy)
+                request={'mode':'app-only','changed_services':[]}
+                parameters={**policy,'registry':source_authority.REGISTRY,
+                    'tag':context['commit'],'mode':'app-only','changed_services':[],'images':{},'enrolled':[],
+                    'generation':params['generation'],'dataPVC':params['dataPVC']}
+                projection=source_plan.preservation_projection(fixtures.SOURCE,parameters,fixtures.decoder,kube)
+                approved={'source_sha':context['commit'],'source_files':{row['path']:row['sha256'] for row in projection['sources']}}
+                with resource_claim.command_scope(session.check):
+                    stores=cohort._capture_stores(session,stage,request,approved,fixtures.SOURCE)
+                    self.assertEqual(stores['projection'],projection)
+                    self.assertTrue(stores['claims'])
+                    claim=next(iter(stores['claims'].values()))
+                    kube.objects[('PersistentVolume',claim['pv']['metadata']['name'])]['spec']['claimRef']['uid']='foreign'
+                    with self.assertRaisesRegex(cohort.Blocked,'cohort_store_storage_changed'):
+                        cohort._capture_stores(session,stage,request,approved,fixtures.SOURCE)
+
+    def test_cut_captures_real_prerequisite_inputs_before_kubernetes_observation(self):
+        """The Kubernetes read is a fixture boundary, not P2 qualification."""
+        import staging_cohort_preservation as cohort
+        import staging_prerequisites_test as fixtures
+        class ReachedKube(Exception):
+            pass
+        def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            with patch.object(stage.kube,'run',side_effect=ReachedKube):
+                with self.assertRaises(ReachedKube):
+                    cohort._start_cut(actions,request,approved,execution,workspace)
+            session=actions.tt_session
+            self.assertEqual(session.check()['phase'],'prepare')
+            prepared=cohort.private._read_private(cohort.private._base(session)/'prepared.json')
+            self.assertTrue(prepared)
+        fixtures.PrepareCompositionTests()._cold_prepare(on_ready=run)
+
+    def test_cohort_cut_uses_fenced_resource_version_cas(self):
+        """Exercise the real cut journal against an in-memory Kubernetes API.
+
+        This is a Kubernetes boundary fixture, not a P2 qualification proof.
+        """
+        import commands, guard, resource_claim, staging_cohort_preservation as cohort
+        import staging_cohort_preservation_test as fixtures
+        from cohort_fake_kube import FakeKube
+        from types import SimpleNamespace
+        before={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user',
+            'namespace':'voice-staging','uid':'user','resourceVersion':'3','generation':1},
+            'spec':{'replicas':1,'template':{'spec':{'containers':[{'name':'user','image':'old'}]}}}}
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)),\
+                 patch.object(guard,'ROOT',root),patch.object(cohort,'_source'):
+                session,_=fixtures.CutEffectTests().fixture(root,before)
+                kube=FakeKube({('deployment','voice-user'):before})
+                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=kube.capture_patch):
+                    result=cohort.cut_cas(session,'deployment',before,[{'op':'replace','path':'/spec/replicas','value':0}])
+                    self.assertEqual(result,kube.get('deployment','voice-user'))
+                    with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                        cohort.cut_cas(session,'deployment',before,[{'op':'replace','path':'/spec/replicas','value':0}])
+                self.assertEqual(kube.calls,[('deployment','voice-user',[
+                    {'op':'test','path':'/metadata/uid','value':'user'},
+                    {'op':'test','path':'/metadata/resourceVersion','value':'3'},
+                    {'op':'replace','path':'/spec/replicas','value':0}])])
+
     def test_actor_drift_after_offnode_readback_prevents_transaction_authorization(self):
         import actor_root
-        actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'}
+        actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured-code');actions.binding={'fixed':'hash'};actions._installation=None
         state={'operation':'123456abcdef','cipher_binding':{},'service_actor_services':['social'],
             'service_actor_authority':{'binding':'root-produced'}}
         order=[]

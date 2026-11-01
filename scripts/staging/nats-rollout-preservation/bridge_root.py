@@ -2,6 +2,7 @@
 import datetime as dt
 import copy
 import grp
+import hashlib
 import json
 import re
 import os
@@ -28,14 +29,51 @@ INSTALLED=guard.ROOT/'installed'
 def private_json(path):return root_private_json(path,limit=128<<20 if Path(path).name=='checkpoint.json' else 2<<20)
 def save(path,row):root_save(path,row,limit=128<<20)
 
+
+def _copy_checkpoint(state,cut,installation,space_members=None):
+    import resource_claim
+    installation=resource_claim.require_installation(installation)
+    fence=resource_claim.historical_binding(state,installation=installation)
+    scoped=fence['schema']=='voice-staging-resource-fence-v2'
+    row={'schema':'nats-rollout-copy-v2' if scoped else 'nats-rollout-copy-v1',
+        'operation':state['operation'],'archive_sha256':cut['manifest']['archive_sha256'],
+        'manifest_sha256':cut['manifest_sha256'],'census_sha256':cut['census_sha256']}
+    if scoped:row['installation_sha256']=installation.sha256
+    if space_members is not None:row['space_members']=space_members
+    return row
+
+
+def _validate_copy_checkpoint(row,state,cut,installation,space_members=None):
+    if row!=_copy_checkpoint(state,cut,installation,space_members):
+        raise Blocked('rollout_copy_checkpoint_changed')
+
 def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
-def record_source_authority(session,approved,execution):
+def status_summary(state):
+    if (state.get("schema") not in ("nats-rollout-root-v1","nats-rollout-root-v2","voice-staging-cohort-preservation-checkpoint-v1")
+        or state.get("schema")=="nats-rollout-root-v2" and (not isinstance(state.get("installation_sha256"),str) or not re.fullmatch(r"[a-f0-9]{64}",state["installation_sha256"]))
+        or not isinstance(state.get("operation"),str) or not re.fullmatch(r"[a-f0-9]{12}",state["operation"])):
+        raise Blocked("bridge_status_checkpoint_invalid")
+    result=summary(state)
+    for key,value in result.items():
+        if not isinstance(value,str) or len(value)>128 or key!="operation" and not re.fullmatch(r"[A-Za-z0-9_.:-]+",value):
+            raise Blocked("bridge_status_summary_invalid")
+    if not result.get("status"):raise Blocked("bridge_status_checkpoint_invalid")
+    return result
+
+def record_source_authority(session,approved,execution,*,code=None,binding=None):
     """Record only digests produced by this root-owned source capture."""
     session.check()
     if not re.fullmatch(r'[a-f0-9]{12}',session.operation):raise Blocked('bridge_source_capture_invalid')
-    row={'schema':'voice-staging-source-capture-v1','operation':session.operation,
+    import resource_claim
+    resource_claim.require_session(session,installation=session.installation)
+    if code is None or not isinstance(binding,dict) or transaction.canonical(binding)!=session.helper:
+        raise Blocked('bridge_source_helper_custody_required')
+    code=Path(code)
+    if root_cli.code_binding(code)!=binding:raise Blocked('bridge_source_helper_changed')
+    code_info=code.lstat()
+    row={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,
          'context':copy.deepcopy(session.context),'helper_sha256':session.helper,
          'approved_sha256':transaction.canonical(approved),'execution_sha256':transaction.canonical(execution)}
     raw=json.dumps(row,sort_keys=True,separators=(',',':')).encode()
@@ -50,6 +88,16 @@ def record_source_authority(session,approved,execution):
             info=os.fstat(dfd)
             if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_mode&0o077:
                 raise Blocked('bridge_source_capture_directory_invalid')
+            # Capture the actual already-approved data before publishing its
+            # create-only receipt. Early root readers cannot reconstruct it
+            # from a target, a Secret or a later optional checkpoint field.
+            os.mkdir(session.operation,0o700,dir_fd=dfd)
+            os.fsync(dfd)
+            custody=INSTALLED/'source-authority'/session.operation
+            save(custody/'approved.json',approved)
+            save(custody/'execution.json',execution)
+            save(custody/'code-custody.json',{'root':str(code),'manifest':copy.deepcopy(binding),
+                'directory':{'dev':code_info.st_dev,'ino':code_info.st_ino}})
             fd=os.open(session.operation+'.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=dfd)
             with os.fdopen(fd,'wb') as output:
                 output.write(raw);output.flush();os.fsync(output.fileno())
@@ -66,7 +114,8 @@ def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
         raise Blocked('realtime_bootstrap_actor_changed')
     try:
         expected=copy.deepcopy(before)
-        schema=expected['story_schema']
+        profile=expected['story_schema']
+        schema=profile['baseline'] if profile.get('schema')=='voice-story-baseline4-target8-composition-v1' else profile
         first=schema['database_secret'];second=schema['authority']['secret']
         if (first['name']!='voice-app-secrets' or first['uid']!=old_secret['uid']
             or second['uid']!=old_secret['uid'] or new_secret['uid']!=old_secret['uid']
@@ -76,7 +125,7 @@ def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
             raise ValueError()
         first['resourceVersion']=second['resourceVersion']=new_secret['resourceVersion']
         candidate=expected.get('compatible_story_candidate')
-        if candidate is not None:candidate['schema_sha256']=transaction.canonical(schema)
+        if candidate is not None:candidate['schema_sha256']=transaction.canonical(profile)
         if expected!=after:raise ValueError()
         return after
     except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_actor_changed') from None
@@ -122,20 +171,67 @@ def capture_cohort_authorities(actions,request,approved,workspace,stage,contract
     except FileNotFoundError:active=None
     if active is not None:
         validate_active_contract_identity(active,stage.expected,baseline);contract=active['contract']
-    names=[name.removeprefix('voice-') for name in stage.snapshots if name!=HUB]
-    actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml)
     try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
     except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
     previous=private_json(guard.ROOT/'bootstrap-enrollment.json')
     from nats_contract_plan import digest as enrollment_digest
-    if (not isinstance(enrollment,dict) or enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
+    if (not isinstance(enrollment,dict) or enrollment.get('schema') not in ('voice-nats-bootstrap-enrollment-v4','voice-nats-bootstrap-enrollment-scoped-v4')
         or enrollment.get('previous_enrollment')!=previous
         or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous)):
         raise Blocked('enrolled_bootstrap_selection_refused')
-    nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml)
+    nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml,installation=actions.installation)
+    names=[name.removeprefix('voice-') for name in stage.snapshots if name!=HUB]
+    if 'story' in names:
+        composition=_cohort_story_composition(actions,request,approved,workspace)
+        actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,
+            story_composition=composition,installation=actions.installation)
+    else:actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml,installation=actions.installation)
     session.check()
     return {'schema':'voice-staging-cohort-preflight-v1','operation':session.operation,
             'services':names,'actor':actor,'nats':nats,'enrollment':enrollment,'contract':contract}
+
+
+def _cohort_story_composition(actions,request,approved,workspace):
+    """Bind pre-cut Story4/source8 descriptors to actual protected source inputs."""
+    session=actions.tt_session
+    parent=INSTALLED/'prerequisites'/session.operation
+    prepared=private_json(parent/'prepared.json');parent_plan=prepared.get('plan') if type(prepared) is dict else None
+    execution=private_json(parent/'execution.json')
+    receipt=private_json(INSTALLED/'source-authority'/(session.operation+'.json'))
+    from apply import digest
+    import staging_prerequisites
+    if (type(prepared) is not dict or set(prepared)!={'schema','plan','request','gis_authority_sha256'}
+        or prepared.get('schema')!='voice-staging-prerequisites-prepared-v1'
+        or prepared.get('request')!={'mode':request.get('mode'),'changed_services':request.get('changed_services'),
+                                     'gis_first_install':request.get('gis_first_install') is True}
+        or not isinstance(prepared.get('gis_authority_sha256'),str)
+        or not re.fullmatch(r'[a-f0-9]{64}',prepared['gis_authority_sha256'])
+        or type(parent_plan) is not dict or actions.installation!=session.installation
+        or receipt!={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,
+        'context':session.context,'helper_sha256':session.helper,'approved_sha256':digest(approved),
+        'execution_sha256':digest(execution)}
+        or parent_plan.get('schema')!='voice-staging-prerequisites-plan-v3'
+        or parent_plan.get('installation_sha256')!=session.installation.sha256
+        or parent_plan.get('operation')!=session.operation or parent_plan.get('context')!=session.context
+        or parent_plan.get('helper_sha256')!=session.helper
+        or parent_plan.get('source_capture_sha256')!=digest(receipt)
+        or parent_plan.get('approved_sha256')!=digest(approved) or parent_plan.get('execution_sha256')!=digest(execution)):
+        raise Blocked('cohort_preflight_source_changed')
+    staging_prerequisites.validate_plan(parent_plan,session)
+    def source_read(relative):
+        name=str(relative).replace('\\','/')
+        path=Path(workspace)/relative
+        if Path(relative).is_absolute() or '..' in Path(relative).parts:raise Blocked('cohort_preflight_source_changed')
+        encrypted_cut.directory(path.parent)
+        raw=public_read(path)
+        if hashlib.sha256(raw).hexdigest()!=approved['source_files'].get(name):raise Blocked('cohort_preflight_source_changed')
+        return raw
+    migration_plan=compiler.compile_migrations(workspace,request['mode'],source_read)
+    story_binding={'operation':session.operation,'source_sha':approved['source_sha'],
+        'source_capture_sha256':digest(receipt),'helper_sha256':session.helper,
+        'context_sha256':digest(session.context),'migration_plan_sha256':digest(migration_plan)}
+    session.check()
+    return migration_plan,story_binding
 
 
 class Actions:
@@ -143,12 +239,34 @@ class Actions:
         import resource_claim
         return resource_claim.root_scope(self,request)
 
-    def __init__(self,code):
+    def __init__(self,code,*,installation=None):
+        import resource_claim
+        self._installation=resource_claim.require_installation(installation)
         self.code=Path(code);self.binding=root_cli.code_binding(self.code)
+
+    @property
+    def installation(self):return self._installation
 
     def _report(self,name,status):
         observer=getattr(self,'_observer',None)
         if observer is not None:observer(name,status)
+
+    def _require_authorization_operation(self,operation):
+        session=getattr(self,'tt_session',None)
+        if session is not None and operation!=session.operation:
+            raise Blocked('staging_authorization_operation_changed')
+        return session
+
+    def _require_authorization_binding(self,state):
+        import resource_claim
+        session=self._require_authorization_operation(state.get('operation'))
+        fence=state.get('resource_fence')
+        if isinstance(fence,dict) and fence.get('schema')=='voice-staging-resource-fence-v2':
+            if type(session) is not resource_claim.Session or not session.admitted:
+                raise Blocked('staging_installation_binding_changed')
+            resource_claim.historical_binding(state,installation=session.installation)
+            session.require_binding(fence)
+        return session
 
     def execute_observed(self,request,observe):
         if getattr(self,'_observer',None) is not None:raise Blocked('bridge_operation_already_observed')
@@ -161,11 +279,23 @@ class Actions:
         state=private_json(base/'checkpoint.json')
         if state.get('operation')!=operation:raise Blocked('bridge_operation_custody_invalid')
         session=getattr(self,'tt_session',None)
+        if state.get('schema')=='voice-staging-cohort-preservation-checkpoint-v1':
+            import resource_claim
+            import staging_cohort_preservation as cohort
+            plan=state.get('plan')
+            if (type(plan) is not dict or set(plan)!=cohort.PLAN_FIELDS or plan.get('schema')!=cohort.SCHEMA
+                or plan.get('operation')!=operation or plan.get('helper_sha256')!=resource_claim.digest(self.binding)):
+                raise Blocked('cohort_status_checkpoint_changed')
+            resource_claim.validate(plan.get('context'))
+            if session is not None:
+                cohort.validate_plan(plan,session)
+                cohort.load_plan(session)
+            return base,state
         if session is not None:
             if operation==session.operation:session.require_binding(state.get('resource_fence'))
             else:
                 import resource_claim
-                resource_claim.historical_binding(state)
+                resource_claim.historical_binding(state,installation=self.installation)
         if state.get('operator_retirement') is not None:
             from operator_retirement import verify_terminal
             verify_terminal(base,state)
@@ -174,8 +304,29 @@ class Actions:
         paused_recovery.verify_adopted_binding(base,state,self.binding)
         return base,state
 
+    def validate_cached(self,request,result):
+        session=getattr(self,"tt_session",None)
+        protected=request.get("action")=="prepare" and request.get("mode") in ("full","app-only")
+        if session is None:
+            if protected:raise Blocked("cohort_cache_session_required")
+            return
+        row=session.journal.read()
+        if not protected and not (request.get("action")=="authorize" and row.get("cohort_preservation_sha256") is not None):return
+        import staging_cohort_preservation as cohort
+        expected=(cohort.prepared_replay_result(session,request) if protected
+            else cohort.final_authorization_result(session,request))
+        if result!=expected:raise Blocked("cohort_cache_result_changed")
+
     def recover(self,request):
         if request['action']=='status':return self.execute(request)
+        session=getattr(self,"tt_session",None)
+        if session is not None:
+            row=session.journal.read()
+            protected=request.get("action")=="prepare" and request.get("mode") in ("full","app-only")
+            if protected or request.get("action")=="authorize" and row.get("cohort_preservation_sha256") is not None:
+                import staging_cohort_preservation as cohort
+                return (cohort.prepared_replay_result(session,request) if protected
+                    else cohort.final_authorization_result(session,request))
         operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
         try:base,state=self.state(operation)
         except (OSError,Blocked):return None
@@ -247,9 +398,31 @@ class Actions:
         return source_run,{'dispatcher_run_id':run['id'],'run_attempt':run['run_attempt'],'head_sha':run['head_sha'],'event':run['event'],'workflow_id':workflow,'path':path,'repository':source_authority.REPO}
 
     def _active_release(self,state,*,authority_guard=None):
+        import resource_claim
         if authority_guard is not None:authority_guard()
         row={'operation':state['operation'],'namespace_uid':state['context']['expected']['namespace_uid'],
             'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']}
+        if state.get('schema')=='nats-rollout-root-v2':
+            if (state.get('installation_sha256')!=self.installation.sha256
+                or state['target'].get('installation_sha256')!=self.installation.sha256
+                or not isinstance(state.get('operation'),str) or not re.fullmatch(r'[a-f0-9]{12}',state['operation'])):
+                raise Blocked('staging_installation_binding_changed')
+            import commands
+            session=getattr(self,'tt_session',None)
+            if (type(session) is not resource_claim.Session or not session.admitted
+                or session.installation!=self.installation or session.operation!=state['operation']
+                or commands.authority_guard!=session.check):raise Blocked('staging_installation_binding_changed')
+            session.require_binding(state.get('resource_fence'))
+            resource_claim.historical_binding(state,installation=self.installation)
+            if private_json(guard.ROOT/('rollout-'+state['operation'])/'checkpoint.json')!=state:
+                raise Blocked('staging_active_release_checkpoint_changed')
+            row.update(schema='voice-active-release-v1',installation_sha256=self.installation.sha256)
+        elif state.get('schema')=='nats-rollout-root-v1':
+            resource_claim.require_production(self.installation)
+        else:raise Blocked('staging_installation_binding_changed')
+        try:previous=private_json(INSTALLED/'active-release.json')
+        except FileNotFoundError:previous=None
+        if previous is not None:resource_claim.validate_active_release(previous,installation=self.installation)
         successor=state.get('gis_existing_update')
         if successor is not None:
             import gis_existing_update as existing
@@ -258,7 +431,7 @@ class Actions:
             if saved!=state:raise Blocked('gis_existing_publication_checkpoint_changed')
             receipt=successor['receipt'];anchor=receipt['anchor']
             reference={'operation':state['operation'],'receipt_sha256':receipt['receipt_sha256']}
-            previous=private_json(INSTALLED/'active-release.json')
+            if previous is None:raise Blocked('gis_existing_publication_stale')
             if previous.get('operation')==state['operation']:
                 if (previous.get('gis_first_install_transition')!=anchor
                     or previous.get('gis_latest_transition')!=reference
@@ -280,8 +453,7 @@ class Actions:
         if transition is not None:
             reference={'operation':state['operation'],
                 'receipt_sha256':transition['receipt_sha256']}
-            try:previous=private_json(INSTALLED/'active-release.json')
-            except FileNotFoundError:previous={}
+            previous=previous or {}
             existing=previous.get('gis_first_install_transition')
             if existing is not None:
                 if existing!=reference or any(previous.get(key)!=value for key,value in row.items()):
@@ -289,8 +461,7 @@ class Actions:
                 return
             row['gis_first_install_transition']=reference
         else:
-            try:previous=private_json(INSTALLED/'active-release.json')
-            except FileNotFoundError:previous={}
+            previous=previous or {}
             if 'gis_first_install_transition' in previous:
                 if all(previous.get(key)==value for key,value in row.items()):return
                 raise Blocked('gis_existing_publication_stale')
@@ -313,6 +484,80 @@ class Actions:
         binding=gis.validate_next_operation(receipt,prior,kube)
         return {**binding,'receipt':copy.deepcopy(receipt)}
 
+    def _capture_source(self,request,previous=None,repair=None):
+        """Capture source receipts after admission; performs no rollout or migration."""
+        operation=request['nonce'][:12]
+        source_run,execution=self._dispatcher(request)
+        provisional_mode=request.get('provisional_staging') is True
+        if provisional_mode or repair is not None:
+            if (execution['event']!='workflow_dispatch' or execution['workflow_id']!=263689731
+                or request['mode']!='images-only' or previous is not None):raise Blocked('provisional_dispatch_required')
+        workspace=INSTALLED/'sources'/operation;workspace.mkdir(mode=0o700)
+        self._report('source-capture','STARTED')
+        approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
+            if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
+        return source_run,execution,provisional_mode,workspace,approved
+
+    def _prepare_cohort(self,request):
+        """Protected source capture and real cohort producer."""
+        import commands
+        import resource_claim
+        import staging_cohort_preservation
+        import staging_prerequisites
+        session=getattr(self,"tt_session",None)
+        if (type(self) is not Actions or type(session) is not resource_claim.Session
+            or commands.authority_guard!=session.check or not session.admitted
+            or request.get("action")!="prepare" or request.get("mode") not in ("full","app-only")
+            or request.get("provisional_staging") is True or request.get("operation") is not None
+            or request.get("nonce","")[:12]!=session.operation
+            or request.get("resource_context")!=session.context
+            or request.get("source_sha")!=session.context.get("commit")
+            or resource_claim.digest(self.binding)!=session.helper):
+            raise Blocked("cohort_prepare_session_invalid")
+        if session.installation!=self.installation:
+            raise RuntimeError('staging_installation_binding_changed')
+        row=session.check()
+        if row.get("phase")!="prepare" or row.get("target_sha256") is not None:
+            raise Blocked("cohort_prepare_session_invalid")
+        staging_cohort_preservation.record_prepare_request(session,request)
+        self._idle()
+        source_run,execution=self._dispatcher(request)
+        encrypted_cut.directory(INSTALLED/"sources")
+        workspace=INSTALLED/"sources"/session.operation
+        workspace.mkdir(mode=0o700)
+        self._report("source-capture","STARTED")
+        approved=source_authority.capture_source(request["token"],source_run,execution["head_sha"],workspace)
+        code=Path(self.code);installed=guard.ROOT/"installed"/"code"
+        if code!=installed and (code.parent!=guard.ROOT or not re.fullmatch(r"rollout-code-[a-f0-9]{32}",code.name)
+                                or root_cli.rollout_directory_kind(code)!="capture"):
+            raise Blocked("cohort_helper_source_changed")
+        if (type(approved) is not dict or type(approved.get("source_files")) is not dict
+            or approved.get("source_sha")!=request["source_sha"]
+            or execution.get("head_sha")!=request["source_sha"]
+            or root_cli.code_binding(self.code)!=self.binding
+            or not staging_prerequisites.REQUIRED_HELPERS.issubset(self.binding)
+            or not set(staging_prerequisites.P2_BINARY_PINS).issubset(self.binding)):
+            raise Blocked("cohort_source_identity_changed")
+        encrypted_cut.directory(workspace)
+        if stat.S_IMODE(workspace.lstat().st_mode)!=0o700:raise Blocked("cohort_source_workspace_invalid")
+        for relative,wanted in self.binding.items():
+            if relative in staging_prerequisites.P2_BINARY_PINS:
+                if wanted!=staging_prerequisites.P2_BINARY_PINS[relative]:
+                    raise Blocked("cohort_helper_source_changed")
+                continue
+            path=workspace/"scripts"/"staging"/relative
+            if approved["source_files"].get("scripts/staging/"+relative)!=wanted:
+                raise Blocked("cohort_helper_source_changed")
+            for parent in path.parents:
+                if parent==workspace:break
+                info=parent.lstat()
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022:
+                    raise Blocked("cohort_helper_source_changed")
+            if root_cli.public_code_sha(path)!=wanted:raise Blocked("cohort_helper_source_changed")
+        session.check()
+        record_source_authority(session,approved,execution,code=self.code,binding=self.binding)
+        self._report("source-capture","COMPLETE")
+        return staging_cohort_preservation.prepare(self,request,approved,execution,workspace)
     def _prepare(self,request,previous=None,repair=None,*,cohort_ref=None):
         import migrations
         if cohort_ref is None:
@@ -320,18 +565,10 @@ class Actions:
             if repair is None:self._idle()
             else:self._idle(admitted_parent=repair['operation'])
             operation=request['nonce'][:12]
-            source_run,execution=self._dispatcher(request)
-            provisional_mode=request.get('provisional_staging') is True
-            if provisional_mode or repair is not None:
-                if (execution['event']!='workflow_dispatch' or execution['workflow_id']!=263689731
-                    or request['mode']!='images-only' or previous is not None):raise Blocked('provisional_dispatch_required')
-            workspace=INSTALLED/'sources'/operation;workspace.mkdir(mode=0o700)
-            self._report('source-capture','STARTED')
-            approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
-                if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
+            source_run,execution,provisional_mode,workspace,approved=self._capture_source(request,previous,repair)
             if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
                 if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
-                record_source_authority(self.tt_session,approved,execution)
+                record_source_authority(self.tt_session,approved,execution,code=self.code,binding=self.binding)
         else:
             import staging_cohort_preservation
             if previous is not None or repair is not None or request.get('provisional_staging') is True:
@@ -341,6 +578,7 @@ class Actions:
                 or any(request.get(key)!=loaded['request'][key] for key in ('mode','changed_services'))
                 or (request.get('gis_first_install') is True)!=loaded['request']['gis_first_install']):
                 raise Blocked('cohort_preserved_prepare_invalid')
+            staging_cohort_preservation.require_continuation(session)
             operation=session.operation;approved=loaded['approved'];execution=loaded['execution'];workspace=Path(loaded['workspace'])
             provisional_mode=False
         lifecycle=None
@@ -348,7 +586,7 @@ class Actions:
             import provisional
             for relative,wanted in self.binding.items():
                 if relative in ('nats-known-baseline/kernel','nats-rollout-preservation/bootstrap-renewer',
-                    'nats-rollout-preservation/story-current4-probe'):continue
+                    'nats-rollout-preservation/story-current4-probe','nats-rollout-preservation/story-restored8-probe'):continue
                 if approved['source_files'].get('scripts/staging/'+relative)!=wanted:
                     raise Blocked('provisional_helper_source_changed')
             lifecycle={'source_authority':{k:v for k,v in approved.items() if k!='source_files'},'execution_authority':execution}
@@ -454,6 +692,35 @@ class Actions:
         self._report('contract-selection','COMPLETE')
         self._report('nats-preflight','STARTED')
         renderer_authority=None
+        import actor_root
+        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
+            raise Blocked('staging_prerequisites_capture_changed')
+        if cohort_ref is not None:
+            preserved_preflight=staging_cohort_preservation.load_preflight(self.tt_session)
+        nats_authority=None
+        if cohort_ref is not None:
+            enrollment=preserved_preflight['enrollment'];nats_authority=preserved_preflight['nats']
+            if preserved_preflight['contract']!=parameters['contract'] or nats_authority is None:
+                raise Blocked('cohort_preserved_authority_changed')
+            import nats_root_plan
+            current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
+            if any(current[key]!=nats_authority[key] for key in ('plan','binding','scripts')):
+                raise Blocked('cohort_preserved_authority_changed')
+            parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
+        elif not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
+            try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
+            except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
+            if not isinstance(enrollment,dict):raise Blocked('enrolled_bootstrap_selection_refused')
+            if enrollment is not None:
+                from nats_contract_plan import digest as enrollment_digest
+                previous_enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
+                if (enrollment.get('schema') not in ('voice-nats-bootstrap-enrollment-v4','voice-nats-bootstrap-enrollment-scoped-v4')
+                    or enrollment.get('previous_enrollment')!=previous_enrollment
+                    or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous_enrollment)):
+                    raise Blocked('enrolled_bootstrap_selection_refused')
+                import nats_root_plan
+                nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
+                parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         if renderer_selected:
             import renderer_root
             renderer_image=approved['images']['nats-hub-config-renderer']
@@ -468,40 +735,20 @@ class Actions:
                 if renderer_authority['descriptor']['images']['target']!=renderer_image:
                     raise Blocked('staging_prerequisites_renderer_changed')
             else:
-                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
-        import actor_root
-        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
-            raise Blocked('staging_prerequisites_capture_changed')
+                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image,installation=self.installation)
         if cohort_ref is None:
-            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,installation=self.installation)
         else:
-            preserved_preflight=staging_cohort_preservation.load_preflight(self.tt_session)
             names=preserved_preflight['services'];actor_authority=preserved_preflight['actor']
-            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority)
+            composition=_cohort_story_composition(self,request,approved,workspace)
+            refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,story_composition=composition,installation=self.installation)
+            stores=staging_cohort_preservation._read(staging_cohort_preservation._base(self.tt_session)/'stores.json')
+            current_secret=kube.get('secret','voice-app-secrets')
+            staging_cohort_preservation._app_successor(self.tt_session,stores['app_before'],current_secret)
+            actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,
+                stores['app_before']['metadata'],current_secret['metadata'])
             staging_cohort_preservation.revalidate_paused(self.tt_session)
-        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
-            raise Blocked('staging_prerequisites_capture_changed')
         if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
-        nats_authority=None
-        if cohort_ref is not None:
-            enrollment=preserved_preflight['enrollment'];nats_authority=preserved_preflight['nats']
-            if preserved_preflight['contract']!=parameters['contract'] or nats_authority is None:
-                raise Blocked('cohort_preserved_authority_changed')
-            parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
-        elif not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
-            try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
-            except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
-            if not isinstance(enrollment,dict):raise Blocked('enrolled_bootstrap_selection_refused')
-            if enrollment is not None:
-                from nats_contract_plan import digest as enrollment_digest
-                previous_enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
-                if (enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
-                    or enrollment.get('previous_enrollment')!=previous_enrollment
-                    or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous_enrollment)):
-                    raise Blocked('enrolled_bootstrap_selection_refused')
-                import nats_root_plan
-                nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
-                parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         self._report('nats-preflight','COMPLETE')
         realtime_receipt=None
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
@@ -514,18 +761,22 @@ class Actions:
             if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
             if realtime_receipt is not None:
                 schema=realtime_receipt.get('schema') if isinstance(realtime_receipt,dict) else None
-                if schema=='voice-staging-realtime-bootstrap-receipt-v1':
+                if schema in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2'):
                     if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     bootstrap_plan=realtime_bootstrap.load_plan(self.tt_session)
-                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,
+                        installation=self.installation,**({'story_composition':_cohort_story_composition(self,request,approved,workspace)} if cohort_ref is not None else {}))
                     if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
                     actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,bootstrap_plan['secret'],realtime_receipt['secret'])
-                elif schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
+                elif schema in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v3','voice-staging-realtime-bootstrap-existing-v4'):
                     if realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
-                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,
+                        installation=self.installation,**({'story_composition':_cohort_story_composition(self,request,approved,workspace)} if cohort_ref is not None else {}))
                     if refreshed!=actor_authority or realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:
                         raise Blocked('realtime_bootstrap_actor_changed')
                 else:raise Blocked('realtime_bootstrap_receipt_invalid')
+        if cohort_ref is not None:
+            staging_cohort_preservation.record_actor_successor(self.tt_session,actor_authority,stage,realtime_receipt)
         self._report('target-build','STARTED')
         build=workspace.parent/(operation+'-build');build.mkdir(mode=0o700)
         parameter_path=build/'parameters.json';save(parameter_path,parameters)
@@ -533,6 +784,7 @@ class Actions:
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
+        if getattr(self,'tt_session',None) is not None:value['target']['installation_sha256']=self.installation.sha256
         if realtime_receipt is not None:
             value['target']['realtime_bootstrap_sha256']=transaction.canonical(realtime_receipt)
         if prerequisites is not None:value['target']['prerequisites_sha256']=transaction.canonical(prerequisites)
@@ -547,10 +799,10 @@ class Actions:
             if lifecycle is not None:source_authority.revalidate_ci(request['token'],approved)
             if repair is not None:
                 provisional.verify_runtime(repair,kube,self.binding,private_json(INSTALLED/'active-release.json'),require_healthy=False)
-            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority)
-            if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority)
+            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority,installation=self.installation)
+            if renderer_authority is not None:renderer_root.revalidate(kube,stage,renderer_authority,installation=self.installation)
             if nats_authority is not None:
-                current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
+                current=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml,installation=self.installation)
                 # Business records may advance, but config/consumer intent and
                 # dynamic subject ownership cannot change between plan/fence.
                 if current['plan']!=nats_authority['plan'] or current['binding']!=nats_authority['binding']:raise Blocked('nats_migration_live_contract_changed')
@@ -587,6 +839,9 @@ class Actions:
         from native_store import verify_archive
         from docker_runtime import NATS_IMAGE,DockerRuntime
         payload_base=Path(payload_base or base);cut=cut or state['cut'];binding=binding or state['cipher_binding']
+        if payload_base==Path(base):
+            _validate_copy_checkpoint(private_json(payload_base/'copy-checkpoint.json'),state,cut,self.installation,
+                state.get('cipher_space_members'))
         runtime=DockerRuntime(base,state['operation'])
         def readback(archive):
             stage.verify_final_storage()
@@ -611,12 +866,10 @@ class Actions:
 
     def _encrypt(self,base,state,execution):
         cut=state['cut']
-        copy_binding={'schema':'nats-rollout-copy-v1','operation':state['operation'],
-            'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
-            'census_sha256':cut['census_sha256']}
+        members=None
         if 'space_backup' in state:
             _,members=encrypted_cut.space_members(base,state['space_backup'])
-            copy_binding['space_members']=members
+        copy_binding=_copy_checkpoint(state,cut,self.installation,members)
         save(base/'copy-checkpoint.json',copy_binding)
         cipher=encrypted_cut.encrypt_cut(base,INSTALLED/'recovery',space=state.get('space_backup'))
         if 'space_members' in cipher:state['cipher_space_members']=cipher.pop('space_members')
@@ -679,7 +932,7 @@ class Actions:
             if current['source_files'].get('scripts/staging/'+relative)!=wanted:
                 raise Blocked('preserved_upload_current_helper_source_changed')
         source_authority._head(source_authority._headers(request['token']),execution['head_sha'],time.monotonic()+30)
-        stage=transaction.reconstruct(Kube(),state,lambda event:None)
+        stage=transaction.reconstruct(Kube(),state,lambda event:None,installation=self.installation)
         stage.owned_marker();stage.verify_final_storage()
         marker=Kube().get('configmap','voice-nats-generation')
         if marker['data'].get('phase')!='rollout-capturing' or marker['metadata']['resourceVersion']!='3073024':
@@ -704,7 +957,10 @@ class Actions:
             'authorize-expired-native':self._authorize_expired_native,'finish-expired-native':self._finish_expired_native,
             'prepare-expired-finish':self._prepare_expired_finish,'authorize-expired-finish':self._authorize_expired_finish}
         if request['action'] in expired_actions:return expired_actions[request['action']](request)
-        if request['action']=='prepare':return self._prepare(request)
+        if request['action']=='prepare':
+            if request.get('mode') in ('full','app-only') and request.get('provisional_staging') is not True:
+                return self._prepare_cohort(request)
+            return self._prepare(request)
         if request['action']=='prepare-repair':
             import provisional
             base,parent=self.state(request['operation'])
@@ -731,11 +987,19 @@ class Actions:
             transaction.rollback_package(previous,story_only=story_only)
             changed=transaction.rollback_services(previous,story_only=story_only)
             return self._prepare({**request,'mode':'images-only','changed_services':changed},previous)
+        session=getattr(self,"tt_session",None)
+        if request["action"]=="authorize" and session is not None:
+            row=session.journal.read()
+            if row.get("cohort_preservation_sha256") is not None:
+                return self._authorize_cohort(request)
         base,state=self.state(request['operation'])
-        if request['action']=='status':return summary(state)
+        if request['action']=='status':return status_summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
+            session=self._require_authorization_binding(state)
             import migrations
             migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+            _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
+                state.get('cipher_space_members'))
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             upload_record=None
@@ -755,19 +1019,19 @@ class Actions:
             # checkpoint byte-for-byte intact, so a failed proof is not custody.
             if upload_record is None:
                 state['custody']=receipt;save(base/'checkpoint.json',state)
-            self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None))
+            self._verify_decrypted_restore(base,state,transaction.reconstruct(Kube(),state,lambda event:None,installation=self.installation))
             import actor_root
             actor_root.revalidate(Kube(),INSTALLED/'sources'/state['operation'],self.code,self.binding,
-                transaction.reconstruct(Kube(),state,lambda event:None),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'])
+                transaction.reconstruct(Kube(),state,lambda event:None,installation=self.installation),state['service_actor_services'],compiler.decode_yaml,state['service_actor_authority'],installation=self.installation)
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             if upload_record is not None:
                 preserved_upload.verify_deadline(upload_record,dt.datetime.now(dt.timezone.utc))
                 state['custody']=receipt
                 transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'],
-                    authorization_deadline=dt.datetime.fromisoformat(upload_record['deadline']))
+                    authorization_deadline=dt.datetime.fromisoformat(upload_record['deadline']),resource_session=session)
             else:
-                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'])
+                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],state['contract'],resource_session=session)
             gid=grp.getgrnam('pmd').gr_gid
             for name in ('apply-authorization.json','apply-manifests.json'):os.chown(base/name,0,gid);(base/name).chmod(0o440)
             return summary(state)|{'authorization':str(base/'apply-authorization.json')}
@@ -775,10 +1039,32 @@ class Actions:
             if state.get('expired_recovery_authority') is not None:
                 raise Blocked('expired_native_explicit_finish_required')
             receipt=guard.protected_receipt(base/'apply-authorization.json')
-            result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'])
+            result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'],installation=self.installation)
             self._active_release(result)
             return summary(result)
         raise Blocked('bridge_action_invalid')
+
+    def _authorize_cohort(self,request):
+        import staging_cohort_preservation as cohort
+        session=self.tt_session;row=session.check()
+        if row.get("phase")!="cohort-preservation":
+            # Read-only recovery can prove a completed final result. No child,
+            # target construction or authorization is retried after an intent.
+            return cohort.final_authorization_result(session,request)
+        cohort.qualify_offnode(self,request)
+        qualified,loaded=cohort.begin_continuation(session,request)
+        prepare={"action":"prepare","nonce":cohort._read(cohort._request_record(session))["nonce"],
+            "mode":loaded["request"]["mode"],"changed_services":loaded["request"]["changed_services"],
+            "source_sha":session.context["commit"],"resource_context":session.context,"token":request["token"]}
+        if loaded["request"]["gis_first_install"]:prepare["gis_first_install"]=True
+        self._prepare(prepare,cohort_ref=qualified)
+        base,state=self.state(session.operation)
+        transaction.authorize(Kube(),base,state,state["cut"]["manifest"]["archive_sha256"],
+            state["cut"]["manifest_sha256"],state["contract"],resource_session=session,cohort_request=request)
+        gid=grp.getgrnam("pmd").gr_gid
+        for name in ("apply-authorization.json","apply-manifests.json"):
+            os.chown(base/name,0,gid);(base/name).chmod(0o440)
+        return cohort.final_authorization_result(session,request)
 
     def _expired_source_admission(self,request):
         """Fresh helper authority and historical target data remain separate.
@@ -948,6 +1234,8 @@ class Actions:
         slot=base/'expired-finish-proofs'/request['upload_nonce']
         record=expired_transport.upload.private_json(slot/'upload.json')
         if record['execution']!=execution:raise Blocked('expired_finish_upload_execution_changed')
+        _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
+            state.get('cipher_space_members'))
         expired_transport.readback(request['token'],base,state,slot,execution,
             {'original':request['original_artifact_id'],'observation':request['observation_artifact_id']})
         self._verify_decrypted_restore(base,state,stage)
@@ -1012,7 +1300,7 @@ class Actions:
         workspace=INSTALLED/'sources'/state['operation']
         def validate(runtime,broker,tree,row,manifest,records):
             actual=nats_root_plan.closed_copy_preflight(Kube(),workspace,state['bootstrap_enrollment'],
-                state['contract'],compiler.decode_yaml,runtime,broker,tree)
+                state['contract'],compiler.decode_yaml,runtime,broker,tree,installation=self.installation)
             if (actual['plan']!=state['nats_contract'] or actual['binding']!=state['nats_contract_binding']
                 or actual['scripts']!=state['nats_target_scripts']):
                 raise Blocked('expired_recovery_original_nats_authority_changed')
@@ -1058,13 +1346,19 @@ class Actions:
         """Actual dual readback and fresh guards precede durable transaction entry."""
         import expired_transport
         import expired_recovery
+        self._require_authorization_operation(request.get('operation'))
+        _,current_state=self.state(request['operation'])
+        self._require_authorization_binding(current_state)
         # Current master/source/helper admission is repeated for this separate
         # authorize request, while upload proof stays bound to its own nonce.
         base,state,stage,execution,current,admission,all_fresh=self._expired_source_admission(request)
+        self._require_authorization_binding(state)
         execution['nonce']=request['upload_nonce']
         slot=base/'expired-recovery-proofs'/request['upload_nonce']
         record=expired_transport.upload.private_json(slot/'upload.json')
         if record['execution']!=execution:raise Blocked('expired_recovery_upload_execution_changed')
+        _validate_copy_checkpoint(private_json(base/'copy-checkpoint.json'),state,state['cut'],self.installation,
+            state.get('cipher_space_members'))
         expired_transport.readback(request['token'],base,state,slot,execution,
             {'original':request['original_artifact_id'],'observation':request['observation_artifact_id']})
         self._verify_decrypted_restore(base,state,stage)
@@ -1078,7 +1372,8 @@ class Actions:
         actual,proof=expired_recovery.runtime_authority(base,state,authority,now=dt.datetime.now(dt.timezone.utc))
         transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],
             state['cut']['manifest_sha256'],state['contract'],
-            authorization_deadline=dt.datetime.fromisoformat(actual['expires_at']),expired_authority=actual)
+            authorization_deadline=dt.datetime.fromisoformat(actual['expires_at']),expired_authority=actual,
+            resource_session=getattr(self,'tt_session',None))
         gid=grp.getgrnam('pmd').gr_gid
         for name in ('apply-authorization.json','apply-manifests.json'):
             os.chown(base/name,0,gid);(base/name).chmod(0o440)

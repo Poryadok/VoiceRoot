@@ -15,6 +15,19 @@ import staging_prerequisites as prereq
 from root_main import save
 
 
+def bind_fixture_prerequisites(session, plan):
+    """Exercise the real session transitions with a deliberately mocked P2 receipt."""
+    import staging_cohort_preservation as cohort
+    receipt={'fixture':'qualified-p2'}
+    p2={'actual_before':plan['actual_before'],
+        'candidate':{'commit':session.context['commit'],'images':session.context['images']}}
+    plan.update(schema='voice-staging-prerequisites-plan-v4',installation_sha256=session.installation.sha256,
+                preservation_sha256=prereq.digest(receipt))
+    with patch.object(cohort,'validate_plan'),patch.object(cohort,'load_qualified',return_value=receipt):
+        session.bind_cohort_preservation(p2,plan['actual_before'])
+        return session.bind_prerequisites(plan,plan['actual_before'])
+
+
 class PrivateCustodyTests(unittest.TestCase):
     def test_paused_gis_authority_requires_protected_prepared_hash_and_active_anchor(self):
         import staging_cohort_preservation as cohort
@@ -103,7 +116,7 @@ class PrivateCustodyTests(unittest.TestCase):
             session=resource_claim.Session(context,'a'*12,prereq.digest(binding),lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{'scripts/staging/'+name:wanted}}
             execution={'fixture':'execution'}
-            receipt={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+            receipt={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                      'helper_sha256':session.helper,'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/('a'*12+'.json'),receipt)
             actions=bridge_root.Actions(installed/'code');actions.tt_session=session
@@ -135,7 +148,7 @@ class PrivateCustodyTests(unittest.TestCase):
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
             session.admit(start=True)
-            source={'schema':'voice-staging-source-capture-v1','operation':session.operation,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,
                 'context':context,'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
             save(installed/'source-authority'/('a'*12+'.json'),source)
             raw=b'{"fixture":true}';payload=payloads/(hashlib.sha256(b'gis-signer').hexdigest()+'.json');payload.write_bytes(raw);payload.chmod(0o600)
@@ -151,7 +164,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None}
                 save(base/'checkpoint.json',state)
@@ -181,7 +194,7 @@ class PrivateCustodyTests(unittest.TestCase):
             session=resource_claim.Session(context,'a'*12,prereq.digest(manifest),lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{'scripts/staging/'+name:manifest[name]},'images':{'fixture':'g'}}
             execution={'fixture':'execution'}
-            source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/('a'*12+'.json'),source);save(base/'approved.json',approved);save(base/'execution.json',execution)
             plan={'schema':'voice-staging-prerequisites-plan-v1','operation':session.operation,'context':context,'helper_sha256':session.helper,
@@ -194,7 +207,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 save(base/'checkpoint.json',{'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None})
                 value=prereq.load_authority(session)
@@ -217,7 +230,7 @@ class PrivateCustodyTests(unittest.TestCase):
             base=installed/'prerequisites'/('a'*12);base.mkdir(parents=True,mode=0o700)
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
-            source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
             save(installed/'source-authority'/('a'*12+'.json'),source)
             plan={'schema':'voice-staging-prerequisites-plan-v1','operation':session.operation,'context':context,'helper_sha256':session.helper,
@@ -235,7 +248,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None};save(base/'checkpoint.json',state)
                 with self.assertRaises(prereq.Blocked):prereq.record_pending(session,'release_policy','create-policy-configmap')
@@ -266,7 +279,7 @@ class SubmitTests(unittest.TestCase):
                 context=resource_claim_test.context();card=resource_claim_test.card(context)
                 session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
                 session.admit(start=True)
-                source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+                source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
                 save(installed/'source-authority'/('a'*12+'.json'),source)
                 value=policy.staging_descriptor(context['commit']);obj=value['policy_object']
@@ -289,7 +302,7 @@ class SubmitTests(unittest.TestCase):
                 plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
-                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                binding=bind_fixture_prerequisites(session,plan)
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':prereq.digest(plan)}
                 save(base/'checkpoint.json',state)
@@ -358,14 +371,16 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_existing_inventory_new_candidate_creates_only_release_policy(self):
         self._cold_prepare('c2-new-candidate')
 
-    def _cold_prepare(self,fault=None,*,realtime_source=False):
-        import os, shutil, subprocess, base64, yaml, uuid
+    def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
+                      context_commit=None,full_source=False,strict_helpers=False,source_overrides=None):
+        import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
         import staging_gis_material as gis
         import staging_p3_prerequisites as p3
         import staging_p3_prerequisites_crypto as crypto
         import staging_release_policy_prepare as policy
+        if strict_helpers and not full_source:raise ValueError('strict fixture requires the captured source tree')
         source_root=Path(os.environ.get('VOICE_TEST_SOURCE_ROOT',Path(__file__).resolve().parents[3]))
         if not (source_root/'deploy/staging/services.yaml').is_file():self.skipTest('requires actual source fixture')
         with tempfile.TemporaryDirectory(dir='/root') as folder, ExitStack() as stack:
@@ -378,14 +393,25 @@ class PrepareCompositionTests(unittest.TestCase):
                 'deploy/templates/verify-game-integration-db-job.yaml']
             relative += [str(path.relative_to(source_root)) for path in (source_root/'src/backend/migrations/game_integration_db').glob('*.sql')]
             if realtime_source:relative += ['deploy/templates/migrate-realtime-db-job.yaml','src/backend/migrations/realtime_db/000001_admission.up.sql']
+            if full_source:
+                for prefix in ('deploy','docker','scripts/staging','scripts/storage','scripts/dev','scripts/deploy','src/backend/migrations',
+                               'src/backend/auth/src/main/resources/db/migration'):
+                    relative.extend(str(path.relative_to(source_root)) for path in (source_root/prefix).rglob('*')
+                        if path.is_file() and '__pycache__' not in path.parts and path.suffix!='.pyc')
+                relative=list(dict.fromkeys(relative))
             for name in relative:
                 dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)
+            for name,path in (source_overrides or {}).items():
+                if name not in relative:raise ValueError('override outside captured source')
+                shutil.copyfile(path,workspace/name)
             helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
-            for path in (code/helper,workspace/'scripts/staging'/helper):
-                path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
+            if not strict_helpers:
+                for path in (code/helper,workspace/'scripts/staging'/helper):
+                    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
             resource_helper='nats-rollout-preservation/resource_claim.py'
-            for path in (code/resource_helper,workspace/'scripts/staging'/resource_helper):
-                path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
+            if not strict_helpers:
+                for path in (code/resource_helper,workspace/'scripts/staging'/resource_helper):
+                    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
             manifest={name:hashlib.sha256(helper_raw).hexdigest() for name in (helper,resource_helper)}
             if realtime_source:
                 name='nats-rollout-preservation/realtime_bootstrap.py'
@@ -393,23 +419,45 @@ class PrepareCompositionTests(unittest.TestCase):
                 for path in (code/name,workspace/'scripts/staging'/name):
                     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o600)
                 manifest[name]=hashlib.sha256(raw).hexdigest()
+            if strict_helpers:
+                import bundle
+                qualified=Path(os.environ.get('VOICE_QUALIFIED_BINARIES','/fixture/qualified-binaries'))
+                output=root/'qualified-bundle'
+                bundle.build(qualified/'kernel',output,qualified/'bootstrap-renewer',qualified/'story-current4-probe',
+                    story_target8=qualified/'story-restored8-probe')
+                with tarfile.open(output/'rollout-bundle.tar') as archive:
+                    archive.extractall(code,filter='data')
+                manifest=json.loads((code/'capture-manifest.json').read_bytes())
             save(code/'capture-manifest.json',manifest)
-            context=resource_claim_test.context();card=resource_claim_test.card(context)
-            journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
+            context=resource_claim_test.context()
+            if context_commit is not None:context['commit']=context_commit
+            if strict_helpers:
+                game_image=bridge_root.source_authority.REGISTRY+'/gameintegration@sha256:'+'a'*64
+                context['images']={'voice-gameintegration/gameintegration':game_image}
+            card=resource_claim_test.card(context)
+            if strict_helpers:
+                import bootstrap_selection_test
+                installation=bootstrap_selection_test.owned_fixture()[3]
+                journal=resource_claim.RootJournal(root)
+            else:
+                installation=None;journal=resource_claim_test.MemoryJournal()
+            session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal,installation=installation)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
-            approved['source_files']['scripts/staging/'+helper]=manifest[helper]
-            approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
+            if strict_helpers:approved['images']['gameintegration']=game_image
+            if not strict_helpers:
+                approved['source_files']['scripts/staging/'+helper]=manifest[helper]
+                approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
             if realtime_source:
                 approved.update(schema='voice-source-authority-v1',verified=True)
                 approved['source_files']['scripts/staging/nats-rollout-preservation/realtime_bootstrap.py']=manifest['nats-rollout-preservation/realtime_bootstrap.py']
-            approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
+            if not strict_helpers:approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
             execution={'fixture':'source selected by real bridge capture, modeled here'}
             if realtime_source:execution['head_sha']=context['commit']
-            source={'schema':'voice-staging-source-capture-v1','operation':operation,'context':context,'helper_sha256':session.helper,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':operation,'context':context,'helper_sha256':session.helper,
                 'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/(operation+'.json'),source);save(installed/'policy.json',{'unrelated':'preserve'})
-            actions=bridge_root.Actions(code);actions.tt_session=session
+            actions=bridge_root.Actions(code,installation=installation);actions.tt_session=session
             def openssl(*args):subprocess.run(['/usr/bin/openssl',*map(str,args)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             key=root/'ca.key';cert=root/'ca.crt';peerkey=root/'peer.key';csr=root/'peer.csr';peer=root/'peer.crt';ext=root/'ext'
             openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','180','-subj','/CN=synthetic-root',
@@ -509,15 +557,27 @@ class PrepareCompositionTests(unittest.TestCase):
             stage=object.__new__(runtime_stage.RolloutStage);stage.kube=kube;stage.operation=operation;stage.marker=copy.deepcopy(marker)
             stage.snapshots={'voice-user':copy.deepcopy(deployment)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images=copy.deepcopy(card['observed']['images']);stage.expected={'namespace_uid':ns,'deployment_uids':{'voice-user':'user'},
-                'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid}
+                'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid,'generation':session.installation.generation}
             stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
                 'index_sha256':'e'*64,'manifest_sha256':'d'*64,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+'d'*64})
-            stack.enter_context(patch.object(guard,'ROOT',root));stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
-            stack.enter_context(patch.object(prereq,'BINARY_PINS',{}));stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
+            stack.enter_context(patch.object(guard,'ROOT',root))
+            if not strict_helpers:
+                stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
+                stack.enter_context(patch.object(prereq,'BINARY_PINS',{}))
+            if strict_helpers:
+                original_collector=prereq._source_module
+                metadata_dir=Path(__file__).parent/'fixtures'/'qualified-nginx'
+                def offline_collector(authority,source):
+                    module=original_collector(authority,source)
+                    module.collect=lambda:{name:(metadata_dir/(name+'.json')).read_bytes() for name in ('index','manifest','config')}
+                    return module
+                stack.enter_context(patch.object(prereq,'_source_module',side_effect=offline_collector))
+            else:stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
             stack.enter_context(patch.object(runtime_stage.RolloutStage,'capture',return_value=stage))
-            stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
-            stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
+            if not strict_helpers:
+                stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
+                stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
             stack.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get));stack.enter_context(patch.object(commands,'capture',side_effect=transport))
             stack.enter_context(patch.object(compiler,'capture',side_effect=transport));stack.enter_context(patch.object(stage_runtime,'capture',side_effect=transport))
             stack.enter_context(patch.object(p3,'probe_jwks',return_value=None));stack.enter_context(resource_claim.command_scope(session.check))
@@ -527,14 +587,31 @@ class PrepareCompositionTests(unittest.TestCase):
                     self.assertEqual(writes,[]);result=original(s);events.append('preflight:'+slot);return result
                 stack.enter_context(patch.object(module,'preflight_payloads',side_effect=checked))
             request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
+            if on_ready is not None:
+                return on_ready(actions,request,approved,execution,workspace,stage,live,transport,get,card)
             if fault=='missing-issuer':
-                with self.assertRaises(FileNotFoundError):prereq.run_prepare(actions,request,approved,execution,workspace)
+                if bridge_missing is None:
+                    with self.assertRaises(FileNotFoundError):prereq.prepare_inputs(actions,request,approved,execution,workspace)
+                else:bridge_missing(actions,request,approved,execution,workspace)
                 self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
             if fault=='expanded-trust':
-                with self.assertRaisesRegex(prereq.Blocked,'issuer_trust_changed'):prereq.run_prepare(actions,request,approved,execution,workspace)
+                with self.assertRaisesRegex(prereq.Blocked,'issuer_trust_changed'):prereq.prepare_inputs(actions,request,approved,execution,workspace)
                 self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
+            prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            # These tests exercise prerequisite effect ordering, not the P2
+            # producer. The receipt and paused stage are explicit fixtures.
+            import staging_cohort_preservation as cohort
+            qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
+            p2_plan={'actual_before':stage.old_images,'candidate':{'commit':context['commit'],'images':context['images']}}
+            qualified_loader=stack.enter_context(patch.object(cohort,'load_qualified',return_value=qualified))
+            stack.enter_context(patch.object(cohort,'capture_stage',return_value=stage))
+            stack.enter_context(patch.object(cohort,'capture_final_stage',return_value=stage))
+            auxiliary_loader=stack.enter_context(patch.object(cohort,'load_auxiliary_successor',return_value=None))
+            stack.enter_context(patch.object(cohort,'revalidate_paused'))
+            with patch.object(cohort,'validate_plan'):
+                session.bind_cohort_preservation(p2_plan,stage.old_images)
             if fault=='lost-app-reply':
-                with self.assertRaisesRegex(RuntimeError,'synthetic_lost_app_response'):prereq.run_prepare(actions,request,approved,execution,workspace)
+                with self.assertRaisesRegex(RuntimeError,'synthetic_lost_app_response'):prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
                 self.assertIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
                 state=prereq._checkpoint(session)
                 self.assertEqual(state['steps']['gis_material']['gis-app-credentials'],{'status':'PENDING'})
@@ -542,7 +619,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
                 with self.assertRaises(Exception):prereq._complete(session)
                 self.assertEqual(len(writes),15);return
-            receipt=prereq.run_prepare(actions,request,approved,execution,workspace)
+            receipt=prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
             self.assertEqual(events[:4],['candidate',*('preflight:'+slot for slot in prereq.SLOTS)])
             self.assertEqual(len(writes),15);self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
             self.assertEqual(json.loads((installed/'policy.json').read_bytes())['unrelated'],'preserve')
@@ -570,7 +647,7 @@ class PrepareCompositionTests(unittest.TestCase):
                     'endpoints':{'uid':'pgep','resourceVersion':'1','pod_ip':'10.0.0.2'},
                     'slice':{'uid':'pgslice','resourceVersion':'1'},'system_identifier':'12345'}
                 view=rt._stage_view(stage)
-                plan={'schema':'voice-staging-realtime-bootstrap-v2','operation':session.operation,
+                plan={'schema':'voice-staging-realtime-bootstrap-v4','installation_sha256':session.installation.sha256,'operation':session.operation,
                     'context':session.context,'helper_sha256':session.helper,'source_sha':context['commit'],
                     'source_files_sha256':prereq.digest(approved['source_files']),
                     'source_authority_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution),
@@ -587,10 +664,10 @@ class PrepareCompositionTests(unittest.TestCase):
                 steps={'role':done({'role':None,'database':None},{'kind':'role','credential_sha256':plan['credential_sha256']},role_row),
                     'database':done(role_row,{'kind':'database','owner_oid':13},final),
                     'secret':done(plan['secret'],{'kind':'secret','plan_sha256':prereq.digest(plan)},rt._secret_identity(after))}
-                rt_receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','plan_sha256':prereq.digest(plan),
+                rt_receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v2','installation_sha256':session.installation.sha256,'plan_sha256':prereq.digest(plan),
                     'steps_sha256':prereq.digest(steps),'role_oid':13,'database_oid':29,'owner_oid':13,
                     'secret':rt._secret_identity(after),'migration_pass':False}
-                checkpoint={'schema':'voice-staging-realtime-bootstrap-checkpoint-v1','plan':plan,'status':'COMPLETE',
+                checkpoint={'schema':'voice-staging-realtime-bootstrap-checkpoint-v2','installation_sha256':session.installation.sha256,'plan':plan,'status':'COMPLETE',
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(plan)},'steps':steps,'receipt':rt_receipt}
                 rtbase=installed/'realtime-bootstrap'/session.operation;rtbase.mkdir(parents=True,mode=0o700)
                 for name,value in [('checkpoint.json',checkpoint),('before-secret.json',before),
@@ -598,6 +675,21 @@ class PrepareCompositionTests(unittest.TestCase):
                 (rtbase/'credential').write_bytes(password);(rtbase/'credential').chmod(0o600)
                 live[('secret','voice-app-secrets')]=copy.deepcopy(after)
                 self.assertEqual(prereq.load_capture(session),captured)
+                legacy_plan=copy.deepcopy(plan);legacy_plan['schema']='voice-staging-realtime-bootstrap-v2'
+                del legacy_plan['installation_sha256']
+                legacy_steps=copy.deepcopy(steps)
+                legacy_steps['secret']['request_sha256']=prereq.digest({'kind':'secret','plan_sha256':prereq.digest(legacy_plan)})
+                legacy_receipt={**rt_receipt,'schema':'voice-staging-realtime-bootstrap-receipt-v1',
+                    'plan_sha256':prereq.digest(legacy_plan),'steps_sha256':prereq.digest(legacy_steps)}
+                del legacy_receipt['installation_sha256']
+                legacy_fence={**checkpoint['resource_fence'],'schema':'voice-staging-resource-fence-v1',
+                              'target_sha256':prereq.digest(legacy_plan)}
+                del legacy_fence['installation_sha256']
+                legacy={'schema':'voice-staging-realtime-bootstrap-checkpoint-v1','plan':legacy_plan,'status':'COMPLETE',
+                        'resource_fence':legacy_fence,'steps':legacy_steps,'receipt':legacy_receipt}
+                save(rtbase/'checkpoint.json',legacy)
+                with self.assertRaisesRegex(prereq.Blocked,'realtime_custody_changed'):prereq.load_capture(session)
+                save(rtbase/'checkpoint.json',checkpoint)
                 checkpoint['status']='RUNNING';save(rtbase/'checkpoint.json',checkpoint)
                 with self.assertRaises(Exception):prereq.load_capture(session)
                 checkpoint['status']='COMPLETE';save(rtbase/'checkpoint.json',checkpoint)
@@ -615,14 +707,24 @@ class PrepareCompositionTests(unittest.TestCase):
             if fault in ('c2','c2-new-candidate'):
                 # A durable rollout PASS is modeled here; this is not a claim
                 # that the transaction/runtime boundary ran in this fixture.
-                target={'tag':context['commit'],'images':context['images'],'manifest_sha256':'1'*64,
-                    'prerequisites_sha256':prereq.digest(captured),'template_hashes':{}}
-                saved={'operation':operation,'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED',
+                target={'registry':'registry','tag':context['commit'],'mode':'app-only','changed_services':['gameintegration'],
+                    'images':context['images'],'manifest_sha256':'1'*64,'migration_sha256':'2'*64,'nonnats_sha256':'3'*64,
+                    'source_hashes':{'fixture':'4'*64},'template_hashes':{'fixture':'5'*64},'input_template_hashes':{'fixture':'6'*64},
+                    'installation_sha256':session.installation.sha256,'cohort_preservation_sha256':prereq.digest(qualified),
+                    'realtime_bootstrap_sha256':'7'*64,'prerequisites_sha256':prereq.digest(captured)}
+                saved={'schema':'nats-rollout-root-v2','installation_sha256':session.installation.sha256,
+                    'operation':operation,'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED',
                     'code_capture':manifest,'target':target,'prerequisites':captured,
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target)},
                     'context':{'expected':stage.expected,'snapshots':stage.snapshots}}
                 rollout=root/('rollout-'+operation);rollout.mkdir(mode=0o700);save(rollout/'checkpoint.json',saved)
-                active={'operation':operation,'namespace_uid':ns,'pvc_uid':claim_uid,'target_sha256':'1'*64}
+                active={'schema':'voice-active-release-v1','installation_sha256':session.installation.sha256,
+                        'operation':operation,'namespace_uid':ns,'pvc_uid':claim_uid,'target_sha256':'1'*64}
+                # The historical P2 producer is outside this prerequisite unit;
+                # its qualified receipt is the explicit preservation fixture.
+                historical_receipts={operation:qualified}
+                stack.enter_context(patch.object(cohort,'validate_historical_capture',
+                    side_effect=lambda op,**kwargs:historical_receipts[op]))
                 save(installed/'active-release.json',active)
                 self.assertEqual(prereq.validate_historical_capture(operation),captured)
                 attempt=prereq._base(session)/'attempts'/(hashlib.sha256(b'gis_material/gis-app-credentials').hexdigest()+'.json')
@@ -641,9 +743,21 @@ class PrepareCompositionTests(unittest.TestCase):
                 writes.clear();events.clear()
                 # GIS workload admission belongs to the normal Stage caller;
                 # this external baseline seam remains explicit in the fixture.
-                stack.enter_context(patch('gis_existing_update.load_authority',return_value={'fixture':'qualified baseline'}))
+                anchor={'operation':'d'*12,'receipt_sha256':'e'*64}
+                active['gis_first_install_transition']=anchor;save(installed/'active-release.json',active)
+                stack.enter_context(patch('gis_existing_update.load_authority',return_value={
+                    'operation':anchor['operation'],'anchor_sha256':anchor['receipt_sha256']}))
                 with resource_claim.command_scope(session.check):
-                    receipt2=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved,execution,workspace2)
+                    request2={'mode':'app-only','changed_services':['gameintegration']}
+                    prepared2=prereq.prepare_inputs(actions,request2,approved,execution,workspace2)
+                    qualified2={'prerequisite_inputs_sha256':prepared2['inputs_sha256']}
+                    historical_receipts[operation]=qualified2
+                    qualified_loader.return_value=qualified2
+                    auxiliary_loader.return_value={'response':copy.deepcopy(live[('deployment','voice-p3-principal-jwks')])}
+                    p2_plan2={'actual_before':stage.old_images,'candidate':{'commit':context2['commit'],'images':context2['images']}}
+                    with patch.object(cohort,'validate_plan'):
+                        session.bind_cohort_preservation(p2_plan2,stage.old_images)
+                    receipt2=prereq.run_prepare(actions,request2,approved,execution,workspace2,preservation_ref=qualified2)
                     self.assertEqual(writes,[])
                     self.assertEqual(receipt2['actual_before'],receipt2['actual_after'])
                     binding2=session.capture_prerequisites(stage)
@@ -673,7 +787,7 @@ class PrepareCompositionTests(unittest.TestCase):
                     with self.assertRaisesRegex(prereq.Blocked,'preserved_source_changed'):
                         prereq._qualified_preserved(session,'p3','Deployment/voice-p3-principal-jwks',prior,prior_rollout,changed_approved)
                     source_path.write_bytes(source_bytes)
-                target2={**target,'prerequisites_sha256':prereq.digest(captured2)}
+                target2={**target,'cohort_preservation_sha256':prereq.digest(qualified2),'prerequisites_sha256':prereq.digest(captured2)}
                 saved2={**saved,'operation':operation,'target':target2,'prerequisites':captured2,
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target2)}}
                 rollout2=root/('rollout-'+operation);rollout2.mkdir(mode=0o700);save(rollout2/'checkpoint.json',saved2)
@@ -708,7 +822,13 @@ class PrepareCompositionTests(unittest.TestCase):
                 session.admit(start=True);actions.tt_session=session;stage.operation=operation
                 save(installed/'source-authority'/(operation+'.json'),{**source,'operation':operation,'context':context3,'approved_sha256':prereq.digest(approved3)})
                 with resource_claim.command_scope(session.check):
-                    receipt3=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved3,execution,workspace3)
+                    request3={'mode':'app-only','changed_services':['gameintegration']}
+                    prepared3=prereq.prepare_inputs(actions,request3,approved3,execution,workspace3)
+                    qualified3={'prerequisite_inputs_sha256':prepared3['inputs_sha256']};qualified_loader.return_value=qualified3
+                    p2_plan3={'actual_before':stage.old_images,'candidate':{'commit':context3['commit'],'images':context3['images']}}
+                    with patch.object(cohort,'validate_plan'):
+                        session.bind_cohort_preservation(p2_plan3,stage.old_images)
+                    receipt3=prereq.run_prepare(actions,request3,approved3,execution,workspace3,preservation_ref=qualified3)
                     self.assertEqual(len(writes),1 if fault=='c2-new-candidate' else 0)
                     if fault=='c2-new-candidate':
                         plan3=prereq._checkpoint(session)['plan'];descriptor3=policy.staging_descriptor(context3['commit'])

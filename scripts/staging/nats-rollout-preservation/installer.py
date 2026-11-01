@@ -137,8 +137,8 @@ def tt_resource_journal_snapshot(installed):
     try:
         row=resource_claim.trusted_json(path,missing=True)
         if row is None:return {str(path):None}
-        expected={'schema','context','operation','helper_sha256','target_sha256','status','phase','actual'}
-        if (set(row)!=expected or row['schema']!='voice-staging-resource-fence-v1' or row['status']!='complete'
+        resource_claim._journal_binding(row,resource_claim.production_installation())
+        if (row['status']!='complete'
             or row['phase']!='finished' or not re.fullmatch('[a-f0-9]{12}',row['operation'])
             or any(not re.fullmatch('[a-f0-9]{64}',row[key]) for key in ('helper_sha256','target_sha256'))):
             raise ValueError('unresolved journal')

@@ -2,7 +2,7 @@ import copy,hashlib,json,shutil,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import bootstrap_selection
-from bootstrap_selection_test import fixture as enrollment_fixture
+from bootstrap_selection_test import owned_fixture as enrollment_fixture
 from nats_contract_plan_test import live
 from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V5_SOURCE_HASHES
 from rollout_census_test import CREATED
@@ -12,7 +12,7 @@ from controller import Blocked
 class Tests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.source=Path(self.tmp.name)
-        self.kube,self.enrollment,self.rows,self.sha=enrollment_fixture()
+        self.kube,self.enrollment,self.rows,self.installation=enrollment_fixture()
         self.streams=live();self.tree={'streams':3,'consumers':0,'messages':14,'bytes':200,'total':1,'account_details':[{'id':'A'+'A'*55,'stream_detail':[]}]}
         for name,info in self.streams.items():
             state=dict(info['state'],consumer_count=0,bytes=100)
@@ -42,9 +42,8 @@ class Tests(unittest.TestCase):
         return {'kind':'ConfigMap','metadata':{'name':'voice-nats-'+part+'-bootstrap'},'data':{'bootstrap.sh':text}}
     def run_plan(self,auth=None):
         with patch.object(module,'TARGET_FILES',self.files),patch.object(module,'monitor',return_value=self.tree),patch.object(module,'census',return_value={'fixture_census':True}),\
-             patch.object(bootstrap_selection,'ACCOUNT_SHA',self.sha),\
              patch('bootstrap_auth.prove',return_value=auth or copy.deepcopy(self.fresh_auth)) as prove:
-            result=module.preflight(self.kube,self.source,self.enrollment,self.contract,self.decode)
+            result=module.preflight(self.kube,self.source,self.enrollment,self.contract,self.decode,installation=self.installation)
             self.assertEqual(prove.call_args.args[0],b'renewed-private-creds')
             return result
     def test_root_producer_binds_source_existing_enrollment_server_and_plan(self):
@@ -109,9 +108,8 @@ class CanonicalBootstrapTests(unittest.TestCase):
     def run_plan(self):
         import yaml
         with patch.object(module,'monitor',return_value=self.tree),patch.object(module,'census',return_value={'fixture_census':True}),\
-             patch.object(bootstrap_selection,'ACCOUNT_SHA',self.sha),\
              patch('bootstrap_auth.prove',return_value=copy.deepcopy(self.fresh_auth)):
-            return module.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load)
+            return module.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load,installation=self.installation)
     def compatible(self,authority):
         import compiler,yaml
         return compiler.compatible_bootstrap(self.source,self.contract,yaml.safe_load,
