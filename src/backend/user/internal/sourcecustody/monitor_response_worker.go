@@ -96,3 +96,26 @@ func (w *monitorResponseWorker) stop() error {
 	}
 	return nil
 }
+
+// run owns step and stop for the entire lifetime. Cancellation, failed health,
+// closed ticks and uncertain I/O all terminate the incarnation; the caller
+// must independently fence/recover after it exits.
+func (w *monitorResponseWorker) run(ctx context.Context, ticks <-chan time.Time) error {
+	if w == nil || w.responder == nil || w.store == nil {
+		return ErrUnavailable
+	}
+	defer func() { _ = w.stop() }()
+	if ctx == nil || ticks == nil || w.step(ctx) != nil {
+		return ErrUnavailable
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ErrUnavailable
+		case _, ok := <-ticks:
+			if !ok || w.step(ctx) != nil {
+				return ErrUnavailable
+			}
+		}
+	}
+}

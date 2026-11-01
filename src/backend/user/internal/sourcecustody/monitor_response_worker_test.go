@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -127,6 +128,30 @@ func TestMonitorResponseWorkerCancellationAndStopRetry(t *testing.T) {
 			require.Equal(t, f.responses[1], f.responses[2], "STOP retries must be byte-identical")
 		})
 	}
+}
+
+func TestMonitorResponseWorkerRunPublishesStopOnCancellation(t *testing.T) {
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	challenge, digest := supervisionNonce(1), supervisionNonce(2)
+	r, err := newMonitorResponder(challenge, digest, uuid.New(), private)
+	require.NoError(t, err)
+	armed := make(chan struct{}, 1)
+	f := &responseWorkerFixture{probes: map[uint64]supervisionProbe{1: {Challenge: challenge, DecisionDigest: digest, Sequence: 1, Nonce: supervisionNonce(3)}}, onInsert: func() {
+		select {
+		case armed <- struct{}{}:
+		default:
+		}
+	}}
+	w := newMonitorResponseWorker(r, f, func(context.Context) error { return nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.run(ctx, make(chan time.Time)) }()
+	<-armed
+	cancel()
+	require.Error(t, <-done)
+	require.Len(t, f.responses, 2)
+	require.Equal(t, MonitorStop, f.responses[1].Kind)
 }
 
 func TestMonitorResponseWorkerSignsOnlyHealthyOrderedProbesAndStops(t *testing.T) {
