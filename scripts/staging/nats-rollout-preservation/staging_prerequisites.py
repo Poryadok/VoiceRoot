@@ -1039,12 +1039,14 @@ def _realtime_app_extension(session,state):
     except FileNotFoundError:return False
     if checkpoint.get('status')!='COMPLETE':return False
     plan,receipt,_,_=rt._records(checkpoint,session)
+    if checkpoint['resource_fence']['schema']!=session.binding()['schema']:
+        raise Blocked('staging_prerequisites_realtime_custody_changed')
     captured=_json(_read_private(_base(session)/'capture.json',limit=32<<20))
     before=_json(_read_private(base/'before-secret.json'));credential=_read_private(base/'credential',limit=128)
     payload=_json(load_payload(session,'gis_material','gis-app-credentials'))
     desired=_semantic(payload['before']);desired['data']=payload['after_data']
     original=state['steps']['gis_material']['gis-app-credentials']['observation']
-    if (plan.get('schema')!='voice-staging-realtime-bootstrap-v2' or plan.get('prerequisites_sha256')!=digest(captured)
+    if (plan.get('schema') not in ('voice-staging-realtime-bootstrap-v2','voice-staging-realtime-bootstrap-v4') or plan.get('prerequisites_sha256')!=digest(captured)
         or _semantic(before)!=desired or rt._secret_identity(before)!=plan['secret']
         or any(before['metadata'].get(key)!=original[key] for key in ('uid','resourceVersion'))
         or hashlib.sha256(credential).hexdigest()!=plan['credential_sha256']):

@@ -419,7 +419,7 @@ class PrepareCompositionTests(unittest.TestCase):
             approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
             execution={'fixture':'source selected by real bridge capture, modeled here'}
             if realtime_source:execution['head_sha']=context['commit']
-            source={'schema':'voice-staging-source-capture-v1','operation':operation,'context':context,'helper_sha256':session.helper,
+            source={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':operation,'context':context,'helper_sha256':session.helper,
                 'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/(operation+'.json'),source);save(installed/'policy.json',{'unrelated':'preserve'})
             actions=bridge_root.Actions(code);actions.tt_session=session
@@ -541,13 +541,26 @@ class PrepareCompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(module,'preflight_payloads',side_effect=checked))
             request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
             if fault=='missing-issuer':
-                with self.assertRaises(FileNotFoundError):prereq.run_prepare(actions,request,approved,execution,workspace)
+                with self.assertRaises(FileNotFoundError):prereq.prepare_inputs(actions,request,approved,execution,workspace)
                 self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
             if fault=='expanded-trust':
-                with self.assertRaisesRegex(prereq.Blocked,'issuer_trust_changed'):prereq.run_prepare(actions,request,approved,execution,workspace)
+                with self.assertRaisesRegex(prereq.Blocked,'issuer_trust_changed'):prereq.prepare_inputs(actions,request,approved,execution,workspace)
                 self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
+            prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            # These tests exercise prerequisite effect ordering, not the P2
+            # producer. The receipt and paused stage are explicit fixtures.
+            import staging_cohort_preservation as cohort
+            qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
+            p2_plan={'actual_before':stage.old_images,'candidate':{'commit':context['commit'],'images':context['images']}}
+            qualified_loader=stack.enter_context(patch.object(cohort,'load_qualified',return_value=qualified))
+            stack.enter_context(patch.object(cohort,'capture_stage',return_value=stage))
+            stack.enter_context(patch.object(cohort,'capture_final_stage',return_value=stage))
+            auxiliary_loader=stack.enter_context(patch.object(cohort,'load_auxiliary_successor',return_value=None))
+            stack.enter_context(patch.object(cohort,'revalidate_paused'))
+            with patch.object(cohort,'validate_plan'):
+                session.bind_cohort_preservation(p2_plan,stage.old_images)
             if fault=='lost-app-reply':
-                with self.assertRaisesRegex(RuntimeError,'synthetic_lost_app_response'):prereq.run_prepare(actions,request,approved,execution,workspace)
+                with self.assertRaisesRegex(RuntimeError,'synthetic_lost_app_response'):prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
                 self.assertIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
                 state=prereq._checkpoint(session)
                 self.assertEqual(state['steps']['gis_material']['gis-app-credentials'],{'status':'PENDING'})
@@ -555,7 +568,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
                 with self.assertRaises(Exception):prereq._complete(session)
                 self.assertEqual(len(writes),15);return
-            receipt=prereq.run_prepare(actions,request,approved,execution,workspace)
+            receipt=prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
             self.assertEqual(events[:4],['candidate',*('preflight:'+slot for slot in prereq.SLOTS)])
             self.assertEqual(len(writes),15);self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
             self.assertEqual(json.loads((installed/'policy.json').read_bytes())['unrelated'],'preserve')
@@ -583,7 +596,7 @@ class PrepareCompositionTests(unittest.TestCase):
                     'endpoints':{'uid':'pgep','resourceVersion':'1','pod_ip':'10.0.0.2'},
                     'slice':{'uid':'pgslice','resourceVersion':'1'},'system_identifier':'12345'}
                 view=rt._stage_view(stage)
-                plan={'schema':'voice-staging-realtime-bootstrap-v2','operation':session.operation,
+                plan={'schema':'voice-staging-realtime-bootstrap-v4','installation_sha256':session.installation.sha256,'operation':session.operation,
                     'context':session.context,'helper_sha256':session.helper,'source_sha':context['commit'],
                     'source_files_sha256':prereq.digest(approved['source_files']),
                     'source_authority_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution),
@@ -600,10 +613,10 @@ class PrepareCompositionTests(unittest.TestCase):
                 steps={'role':done({'role':None,'database':None},{'kind':'role','credential_sha256':plan['credential_sha256']},role_row),
                     'database':done(role_row,{'kind':'database','owner_oid':13},final),
                     'secret':done(plan['secret'],{'kind':'secret','plan_sha256':prereq.digest(plan)},rt._secret_identity(after))}
-                rt_receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','plan_sha256':prereq.digest(plan),
+                rt_receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v2','installation_sha256':session.installation.sha256,'plan_sha256':prereq.digest(plan),
                     'steps_sha256':prereq.digest(steps),'role_oid':13,'database_oid':29,'owner_oid':13,
                     'secret':rt._secret_identity(after),'migration_pass':False}
-                checkpoint={'schema':'voice-staging-realtime-bootstrap-checkpoint-v1','plan':plan,'status':'COMPLETE',
+                checkpoint={'schema':'voice-staging-realtime-bootstrap-checkpoint-v2','installation_sha256':session.installation.sha256,'plan':plan,'status':'COMPLETE',
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(plan)},'steps':steps,'receipt':rt_receipt}
                 rtbase=installed/'realtime-bootstrap'/session.operation;rtbase.mkdir(parents=True,mode=0o700)
                 for name,value in [('checkpoint.json',checkpoint),('before-secret.json',before),
@@ -611,6 +624,21 @@ class PrepareCompositionTests(unittest.TestCase):
                 (rtbase/'credential').write_bytes(password);(rtbase/'credential').chmod(0o600)
                 live[('secret','voice-app-secrets')]=copy.deepcopy(after)
                 self.assertEqual(prereq.load_capture(session),captured)
+                legacy_plan=copy.deepcopy(plan);legacy_plan['schema']='voice-staging-realtime-bootstrap-v2'
+                del legacy_plan['installation_sha256']
+                legacy_steps=copy.deepcopy(steps)
+                legacy_steps['secret']['request_sha256']=prereq.digest({'kind':'secret','plan_sha256':prereq.digest(legacy_plan)})
+                legacy_receipt={**rt_receipt,'schema':'voice-staging-realtime-bootstrap-receipt-v1',
+                    'plan_sha256':prereq.digest(legacy_plan),'steps_sha256':prereq.digest(legacy_steps)}
+                del legacy_receipt['installation_sha256']
+                legacy_fence={**checkpoint['resource_fence'],'schema':'voice-staging-resource-fence-v1',
+                              'target_sha256':prereq.digest(legacy_plan)}
+                del legacy_fence['installation_sha256']
+                legacy={'schema':'voice-staging-realtime-bootstrap-checkpoint-v1','plan':legacy_plan,'status':'COMPLETE',
+                        'resource_fence':legacy_fence,'steps':legacy_steps,'receipt':legacy_receipt}
+                save(rtbase/'checkpoint.json',legacy)
+                with self.assertRaisesRegex(prereq.Blocked,'realtime_custody_changed'):prereq.load_capture(session)
+                save(rtbase/'checkpoint.json',checkpoint)
                 checkpoint['status']='RUNNING';save(rtbase/'checkpoint.json',checkpoint)
                 with self.assertRaises(Exception):prereq.load_capture(session)
                 checkpoint['status']='COMPLETE';save(rtbase/'checkpoint.json',checkpoint)
@@ -628,14 +656,24 @@ class PrepareCompositionTests(unittest.TestCase):
             if fault in ('c2','c2-new-candidate'):
                 # A durable rollout PASS is modeled here; this is not a claim
                 # that the transaction/runtime boundary ran in this fixture.
-                target={'tag':context['commit'],'images':context['images'],'manifest_sha256':'1'*64,
-                    'prerequisites_sha256':prereq.digest(captured),'template_hashes':{}}
-                saved={'operation':operation,'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED',
+                target={'registry':'registry','tag':context['commit'],'mode':'app-only','changed_services':['gameintegration'],
+                    'images':context['images'],'manifest_sha256':'1'*64,'migration_sha256':'2'*64,'nonnats_sha256':'3'*64,
+                    'source_hashes':{'fixture':'4'*64},'template_hashes':{'fixture':'5'*64},'input_template_hashes':{'fixture':'6'*64},
+                    'installation_sha256':session.installation.sha256,'cohort_preservation_sha256':prereq.digest(qualified),
+                    'realtime_bootstrap_sha256':'7'*64,'prerequisites_sha256':prereq.digest(captured)}
+                saved={'schema':'nats-rollout-root-v2','installation_sha256':session.installation.sha256,
+                    'operation':operation,'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED',
                     'code_capture':manifest,'target':target,'prerequisites':captured,
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target)},
                     'context':{'expected':stage.expected,'snapshots':stage.snapshots}}
                 rollout=root/('rollout-'+operation);rollout.mkdir(mode=0o700);save(rollout/'checkpoint.json',saved)
-                active={'operation':operation,'namespace_uid':ns,'pvc_uid':claim_uid,'target_sha256':'1'*64}
+                active={'schema':'voice-active-release-v1','installation_sha256':session.installation.sha256,
+                        'operation':operation,'namespace_uid':ns,'pvc_uid':claim_uid,'target_sha256':'1'*64}
+                # The historical P2 producer is outside this prerequisite unit;
+                # its qualified receipt is the explicit preservation fixture.
+                historical_receipts={operation:qualified}
+                stack.enter_context(patch.object(cohort,'validate_historical_capture',
+                    side_effect=lambda op,**kwargs:historical_receipts[op]))
                 save(installed/'active-release.json',active)
                 self.assertEqual(prereq.validate_historical_capture(operation),captured)
                 attempt=prereq._base(session)/'attempts'/(hashlib.sha256(b'gis_material/gis-app-credentials').hexdigest()+'.json')
@@ -654,9 +692,21 @@ class PrepareCompositionTests(unittest.TestCase):
                 writes.clear();events.clear()
                 # GIS workload admission belongs to the normal Stage caller;
                 # this external baseline seam remains explicit in the fixture.
-                stack.enter_context(patch('gis_existing_update.load_authority',return_value={'fixture':'qualified baseline'}))
+                anchor={'operation':'d'*12,'receipt_sha256':'e'*64}
+                active['gis_first_install_transition']=anchor;save(installed/'active-release.json',active)
+                stack.enter_context(patch('gis_existing_update.load_authority',return_value={
+                    'operation':anchor['operation'],'anchor_sha256':anchor['receipt_sha256']}))
                 with resource_claim.command_scope(session.check):
-                    receipt2=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved,execution,workspace2)
+                    request2={'mode':'app-only','changed_services':['gameintegration']}
+                    prepared2=prereq.prepare_inputs(actions,request2,approved,execution,workspace2)
+                    qualified2={'prerequisite_inputs_sha256':prepared2['inputs_sha256']}
+                    historical_receipts[operation]=qualified2
+                    qualified_loader.return_value=qualified2
+                    auxiliary_loader.return_value={'response':copy.deepcopy(live[('deployment','voice-p3-principal-jwks')])}
+                    p2_plan2={'actual_before':stage.old_images,'candidate':{'commit':context2['commit'],'images':context2['images']}}
+                    with patch.object(cohort,'validate_plan'):
+                        session.bind_cohort_preservation(p2_plan2,stage.old_images)
+                    receipt2=prereq.run_prepare(actions,request2,approved,execution,workspace2,preservation_ref=qualified2)
                     self.assertEqual(writes,[])
                     self.assertEqual(receipt2['actual_before'],receipt2['actual_after'])
                     binding2=session.capture_prerequisites(stage)
@@ -686,7 +736,7 @@ class PrepareCompositionTests(unittest.TestCase):
                     with self.assertRaisesRegex(prereq.Blocked,'preserved_source_changed'):
                         prereq._qualified_preserved(session,'p3','Deployment/voice-p3-principal-jwks',prior,prior_rollout,changed_approved)
                     source_path.write_bytes(source_bytes)
-                target2={**target,'prerequisites_sha256':prereq.digest(captured2)}
+                target2={**target,'cohort_preservation_sha256':prereq.digest(qualified2),'prerequisites_sha256':prereq.digest(captured2)}
                 saved2={**saved,'operation':operation,'target':target2,'prerequisites':captured2,
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target2)}}
                 rollout2=root/('rollout-'+operation);rollout2.mkdir(mode=0o700);save(rollout2/'checkpoint.json',saved2)
@@ -721,7 +771,13 @@ class PrepareCompositionTests(unittest.TestCase):
                 session.admit(start=True);actions.tt_session=session;stage.operation=operation
                 save(installed/'source-authority'/(operation+'.json'),{**source,'operation':operation,'context':context3,'approved_sha256':prereq.digest(approved3)})
                 with resource_claim.command_scope(session.check):
-                    receipt3=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved3,execution,workspace3)
+                    request3={'mode':'app-only','changed_services':['gameintegration']}
+                    prepared3=prereq.prepare_inputs(actions,request3,approved3,execution,workspace3)
+                    qualified3={'prerequisite_inputs_sha256':prepared3['inputs_sha256']};qualified_loader.return_value=qualified3
+                    p2_plan3={'actual_before':stage.old_images,'candidate':{'commit':context3['commit'],'images':context3['images']}}
+                    with patch.object(cohort,'validate_plan'):
+                        session.bind_cohort_preservation(p2_plan3,stage.old_images)
+                    receipt3=prereq.run_prepare(actions,request3,approved3,execution,workspace3,preservation_ref=qualified3)
                     self.assertEqual(len(writes),1 if fault=='c2-new-candidate' else 0)
                     if fault=='c2-new-candidate':
                         plan3=prereq._checkpoint(session)['plan'];descriptor3=policy.staging_descriptor(context3['commit'])
