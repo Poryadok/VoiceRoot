@@ -41,6 +41,10 @@ CREATE TABLE public.user_custody_state(singleton boolean PRIMARY KEY,state text 
 			require.NoError(t, pool.QueryRow(ctx, `SELECT system_identifier::text,current_database(),(SELECT oid FROM pg_database WHERE datname=current_database()) FROM pg_control_system()`).Scan(&inventory.ControlSystemID, &inventory.ControlDatabase, &inventory.ControlDatabaseOID))
 			check := func() error { return CheckControlInventory(ctx, conn, inventory) }
 			require.NoError(t, check(), "isolated explicit inventory should qualify")
+			tx, err := conn.Begin(ctx)
+			require.NoError(t, err)
+			require.NoError(t, checkControlInventoryTx(ctx, tx, inventory))
+			require.NoError(t, tx.Rollback(ctx))
 			wrong := inventory
 			wrong.ControlDatabaseOID++
 			require.Error(t, CheckControlInventory(ctx, conn, wrong), "wrong physical database pin")

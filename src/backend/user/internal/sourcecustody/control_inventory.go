@@ -22,7 +22,31 @@ type ControlInventory struct {
 // caller must independently establish that the supplied inventory is complete.
 // The result is immediately stale if any catalog, role or session changes.
 func CheckControlInventory(ctx context.Context, conn *pgxpool.Conn, inventory ControlInventory) error {
-	if ctx == nil || ctx.Err() != nil || conn == nil || len(inventory.LegacyLogins) == 0 || !systemID.MatchString(inventory.ControlSystemID) || !databaseName.MatchString(inventory.ControlDatabase) || inventory.ControlDatabaseOID == 0 {
+	if ctx == nil || ctx.Err() != nil || conn == nil {
+		return ErrUnavailable
+	}
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return ErrUnavailable
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	}()
+	if checkControlInventoryTx(ctx, tx, inventory) != nil || tx.Commit(ctx) != nil {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+// checkControlInventoryTx is a snapshot check within the caller's transaction;
+// it does not itself acquire leader, role, table or source-fencing locks.
+// A caller needing a fresh result must acquire protective locks first, use a
+// fresh catalog snapshot and avoid an earlier cached pg_stat_activity snapshot
+// (or clear the statistics snapshot before checking).
+func checkControlInventoryTx(ctx context.Context, tx pgx.Tx, inventory ControlInventory) error {
+	if ctx == nil || ctx.Err() != nil || tx == nil || len(inventory.LegacyLogins) == 0 || !systemID.MatchString(inventory.ControlSystemID) || !databaseName.MatchString(inventory.ControlDatabase) || inventory.ControlDatabaseOID == 0 {
 		return ErrUnavailable
 	}
 	names := []string{inventory.Admin, inventory.Owner, inventory.Controller, inventory.Responder}
@@ -34,19 +58,10 @@ func CheckControlInventory(ctx context.Context, conn *pgxpool.Conn, inventory Co
 		}
 		seen[name] = true
 	}
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return ErrUnavailable
-	}
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = tx.Rollback(cleanup)
-	}()
 	var valid bool
 	// Legacy roles may still own objects or be superusers at this preliminary
 	// stage. They must be fenced by the separate future upgrade operation.
-	err = tx.QueryRow(ctx, `SELECT
+	err := tx.QueryRow(ctx, `SELECT
  current_user=$1 AND session_user=$1 AND current_database()=$8
  AND (SELECT system_identifier::text FROM pg_control_system())=$9
  AND (SELECT oid FROM pg_database WHERE datname=current_database())=$10::oid
@@ -74,7 +89,7 @@ func CheckControlInventory(ctx context.Context, conn *pgxpool.Conn, inventory Co
 		inventory.Admin, names, append([]string{inventory.Admin}, inventory.LegacyLogins...), []string{inventory.Owner, inventory.Controller, inventory.Responder},
 		[]string{"user_custody_creation", "user_custody_physical_source", "user_custody_open_evidence", "user_custody_state"}, append([]string{inventory.Admin, inventory.Owner}, inventory.LegacyLogins...), inventory.Owner, inventory.ControlDatabase, inventory.ControlSystemID, inventory.ControlDatabaseOID,
 		[]string{"pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_stat_file", "pg_ls_logdir", "pg_ls_waldir", "pg_ls_archive_statusdir", "pg_ls_tmpdir", "pg_ls_replslotdir", "pg_ls_logicalmapdir", "pg_ls_logicalsnapdir", "lo_import", "lo_export", "pg_reload_conf", "pg_rotate_logfile", "pg_promote", "pg_create_restore_point", "pg_switch_wal", "pg_backup_start", "pg_backup_stop"}).Scan(&valid)
-	if err != nil || !valid || tx.Commit(ctx) != nil {
+	if err != nil || !valid {
 		return ErrUnavailable
 	}
 	return nil
