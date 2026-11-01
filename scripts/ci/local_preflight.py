@@ -162,7 +162,7 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             report['ci_routing_report'] = 'ci-routing/diagnostic.json'
             if staging_assets is not None:
                 source = plan['source']
-                shards = [('staging', 34), ('proofs', 15)]
+                shards = [('staging', 34), ('proofs', 15), ('policy', 69)]
                 if runtime_images is not None: shards.append(('runtime', 23))
                 for shard, recipe_count in shards:
                     request = {'root': str(root), 'output': str(output / ('ci-' + shard)),
@@ -171,11 +171,13 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                     if shard == 'runtime': request['runtime_images'] = runtime_images
                     diagnostic = local_ci_staging_execution.run(request)
                     go_tests = diagnostic.get('hosted_go_tests')
+                    policy_tests = diagnostic.get('hosted_policy_tests')
                     if (diagnostic.get('schema') != 'voice-local-ci-staging-v1' or
                             diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != source['head'] or
                             diagnostic.get('base') != base or diagnostic.get('shard') != shard or
                             type(diagnostic.get('recipes')) is not int or diagnostic['recipes'] != recipe_count or
                             type(go_tests) is not int or (go_tests < 1 if shard == 'staging' else go_tests != 0) or
+                            type(policy_tests) is not int or (policy_tests < 1 if shard == 'policy' else policy_tests != 0) or
                             local_source_snapshot.capture(root, head) != source):
                         raise ValueError('CI shard receipt or source identity differs')
                     report['ci_' + shard + '_report'] = 'ci-' + shard + '/diagnostic.json'

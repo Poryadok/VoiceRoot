@@ -89,16 +89,18 @@ def run(request, *, timeout=7200):
         identity = json.loads((output / 'identity.json').read_text(encoding='utf-8'))
         counts = json.loads((output / 'suite-counts.json').read_text(encoding='utf-8'))
         if (identity['source'] != request['commit'] or counts['shard'] != request['shard'] or
-                type(counts['recipes']) is not int or counts['recipes'] != {'staging': 34, 'proofs': 15, 'runtime': 23}[request['shard']] or
+                type(counts['recipes']) is not int or counts['recipes'] != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 69}[request['shard']] or
                 type(counts['hosted_go_tests']) is not int or
-                (counts['hosted_go_tests'] < 1 if request['shard'] == 'staging' else counts['hosted_go_tests'] != 0)):
+                (counts['hosted_go_tests'] < 1 if request['shard'] == 'staging' else counts['hosted_go_tests'] != 0) or
+                type(counts['hosted_policy_tests']) is not int or
+                (counts['hosted_policy_tests'] < 1 if request['shard'] == 'policy' else counts['hosted_policy_tests'] != 0)):
             raise ValueError('invalid staging receipt')
         _validate_journal(output.resolve(), identity)
     except (OSError, ValueError, TypeError, KeyError):
         raise ExecutionError('staging worker returned invalid receipt') from None
     report = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete',
               'source': request['commit'], 'base': request['base'], 'shard': request['shard'], 'recipes': counts['recipes'],
-              'hosted_go_tests': counts['hosted_go_tests'], 'journal': identity['journal'],
+              'hosted_go_tests': counts['hosted_go_tests'], 'hosted_policy_tests': counts['hosted_policy_tests'], 'journal': identity['journal'],
               'slot': identity['slot']}
     with (output / 'diagnostic.json').open('x', encoding='utf-8') as stream:
         json.dump(report, stream, sort_keys=True)

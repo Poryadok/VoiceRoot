@@ -1,4 +1,5 @@
 """Generate serial Make dispatchers and validate exact source-bound receipts."""
+import ast
 import hashlib
 import re
 import shlex
@@ -32,7 +33,7 @@ def story_media_adapter(source, dockerfile, docker_cli_id, python_id):
     return text.encode('utf-8')
 
 def inventory(rows, *, shard='staging'):
-    if shard not in ('staging', 'proofs', 'runtime'):
+    if shard not in ('staging', 'proofs', 'runtime', 'policy'):
         raise ValueError('unsupported shard')
     result = []
     for row in rows:
@@ -51,7 +52,7 @@ def inventory(rows, *, shard='staging'):
         if '..' in path.split('/') or not re.fullmatch(r'[A-Za-z0-9_./-]+', path):
             raise ValueError('unsafe recipe path')
         result.append(('bash' if kind == '$(BASH)' else 'python', path))
-    if (len(result) != {'staging': 34, 'proofs': 15, 'runtime': 23}[shard] or len(set(result)) != len(result) or
+    if (len(result) != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 69}[shard] or len(set(result)) != len(result) or
             result.count(('bash', PRESERVATION)) != (1 if shard == 'staging' else 0)):
         raise ValueError('shard recipe inventory differs')
     return result
@@ -66,7 +67,7 @@ def command(recipe):
     return [('/run/user/1000/adapter-root/bash-guard' if kind == 'bash' else 'python3'), ROOT + path]
 
 def wrappers(recipes, *, shard='staging'):
-    if shard not in ('staging', 'proofs', 'runtime') or len(recipes) != {'staging': 34, 'proofs': 15, 'runtime': 23}[shard]:
+    if shard not in ('staging', 'proofs', 'runtime', 'policy') or len(recipes) != {'staging': 34, 'proofs': 15, 'runtime': 23, 'policy': 69}[shard]:
         raise ValueError('shard recipe count differs')
     result = {}
     for kind in ('bash','python'):
@@ -85,6 +86,7 @@ def wrappers(recipes, *, shard='staging'):
         shell.extend(['  *) exec '+binary+' "$@" ;;', 'esac',
             'printf "%s\\tstart\\n" "$idx" >> /run/user/1000/recipe-events',
             'rc=0'])
+        if shard == 'policy': shell.append('export VOICE_CI_RECIPE_INDEX="$idx"')
         pipe = ' 2>&1 | tee "/run/user/1000/recipe-${idx}.log" | head -c 16777217'
         if kind == 'bash' and shard == 'staging':
             shell.append('if [ "$1" = '+shlex.quote(ROOT+PRESERVATION)+' ]; then '+binary+' "$@" --owned-temp-root /run/user/1000/fixture-root'+pipe+'; codes=("${PIPESTATUS[@]}"); else '+binary+' "$@"'+pipe+'; codes=("${PIPESTATUS[@]}"); fi')
@@ -108,8 +110,8 @@ def validate_events(data, recipes):
         raise ValueError('staging recipe execution incomplete or out of order')
     return len(recipes)
 
-def validate_make_log(data):
-    if len(data) > 32*1024*1024 or re.search(rb'(?i)\bskip(?:ped)?\b', data):
+def validate_make_log(data, *, shard='staging'):
+    if len(data) > 32*1024*1024 or (shard != 'policy' and re.search(rb'(?i)\bskip(?:ped)?\b', data)):
         raise ValueError('staging Make output skipped or exceeded limit')
 
 MARKERS = (
@@ -151,6 +153,113 @@ RUNTIME_MARKERS = (
     'Production smoke offline contract: 9 cases passed.',
     'Production User/Space rollout: 7 cases passed (isolated shell fixture).',
 )
+
+# Only these exact Linux dispositions are accepted; the pinned files must be
+# re-audited if their tests or decorators change. This is not Windows coverage.
+POLICY_SKIP_FILES = {
+    21: ('scripts/ci/local_source_snapshot_test.py', 'bdaf3b29b56dc2e879e00c1219a4dc9d7c736068ecb578451a8209b626dbb159', 1),
+    24: ('scripts/ci/local_process_supervision_test.py', '371cab90b5f4693f213746590bad143ee8d71737cf3472e935579f54596dcd05', 33),
+    33: ('scripts/ci/local_ci_routing_test.py', 'e5da4335ed1975d4eefeccbe4a79f09258f033e6b20a8ef640f44e89e6294c5f', 1),
+    41: ('scripts/ci/local_nats_hosted_diagnostic_test.py', '1b49039756b9aabd7c7963ec22f86a0acd2591b547993fc52e4ee150fbb8a5d6', 2),
+}
+POLICY_SHELL_MARKERS = {
+    1: 'All resolve-staging-matrix tests passed.', 2: 'All resolve-go-matrix tests passed.',
+    3: 'All verify-required-jobs tests passed.', 5: '', 6: None,
+    55: 'unscoped Testcontainers cleanup fails closed', 63: 'CI script tests are reachable from Actions.',
+    64: 'All Auth Testcontainers report gate tests passed.', 65: 'Auth proto sync guard regression tests passed.',
+    66: 'PASS: A1 proof builds and validates the pinned official mc runtime before Compose.',
+    67: 'CI MinIO Compose image override contract passed',
+    68: 'PASS: staging MinIO bucket Jobs are replaced only for known completed image drift.',
+}
+
+
+def policy_expected_skips(root, rows):
+    result = {}
+    for index, (name, digest, count) in POLICY_SKIP_FILES.items():
+        if index >= len(rows) or name not in rows[index].get('source_sha256', {}):
+            raise ValueError('policy skip recipe changed')
+        data = (root / name).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError('policy skip source changed')
+        found = set()
+        for cls in (node for node in ast.walk(ast.parse(data)) if isinstance(node, ast.ClassDef)):
+            for method in (node for node in cls.body if isinstance(node, ast.FunctionDef)):
+                for decorator in method.decorator_list:
+                    if (isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute) and
+                            decorator.func.attr == 'skipUnless' and len(decorator.args) == 2 and
+                            isinstance(decorator.args[1], ast.Constant) and
+                            ast.unparse(decorator.args[0]) == "os.name == 'nt'"):
+                        found.add(('__main__.' + cls.name + '.' + method.name, decorator.args[1].value))
+        if len(found) != count: raise ValueError('policy skip inventory changed')
+        result[index] = found
+    return result
+
+
+def policy_skip_logger():
+    """Instrument unittest skips in the private policy client only."""
+    return b'''import json, os, unittest
+original = unittest.result.TestResult.addSkip
+def add_skip(self, test, reason):
+    index = os.environ.get('VOICE_CI_RECIPE_INDEX', '')
+    if not index.isdigit() or not 0 <= int(index) <= 69:
+        raise RuntimeError('invalid policy skip recipe identity')
+    data = (json.dumps({'recipe': int(index), 'id': test.id(), 'reason': str(reason)}, separators=(',', ':')) + '\\n').encode('utf-8')
+    if len(data) > 4096:
+        raise RuntimeError('policy skip event too large')
+    fd = os.open(os.environ['VOICE_CI_SKIP_LOG'], os.O_WRONLY | os.O_APPEND)
+    try:
+        if os.write(fd, data) != len(data):
+            raise RuntimeError('short policy skip event write')
+    finally:
+        os.close(fd)
+    return original(self, test, reason)
+unittest.result.TestResult.addSkip = add_skip
+'''
+
+
+def parse_policy_skip_events(data):
+    import json
+    if len(data) > 1024 * 1024 or (data and not data.endswith(b'\n')):
+        raise ValueError('policy skip log too large or truncated')
+    def unique(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj: raise ValueError('duplicate policy skip field')
+            obj[key] = value
+        return obj
+    result = {}
+    for line in data.splitlines():
+        row = json.loads(line, object_pairs_hook=unique)
+        if (not isinstance(row, dict) or set(row) != {'recipe', 'id', 'reason'} or
+                type(row['recipe']) is not int or not 0 <= row['recipe'] <= 69 or
+                any(not isinstance(row[key], str) or not 0 < len(row[key]) <= 512 for key in ('id', 'reason'))):
+            raise ValueError('invalid policy skip event')
+        item = (row['id'], row['reason'])
+        entries = result.setdefault(row['recipe'], set())
+        if item in entries: raise ValueError('duplicate policy skip event')
+        entries.add(item)
+    return result
+
+
+def validate_policy_recipe(index, data, observed, expected):
+    if type(index) is not int or not 0 <= index < 69 or len(data) > 16 * 1024 * 1024:
+        raise ValueError('policy recipe identity or output size invalid')
+    if re.search(rb'(?im)^\s*skip(?:ped)?(?:\s|:|\()', data):
+        raise ValueError('unreviewed policy skip marker')
+    if observed != expected.get(index, set()):
+        raise ValueError('policy skip identities differ')
+    if index in POLICY_SHELL_MARKERS:
+        if observed: raise ValueError('shell recipe unexpectedly skipped')
+        marker = POLICY_SHELL_MARKERS[index]
+        if marker == '' and data: raise ValueError('silent policy recipe produced output')
+        if marker is None and not re.search(rb'(?m)^image-catalog drift check OK \([^\r\n]+\)\r?$', data):
+            raise ValueError('image catalog marker missing')
+        if marker and data.splitlines().count(marker.encode()) != 1: raise ValueError('policy marker missing or duplicated')
+        return
+    summaries = re.findall(rb'^Ran ([0-9]+) tests? in [^\r\n]+\r?$', data, flags=re.MULTILINE)
+    results = re.findall(rb'^OK(?: \(skipped=([0-9]+)\))?\r?$', data, flags=re.MULTILINE)
+    if len(summaries) != 1 or len(results) != 1 or int(summaries[0]) <= len(observed) or int(results[0] or b'0') != len(observed):
+        raise ValueError('policy unittest summary or skip count differs')
 
 def validate_recipe(index, data, *, shard='staging'):
     if shard not in ('staging', 'proofs', 'runtime'): raise ValueError('unsupported shard')
