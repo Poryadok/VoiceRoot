@@ -226,6 +226,9 @@ class CompositionTests(unittest.TestCase):
                         objects[('pod',monitor_pod['metadata']['name'])]=monitor_pod
                     fake=FakeKube(objects);flags={'hub_released':False}
                     def capture_fence(argv,*,body=b'',**kwargs):
+                        if through_storage and argv[:2]==['/usr/bin/docker','--host=unix:///var/run/docker.sock']:
+                            commands.authority_guard(argv)
+                            raise ReachedFence()
                         if 'patch' in argv:
                             index=argv.index('patch');kind=argv[index+1]
                             if kind=='deployment' and not through_workload:raise ReachedFence()
@@ -286,7 +289,11 @@ class CompositionTests(unittest.TestCase):
                                 if flags['hub_released'] and not through_storage and kind=='pvc':raise ReachedFence()
                                 if through_storage and flags['hub_released'] and kind=='statefulset' and name=='voice-postgres':raise ReachedFence()
                                 if through_storage and flags['hub_released'] and kind.lower()=='secret' and name=='voice-app-secrets':
+                                    commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
                                     return copy.deepcopy(kube.objects[('Secret',name)])
+                                if through_storage and flags['hub_released'] and kind=='Deployment' and name in stage.snapshots:
+                                    commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                                    return copy.deepcopy(live[('deployment',name)])
                                 try:return get(kind,name)
                                 except KeyError:
                                     return kube.get(kind,name)
@@ -320,7 +327,8 @@ class CompositionTests(unittest.TestCase):
                         self.assertEqual(cohort._read(base/'effects'/('cut-pod-'+monitor_pod['metadata']['name']+'-'+suffix+'.json'))['status'],'DONE')
                 if through_storage:
                     self.assertTrue((base/'paused.json').exists())
-                    self.assertEqual(cohort._state(actions.tt_session)['phase'],'COHORT_BACKUP')
+                    checkpoint=cohort._read(cohort._runtime_base(actions.tt_session)/'checkpoint.json')
+                    self.assertEqual((checkpoint['phase'],checkpoint['status']),('COHORT_BACKUP','BLOCKED'))
                 self.assertEqual(actions.tt_session.journal.read()['status'],'uncertain')
             else:self.assertEqual(actions.tt_session.check()['phase'],'prepare')
         overrides=None
