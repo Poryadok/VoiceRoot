@@ -87,6 +87,8 @@ class FullGoTests(unittest.TestCase):
     def test_profiles_are_explicit_and_unsupported_services_refuse(self):
         self.assertEqual(subject.profile('bot')['images'], ('postgres:16-bookworm', 'nats:2.10-alpine'))
         self.assertEqual(subject.profile('search')['images'], ('postgres:16-bookworm',))
+        self.assertEqual(subject.profile('realtime')['images'], ())
+        self.assertEqual(subject.profile('user')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1'))
         for service in ('controlledgame', 'moderation', 'social', 'subscription', 'story'):
             with self.subTest(service=service):
                 self.assertEqual(subject.profile(service)['images'], ('postgres:16-bookworm',))
@@ -109,6 +111,34 @@ class FullGoTests(unittest.TestCase):
                 path.write_text(json.dumps(inventory), encoding='utf-8')
                 with self.subTest(inventory=inventory), self.assertRaises(ValueError):
                     subject.read_required(root, 'bot', [package])
+
+    def test_empty_image_set_is_valid_only_for_realtime_profile(self):
+        owner = mock.Mock()
+        subject.chat.validate_archives({}, subject.profile('realtime')['images'])
+        subject.chat.verify_images(owner, 'client', {}, subject.profile('realtime')['images'])
+        owner.execute.assert_not_called()
+        for service in ('bot', 'user', 'chat', 'search'):
+            with self.subTest(service=service), self.assertRaises(ValueError):
+                subject.chat.validate_archives({}, subject.profile(service)['images'])
+        with self.assertRaises(ValueError):
+            subject.chat.validate_archives({'unexpected': {}}, subject.profile('realtime')['images'])
+
+    def test_new_profiles_require_their_own_source_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'scripts/ci/go_integration_required.json'
+            path.parent.mkdir(parents=True)
+            for service in ('user', 'realtime'):
+                package = 'voice/backend/' + service
+                path.write_text(json.dumps({service: [[package, 'TestRequired']]}), encoding='utf-8')
+                self.assertEqual(subject.read_required(root, service, [package]), [[package, 'TestRequired']])
+                with self.assertRaises(ValueError):
+                    subject.read_required(root, service, ['voice/backend/other'])
+                with mock.patch.object(subject.chat, 'run_full', return_value={'status': 'incomplete'}) as run:
+                    subject.run_profile(service, 'owner', 'daemon', 'client', root, {}, root, 'a' * 64,
+                                        {tag: 'sha256:' + 'b' * 64 for tag in subject.profile(service)['images']},
+                                        root / 'out')
+                self.assertEqual(run.call_args.kwargs, {'service': service})
 
     def test_chat_dispatch_keeps_existing_executor(self):
         with mock.patch.object(subject.auth_broker, '_require_worker_job'), \
@@ -190,7 +220,8 @@ class FullGoTests(unittest.TestCase):
     def test_repository_profile_inventories_are_nonempty_and_service_scoped(self):
         root = Path(__file__).resolve().parents[2]
         inventory = json.loads((root / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
-        for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'):
+        for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story',
+                        'realtime', 'user'):
             packages = sorted({item[0] for item in inventory[service]})
             with self.subTest(service=service):
                 required = subject.read_required(root, service, packages)
