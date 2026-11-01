@@ -89,6 +89,9 @@ class FullGoTests(unittest.TestCase):
         self.assertEqual(subject.profile('search')['images'], ('postgres:16-bookworm',))
         self.assertEqual(subject.profile('realtime')['images'], ())
         self.assertEqual(subject.profile('user')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1'))
+        self.assertEqual(subject.profile('gameintegration')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1'))
+        self.assertEqual(subject.profile('role')['images'], ('postgres:16-bookworm', 'migrate/migrate:v4.18.1',
+                                                             'redis:7-alpine'))
         for service in ('controlledgame', 'moderation', 'social', 'subscription', 'story'):
             with self.subTest(service=service):
                 self.assertEqual(subject.profile(service)['images'], ('postgres:16-bookworm',))
@@ -117,18 +120,27 @@ class FullGoTests(unittest.TestCase):
         subject.chat.validate_archives({}, subject.profile('realtime')['images'])
         subject.chat.verify_images(owner, 'client', {}, subject.profile('realtime')['images'])
         owner.execute.assert_not_called()
-        for service in ('bot', 'user', 'chat', 'search'):
+        for service in ('bot', 'user', 'chat', 'search', 'gameintegration', 'role'):
             with self.subTest(service=service), self.assertRaises(ValueError):
                 subject.chat.validate_archives({}, subject.profile(service)['images'])
         with self.assertRaises(ValueError):
             subject.chat.validate_archives({'unexpected': {}}, subject.profile('realtime')['images'])
+        with tempfile.TemporaryDirectory() as directory:
+            for service in ('gameintegration', 'role'):
+                tags = subject.profile(service)['images']
+                archives = {tag: {'archive': str(Path(directory) / str(index)), 'archive_sha256': 'a' * 64,
+                                  'image_id': 'sha256:' + 'b' * 64} for index, tag in enumerate(tags)}
+                subject.chat.validate_archives(archives, tags)
+                archives.pop(tags[-1])
+                with self.subTest(service=service), self.assertRaises(ValueError):
+                    subject.chat.validate_archives(archives, tags)
 
     def test_new_profiles_require_their_own_source_inventory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / 'scripts/ci/go_integration_required.json'
             path.parent.mkdir(parents=True)
-            for service in ('user', 'realtime'):
+            for service in ('user', 'realtime', 'gameintegration', 'role'):
                 package = 'voice/backend/' + service
                 path.write_text(json.dumps({service: [[package, 'TestRequired']]}), encoding='utf-8')
                 self.assertEqual(subject.read_required(root, service, [package]), [[package, 'TestRequired']])
@@ -221,7 +233,7 @@ class FullGoTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         inventory = json.loads((root / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
         for service in ('bot', 'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story',
-                        'realtime', 'user'):
+                        'realtime', 'user', 'gameintegration', 'role'):
             packages = sorted({item[0] for item in inventory[service]})
             with self.subTest(service=service):
                 required = subject.read_required(root, service, packages)

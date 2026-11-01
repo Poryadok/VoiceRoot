@@ -25,9 +25,10 @@ import local_auth_full_orchestration as auth_broker
 BOT_IMAGES = ('postgres:16-bookworm', 'nats:2.10-alpine')
 SEARCH_IMAGES = ('postgres:16-bookworm',)
 USER_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1')
+ROLE_IMAGES = ('postgres:16-bookworm', 'migrate/migrate:v4.18.1', 'redis:7-alpine')
 REALTIME_IMAGES = ()
 POSTGRES_SERVICES = frozenset({'search', 'controlledgame', 'moderation', 'social', 'subscription', 'story'})
-EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime'}
+EXTRA_SERVICES = POSTGRES_SERVICES | {'bot', 'user', 'realtime', 'gameintegration', 'role'}
 
 
 def profile(service):
@@ -39,6 +40,10 @@ def profile(service):
         return {'images': BOT_IMAGES, 'module': 'src/backend/bot'}
     if service == 'user':
         return {'images': USER_IMAGES, 'module': 'src/backend/user'}
+    if service == 'gameintegration':
+        return {'images': USER_IMAGES, 'module': 'src/backend/gameintegration'}
+    if service == 'role':
+        return {'images': ROLE_IMAGES, 'module': 'src/backend/role'}
     if service == 'realtime':
         return {'images': REALTIME_IMAGES, 'module': 'src/backend/realtime'}
     if service in POSTGRES_SERVICES:
@@ -137,6 +142,10 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
         result['unbound_inputs'].append('tagged Realtime lifecycle PostgreSQL fixture and dedicated job')
     if service == 'user':
         result['unbound_inputs'].append('User association, admission and capture dedicated fixtures and jobs')
+    if service == 'gameintegration':
+        result['unbound_inputs'].append('T30 Compose Chat and Game Integration dedicated fixtures and jobs')
+    if service == 'role':
+        result['unbound_inputs'].append('Role migration, bootstrap and tagged Role-Space dedicated fixtures and jobs')
     (output / 'diagnostic.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return result
 
