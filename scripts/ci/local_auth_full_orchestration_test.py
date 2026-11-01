@@ -14,6 +14,16 @@ class FullAuthInputsTests(unittest.TestCase):
                       'image_id': 'sha256:' + ('%x' % (index + 1)) * 64}
                 for index, tag in enumerate(subject.IMAGE_TAGS)}
 
+    def test_stage_record_contains_only_fixed_allowlisted_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            subject.record_stage(path, 'daemon-readiness')
+            self.assertEqual(json.loads((path / 'stage.json').read_text()),
+                             {'schema': 'voice-local-auth-stage-v1', 'stage': 'daemon-readiness'})
+            with self.assertRaises(ValueError):
+                subject.record_stage(path, 'secret=abc')
+            self.assertNotIn('secret', (path / 'stage.json').read_text())
+
     def test_owned_make_copy_is_verified_inside_actual_client(self):
         owner = mock.Mock()
         owner.create_container.return_value = 'tools'
@@ -165,6 +175,7 @@ class FullAuthInputsTests(unittest.TestCase):
             scheduled.run.create_rootless_container.assert_not_called()
             load.assert_not_called()
             scheduled.close.assert_called_once()
+            self.assertEqual(json.loads((output / 'stage.json').read_text())['stage'], 'make-provisioning')
 
 
 if __name__ == '__main__':

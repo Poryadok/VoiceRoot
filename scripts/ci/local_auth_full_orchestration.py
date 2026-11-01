@@ -25,6 +25,24 @@ import local_process_supervision as supervision
 IMAGE_TAGS = ('postgres:16-alpine', 'redis:7-alpine', 'redis:7.4-alpine',
               'nats:2.11-alpine', 'migrate/migrate:v4.18.1')
 MAKE_IMAGE = 'sha256:a9daab691df2dfe118e5c6d3d6bd8fd6767ea2c9bf8fa3c9356161055dd7b97d'
+STAGES = frozenset({'source-copy', 'acquire-slot', 'resources', 'make-provisioning', 'socket-init',
+                    'daemon-create', 'daemon-start', 'daemon-readiness', 'image-load', 'auth-suite',
+                    'tool-verification', 'cleanup-verification', 'complete'})
+
+
+def record_stage(output, stage):
+    """Atomically record only the last attempted fixed stage, never exception text."""
+    if stage not in STAGES:
+        raise ValueError('invalid Auth diagnostic stage')
+    raw = (json.dumps({'schema': 'voice-local-auth-stage-v1', 'stage': stage}, sort_keys=True) + '\n').encode('ascii')
+    with tempfile.NamedTemporaryFile(mode='wb', dir=output, prefix='.stage-', delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(raw); stream.flush(); os.fsync(stream.fileno())
+    try:
+        os.replace(temporary, Path(output) / 'stage.json')
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def _verify_make(owner, client, expected):
@@ -116,32 +134,43 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
     validate_images(images)
     source = snapshot.capture(root, head)
     output.mkdir(parents=True)
+    record_stage(output, 'source-copy')
     source_copy = snapshot.materialize(root, source, output / 'source')
     checkout = output / 'run'; checkout.mkdir()
     engine = DockerCLI()
     if engine._call('image', 'inspect', client_image_id, '--format', '{{.Id}}') != client_image_id:
         raise ValueError('Auth client image identity differs')
+    record_stage(output, 'acquire-slot')
     scheduled = ScheduledRun.start_host(checkout, engine, 300)
     owner = scheduled.run
     failure, result = None, None
     try:
+        record_stage(output, 'resources')
         network = owner.create_resource('network')
         mounts = {target: owner.create_resource('volume') for target in sorted(rootless.WORKSPACE_TARGETS)}
         client = owner.create_container(client_image_id, network,
             {'/socket': mounts['/run/user/1000'], '/workspace': mounts['/workspace']}, [],
             command=['sleep', 'infinity'], clear_entrypoint=True)
         owner.start_container(client)
+        record_stage(output, 'make-provisioning')
         make_tool = provision_make(owner, engine, network, mounts['/workspace'], client)
+        record_stage(output, 'socket-init')
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             if owner.execute(client, ['chown', '1000:1000', '/socket'], out, err, 30):
                 raise ValueError('socket initialization failed')
+        record_stage(output, 'daemon-create')
         daemon = owner.create_rootless_container(network, mounts,
             lambda request: common._create_daemon(helper, helper_digest, engine.rootless_creator_env(), request))
+        record_stage(output, 'daemon-start')
         owner.start_container(daemon)
         # Readiness validates the shared profile and exact network on each pass.
+        record_stage(output, 'daemon-readiness')
         local_auth_full.wait_daemon(owner, daemon, client)
+        record_stage(output, 'image-load')
         image_inputs = load_images(owner, daemon, images, output)
+        record_stage(output, 'auth-suite')
         diagnostic = local_auth_full.run_full(owner, daemon, client, root, source, source_copy, cache, output / 'full')
+        record_stage(output, 'tool-verification')
         _verify_make(owner, client, (make_tool['sha256'] + '  /workspace/tools/make\n' +
                                      make_tool['version'] + '\n').encode('ascii'))
         if diagnostic['maven_cache_sha256'] != cache_digest:
@@ -155,9 +184,11 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
     except BaseException as error:
         failure = error
     common._finish(scheduled, failure)
+    record_stage(output, 'cleanup-verification')
     if snapshot.capture(root, head) != source:
         raise ValueError('source changed during full Auth cleanup')
     (output / 'diagnostic.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    record_stage(output, 'complete')
     return result
 
 
