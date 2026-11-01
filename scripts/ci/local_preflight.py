@@ -167,6 +167,7 @@ def _validate_full_auth_report(result, source, inputs, images):
     if not isinstance(result, dict):
         raise ValueError('invalid full Auth report')
     diagnostic, identities = result.get('diagnostic'), result.get('inputs')
+    make_tool = identities.get('make_tool') if isinstance(identities, dict) else None
     expected_images = {tag: {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
                        for tag, item in images.items()}
     if (result.get('schema') != 'voice-local-auth-full-orchestration-v1' or result.get('status') != 'incomplete' or
@@ -175,6 +176,10 @@ def _validate_full_auth_report(result, source, inputs, images):
             diagnostic.get('maven_cache_sha256') != inputs['maven_cache_sha256'] or not isinstance(identities, dict) or
             identities.get('creator_sha256') != inputs['helper_sha256'] or identities.get('client_image_id') != inputs['client_image_id'] or
             identities.get('maven_cache_sha256') != inputs['maven_cache_sha256'] or identities.get('images') != expected_images or
+            not isinstance(make_tool, dict) or set(make_tool) != {'image_id', 'sha256', 'version'} or
+            make_tool.get('image_id') != local_auth_full_orchestration.MAKE_IMAGE or
+            not isinstance(make_tool.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', make_tool['sha256']) or
+            not isinstance(make_tool.get('version'), str) or not re.fullmatch(r'GNU Make [0-9][^\r\n]*', make_tool['version']) or
             any(not isinstance(diagnostic.get(k), str) or not re.fullmatch(r'[0-9a-f]{64}', diagnostic[k])
                 for k in ('source_archive_sha256', 'build_archive_sha256'))):
         raise ValueError('full Auth diagnostic identity or status mismatch')

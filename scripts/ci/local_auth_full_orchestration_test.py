@@ -14,6 +14,32 @@ class FullAuthInputsTests(unittest.TestCase):
                       'image_id': 'sha256:' + ('%x' % (index + 1)) * 64}
                 for index, tag in enumerate(subject.IMAGE_TAGS)}
 
+    def test_owned_make_copy_is_verified_inside_actual_client(self):
+        owner = mock.Mock()
+        owner.create_container.return_value = 'tools'
+        engine = mock.Mock()
+        engine._call.return_value = subject.MAKE_IMAGE + ' linux/amd64'
+        expected = ('a' * 64 + '  /workspace/tools/make\nGNU Make 4.3\n').encode()
+        def execute(client, command, out, err, timeout):
+            out.write(expected)
+            return 0
+        owner.execute.side_effect = execute
+        result = subject.provision_make(owner, engine, 'net', 'volume', 'client')
+        self.assertEqual(result, {'image_id': subject.MAKE_IMAGE, 'sha256': 'a' * 64, 'version': 'GNU Make 4.3'})
+        self.assertEqual([call.args[0] for call in owner.execute.call_args_list], ['tools', 'client'])
+        self.assertIn('cmp /usr/bin/make /workspace/tools/make', owner.execute.call_args_list[0].args[1][2])
+
+    def test_make_mismatch_or_incompatible_client_fails_closed(self):
+        for second in (b'b' * 64 + b'  /workspace/tools/make\nGNU Make 4.3\n', b''):
+            owner = mock.Mock(); owner.create_container.return_value = 'tools'
+            engine = mock.Mock(); engine._call.return_value = subject.MAKE_IMAGE + ' linux/amd64'
+            def execute(client, command, out, err, timeout):
+                out.write((b'a' * 64 + b'  /workspace/tools/make\nGNU Make 4.3\n') if client == 'tools' else second)
+                return 0 if client == 'tools' or second else 1
+            owner.execute.side_effect = execute
+            with self.subTest(second=second), self.assertRaises(ValueError):
+                subject.provision_make(owner, engine, 'net', 'volume', 'client')
+
     def test_exact_required_image_inventory_and_identities(self):
         items = self.inputs()
         with mock.patch.object(subject.common, '_verify_file') as verify:
@@ -99,6 +125,28 @@ class FullAuthInputsTests(unittest.TestCase):
                  self.assertRaisesRegex(ValueError, 'fixture failure'):
                 subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,
                                    'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
+            scheduled.close.assert_called_once()
+
+    def test_missing_make_fails_before_private_daemon_or_image_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir(); output = Path(directory) / 'out'
+            engine = mock.Mock(); engine._call.return_value = 'sha256:' + 'c' * 64
+            scheduled = mock.Mock(); scheduled.run.create_resource.return_value = 'owned-volume'
+            with mock.patch.object(subject, '_require_worker_job'), \
+                 mock.patch.object(subject.common, '_verify_file'), \
+                 mock.patch.object(subject.local_auth_private, 'cache_digest', return_value='d' * 64), \
+                 mock.patch.object(subject, 'validate_images'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value={'head': 'a' * 40}), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=Path(directory) / 'copy'), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host', return_value=scheduled), \
+                 mock.patch.object(subject, 'provision_make', side_effect=ValueError('missing make')), \
+                 mock.patch.object(subject, 'load_images') as load, \
+                 self.assertRaisesRegex(ValueError, 'missing make'):
+                subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,
+                                   'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
+            scheduled.run.create_rootless_container.assert_not_called()
+            load.assert_not_called()
             scheduled.close.assert_called_once()
 
 

@@ -217,6 +217,8 @@ class LocalPreflightTests(unittest.TestCase):
                                          head_ref='codex/test', full_go_inputs=self.full_go_inputs(['bot']))
         run.assert_called_once()
         self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
+        self.assertEqual(report['auth_full_report'], 'auth-full/diagnostic.json')
         self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
         self.assertEqual(report['go_full_reports']['bot']['skipped'], result['tests']['skipped'])
         for bad in (dict(result, status='pass'), dict(result, source={'head': 'wrong'}),
@@ -240,6 +242,8 @@ class LocalPreflightTests(unittest.TestCase):
                 'ownership_journal': 'run/tmp/ci-local/voiceci-fixture/ownership.json',
                 'inputs': {'creator_sha256': values['helper_sha256'], 'client_image_id': values['client_image_id'],
                            'maven_cache_sha256': values['maven_cache_sha256'],
+                           'make_tool': {'image_id': local_preflight.local_auth_full_orchestration.MAKE_IMAGE,
+                                         'sha256': 'a' * 64, 'version': 'GNU Make 4.3'},
                            'images': {tag: {'image_id': item['image_id'], 'archive_sha256': item['sha256']}
                                       for tag, item in images.items()}},
                 'diagnostic': {'schema': 'voice-local-auth-full-diagnostic-v1', 'status': 'incomplete',
@@ -259,8 +263,17 @@ class LocalPreflightTests(unittest.TestCase):
                                          full_auth_inputs=self.full_auth_inputs())
         run.assert_called_once()
         self.assertEqual(report['status'], 'incomplete')
-        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
-        self.assertEqual(report['auth_full_report'], 'auth-full/diagnostic.json')
+
+    def test_full_auth_rejects_missing_or_mismatched_make_identity(self):
+        for mutation in ('missing', 'image', 'digest', 'version'):
+            report = self.full_auth_result()
+            tool = report['inputs']['make_tool']
+            if mutation == 'missing': report['inputs'].pop('make_tool')
+            if mutation == 'image': tool['image_id'] = 'sha256:' + '0' * 64
+            if mutation == 'digest': tool['sha256'] = 'wrong'
+            if mutation == 'version': tool['version'] = 'unknown'
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                local_preflight._validate_full_auth_report(report, self.source, self.full_auth_inputs(), self.full_auth_images())
 
     def test_full_auth_invalid_or_unselected_refuses_execution(self):
         selected = {'source': self.source, 'checks': {'backend-auth': ['auth']}}
