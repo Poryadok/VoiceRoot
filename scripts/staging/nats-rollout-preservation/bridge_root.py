@@ -181,9 +181,12 @@ def _cohort_story_composition(actions,request,approved,workspace):
     execution=private_json(parent/'execution.json')
     receipt=private_json(INSTALLED/'source-authority'/(session.operation+'.json'))
     from apply import digest
-    if (receipt!={'schema':'voice-staging-source-capture-v1','operation':session.operation,
+    if (actions.installation!=session.installation
+        or receipt!={'schema':'voice-staging-source-capture-v2','installation_sha256':session.installation.sha256,'operation':session.operation,
         'context':session.context,'helper_sha256':session.helper,'approved_sha256':digest(approved),
         'execution_sha256':digest(execution)}
+        or parent_plan.get('schema')!='voice-staging-prerequisites-plan-v3'
+        or parent_plan.get('installation_sha256')!=session.installation.sha256
         or parent_plan.get('operation')!=session.operation or parent_plan.get('context')!=session.context
         or parent_plan.get('helper_sha256')!=session.helper
         or parent_plan.get('source_capture_sha256')!=digest(receipt)
