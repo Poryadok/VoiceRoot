@@ -10,6 +10,21 @@ import local_golangci_capture as bounded_capture
 
 
 class LocalGolangciExecutionTests(unittest.TestCase):
+    def test_explicit_proto_capture_limit_preserves_binary_and_rejects_excess(self):
+        wrapper = Path(lint.__file__).with_name('local_golangci_capture.py')
+        binary = 'import sys; sys.stdout.buffer.write(b"\\x00\\xff" * 700000)'
+        result = subprocess.run([sys.executable, '-B', str(wrapper), '--limit=16777216', sys.executable,
+                                 '-c', binary], capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b'\x00\xff' * 700000)
+        excess = 'import sys; sys.stdout.buffer.write(b"x" * 17000000)'
+        result = subprocess.run([sys.executable, '-B', str(wrapper), '--limit=16777216', sys.executable,
+                                 '-c', excess], capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 125)
+        self.assertLessEqual(len(result.stdout), 16777216)
+        bad = subprocess.run([sys.executable, '-B', str(wrapper), '--limit=16777217', sys.executable,
+                              '-c', 'pass'], capture_output=True, timeout=30)
+        self.assertEqual(bad.returncode, 2)
     def test_reader_failure_kills_child_and_never_returns_success(self):
         child = mock.Mock()
         child.stdout.read.side_effect = OSError('broken pipe')
