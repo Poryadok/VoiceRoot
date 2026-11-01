@@ -158,7 +158,9 @@ class FullAuthInputsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'root'; root.mkdir(); output = Path(directory) / 'out'
             engine = mock.Mock(); engine._call.return_value = 'sha256:' + 'c' * 64
-            scheduled = mock.Mock(); scheduled.run.create_resource.return_value = 'owned-volume'
+            scheduled = mock.Mock()
+            scheduled.run.create_resource.side_effect = lambda kind: ('network-' + str(scheduled.run.create_resource.call_count)
+                                                                       if kind == 'network' else 'volume-' + str(scheduled.run.create_resource.call_count))
             with mock.patch.object(subject, '_require_worker_job'), \
                  mock.patch.object(subject.common, '_verify_file'), \
                  mock.patch.object(subject.local_auth_private, 'cache_digest', return_value='d' * 64), \
@@ -176,6 +178,41 @@ class FullAuthInputsTests(unittest.TestCase):
             load.assert_not_called()
             scheduled.close.assert_called_once()
             self.assertEqual(json.loads((output / 'stage.json').read_text())['stage'], 'make-provisioning')
+
+    def test_make_tool_uses_a_separate_owned_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir(); output = Path(directory) / 'out'
+            engine = mock.Mock(); engine._call.return_value = 'sha256:' + 'c' * 64
+            scheduled = mock.Mock(); owner = scheduled.run
+            scheduled.slot = 0
+            owner.directory = output / 'run/tmp/ci-local' / ('voiceci-' + 'e' * 32)
+            owner.create_resource.side_effect = lambda kind: kind + '-' + str(owner.create_resource.call_count)
+            owner.create_container.return_value = 'client'
+            owner.create_rootless_container.return_value = 'daemon'
+            owner.execute.return_value = 0
+            source = {'head': 'a' * 40}
+            make_tool = {'image_id': subject.MAKE_IMAGE, 'sha256': 'a' * 64, 'version': 'GNU Make 4.3'}
+            with mock.patch.object(subject, '_require_worker_job'), \
+                 mock.patch.object(subject.common, '_verify_file'), \
+                 mock.patch.object(subject.local_auth_private, 'cache_digest', return_value='d' * 64), \
+                 mock.patch.object(subject, 'validate_images'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=Path(directory) / 'copy'), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host', return_value=scheduled), \
+                 mock.patch.object(subject, 'provision_make', return_value=make_tool) as provision, \
+                 mock.patch.object(subject.local_auth_full, 'wait_daemon'), \
+                 mock.patch.object(subject, 'load_images', return_value={}), \
+                 mock.patch.object(subject.local_auth_full, 'run_full', return_value={'maven_cache_sha256': 'd' * 64}), \
+                 mock.patch.object(subject, '_verify_make'):
+                result = subject._run_owned(root, 'a' * 40, output, root / 'helper', 'b' * 64,
+                                            'sha256:' + 'c' * 64, root / 'cache', 'd' * 64, self.inputs())
+            client_network = owner.create_container.call_args.args[1]
+            daemon_network = owner.create_rootless_container.call_args.args[0]
+            tool_network = provision.call_args.args[2]
+            self.assertEqual(client_network, daemon_network)
+            self.assertNotEqual(client_network, tool_network)
+            self.assertEqual(result['status'], 'incomplete')
 
 
 if __name__ == '__main__':

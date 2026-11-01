@@ -153,7 +153,10 @@ def _run_owned(root, head, output, helper, helper_digest, client_image_id, cache
             command=['sleep', 'infinity'], clear_entrypoint=True)
         owner.start_container(client)
         record_stage(output, 'make-provisioning')
-        make_tool = provision_make(owner, engine, network, mounts['/workspace'], client)
+        tool_network = owner.create_resource('network')
+        if tool_network == network:
+            raise ValueError('GNU Make tool network is not isolated from the daemon')
+        make_tool = provision_make(owner, engine, tool_network, mounts['/workspace'], client)
         record_stage(output, 'socket-init')
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             if owner.execute(client, ['chown', '1000:1000', '/socket'], out, err, 30):
