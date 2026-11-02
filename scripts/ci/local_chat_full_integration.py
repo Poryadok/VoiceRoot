@@ -169,8 +169,37 @@ def validate_archives(archives, image_tags=IMAGES):
             raise ValueError('invalid Chat image archive identity')
 
 
+def _verified_resource_limit_readback(owner, client_name, daemon_name, limits):
+    """Bind inspected limits to the exact journaled client and rootless daemon."""
+    owner._check_daemon()
+    state = owner.state
+    if (not isinstance(state, dict) or not isinstance(state.get('daemon'), str) or
+            not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', state['daemon']) or
+            not isinstance(state.get('resources'), list)):
+        raise ValueError('private Go daemon identity is not verified')
+    matched = {}
+    for role, name in (('client', client_name), ('daemon', daemon_name)):
+        entries = [item for item in state['resources'] if isinstance(item, dict) and
+                   item.get('kind') == 'container' and item.get('name') == name]
+        if len(entries) != 1:
+            raise ValueError('private Go container identity is not unique in owner journal')
+        item = entries[0]
+        if (item.get('state') != 'ready' or not isinstance(item.get('id'), str) or
+                not re.fullmatch(r'[0-9a-f]{64}', item['id']) or
+                item.get('resource_limits') != limits[role] or
+                item.get('verified_resource_limits') != limits[role] or
+                (role == 'daemon' and item.get('profile') != 'rootless-unix-v1')):
+            raise ValueError('private Go container identity or limit readback differs')
+        matched[role] = item
+    if matched['client']['id'] == matched['daemon']['id']:
+        raise ValueError('private Go client and daemon share a container identity')
+    return {'limits': {'client': dict(limits['client']), 'daemon': dict(limits['daemon'])},
+            'container_ids': {'client': matched['client']['id'], 'daemon': matched['daemon']['id']},
+            'daemon_id': state['daemon']}
+
+
 def run_owned(scheduled, engine, source, root, source_copy, output, helper, helper_digest, archives, acquisition,
-              *, service='chat'):
+              *, service='chat', resource_limits=None):
     from local_auth_full_orchestration import _require_worker_job
     _require_worker_job()
     owner, failure, result = scheduled.run, None, None
@@ -189,14 +218,22 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
                   ('/home/rootless/.local/share/docker', '/var/lib/docker', '/run/user/1000')}
         workspace = owner.create_resource('volume')
         image = engine._call('image', 'inspect', local_go_plan.GO_IMAGE, '--format', '{{.Id}}')
+        client_args = {}
+        if resource_limits is not None:
+            client_args['resource_limits'] = resource_limits['client']
         client = owner.create_container(image, network, {'/socket': mounts['/run/user/1000'],
-                                                          '/workspace': workspace}, [], command=['sleep', 'infinity'])
+                                                          '/workspace': workspace}, [], command=['sleep', 'infinity'],
+                                       **client_args)
         owner.start_container(client)
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             if owner.execute(client, ['chown', '1000:1000', '/socket'], out, err, 30):
                 raise ValueError('private socket initialization failed')
+        daemon_args = {}
+        if resource_limits is not None:
+            daemon_args['resource_limits'] = resource_limits['daemon']
         daemon = owner.create_rootless_container(network, mounts,
-            lambda request: orchestration._create_daemon(helper, helper_digest, engine.rootless_creator_env(), request))
+            lambda request: orchestration._create_daemon(helper, helper_digest, engine.rootless_creator_env(), request),
+            **daemon_args)
         owner.start_container(daemon)
         orchestration._wait_daemon(owner, daemon, client)
         for index, tag in enumerate(image_tags):
@@ -224,6 +261,9 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
                                                       acquisition, output / 'dependencies/download-cache.tar')
         identities = {tag: archives[tag]['image_id'] for tag in image_tags}
         result = executor(owner, daemon, client, root, source, source_copy, source_digest, identities, output / 'full')
+        if resource_limits is not None:
+            result['resource_limit_readback'] = _verified_resource_limit_readback(
+                owner, client, daemon, resource_limits)
         result.update(slot=scheduled.slot, ownership_journal=str(owner.directory / 'ownership.json'),
                       source_archive_sha256=source_digest, go_image_id=image)
     except BaseException as error:

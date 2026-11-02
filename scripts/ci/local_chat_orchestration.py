@@ -44,8 +44,11 @@ def _verify_file(path, expected):
 
 def _create_daemon(helper, digest, environment, request):
     _verify_file(helper, digest)
+    # Resource limits are journaled and inspected by OwnedRun. The pinned helper
+    # has a strict, sealed JSON ABI and applies its own fixed profile.
+    helper_request = {key: value for key, value in request.items() if key != 'resource_limits'}
     result = supervision.run_diagnostic([str(helper)], timeout=90, env=environment,
-                                        input=json.dumps(request, sort_keys=True, separators=(',', ':')).encode(),
+                                        input=json.dumps(helper_request, sort_keys=True, separators=(',', ':')).encode(),
                                         capture_output=True, check=False)
     if result.returncode != 0:
         raise OwnershipError('rootless creator outcome uncertain')

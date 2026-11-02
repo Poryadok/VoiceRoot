@@ -41,6 +41,12 @@ class FullGoTests(unittest.TestCase):
         return {'root': str(root.resolve()), 'head': source['head'],
                 'sha256': hashlib.sha256(canonical).hexdigest()}
 
+    @staticmethod
+    def full_go_output(directory, service='bot'):
+        preflight_output = Path(directory) / 'preflight-output'
+        preflight_output.mkdir()
+        return preflight_output / 'go-full' / service
+
     def test_worker_refuses_before_reading_request_when_job_is_unavailable(self):
         with mock.patch.object(sys, 'argv', ['worker', '--worker']), \
              mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
@@ -69,9 +75,12 @@ class FullGoTests(unittest.TestCase):
                        'archives': {'postgres:16-bookworm': {'archive': str(output / 'image'),
                                     'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + 'c' * 64}},
                        'go_binary': 'go', 'base': 'd' * 40, 'head_ref': 'codex/test',
-                       'resource_limits': self.resource_limits()}
+                       'resource_limits': self.resource_limits(), 'owner_id': 'voiceci-' + '1' * 32,
+                       'ownership_journal': str(output / 'owner' / 'ownership.json'), 'slot': 0}
             limits = self.resource_limits()
-            readback = {'client': limits['client'], 'daemon': limits['daemon']}
+            readback = {'limits': {'client': limits['client'], 'daemon': limits['daemon']},
+                        'container_ids': {'client': '1' * 64, 'daemon': '2' * 64},
+                        'daemon_id': 'daemon-a'}
             with mock.patch.object(sys, 'argv', ['worker', '--worker']), \
                  mock.patch.object(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
                  mock.patch.object(sys, 'stdout', new_callable=io.StringIO), \
@@ -107,6 +116,30 @@ class FullGoTests(unittest.TestCase):
                 subject.main()
             run.assert_not_called()
 
+    def test_bounded_worker_rejects_journal_outside_its_parent_output_before_executor_work(self):
+        owner_id = 'voiceci-' + '8' * 32
+        limits = self.resource_limits()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = self.full_go_output(directory)
+            output.mkdir(parents=True)
+            owner_dir = output / 'run' / 'tmp' / 'ci-local' / owner_id
+            owner_dir.mkdir(parents=True)
+            journal = owner_dir / 'ownership.json'
+            journal.write_text('{}', encoding='utf-8')
+            foreign_journal = Path(directory) / 'foreign' / 'ownership.json'
+            foreign_journal.parent.mkdir()
+            foreign_journal.write_text('{}', encoding='utf-8')
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(subject.chat, 'validate_archives') as archives, \
+                 mock.patch.object(subject, 'DockerCLI') as engine, \
+                 self.assertRaisesRegex(ValueError, 'not bound to its parent output'):
+                subject.run('bot', root, 'a' * 40, output, 'helper', 'b' * 64, {}, 'go',
+                    resource_limits=limits, owner_id=owner_id,
+                    ownership_journal=str(foreign_journal), slot=0)
+            archives.assert_not_called()
+            engine.assert_not_called()
+
     def test_selected_service_passes_resource_limits_to_its_executor(self):
         source = {'head': 'a' * 40}
         base = 'b' * 40
@@ -124,28 +157,51 @@ class FullGoTests(unittest.TestCase):
                  mock.patch.object(subject.snapshot, 'capture', return_value=source), \
                  mock.patch.object(subject, 'run', return_value={'status': 'incomplete', 'source': source}) as run:
                 result = subject.run_selected(plan, 'bot', root, output, 'helper', 'e' * 64, archives, 'go',
-                                              base=base, head_ref='codex/test', resource_limits=limits)
+                                              base=base, head_ref='codex/test', resource_limits=limits,
+                                              owner_id='voiceci-' + '1' * 32,
+                                              ownership_journal=str(output / 'owner' / 'ownership.json'), slot=0)
             self.assertEqual(result['status'], 'incomplete')
             self.assertEqual(run.call_args.kwargs['resource_limits'], limits)
 
     def test_supervised_worker_accepts_only_matching_saved_incomplete_report(self):
         plan = {'source': {'head': 'a' * 40}}
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / 'out'; output.mkdir()
+            output = self.full_go_output(directory)
             limits = self.resource_limits()
+            evidence = []
+            engine = FakeEngine()
             report = {'status': 'incomplete', 'source': plan['source'],
                       'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
                                          'resource_limits': limits},
-                      'resource_limit_readback': {'client': limits['client'], 'daemon': limits['daemon']}}
-            (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
+                      'resource_limit_readback': {'limits': {'client': limits['client'], 'daemon': limits['daemon']},
+                          'container_ids': {'client': '1' * 64, 'daemon': '2' * 64},
+                          'daemon_id': engine.daemon()}}
             fake = subprocess.CompletedProcess([], 0, stdout=json.dumps(report).encode(), stderr=b'')
             fake.job_evidence = {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
                                  'active_process_limit': 512, 'peak_job_memory_bytes': 1024,
                                  'active_processes_after_cleanup': 0}
-            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake) as broker:
-                result = subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+            root = Path(directory) / 'source'; root.mkdir()
+            def successful_worker(command, *, job_name, job_limits, **kwargs):
+                (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
+                current = subprocess.CompletedProcess(command, 0, stdout=json.dumps(report).encode(), stderr=b'')
+                current.job_evidence = {**job_limits.to_dict(), 'job_name': job_name,
+                    'peak_job_memory_bytes': 1024, 'total_processes': 3, 'active_processes_after_cleanup': 0}
+                evidence.append(current.job_evidence)
+                return current
+            with (
+                mock.patch.object(subject, 'DockerCLI', return_value=engine),
+                mock.patch('local_docker_scheduled.host_slot_directory', return_value=Path(directory) / 'slots'),
+                mock.patch.object(proof_scheduler, '_session_identity', return_value={
+                    'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}),
+                mock.patch.object(subject.supervision, 'named_job_exists', return_value=False),
+                mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                    'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}),
+                mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=successful_worker) as broker,
+                mock.patch.object(subject.snapshot, 'capture', return_value=plan['source']),
+            ):
+                result = subject.run_supervised(plan, 'bot', root, output, 'helper', 'c' * 64, {},
                                                 base='b' * 40, head_ref='codex/test', resource_limits=limits)
-            self.assertEqual(result['resource_limit_readback']['host_job'], fake.job_evidence)
+            self.assertEqual(result['resource_limit_readback']['host_job'], evidence[0])
             request = json.loads(broker.call_args.kwargs['input'])
             self.assertEqual(request['resource_limits'], limits)
             self.assertEqual(broker.call_args.kwargs['job_limits'], subject.supervision.JobLimits(
@@ -179,18 +235,72 @@ class FullGoTests(unittest.TestCase):
             self.assertFalse(slots.exists())
             self.assertEqual(list(root.rglob('ownership.json')), [])
 
+    def test_supervised_rejects_existing_or_symlink_output_before_owner_or_slot_mutation(self):
+        limits = self.resource_limits()
+        for path_kind in ('existing', 'symlink'):
+            with self.subTest(path_kind=path_kind), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / 'root'; root.mkdir()
+                preflight_output = Path(directory) / 'preflight-output'; preflight_output.mkdir()
+                output = preflight_output / 'go-full' / 'bot'
+                if path_kind == 'existing':
+                    output.parent.mkdir()
+                    output.mkdir()
+                else:
+                    target = Path(directory) / 'target'; target.mkdir()
+                    output.parent.mkdir()
+                slots = Path(directory) / 'slots'
+                original_is_symlink = Path.is_symlink
+                symlink_probe = (mock.patch.object(Path, 'is_symlink', autospec=True,
+                    side_effect=lambda path: path == output or original_is_symlink(path))
+                    if path_kind == 'symlink' else mock.patch.object(Path, 'is_symlink', autospec=True,
+                    side_effect=original_is_symlink))
+                with mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                         'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}), \
+                     mock.patch.object(subject, 'DockerCLI') as engine, \
+                     mock.patch.object(subject.ScheduledRun, 'start_host') as acquire, \
+                     mock.patch.object(subject.supervision, 'run_diagnostic') as worker, \
+                     mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                     symlink_probe, self.assertRaisesRegex(ValueError, 'Go output must be a new real directory'):
+                    subject.run_supervised({'source': {'head': 'a' * 40}}, 'bot', root, output,
+                        'helper', 'c' * 64, {}, base='b' * 40, head_ref='codex/test',
+                        resource_limits=limits)
+                engine.assert_not_called()
+                acquire.assert_not_called()
+                worker.assert_not_called()
+                self.assertFalse(slots.exists())
+                self.assertEqual(list(root.rglob('ownership.json')), [])
+
+    def test_diagnostic_publication_is_atomic_and_preserves_previous_file_on_replace_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            final = output / 'diagnostic.json'
+            final.write_text('{"previous":true}\n', encoding='utf-8')
+            with mock.patch.object(subject._os, 'replace', side_effect=OSError('replace failed')):
+                with self.assertRaisesRegex(OSError, 'replace failed'):
+                    subject._write_diagnostic_atomic(output, {'status': 'incomplete'})
+            self.assertEqual(final.read_text(encoding='utf-8'), '{"previous":true}\n')
+            self.assertEqual(list(output.glob('.diagnostic-*.tmp')), [])
+
+            subject._write_diagnostic_atomic(output, {'status': 'incomplete'})
+            self.assertEqual(json.loads(final.read_text(encoding='utf-8')),
+                             {'status': 'incomplete'})
+
     def test_supervised_launch_has_durable_named_job_intent_and_owner_bound_slot(self):
         limits = self.resource_limits()
         source = {'head': 'a' * 40}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'root'; root.mkdir()
-            output = Path(directory) / 'out'; output.mkdir()
+            output = self.full_go_output(directory)
             slots = Path(directory) / 'slots'
-            readback = {'client': limits['client'], 'daemon': limits['daemon']}
+            readback = {'limits': {'client': limits['client'], 'daemon': limits['daemon']},
+                        'container_ids': {'client': '1' * 64, 'daemon': '2' * 64},
+                        'daemon_id': 'daemon-a'}
             report = {'status': 'incomplete', 'source': source,
                       'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
                                          'resource_limits': limits},
-                      'resource_limit_readback': readback}
+                       'resource_limit_readback': readback,
+                       'unbound_inputs': ['host PID limit is caller supplied and not measured',
+                           'foreign and non-cooperating host workloads are not tracked']}
             slot_marker_written = []
             owner_ids = []
             admission_calls = []
@@ -203,7 +313,7 @@ class FullGoTests(unittest.TestCase):
 
             def after_owner_marker(_descriptor, slot, owner_id):
                 slot_marker_written.append((slot, owner_id))
-                journals = list(root.rglob('ownership.json'))
+                journals = list(output.rglob('ownership.json'))
                 self.assertEqual(len(journals), 1)
                 journal = json.loads(journals[0].read_text(encoding='utf-8'))
                 self.assertEqual(journal['run_id'], owner_id)
@@ -218,10 +328,13 @@ class FullGoTests(unittest.TestCase):
                 self.assertEqual(job_name, 'Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-'))
                 self.assertEqual(job_limits, subject.supervision.JobLimits(**limits['host_job']))
                 journal_path = Path(request['ownership_journal'])
+                self.assertEqual(journal_path, output / 'run' / 'tmp' / 'ci-local' /
+                                 owner_id / 'ownership.json')
                 journal = json.loads(journal_path.read_text(encoding='utf-8'))
                 self.assertEqual(journal['version'], 2)
                 self.assertEqual(journal['run_id'], owner_id)
                 intent = journal['host_job']
+                report['slot'] = request['slot']
                 self.assertEqual(intent['schema'], 1)
                 self.assertEqual(intent['slot'], request['slot'])
                 self.assertEqual(intent['job_names'], [job_name])
@@ -229,11 +342,11 @@ class FullGoTests(unittest.TestCase):
                 self.assertEqual(set(intent['session_identity']), {'boot_id', 'logon_id', 'session_id'})
                 self.assertEqual(intent['source_identity'], self.source_identity(root, source))
                 self.assertNotEqual(intent['slot'], None)
-                self.assertIn(owner_id.encode('ascii'), (slots / ('heavy-' + str(request['slot']) + '.lock')).read_bytes())
                 (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
                 completed = subprocess.CompletedProcess(command, 0, stdout=json.dumps(report).encode(), stderr=b'')
                 completed.job_evidence = {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
-                                          'active_process_limit': 512, 'peak_job_memory_bytes': 1024,
+                                          'active_process_limit': 512, 'job_name': job_name,
+                                          'peak_job_memory_bytes': 1024, 'total_processes': 3,
                                           'active_processes_after_cleanup': 0}
                 return completed
 
@@ -241,12 +354,14 @@ class FullGoTests(unittest.TestCase):
                  mock.patch.object(subject, 'DockerCLI', return_value=SimpleNamespace(daemon=lambda: 'daemon-a')), \
                  mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
                      'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}), \
+                 mock.patch.object(subject.supervision, 'named_job_exists', return_value=False), \
                  mock.patch('local_docker_scheduled.acquire', side_effect=acquire_with_capacity), \
                  mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
                  mock.patch('local_heavy_slots._owned_slot_marker_written', side_effect=after_owner_marker), \
                  mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=launch):
-                result = subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
-                                                base='b' * 40, head_ref='codex/test', resource_limits=limits)
+                with mock.patch.object(subject.snapshot, 'capture', return_value=source):
+                    result = subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
+                                                    base='b' * 40, head_ref='codex/test', resource_limits=limits)
             self.assertEqual(slot_marker_written, [(result['slot'], owner_ids[0])])
             cpu_job = (8_000_000_000 * limits['host_job']['cpu_rate'] + 9_999) // 10_000
             self.assertEqual(admission_calls, [(owner_ids[0], {
@@ -257,6 +372,8 @@ class FullGoTests(unittest.TestCase):
                               limits['host_job']['active_process_limit']}, limits['capacity_budget'])])
             self.assertEqual(result['status'], 'incomplete')
             self.assertEqual(result['input_identity']['resource_limits'], limits)
+            self.assertTrue(output.parent.is_dir())
+            self.assertFalse(output.parent.is_symlink())
             self.assertEqual(result['resource_limit_readback']['host_job']['cpu_rate'], limits['host_job']['cpu_rate'])
             limitations = ' '.join(result.get('unbound_inputs', [])).lower()
             self.assertIn('pid', limitations)
@@ -268,7 +385,7 @@ class FullGoTests(unittest.TestCase):
         source = {'head': 'a' * 40}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'root'; root.mkdir()
-            output = Path(directory) / 'out'; output.mkdir()
+            output = self.full_go_output(directory)
             slots = Path(directory) / 'slots'
             engine = FakeEngine()
             owner_ids, resources, job_names = [], [], []
@@ -279,7 +396,8 @@ class FullGoTests(unittest.TestCase):
                 job_names.append(job_name)
                 owner = OwnedRun.load(Path(request['ownership_journal']).parent, engine)
                 try:
-                    resources.append(owner.create_resource('network'))
+                    owner.create_resource('network')
+                    resources.append(owner.state['resources'][-1]['id'])
                 finally:
                     owner.close()
                 if change_daemon:
@@ -341,7 +459,7 @@ class FullGoTests(unittest.TestCase):
         changed_source = {'head': 'f' * 40}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'root'; root.mkdir()
-            output = Path(directory) / 'out'; output.mkdir()
+            output = self.full_go_output(directory)
             slots = Path(directory) / 'slots'
             engine = FakeEngine()
             resources, owner_ids = [], []
@@ -355,7 +473,8 @@ class FullGoTests(unittest.TestCase):
                 owner_ids.append(request['owner_id'])
                 owner = OwnedRun.load(Path(request['ownership_journal']).parent, engine)
                 try:
-                    resources.append(owner.create_resource('network'))
+                    owner.create_resource('network')
+                    resources.append(owner.state['resources'][-1]['id'])
                 finally:
                     owner.close()
                 (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
@@ -379,6 +498,66 @@ class FullGoTests(unittest.TestCase):
             marker = next(slots.glob('heavy-*.lock')).read_bytes()
             self.assertNotIn(owner_ids[0].encode('ascii'), marker)
             self.assertEqual(marker[1:], b'idle\n')
+
+    def test_supervised_source_mutation_invalidates_after_parent_cleanup_and_keeps_foreign_sentinel(self):
+        limits = self.resource_limits()
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'; root.mkdir()
+            output = self.full_go_output(directory)
+            slots = Path(directory) / 'slots'
+            source_file = root / 'tracked.txt'
+            source_file.write_text('before', encoding='utf-8')
+            engine = FakeEngine()
+            foreign = ('volume', 'foreign-sentinel')
+            engine.resources[foreign] = {'id': 'foreign-sentinel', 'name': 'foreign-sentinel',
+                'kind': 'volume', 'labels': {'owner': 'foreign'}}
+            owned_ids = []
+            report = {'status': 'incomplete', 'source': source,
+                'input_identity': {'helper_sha256': 'c' * 64, 'archives': {}, 'resource_limits': limits},
+                'resource_limit_readback': {'client': limits['client'], 'daemon': limits['daemon']}}
+
+            def worker(command, *, input, **kwargs):
+                request = json.loads(input)
+                owner = OwnedRun.load(Path(request['ownership_journal']).parent, engine)
+                try:
+                    owner.create_resource('network')
+                    owned_ids.append(owner.state['resources'][-1]['id'])
+                finally:
+                    owner.close()
+                source_file.write_text('changed while the supervised worker ran', encoding='utf-8')
+                (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
+                completed = subprocess.CompletedProcess(command, 0, stdout=json.dumps(report).encode(), stderr=b'')
+                completed.job_evidence = {**kwargs['job_limits'].to_dict(), 'job_name': kwargs['job_name'],
+                    'peak_job_memory_bytes': 1024, 'total_processes': 3, 'active_processes_after_cleanup': 0}
+                return completed
+
+            def capture(_root, head):
+                self.assertEqual(head, source['head'])
+                self.assertEqual(source_file.read_text(encoding='utf-8'), 'changed while the supervised worker ran')
+                return {'head': head, 'changed': True}
+
+            with mock.patch.object(subject, '_worker_command', return_value=['worker']), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                 mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}), \
+                 mock.patch.object(proof_scheduler, '_session_identity', return_value={
+                     'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}), \
+                 mock.patch.object(subject.supervision, 'named_job_exists', return_value=False), \
+                 mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=worker), \
+                 mock.patch.object(subject.snapshot, 'capture', side_effect=capture), \
+                 self.assertRaisesRegex(ValueError, 'source changed during supervised'):
+                subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
+                    base='b' * 40, head_ref='codex/test', resource_limits=limits)
+
+            self.assertEqual(len(owned_ids), 1)
+            self.assertFalse(engine.exists('network', owned_ids[0]))
+            self.assertIn(foreign, engine.resources)
+            self.assertEqual((slots / 'heavy-0.lock').read_bytes()[1:], b'idle\n')
+            self.assertIsNone(heavy_slots.active_resource_reservation(slots,
+                json.loads((output / 'owner.json').read_text(encoding='utf-8'))['run_id']))
+            self.assertNotIn('cleanup_evidence', json.loads((output / 'diagnostic.json').read_text(encoding='utf-8')))
 
     def test_source_file_mutation_during_worker_invalidates_result_after_exact_owned_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -415,6 +594,7 @@ class FullGoTests(unittest.TestCase):
                         for tag in subject.profile('bot')['images']}
             try:
                 with mock.patch.object(subject.auth_broker, '_require_worker_job'), \
+                     mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
                      mock.patch.object(subject, 'DockerCLI', return_value=engine), \
                      mock.patch.object(subject.orchestration, '_verify_file'), \
                      mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
@@ -438,11 +618,26 @@ class FullGoTests(unittest.TestCase):
         plan = {'base': 'b' * 40, 'source': {'head': 'a' * 40},
                 'checks': {'backend-go-integration-pr': ['bot']}, 'components': {'go_integration': ['bot']}}
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / 'out'
+            output = self.full_go_output(directory)
+            root = Path(directory) / 'root'; root.mkdir()
             fake = subprocess.CompletedProcess([], 0, stdout=b'{"status":"pass"}', stderr=b'')
+            scheduled = SimpleNamespace(
+                run=SimpleNamespace(directory=output / 'run' / 'tmp' / 'ci-local' / 'owner'),
+                slot=0,
+                release_owner_handle=mock.Mock(),
+                close=mock.Mock(return_value={}),
+                abandon=mock.Mock())
             with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake) as broker, \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=SimpleNamespace(daemon=lambda: 'daemon-a')), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host', return_value=scheduled), \
+                 mock.patch.object(subject.chat, 'publish_owner'), \
+                 mock.patch.object(subject.supervision, 'named_job_exists', return_value=False), \
+                 mock.patch.object(proof_scheduler, '_session_identity', return_value={
+                     'boot_id': 'boot', 'logon_id': 'logon', 'session_id': 1}), \
                  mock.patch.object(subject, 'run_selected') as inline, self.assertRaises(ValueError):
-                subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+                subject.run_supervised(plan, 'bot', root, output, 'helper', 'c' * 64, {},
                                        base='b' * 40, head_ref='codex/test', resource_limits=self.resource_limits())
             broker.assert_called_once()
             inline.assert_not_called()
@@ -620,6 +815,74 @@ class FullGoTests(unittest.TestCase):
         self.assertEqual(result['status'], 'incomplete')
         run.assert_called_once_with(Path('.'), 'a' * 40, Path('out'), 'helper', 'b' * 64, {}, 'go')
 
+    def test_unbounded_legacy_executor_reports_missing_supervision_and_client_limits(self):
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'nested' / 'out'
+            engine = FakeEngine()
+            scheduled = SimpleNamespace(run=SimpleNamespace(directory=Path(directory) / 'owner'))
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(subject.chat, 'validate_archives'), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=output / 'source'), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={}), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                 mock.patch.object(subject.ScheduledRun, 'start_host', return_value=scheduled), \
+                 mock.patch.object(subject.chat, 'publish_owner'), \
+                 mock.patch.object(subject.chat, 'run_owned', return_value={
+                     'status': 'incomplete', 'source': source}):
+                report = subject.run('bot', root, source['head'], output, 'helper', 'b' * 64,
+                    {tag: {'archive': str(Path(directory) / str(index),),
+                           'archive_sha256': 'c' * 64, 'image_id': 'sha256:' + 'd' * 64}
+                     for index, tag in enumerate(subject.profile('bot')['images'])})
+            limitations = ' '.join(report['unbound_inputs']).lower()
+            self.assertIn('client container cpu and memory limits are not enforced', limitations)
+            self.assertIn('not supervised by an owner-bound windows job', limitations)
+            self.assertNotIn('resource_limits', report.get('input_identity', {}))
+            self.assertTrue((output / 'diagnostic.json').is_file())
+
+    def test_bounded_chat_dispatch_reuses_parent_owner_and_resource_envelope(self):
+        source = {'head': 'a' * 40}
+        limits = self.resource_limits()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'out'; output.mkdir()
+            source_copy = output / 'source'
+            owner_id = 'voiceci-' + '1' * 32
+            journal = output / 'run' / 'tmp' / 'ci-local' / owner_id / 'ownership.json'
+            journal.parent.mkdir(parents=True)
+            journal.write_text('{}', encoding='utf-8')
+            archives = {tag: {'archive': str(Path(directory) / str(index),),
+                              'archive_sha256': 'c' * 64, 'image_id': 'sha256:' + 'd' * 64}
+                        for index, tag in enumerate(subject.profile('chat')['images'])}
+            attached = mock.Mock(slot=1, run=mock.Mock())
+            result = {'status': 'incomplete', 'source': source}
+            with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}), \
+                 mock.patch.object(subject.chat, 'validate_archives'), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject.snapshot, 'materialize', return_value=source_copy), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={'cache': 'ok'}), \
+                 mock.patch.object(subject.chat, 'DockerCLI', return_value=FakeEngine()), \
+                 mock.patch.object(subject.chat.ScheduledRun, 'attach_worker', return_value=attached) as attach, \
+                 mock.patch.object(subject.chat, 'run_owned', return_value=result) as run_owned:
+                report = subject.run('chat', root, source['head'], output, 'helper', 'b' * 64, archives, 'go',
+                    resource_limits=limits, owner_id=owner_id,
+                    ownership_journal=str(journal), slot=1)
+            attach.assert_called_once()
+            self.assertEqual(attach.call_args.args[2:], (1, owner_id, limits))
+            run_owned.assert_called_once()
+            self.assertIs(run_owned.call_args.args[0], attached)
+            self.assertEqual(run_owned.call_args.kwargs['resource_limits'], limits)
+            self.assertEqual(report['status'], 'incomplete')
+            self.assertTrue(any('nested Testcontainers' in item for item in report['unbound_inputs']))
+
     def test_unsupported_selection_refuses_before_any_docker(self):
         with mock.patch.object(subject, 'DockerCLI') as engine, self.assertRaisesRegex(ValueError, 'unsupported'):
             subject.run('file', Path('.'), 'a' * 40, Path('out'), 'helper', 'b' * 64, {}, 'go')
@@ -747,7 +1010,8 @@ class FullGoTests(unittest.TestCase):
                                                   base='c' * 40, head_ref='codex/example'),
                              {'status': 'incomplete', 'source': source})
         planner.assert_called_once_with(Path('.').resolve(), 'c' * 40, source['head'], 'codex/example')
-        run.assert_called_once_with('bot', Path('.'), source['head'], Path('out'), 'helper', 'b' * 64, {}, 'go')
+        run.assert_called_once_with('bot', Path('.'), source['head'], Path('out'), 'helper', 'b' * 64, {}, 'go',
+                                    resource_limits=None, owner_id=None, ownership_journal=None, slot=None)
         for invalid in ({**plan, 'checks': {}}, {**plan, 'components': {'go_integration': ['chat']}},
                         {**plan, 'source': {'head': 'bad'}}):
             with self.subTest(invalid=invalid), mock.patch.object(subject, 'run') as run, self.assertRaises(ValueError):

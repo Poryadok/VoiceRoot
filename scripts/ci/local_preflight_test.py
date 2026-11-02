@@ -349,7 +349,8 @@ class LocalPreflightTests(unittest.TestCase):
                 'checks': {'backend-go-integration-pr': ['bot']},
                 'components': {'go_integration': ['bot']}}
         valid = self.full_go_inputs(['bot'])
-        self.assertEqual(local_preflight._validate_full_go_inputs(plan, valid), ['bot'])
+        with patch.object(local_preflight.local_chat_orchestration, '_verify_file'):
+            self.assertEqual(local_preflight._validate_full_go_inputs(plan, valid), ['bot'])
         invalid = []
         for domain, key, value in (('client', 'nano_cpus', True), ('client', 'memory_bytes', 0),
                                    ('client', 'pids_limit', 3.5), ('daemon', 'nano_cpus', 999999999),
@@ -364,7 +365,8 @@ class LocalPreflightTests(unittest.TestCase):
         changed['bot']['resource_limits']['unexpected'] = 1
         invalid.append(changed)
         for inputs in invalid:
-            with self.subTest(limits=inputs['bot']['resource_limits']), self.assertRaises(ValueError):
+            with self.subTest(limits=inputs['bot']['resource_limits']), patch.object(
+                    local_preflight.local_chat_orchestration, '_verify_file'), self.assertRaises(ValueError):
                 local_preflight._validate_full_go_inputs(plan, inputs)
 
     def test_full_go_preflight_rejects_mixed_selection_before_workers(self):
@@ -389,14 +391,17 @@ class LocalPreflightTests(unittest.TestCase):
                       'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
                                    for tag, item in self.full_go_inputs(['bot'])['bot']['archives'].items()},
                       'resource_limits': self.go_resource_limits()},
-                  'resource_limit_readback': {'client': self.go_resource_limits()['client'],
-                      'daemon': self.go_resource_limits()['daemon'],
+                  'resource_limit_readback': {'limits': {'client': self.go_resource_limits()['client'],
+                      'daemon': self.go_resource_limits()['daemon']},
+                      'container_ids': {'client': '1' * 64, 'daemon': '2' * 64}, 'daemon_id': '3' * 64,
                       'host_job': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
                                    'active_process_limit': 512, 'peak_job_memory_bytes': 1234,
                                    'active_processes_after_cleanup': 0}},
                   'events_sha256': 'b' * 64, 'source_archive_sha256': 'c' * 64, 'required_inventory_sha256': 'd' * 64,
                   'required_count': 1, 'go_image_id': 'sha256:' + 'e' * 64, 'slot': 0,
                   'ownership_journal': str(self.output / 'go-full' / 'bot' / 'run' / 'tmp' / 'ci-local' / ('voiceci-' + 'f' * 32) / 'ownership.json'),
+                  'cleanup_evidence': {'completed': True, 'named_job_absent': True, 'owned_resources_remaining': 0,
+                                       'slot_released': True, 'capacity_reservation_released': True},
                   'unbound_inputs': ['external provenance']}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
@@ -415,11 +420,17 @@ class LocalPreflightTests(unittest.TestCase):
                 local_preflight._validate_full_go_report(bad, 'bot', self.source, self.full_go_inputs(['bot'])['bot'],
                                                          self.output / 'go-full' / 'bot')
         bad_readback = json.loads(json.dumps(result))
-        bad_readback['resource_limit_readback']['client']['pids_limit'] += 1
+        bad_readback['resource_limit_readback']['limits']['client']['pids_limit'] += 1
         with self.assertRaises(ValueError):
             local_preflight._validate_full_go_report(bad_readback, 'bot', self.source,
                                                      self.full_go_inputs(['bot'])['bot'],
                                                      self.output / 'go-full' / 'bot')
+        for key, value in (('client', '2' * 64), ('daemon', ''), ('client', 'not-a-docker-id')):
+            bad_identity = json.loads(json.dumps(result))
+            bad_identity['resource_limit_readback']['container_ids'][key] = value
+            with self.subTest(resource_identity=key, value=value), self.assertRaises(ValueError):
+                local_preflight._validate_full_go_report(bad_identity, 'bot', self.source,
+                    self.full_go_inputs(['bot'])['bot'], self.output / 'go-full' / 'bot')
 
     def test_lint_component_composes_without_completing_other_checks(self):
         plan={'source':self.source,'checks':{'golangci':['go'],'backend-auth':['shared']},'components':{'go':['chat']}}

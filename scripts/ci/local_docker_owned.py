@@ -28,6 +28,44 @@ class OwnershipError(Exception):
     pass
 
 
+def _validate_resource_limits(value):
+    fields = {'nano_cpus', 'memory_bytes', 'memory_swap_bytes', 'pids_limit'}
+    if (not isinstance(value, dict) or set(value) != fields
+            or any(type(value[key]) is not int or value[key] <= 0 for key in fields)
+            or value['memory_swap_bytes'] < value['memory_bytes']):
+        raise OwnershipError('invalid container resource limits')
+    return {key: value[key] for key in fields}
+
+
+def _validate_host_job(value, run_id):
+    if (not isinstance(value, dict) or set(value) !=
+            {'schema', 'slot', 'job_names', 'limits', 'session_identity', 'source_identity'}
+            or type(value['schema']) is not int or value['schema'] != 1
+            or (value['slot'] is not None and (type(value['slot']) is not int or not 0 <= value['slot'] < 64))):
+        raise OwnershipError('invalid host Job intent')
+    expected_name = 'Local\\VoiceCIProof-Go-' + run_id.removeprefix('voiceci-')
+    if value['job_names'] != [expected_name]:
+        raise OwnershipError('invalid named host Job identity')
+    limits = value['limits']
+    fields = {'cpu_rate', 'job_memory_bytes', 'active_process_limit'}
+    if (not isinstance(limits, dict) or set(limits) != fields
+            or any(type(limits[key]) is not int or limits[key] <= 0 for key in fields)
+            or limits['cpu_rate'] > 10000):
+        raise OwnershipError('invalid host Job limits')
+    identity = value['session_identity']
+    if (not isinstance(identity, dict) or set(identity) != {'boot_id', 'logon_id', 'session_id'}
+            or any(not isinstance(identity[key], str) or not identity[key] for key in ('boot_id', 'logon_id'))
+            or type(identity['session_id']) is not int or identity['session_id'] < 0):
+        raise OwnershipError('invalid host session identity')
+    source = value['source_identity']
+    if (not isinstance(source, dict) or set(source) != {'root', 'head', 'sha256'}
+            or not isinstance(source['root'], str) or not Path(source['root']).is_absolute()
+            or not isinstance(source['head'], str) or not re.fullmatch(r'[0-9a-f]{40}', source['head'])
+            or not isinstance(source['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', source['sha256'])):
+        raise OwnershipError('invalid host Job source identity')
+    return value
+
+
 class DockerCLI:
     def __init__(self):
         self._env = dict(os.environ)
@@ -133,11 +171,18 @@ class DockerCLI:
                     actual = value.get('NetworkSettings', {}).get('Ports') or {}
                     if not isinstance(actual, dict) or any(entries not in (None, []) for entries in actual.values()):
                         raise ValueError()
+                host_limits = {'nano_cpus': host.get('NanoCpus') or 0,
+                               'memory_bytes': host.get('Memory') or 0,
+                               'memory_swap_bytes': host.get('MemorySwap') or 0,
+                               'pids_limit': host.get('PidsLimit') or 0}
+                if any(type(field) is not int or field < 0 for field in host_limits.values()):
+                    raise ValueError()
                 return {'id': identifier, 'name': value['Name'].removeprefix('/'), 'kind': kind,
                         'labels': value['Config'].get('Labels') or {}, 'image': value['Image'],
                          'network': host['NetworkMode'], 'mounts': mounts, 'readonly_mounts': sorted(readonly_mounts), 'ports': [], 'running': running,
                          'command': value['Config'].get('Cmd'), 'entrypoint': value['Config'].get('Entrypoint') or [],
-                         'user': value['Config'].get('User') or '', 'network_attachments': sorted(networks)}
+                         'user': value['Config'].get('User') or '', 'network_attachments': sorted(networks),
+                         'resource_limits': host_limits}
             else:
                 raise ValueError()
             return {'id': identifier, 'name': value['Name'], 'labels': value.get('Labels') or {}, 'kind': kind,
@@ -187,8 +232,18 @@ class DockerCLI:
             raise OwnershipError('rootless container profile differs') from None
 
     def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
-                         clear_entrypoint=False):
+                         clear_entrypoint=False, resource_limits=None):
         options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
+        if resource_limits is not None:
+            limits = _validate_resource_limits(resource_limits)
+            nano_cpus = limits['nano_cpus']
+            cpu_text = str(nano_cpus // 1_000_000_000)
+            fraction = nano_cpus % 1_000_000_000
+            if fraction:
+                cpu_text += '.' + f'{fraction:09d}'.rstrip('0')
+            options.extend(('--cpus', cpu_text, '--memory', str(limits['memory_bytes']),
+                            '--memory-swap', str(limits['memory_swap_bytes']),
+                            '--pids-limit', str(limits['pids_limit'])))
         if clear_entrypoint:
             options.extend(('--entrypoint', ''))
         for target, volume in sorted(mounts.items()):
@@ -282,7 +337,7 @@ class DockerCLI:
 
 class OwnedRun:
     @classmethod
-    def create(cls, checkout, engine):
+    def create(cls, checkout, engine, *, run_id=None, host_job=None, resource_limits=None):
         checkout = Path(checkout).resolve()
         if not checkout.is_dir():
             raise OwnershipError('checkout is not a directory')
@@ -290,14 +345,25 @@ class OwnedRun:
         base.mkdir(parents=True, exist_ok=True)
         if base.resolve() != base:
             raise OwnershipError('run directory must not traverse a symlink')
-        directory = base / ('voiceci-' + uuid.uuid4().hex)
+        if run_id is None:
+            run_id = 'voiceci-' + uuid.uuid4().hex
+        if not isinstance(run_id, str) or not re.fullmatch(r'voiceci-[0-9a-f]{32}', run_id):
+            raise OwnershipError('invalid run identity')
+        if resource_limits is not None and host_job is None:
+            raise OwnershipError('bounded Go limits require a durable host Job intent')
+        directory = base / run_id
         directory.mkdir(mode=0o700)
         instance = cls(directory, engine)
         try:
             daemon = engine.daemon()
             if not isinstance(daemon, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', daemon):
                 raise OwnershipError('invalid Docker daemon identity')
-            instance.state = {'version': 1, 'run_id': directory.name, 'daemon': daemon, 'resources': []}
+            instance.state = {'version': 1 if host_job is None else 2,
+                              'run_id': directory.name, 'daemon': daemon, 'resources': []}
+            if host_job is not None:
+                instance.state['host_job'] = host_job
+                if resource_limits is not None:
+                    instance.state['resource_limits'] = resource_limits
             instance._save()
             return instance
         except BaseException:
@@ -356,12 +422,40 @@ class OwnedRun:
 
     def _validate(self):
         state = self.state
-        if (not isinstance(state, dict) or set(state) != {'version', 'run_id', 'daemon', 'resources'}
-                or type(state['version']) is not int or state['version'] != 1
+        if not isinstance(state, dict):
+            raise OwnershipError('invalid ownership journal')
+        version = state.get('version')
+        expected = {'version', 'run_id', 'daemon', 'resources'}
+        if version == 2:
+            expected |= {'host_job'}
+            if 'resource_limits' in state:
+                expected.add('resource_limits')
+        if (set(state) != expected
+                or type(version) is not int or version not in (1, 2)
                 or state['run_id'] != self.directory.name or not isinstance(state['daemon'], str)
                 or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', state['daemon'])
                 or not isinstance(state['resources'], list)):
             raise OwnershipError('invalid ownership journal')
+        if version == 2:
+            _validate_host_job(state['host_job'], state['run_id'])
+            if 'resource_limits' in state:
+                limits = state['resource_limits']
+                if (not isinstance(limits, dict) or set(limits) != {'client', 'daemon', 'host_job', 'capacity_budget'}):
+                    raise OwnershipError('invalid Go resource limits')
+                for key in ('client', 'daemon'):
+                    _validate_resource_limits(limits[key])
+                _validate_resource_limits(limits['daemon'])
+                if limits['daemon'] != {'nano_cpus': 1_000_000_000, 'memory_bytes': 512 * 1024 * 1024,
+                                        'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256}:
+                    raise OwnershipError('rootless daemon limits differ from sealed profile')
+                job = limits['host_job']
+                if (not isinstance(job, dict) or set(job) != {'cpu_rate', 'job_memory_bytes', 'active_process_limit'}
+                        or job != state['host_job']['limits']):
+                    raise OwnershipError('host Job limits differ from durable intent')
+                budget = limits['capacity_budget']
+                if (not isinstance(budget, dict) or set(budget) != {'nano_cpus', 'memory_bytes', 'pids_limit'}
+                        or any(type(budget[key]) is not int or budget[key] <= 0 for key in budget)):
+                    raise OwnershipError('invalid aggregate capacity budget')
         names = set()
         for item in state['resources']:
             if not isinstance(item, dict):
@@ -378,6 +472,9 @@ class OwnedRun:
                     keys.add('readonly_mounts')
                 if 'image_operation' in item:
                     keys.add('image_operation')
+                for optional in ('resource_limits', 'verified_resource_limits', 'observed_resource_limits'):
+                    if optional in item:
+                        keys.add(optional)
             if (set(item) != keys
                     or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'quarantined', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
@@ -390,7 +487,8 @@ class OwnedRun:
                     (kind == 'container' and item.get('profile') not in ROOTLESS_PROFILES)):
                 raise OwnershipError('invalid quarantined resource')
             if item['state'] == 'creating':
-                if item['id']:
+                if item['id'] and ('resource_limits' not in item or kind != 'container' or
+                                    not re.fullmatch(r'[0-9a-f]{64}', item['id'])):
                     raise OwnershipError('invalid creating resource identity')
             elif ((item['kind'] in ('network', 'container') and not re.fullmatch(r'[0-9a-f]{64}', item['id']))
                   or (item['kind'] == 'volume' and item['id'] != item['name'])):
@@ -400,6 +498,20 @@ class OwnedRun:
                         or not isinstance(item['network'], str) or not (re.fullmatch(r'[0-9a-f]{64}', item['network']) or (item.get('profile') == 'phase0-isolated-v1' and item['network'] == 'none'))
                         or not isinstance(item['mounts'], dict) or not isinstance(item['ports'], list)):
                     raise OwnershipError('invalid container specification')
+                if 'resource_limits' in item:
+                    requested = _validate_resource_limits(item['resource_limits'])
+                    if 'verified_resource_limits' in item and (
+                            _validate_resource_limits(item['verified_resource_limits']) != requested or
+                            item['state'] == 'creating'):
+                        raise OwnershipError('invalid verified container resource limits')
+                    if 'observed_resource_limits' in item:
+                        observed_limits = _validate_resource_limits(item['observed_resource_limits'])
+                        if item['state'] != 'creating' or observed_limits == requested:
+                            raise OwnershipError('invalid mismatched container resource limits')
+                    if item['state'] != 'creating' and item.get('verified_resource_limits') != requested:
+                        raise OwnershipError('container resource limits were not verified')
+                elif any(key in item for key in ('verified_resource_limits', 'observed_resource_limits')):
+                    raise OwnershipError('container resource limit evidence has no request')
                 self._validate_mounts_ports(item['mounts'], item['ports'])
                 if 'command' in item:
                     self._validate_command(item['command'])
@@ -482,7 +594,7 @@ class OwnedRun:
         if self._lock is None or self.engine.daemon() != self.state['daemon']:
             raise OwnershipError('run lock or Docker daemon identity changed')
 
-    def _inspect(self, item):
+    def _inspect(self, item, *, allow_resource_limit_mismatch=False):
         observed = self.engine.inspect(item['kind'], item['name'])
         labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': item['nonce'], 'voice.ci.kind': item['kind']}
         if (not isinstance(observed, dict) or observed.get('kind') != item['kind']
@@ -495,6 +607,14 @@ class OwnedRun:
         if item['kind'] == 'container' and any(observed.get(key) != item[key]
                                                for key in ('image', 'network', 'mounts', 'ports')):
             raise OwnershipError('Docker container specification changed')
+        if item['kind'] == 'container' and 'resource_limits' in item:
+            try:
+                actual_limits = _validate_resource_limits(observed.get('resource_limits'))
+            except OwnershipError:
+                raise OwnershipError('Docker container resource limits were not inspectable') from None
+            if ((actual_limits != item['resource_limits'] and not allow_resource_limit_mismatch) or
+                    ('verified_resource_limits' in item and actual_limits != item['verified_resource_limits'])):
+                raise OwnershipError('Docker container resource limits changed')
         if item.get('profile') == 'phase0-isolated-v1' and observed.get('readonly_mounts') != item['readonly_mounts']:
             raise OwnershipError('phase0 source mount is not read-only')
         if item.get('profile') == 'phase0-isolated-v1' and (observed.get('user') not in ('', '0', '0:0') or
@@ -506,6 +626,34 @@ class OwnedRun:
         if item['kind'] == 'container' and item.get('profile') in ROOTLESS_PROFILES:
             self.engine.verify_rootless(item, labels, observed.get('running'))
         return observed
+
+    def _finish_limited_creation(self, item, identifier):
+        item['id'] = identifier
+        self._save()
+        raw = self.engine.inspect('container', item['name'])
+        expected_labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': item['nonce'],
+                           'voice.ci.kind': 'container'}
+        same_owner = (isinstance(raw, dict) and raw.get('id') == identifier and
+                      raw.get('kind') == 'container' and raw.get('name') == item['name'] and
+                      isinstance(raw.get('labels'), dict) and
+                      all(raw['labels'].get(key) == value for key, value in expected_labels.items()))
+        if same_owner:
+            try:
+                actual = _validate_resource_limits(raw.get('resource_limits'))
+            except OwnershipError:
+                actual = None
+            if actual is not None and actual != item['resource_limits']:
+                item['observed_resource_limits'] = actual
+                self._save()
+        observed = self._inspect(item, allow_resource_limit_mismatch=True)
+        actual = _validate_resource_limits(observed.get('resource_limits'))
+        if actual != item['resource_limits']:
+            item['observed_resource_limits'] = actual
+            self._save()
+            raise OwnershipError('Docker container resource limits differ from request')
+        item['verified_resource_limits'] = actual
+        item['state'] = 'ready'
+        self._save()
 
     def reconcile_creation(self, name):
         """Adopt only an already visible, exact owned resource after a lost response.
@@ -529,10 +677,15 @@ class OwnedRun:
                 (item['kind'] in ('network', 'container') and not re.fullmatch(r'[0-9a-f]{64}', identifier)) or
                 (item['kind'] == 'volume' and identifier != item['name'])):
             raise OwnershipError('created resource identity is invalid')
+        if item.get('id') and item['id'] != identifier:
+            raise OwnershipError('created resource identity changed after durable creation intent')
         candidate = dict(item, id=identifier, state='ready')
         self._inspect(candidate)
         self._check_daemon()
         item['id'], item['state'] = identifier, 'ready'
+        if 'resource_limits' in item:
+            item['verified_resource_limits'] = candidate['resource_limits']
+            item.pop('observed_resource_limits', None)
         self._save()
 
     def create_resource(self, kind):
@@ -588,7 +741,8 @@ class OwnedRun:
         self._save()
         return item['name']
 
-    def create_container(self, image_id, network_name, mounts, ports, command=None, *, clear_entrypoint=False):
+    def create_container(self, image_id, network_name, mounts, ports, command=None, *, clear_entrypoint=False,
+                         resource_limits=None):
         self._validate()
         self._check_daemon()
         if (not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id)
@@ -599,6 +753,7 @@ class OwnedRun:
         self._validate_mounts_ports(mounts, ports)
         if command is not None:
             self._validate_command(command)
+        limits = _validate_resource_limits(resource_limits) if resource_limits is not None else None
         networks = [r for r in self.state['resources'] if r['kind'] == 'network' and r['name'] == network_name and r['state'] == 'ready']
         volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
         if len(networks) != 1 or any(name not in volumes for name in mounts.values()):
@@ -618,25 +773,41 @@ class OwnedRun:
                 'mounts': dict(mounts), 'ports': sorted(ports)}
         if command is not None:
             item['command'] = list(command)
+        if limits is not None:
+            item['resource_limits'] = limits
         self.state['resources'].append(item)
         self._save()
         labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': nonce, 'voice.ci.kind': 'container'}
         if command is None:
-            identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'])
+            if limits is None:
+                identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'])
+            else:
+                identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts,
+                                                          item['ports'], resource_limits=limits)
         elif clear_entrypoint:
+            kwargs = {'command': list(command), 'clear_entrypoint': True}
+            if limits is not None:
+                kwargs['resource_limits'] = limits
             identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts,
-                                                      item['ports'], command=list(command), clear_entrypoint=True)
+                                                      item['ports'], **kwargs)
         else:
-            identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'], command=list(command))
+            kwargs = {'command': list(command)}
+            if limits is not None:
+                kwargs['resource_limits'] = limits
+            identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts,
+                                                      item['ports'], **kwargs)
         self._check_daemon()
         if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
             raise OwnershipError('Docker container identity is invalid')
+        if limits is not None:
+            self._finish_limited_creation(item, identifier)
+            return item['name']
         self._inspect(dict(item, id=identifier))
         item['id'], item['state'] = identifier, 'ready'
         self._save()
         return item['name']
 
-    def create_rootless_container(self, network_name, mounts, creator):
+    def create_rootless_container(self, network_name, mounts, creator, *, resource_limits=None):
         """Journal a narrow profile; caller must authenticate creator and socket access.
 
         This primitive alone is not a preflight receipt or complete isolation.
@@ -650,6 +821,11 @@ class OwnedRun:
                        for r in self.state['resources'])):
             raise OwnershipError('invalid rootless request or unresolved operation')
         self._validate_mounts_ports(mounts, [])
+        limits = _validate_resource_limits(resource_limits) if resource_limits is not None else None
+        if limits is not None and limits != {
+                'nano_cpus': 1_000_000_000, 'memory_bytes': 512 * 1024 * 1024,
+                'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256}:
+            raise OwnershipError('rootless daemon limits differ from sealed profile')
         networks = [r for r in self.state['resources'] if r['kind'] == 'network'
                     and r['name'] == network_name and r['state'] == 'ready']
         volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
@@ -671,6 +847,8 @@ class OwnedRun:
                 'id': '', 'state': 'creating', 'image': rootless.IMAGE, 'network': networks[0]['id'],
                 'mounts': dict(mounts), 'ports': [], 'profile':
                     'rootless-workspace-v1' if '/workspace' in mounts else 'rootless-unix-v1'}
+        if limits is not None:
+            item['resource_limits'] = limits
         self.state['resources'].append(item)
         self._save()
         request = {'name': item['name'], 'run_id': self.run_id, 'nonce': nonce, 'daemon': self.state['daemon'],
@@ -678,10 +856,15 @@ class OwnedRun:
                    'legacy_volume': mounts['/var/lib/docker'], 'socket_volume': mounts['/run/user/1000']}
         if '/workspace' in mounts:
             request['workspace_volume'] = mounts['/workspace']
+        if limits is not None:
+            request['resource_limits'] = limits
         identifier = creator(request)
         self._check_daemon()
         if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
             raise OwnershipError('rootless container identity is invalid')
+        if limits is not None:
+            self._finish_limited_creation(item, identifier)
+            return item['name']
         self._inspect(dict(item, id=identifier))
         item['id'], item['state'] = identifier, 'ready'
         self._save()

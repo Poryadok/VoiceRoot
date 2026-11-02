@@ -32,7 +32,8 @@ class ScheduledRunTests(unittest.TestCase):
                 ScheduledRun.start_host(other_checkout, self.engine, 0, capacity=1)
             directory, slot = one.run.directory, one.slot
             one.abandon()
-            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1)
+            with mock.patch('local_docker_scheduled.host_slot_directory', return_value=self.slots):
+                ScheduledRun.recover_host(directory, self.engine, slot, capacity=1)
             self.assertNotIn(('network', resource), self.engine.resources)
             later = ScheduledRun.start_host(other_checkout, self.engine, 0, capacity=1)
             later.close()
@@ -48,7 +49,7 @@ class ScheduledRunTests(unittest.TestCase):
             events.append(('journal', run.run_id))
             return run
 
-        def acquire_after_journal(directory, timeout, capacity=2, *, owner_id=None):
+        def acquire_after_journal(directory, timeout, capacity=2, *, owner_id=None, **kwargs):
             events.append(('acquire', owner_id))
             self.assertTrue(events and events[0][0] == 'journal')
             self.assertEqual(owner_id, events[0][1])
@@ -91,14 +92,211 @@ class ScheduledRunTests(unittest.TestCase):
                 lease.abandon()
 
         with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
-             mock.patch.object(proof_scheduler, '_default_job_exists', return_value=False) as job_exists:
-            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1)
-        job_exists.assert_called_once_with(host_job['job_names'][0])
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False) as job_exists:
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1, slot_directory=self.slots)
+        self.assertEqual(job_exists.call_args_list, [mock.call(host_job['job_names'][0]),
+                                                     mock.call(host_job['job_names'][0])])
         self.assertNotIn(('network', owned_name), self.engine.resources)
         self.assertIn(foreign_key, self.engine.resources)
         marker = (self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()
         self.assertEqual(marker[1:], b'idle\n')
         self.assertIsNone(heavy_slots.active_resource_reservation(self.slots, owner_id))
+
+    def test_recover_host_recovers_reserved_idle_marker_after_acquire_crash(self):
+        owner_id = 'voiceci-' + 'c' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        budget = {'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 512}
+        claim = {'nano_cpus': 2_000_000_000, 'memory_bytes': 4_000, 'pids_limit': 256}
+        original = heavy_slots._write_marker
+
+        def crash_after_reservation(descriptor, value):
+            if value.startswith(b'busy:'):
+                raise KeyboardInterrupt('simulated process death after durable reservation')
+            return original(descriptor, value)
+
+        with mock.patch.object(heavy_slots, '_write_marker', side_effect=crash_after_reservation), \
+             self.assertRaisesRegex(KeyboardInterrupt, 'durable reservation'):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1,
+                run_id=owner_id, resource_claim=claim, capacity_budget=budget,
+                host_job=host_job)
+
+        directory = self.root / 'tmp' / 'ci-local' / owner_id
+        self.assertTrue(directory.is_dir())
+        self.assertEqual(heavy_slots.resource_reservation_slot(self.slots, owner_id), 0)
+        self.assertEqual((self.slots / 'heavy-0.lock').read_bytes()[1:], b'idle\n')
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False):
+            ScheduledRun.recover_host(directory, self.engine, slot=None, capacity=1,
+                                      slot_directory=self.slots)
+        self.assertIsNone(heavy_slots.active_resource_reservation(self.slots, owner_id))
+        self.assertEqual((self.slots / 'heavy-0.lock').read_bytes()[1:], b'idle\n')
+
+    def test_recover_host_recovers_idle_marker_after_release_crash(self):
+        owner_id = 'voiceci-' + 'e' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        budget = {'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 512}
+        claim = {'nano_cpus': 2_000_000_000, 'memory_bytes': 4_000, 'pids_limit': 256}
+        scheduled = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1,
+            run_id=owner_id, resource_claim=claim, capacity_budget=budget, host_job=host_job)
+        directory, slot = scheduled.run.directory, scheduled.slot
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False), \
+             mock.patch.object(heavy_slots, '_release_reservation_locked',
+                               side_effect=OSError('simulated crash after idle marker')):
+            with self.assertRaisesRegex(OSError, 'after idle marker'):
+                scheduled.close()
+        self.assertEqual((self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()[1:], b'idle\n')
+        self.assertIsNotNone(heavy_slots.active_resource_reservation(self.slots, owner_id))
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False):
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1, slot_directory=self.slots)
+        self.assertIsNone(heavy_slots.active_resource_reservation(self.slots, owner_id))
+        self.assertEqual((self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()[1:], b'idle\n')
+
+    def test_replacement_container_id_keeps_journal_and_host_slot_for_recovery(self):
+        owner_id = 'voiceci-' + 'f' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        budget = {'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 512}
+        claim = {'nano_cpus': 2_000_000_000, 'memory_bytes': 4_000, 'pids_limit': 256}
+        client_limits = {'nano_cpus': 1_000_000_000, 'memory_bytes': 4096,
+                         'memory_swap_bytes': 4096, 'pids_limit': 32}
+        scheduled = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1,
+            run_id=owner_id, resource_claim=claim, capacity_budget=budget, host_job=host_job)
+        network = scheduled.run.create_resource('network')
+        volume = scheduled.run.create_resource('volume')
+        name = scheduled.run.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+            command=['sleep', 'infinity'], resource_limits=client_limits)
+        item = scheduled.run.state['resources'][-1]
+        original_id = item['id']
+        item['state'] = 'creating'
+        item.pop('verified_resource_limits', None)
+        scheduled.run._save()
+        replacement_id = 'f' + 'e' * 63
+        self.engine.resources[('container', name)]['id'] = replacement_id
+        directory, slot = scheduled.run.directory, scheduled.slot
+
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False):
+            with self.assertRaisesRegex(OwnershipError, 'identity changed'):
+                scheduled.close()
+            with self.assertRaisesRegex(OwnershipError, 'identity changed'):
+                ScheduledRun.recover_host(directory, self.engine, slot, capacity=1,
+                                          slot_directory=self.slots)
+
+        self.engine.identity = 'daemon-replacement'
+        with self.assertRaisesRegex(OwnershipError, 'daemon identity changed'):
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1,
+                                      slot_directory=self.slots)
+
+        self.assertEqual(item['id'], original_id)
+        self.assertEqual(item['state'], 'creating')
+        self.assertTrue(self.engine.exists('container', replacement_id))
+        self.assertEqual(self.engine.started, [])
+        self.assertNotIn(('container', name), self.engine.removed)
+        marker = (self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()[1:]
+        self.assertTrue(marker.endswith((':' + owner_id + '\n').encode()))
+
+    def test_worker_close_keeps_owned_resources_and_slot_for_parent_job_verification(self):
+        owner_id = 'voiceci-' + 'e' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        owner = OwnedRun.create(self.root, self.engine, run_id=owner_id, host_job=host_job)
+        lease = acquire_slot(self.slots, 0, capacity=1, owner_id=owner_id)
+        owner.state['host_job']['slot'] = lease.slot
+        owner._save()
+        name = owner.create_resource('network')
+        directory, slot = owner.directory, lease.slot
+        owner.close()
+        lease.abandon()
+
+        worker = ScheduledRun.attach_worker(directory, self.engine, slot, owner_id, None)
+        self.addCleanup(worker.close)
+        self.assertEqual(worker.slot, slot)
+        with mock.patch('local_docker_scheduled.supervision.named_job_exists',
+                        side_effect=AssertionError('worker cannot prove its own Job absent')):
+            worker.close()
+        self.assertIn(('network', name), self.engine.resources)
+        self.assertTrue((self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()[1:].endswith(
+            (':' + owner_id + '\n').encode()))
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False):
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1, slot_directory=self.slots)
+        self.assertNotIn(('network', name), self.engine.resources)
+
+    def test_close_returns_lock_scoped_release_evidence_even_after_slot_is_reused(self):
+        owner_id = 'voiceci-' + '9' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        budget = {'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 512}
+        claim = {'nano_cpus': 2_000_000_000, 'memory_bytes': 4_000, 'pids_limit': 256}
+        with mock.patch('local_docker_scheduled.host_slot_directory', return_value=self.slots), \
+             mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False):
+            scheduled = ScheduledRun.start_host(self.root, self.engine, 0, capacity=1, run_id=owner_id,
+                resource_claim=claim, capacity_budget=budget, host_job=host_job)
+            owner_slot = scheduled.slot
+            release = scheduled.close()
+            peer = ScheduledRun.start_host(self.root, self.engine, 0, capacity=1)
+            self.addCleanup(peer.close)
+        self.assertEqual(release['slot_release'], {'slot': owner_slot, 'owner_id': owner_id,
+            'marker_idle': True, 'reservation_released': True})
+        peer.close()
+
+    def test_parent_close_requires_named_job_absence_before_cleanup(self):
+        owner_id = 'voiceci-' + 'f' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        owner = OwnedRun.create(self.root, self.engine, run_id=owner_id, host_job=host_job)
+        lease = acquire_slot(self.slots, 0, capacity=1, owner_id=owner_id)
+        owner.state['host_job']['slot'] = lease.slot
+        owner._save()
+        name = owner.create_resource('network')
+        directory, slot = owner.directory, lease.slot
+        parent = ScheduledRun(owner, lease, self.engine, self.slots)
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=True):
+            with self.assertRaisesRegex(OwnershipError, 'still present'):
+                parent.close()
+        self.assertIn(('network', name), self.engine.resources)
+        self.assertTrue((self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()[1:].endswith(
+            (':' + owner_id + '\n').encode()))
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch('local_docker_scheduled.supervision.named_job_exists', return_value=False):
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1, slot_directory=self.slots)
+        self.assertNotIn(('network', name), self.engine.resources)
 
     def test_recovers_a_created_resource_after_lost_create_response(self):
         one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
@@ -319,13 +517,14 @@ class ScheduledRunTests(unittest.TestCase):
         self.addCleanup(one.abandon)
         self.addCleanup(other.abandon)
         resource = one.run.create_resource('network')
+        one_directory, one_slot = one.run.directory, one.slot
         with self.assertRaises((OwnershipError, ValueError)):
-            ScheduledRun.recover(one.run.directory, self.slots, self.engine, one.slot)
+            ScheduledRun.recover(one_directory, self.slots, self.engine, one_slot)
         one.abandon()
         with self.assertRaises((OwnershipError, ValueError)):
             ScheduledRun.recover(other.run.directory, self.slots, self.engine, one.slot)
         self.assertIn(('network', resource), self.engine.resources)
-        ScheduledRun.recover(one.run.directory, self.slots, self.engine, one.slot)
+        ScheduledRun.recover(one_directory, self.slots, self.engine, one_slot)
         other.close()
 
     def test_uncertain_recovery_does_not_release_capacity(self):

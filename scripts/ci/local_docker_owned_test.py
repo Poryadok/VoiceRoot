@@ -95,6 +95,57 @@ class FakeEngine:
 
 
 class RootlessEndpointTests(unittest.TestCase):
+    def test_reconcile_creation_rejects_replacement_for_persisted_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                              command=['sleep', 'infinity'], resource_limits={
+                    'nano_cpus': 1_000_000_000, 'memory_bytes': 4096,
+                    'memory_swap_bytes': 4096, 'pids_limit': 32})
+                item = owner.state['resources'][-1]
+                original_id = item['id']
+                item['state'] = 'creating'
+                item.pop('verified_resource_limits', None)
+                owner._save()
+                replacement_id = 'f' + 'e' * 63
+                engine.resources[('container', name)]['id'] = replacement_id
+
+                with self.assertRaisesRegex(OwnershipError, 'identity changed'):
+                    owner.reconcile_creation(name)
+
+                self.assertEqual(item['id'], original_id)
+                self.assertEqual(item['state'], 'creating')
+                self.assertTrue(engine.exists('container', replacement_id))
+                self.assertNotIn(('container', name), engine.removed)
+            finally:
+                owner.close()
+
+    def test_reconcile_creation_rejects_changed_daemon_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                name = owner.create_resource('network')
+                item = owner.state['resources'][-1]
+                # Exercise recovery of a still-pending create with no returned ID.
+                item['state'] = 'creating'
+                item['id'] = ''
+                owner._save()
+                engine.identity = 'daemon-replacement'
+
+                with self.assertRaisesRegex(OwnershipError, 'daemon identity changed'):
+                    owner.reconcile_creation(name)
+
+                self.assertEqual(item['state'], 'creating')
+                self.assertIn(('network', name), engine.resources)
+                self.assertEqual(engine.removed, [])
+            finally:
+                owner.close()
+
     def test_verified_stream_hashes_exact_partial_pipe_writes(self):
         class Sink:
             def __init__(self):
@@ -254,7 +305,8 @@ class DockerResourceLimitTests(unittest.TestCase):
             owner = OwnedRun.create(Path(directory), engine)
             try:
                 network = owner.create_resource('network')
-                name = owner.create_container('sha256:' + 'd' * 64, network, {}, [],
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
                                               command=['sleep', 'infinity'], resource_limits=limits)
                 self.fail('a resource limit mismatch must prevent successful creation')
             except OwnershipError:
@@ -372,7 +424,9 @@ class DockerResourceLimitTests(unittest.TestCase):
                     'job_names': ['Local\\VoiceCIProof-Go-' + 'a' * 32],
                     'limits': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
                                'active_process_limit': 512},
-                    'session_identity': {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}}
+                    'session_identity': {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7},
+                    'source_identity': {'root': str(Path('.').resolve()), 'head': 'b' * 40,
+                                        'sha256': 'c' * 64}}
         with tempfile.TemporaryDirectory() as directory:
             engine = FakeEngine()
             owner = OwnedRun.create(Path(directory), engine, run_id=owner_id, host_job=host_job)

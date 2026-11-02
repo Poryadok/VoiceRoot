@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -46,8 +48,8 @@ class HeavySlotsTest(unittest.TestCase):
                             capacity_budget=budget)
             finally:
                 if second is not None:
-                    second.close()
-                first.close()
+                    second.close(cleanup_verified=True)
+                first.close(cleanup_verified=True)
 
     def test_budget_configuration_mismatch_and_overcommit_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -67,7 +69,7 @@ class HeavySlotsTest(unittest.TestCase):
                             resource_claim={'nano_cpus': 1_000_000_001, 'memory_bytes': 2_001,
                                             'pids_limit': 201}, capacity_budget=budget)
             finally:
-                lease.close()
+                lease.close(cleanup_verified=True)
 
     def test_bounded_claim_refuses_legacy_busy_slot_with_unknown_usage(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -89,7 +91,8 @@ class HeavySlotsTest(unittest.TestCase):
                 with self.assertRaises((ValueError, TimeoutError)):
                     acquire(root, timeout=0, capacity=2)
             finally:
-                bounded.close()
+                bounded.abandon()
+            self.assertIsNotNone(slots.active_resource_reservation(root, 'voiceci-' + '8' * 32))
 
     def test_abandoned_bounded_reservation_survives_and_recovery_releases_after_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -139,6 +142,204 @@ lease.abandon()
             finally:
                 recovered.close()
 
+    def test_reservation_write_failure_closes_slot_fd_and_leaves_recoverable_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner_id = 'voiceci-' + 'c' * 32
+            claim = {'nano_cpus': 1, 'memory_bytes': 2, 'pids_limit': 3}
+            budget = {'nano_cpus': 2, 'memory_bytes': 4, 'pids_limit': 6}
+            original = slots._write_marker
+
+            def fail_busy_marker(descriptor, value):
+                if value.startswith(b'busy:'):
+                    raise KeyboardInterrupt('simulated crash after reservation fsync')
+                return original(descriptor, value)
+
+            with mock.patch.object(slots, '_write_marker', side_effect=fail_busy_marker), \
+                 self.assertRaisesRegex(KeyboardInterrupt, 'after reservation fsync'):
+                acquire(root, timeout=0, capacity=1, owner_id=owner_id,
+                        resource_claim=claim, capacity_budget=budget)
+
+            self.assertEqual(slots.active_resource_reservation(root, owner_id), claim)
+            slot_path = root / 'heavy-0.lock'
+            descriptor = os.open(slot_path, os.O_RDWR)
+            try:
+                self.assertTrue(slots._try_lock(descriptor), 'failed acquire leaked the slot lock')
+                self.assertEqual(slots._marker(descriptor), b'idle\n')
+            finally:
+                slots._unlock_close(descriptor)
+            slots.release_resource_reservation(root, owner_id, cleanup_verified=True)
+            self.assertIsNone(slots.active_resource_reservation(root, owner_id))
+
+    def test_idle_marker_with_orphan_reservation_is_excluded_from_new_acquisitions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner_id = 'voiceci-' + 'c' * 32
+            contender_id = 'voiceci-' + 'd' * 32
+            claim = {'nano_cpus': 1, 'memory_bytes': 2, 'pids_limit': 3}
+            budget = {'nano_cpus': 3, 'memory_bytes': 6, 'pids_limit': 9}
+            original = slots._write_marker
+
+            def fail_busy_marker(descriptor, value):
+                if value.startswith(b'busy:'):
+                    raise KeyboardInterrupt('crash after reservation')
+                return original(descriptor, value)
+
+            with mock.patch.object(slots, '_write_marker', side_effect=fail_busy_marker), \
+                 self.assertRaises(KeyboardInterrupt):
+                acquire(root, timeout=0, capacity=2, owner_id=owner_id,
+                        resource_claim=claim, capacity_budget=budget)
+
+            contender = acquire(root, timeout=0, capacity=2, owner_id=contender_id,
+                               resource_claim=claim, capacity_budget=budget)
+            try:
+                self.assertEqual(contender.slot, 1)
+                self.assertEqual(slots.resource_reservation_slot(root, owner_id), 0)
+            finally:
+                contender.close(cleanup_verified=True)
+
+    def test_duplicate_reservation_slot_indices_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            claim = {'nano_cpus': 1, 'memory_bytes': 2, 'pids_limit': 3}
+            state = {'version': 1, 'budget': None, 'reservations': {
+                'voiceci-' + 'a' * 32: {'claim': claim, 'slot': 0},
+                'voiceci-' + 'b' * 32: {'claim': claim, 'slot': 0}}}
+            slots._save_resource_state(root, state)
+            with self.assertRaisesRegex(ValueError, 'multiple owners'):
+                slots._resource_state(root)
+
+    def test_acquire_waits_for_held_slot_to_close_before_deadline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = acquire(root, timeout=0, capacity=1)
+            closer = threading.Thread(target=lambda: (time.sleep(0.08), first.close()))
+            closer.start()
+            try:
+                second = acquire(root, timeout=1, capacity=1)
+            finally:
+                closer.join(timeout=2)
+            self.assertFalse(closer.is_alive())
+            second.close()
+
+    def test_admission_waiter_releases_lock_so_slot_close_can_proceed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = acquire(root, timeout=0, capacity=1)
+            sleep_entered = threading.Event()
+            allow_sleep = threading.Event()
+            close_attempted = threading.Event()
+            close_finished = threading.Event()
+            acquired = []
+            failures = []
+            original_sleep = slots.time.sleep
+            original_lock = slots._lock_admission
+
+            def controlled_sleep(seconds):
+                if threading.current_thread().name == 'waiting-acquire':
+                    sleep_entered.set()
+                    allow_sleep.wait()
+                else:
+                    original_sleep(seconds)
+
+            def observed_lock(directory, deadline):
+                if threading.current_thread().name == 'closing-slot':
+                    close_attempted.set()
+                return original_lock(directory, deadline)
+
+            def wait_for_slot():
+                try:
+                    acquired.append(acquire(root, timeout=3, capacity=1))
+                except BaseException as error:
+                    failures.append(error)
+
+            def close_slot():
+                first.close()
+                close_finished.set()
+
+            waiter = threading.Thread(name='waiting-acquire', target=wait_for_slot)
+            closer = threading.Thread(name='closing-slot', target=close_slot)
+            try:
+                with mock.patch.object(slots.time, 'sleep', side_effect=controlled_sleep), \
+                     mock.patch.object(slots, '_lock_admission', side_effect=observed_lock):
+                    waiter.start()
+                    self.assertTrue(sleep_entered.wait(timeout=2))
+                    closer.start()
+                    self.assertTrue(close_attempted.wait(timeout=2))
+                    self.assertTrue(close_finished.wait(timeout=2),
+                        'waiting acquisition retained the admission lock while sleeping')
+                    allow_sleep.set()
+                    waiter.join(timeout=3)
+                    closer.join(timeout=3)
+                self.assertFalse(waiter.is_alive())
+                self.assertFalse(closer.is_alive())
+                self.assertEqual(len(acquired), 1)
+                acquired[0].close()
+            finally:
+                allow_sleep.set()
+                if waiter.is_alive():
+                    waiter.join(timeout=5)
+                if closer.is_alive():
+                    closer.join(timeout=5)
+                first.abandon()
+                for lease in acquired:
+                    lease.abandon()
+
+    def test_concurrent_acquire_and_close_do_not_poison_released_slot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = acquire(root, timeout=0, capacity=2)
+            child = '''import sys
+import local_heavy_slots as slots
+def hold_after_owner_marker(_descriptor, _slot, _owner_id):
+    print('locked', flush=True)
+    sys.stdin.readline()
+slots._owned_slot_marker_written = hold_after_owner_marker
+lease = slots.acquire(sys.argv[1], timeout=3, capacity=2, owner_id='voiceci-' + 'd' * 32)
+print('acquired', flush=True)
+sys.stdin.readline()
+lease.close()
+print('closed', flush=True)
+'''
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent))
+            process = subprocess.Popen([sys.executable, '-u', '-c', child, str(root)], env=env,
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True)
+            close_attempted = threading.Event()
+            original_lock = slots._lock_admission
+
+            def observed_lock(directory, deadline):
+                if threading.current_thread().name == 'closing-slot':
+                    close_attempted.set()
+                return original_lock(directory, deadline)
+
+            closer = threading.Thread(name='closing-slot', target=lambda: first.close())
+            try:
+                self.assertEqual(process.stdout.readline().strip(), 'locked')
+                with mock.patch.object(slots, '_lock_admission', side_effect=observed_lock):
+                    closer.start()
+                    self.assertTrue(close_attempted.wait(timeout=2))
+                    process.stdin.write('\n')
+                    process.stdin.flush()
+                    self.assertEqual(process.stdout.readline().strip(), 'acquired')
+                    closer.join(timeout=2)
+                self.assertFalse(closer.is_alive())
+                process.stdin.write('\n')
+                process.stdin.flush()
+                self.assertEqual(process.stdout.readline().strip(), 'closed')
+                self.assertEqual(process.wait(timeout=3), 0)
+                self.assertEqual(process.stderr.read(), '')
+                self.assertEqual((root / 'heavy-0.lock').read_bytes()[1:], b'idle\n')
+            finally:
+                if closer.is_alive():
+                    closer.join(timeout=2)
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=3)
+                process.stdin.close()
+                process.stdout.close()
+                process.stderr.close()
+
     def test_bounded_and_legacy_processes_race_through_one_admission_lock(self):
         child = '''import sys
 from local_heavy_slots import acquire
@@ -157,7 +358,7 @@ except (ValueError, TimeoutError):
 else:
     print('acquired', flush=True)
     sys.stdin.readline()
-    lease.close()
+    lease.close(cleanup_verified=(mode == 'bounded'))
 '''
         env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent))
         for _ in range(4):

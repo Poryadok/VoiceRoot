@@ -25,6 +25,54 @@ class FullChatTests(unittest.TestCase):
                 dict(Package=package, Test='TestRequired', Action=action),
                 dict(Package=package, Action='pass')]
 
+    def test_resource_limit_readback_is_bound_to_unique_container_ids_and_daemon(self):
+        limits = {'client': {'nano_cpus': 1500000000, 'memory_bytes': 2 * 1024 * 1024 * 1024,
+                             'memory_swap_bytes': 3 * 1024 * 1024 * 1024, 'pids_limit': 384},
+                  'daemon': {'nano_cpus': 1000000000, 'memory_bytes': 512 * 1024 * 1024,
+                             'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256}}
+        owner = mock.Mock()
+        valid_state = {'daemon': 'a' * 64, 'resources': [
+            {'kind': 'container', 'name': 'client', 'id': 'b' * 64, 'state': 'ready',
+             'resource_limits': limits['client'], 'verified_resource_limits': limits['client']},
+            {'kind': 'container', 'name': 'daemon', 'id': 'c' * 64, 'state': 'ready',
+             'profile': 'rootless-unix-v1', 'resource_limits': limits['daemon'],
+             'verified_resource_limits': limits['daemon']}]}
+        owner.state = valid_state
+        owner._check_daemon.return_value = None
+        self.assertEqual(subject._verified_resource_limit_readback(owner, 'client', 'daemon', limits),
+                         {'limits': limits, 'container_ids': {'client': 'b' * 64, 'daemon': 'c' * 64},
+                          'daemon_id': 'a' * 64})
+
+        invalid_states = []
+        duplicate = json.loads(json.dumps(owner.state))
+        duplicate['resources'].append(json.loads(json.dumps(duplicate['resources'][0])))
+        invalid_states.append(duplicate)
+        missing_id = json.loads(json.dumps(owner.state))
+        missing_id['resources'][0]['id'] = ''
+        invalid_states.append(missing_id)
+        substituted = json.loads(json.dumps(owner.state))
+        substituted['resources'][0]['name'] = 'other-client'
+        invalid_states.append(substituted)
+        duplicate_id = json.loads(json.dumps(owner.state))
+        duplicate_id['resources'][0]['id'] = duplicate_id['resources'][1]['id']
+        invalid_states.append(duplicate_id)
+        bad_daemon = json.loads(json.dumps(owner.state))
+        bad_daemon['resources'][1]['profile'] = 'other-profile'
+        invalid_states.append(bad_daemon)
+        for state in invalid_states:
+            with self.subTest(state=state):
+                owner.state = state
+                with self.assertRaises(ValueError):
+                    subject._verified_resource_limit_readback(owner, 'client', 'daemon', limits)
+
+        equal_limits = {'client': dict(limits['daemon']), 'daemon': dict(limits['daemon'])}
+        equal_state = json.loads(json.dumps(valid_state))
+        equal_state['resources'][0]['resource_limits'] = equal_limits['client']
+        equal_state['resources'][0]['verified_resource_limits'] = equal_limits['client']
+        owner.state = equal_state
+        self.assertEqual(subject._verified_resource_limit_readback(owner, 'client', 'daemon', equal_limits)
+                         ['container_ids'], {'client': 'b' * 64, 'daemon': 'c' * 64})
+
     def test_required_inventory_requires_each_case_to_pass(self):
         package = 'voice/backend/chat/internal/store'
         required = [[package, 'TestRequired']]
@@ -176,6 +224,13 @@ class FullChatTests(unittest.TestCase):
             owner.create_container.return_value = 'client'
             owner.create_rootless_container.return_value = 'daemon'
             owner.execute.return_value = 0
+            owner._check_daemon.return_value = None
+            owner.state = {'daemon': 'f' * 64, 'resources': [
+                {'kind': 'container', 'name': 'client', 'id': 'b' * 64, 'state': 'ready',
+                 'resource_limits': limits['client'], 'verified_resource_limits': limits['client']},
+                {'kind': 'container', 'name': 'daemon', 'id': 'c' * 64, 'state': 'ready',
+                 'profile': 'rootless-unix-v1', 'resource_limits': limits['daemon'],
+                 'verified_resource_limits': limits['daemon']}]}
             scheduled = mock.Mock(run=owner, slot=0)
             tags = ('postgres:16-bookworm', 'nats:2.10-alpine')
             archives = {tag: {'archive': str(archive), 'archive_sha256': 'a' * 64,
@@ -188,8 +243,8 @@ class FullChatTests(unittest.TestCase):
                  mock.patch.object(subject.local_go_execution, 'transfer_source', return_value='d' * 64), \
                  mock.patch.object(subject.local_go_execution, 'transfer_dependencies'), \
                  mock.patch('local_go_full_integration.run_profile', return_value={'status': 'incomplete'}):
-                subject.run_owned(scheduled, engine, {}, root, root, output, 'helper', 'e' * 64,
-                                  archives, {}, service='bot', resource_limits=limits)
+                result = subject.run_owned(scheduled, engine, {}, root, root, output, 'helper', 'e' * 64,
+                                           archives, {}, service='bot', resource_limits=limits)
             owner.create_container.assert_called_once()
             self.assertEqual(owner.create_container.call_args.kwargs['resource_limits'], limits['client'])
             owner.create_rootless_container.assert_called_once()
@@ -198,6 +253,9 @@ class FullChatTests(unittest.TestCase):
             self.assertLess(method_names.index('create_container'), method_names.index('start_container'))
             self.assertLess(method_names.index('create_rootless_container'),
                             method_names.index('start_container', method_names.index('start_container') + 1))
+            self.assertEqual(result['resource_limit_readback']['container_ids'],
+                             {'client': 'b' * 64, 'daemon': 'c' * 64})
+            self.assertEqual(result['resource_limit_readback']['daemon_id'], 'f' * 64)
             scheduled.close.assert_called_once_with()
 
 

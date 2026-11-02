@@ -832,9 +832,37 @@ the full `backend-auth` check `not_run`; it is not a preflight or PR receipt.
 
 For planner-selected `backend-go-integration-pr`, `--go-integration-inputs`
 accepts an absolute path to a JSON object keyed by every selected service. Each
-value contains exactly `helper`, `helper_sha256`, and `archives`. The helper is
-an absolute path; `archives` maps each required image tag to `archive` (absolute
-path), `archive_sha256`, and `image_id`. Chat requires `postgres:16-bookworm`,
+value contains exactly `helper`, `helper_sha256`, `archives`, and
+`resource_limits`. The helper is an absolute path; `archives` maps each required
+image tag to `archive` (absolute path), `archive_sha256`, and `image_id`.
+`resource_limits` is caller supplied and contains exactly `client`, `daemon`,
+`host_job`, and `capacity_budget`. The `client` and `daemon` records each contain
+positive integer `nano_cpus`, `memory_bytes`, `memory_swap_bytes`, and
+`pids_limit`. Client limits are applied to and read back from the Go client
+container. The daemon limits must equal the sealed rootless profile
+(`1_000_000_000` nano CPUs, `536_870_912` memory bytes, `1_073_741_824` total
+memory plus swap bytes, and 256 PIDs); they are checked against Docker inspect
+before that stopped daemon is started. The helper's strict JSON ABI and pinned
+profile are unchanged.
+
+`host_job` contains positive integer `cpu_rate` (Windows Job CPU rate, in
+ten-thousandths), `job_memory_bytes`, and `active_process_limit`. These limits
+apply to the supervised host Go worker and are verified through the named Job
+evidence. `capacity_budget` contains positive integer `nano_cpus`,
+`memory_bytes`, and `pids_limit`. It is an explicit operator ceiling shared by
+cooperating local heavy-run schedulers. CPU and memory ceilings may not exceed
+the measured host CPU and physical-memory capacities; the PID ceiling is an
+explicit operator value because a reliable host-wide PID capacity is not
+available. Admission accounts for the selected run's client, fixed-profile
+daemon, and Windows Job claims together under the same host-wide lock used by
+legacy slot acquisitions. Unknown legacy work and non-cooperating processes
+are not measured or controlled: bounded runs fail closed while an unbounded
+legacy slot is active, and legacy runs cannot start during a bounded reservation.
+The budget is persisted for the scheduler directory and must remain identical
+for later runs. This cooperative accounting is not a host-wide resource
+guarantee.
+
+Chat requires `postgres:16-bookworm`,
 `redis:7.4-alpine`, and `migrate/migrate:v4.18.1`; Bot requires
 `postgres:16-bookworm` and `nats:2.10-alpine`; Search requires
 `postgres:16-bookworm`. Missing, extra or unsupported services and image inputs
@@ -842,8 +870,11 @@ fail before owned execution. A supervised Windows Job worker recomputes the
 source plan. Per-service reports preserve skipped tests and unbound provenance
 limitations; the check remains `not_run` and the preflight remains `incomplete`.
 Caller custody of images, helper, Docker daemon and socket is required; this is
-not hosted CI parity or a PR receipt. The policy shard runs the full Go executor
-contract tests as a separate recipe.
+not hosted CI parity or a PR receipt. Docker limits on the client and daemon do
+not establish nested cgroup limits for containers created by Testcontainers;
+Ryuk isolation, third-party services, image provenance and unknown external
+workloads remain unproven. The policy shard runs the full Go executor contract
+tests as a separate recipe.
 
 An alternative full Auth diagnostic requires `--auth-full-helper`,
 `--auth-full-helper-sha256`, `--auth-full-client-image-id`,

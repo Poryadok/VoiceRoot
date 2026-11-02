@@ -344,10 +344,11 @@ def _validate_full_go_inputs(plan, inputs):
         raise ValueError('full Go inputs must match all selected services')
     for service in selected:
         row = inputs[service]
-        if (not isinstance(row, dict) or set(row) != {'helper', 'helper_sha256', 'archives'} or
+        if (not isinstance(row, dict) or set(row) != {'helper', 'helper_sha256', 'archives', 'resource_limits'} or
                 not isinstance(row['helper'], str) or not Path(row['helper']).is_absolute() or
                 not isinstance(row['helper_sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', row['helper_sha256'])):
             raise ValueError('invalid full Go helper input')
+        local_go_full_integration._validate_resource_limits(row['resource_limits'])
         local_go_full_integration.chat.validate_archives(row['archives'], local_go_full_integration.profile(service)['images'])
         local_chat_orchestration._verify_file(row['helper'], row['helper_sha256'])
         for image in row['archives'].values():
@@ -359,7 +360,11 @@ def _validate_full_go_report(result, service, source, inputs, output):
     expected = {tag: item['image_id'] for tag, item in inputs['archives'].items()}
     expected_inputs = {'helper_sha256': inputs['helper_sha256'],
                        'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
-                                    for tag, item in inputs['archives'].items()}}
+                                     for tag, item in inputs['archives'].items()},
+                       'resource_limits': inputs['resource_limits']}
+    readback = result.get('resource_limit_readback') if isinstance(result, dict) else None
+    ids = readback.get('container_ids') if isinstance(readback, dict) else None
+    host_job = readback.get('host_job') if isinstance(readback, dict) else None
     if (not isinstance(result, dict) or result.get('schema') != 'voice-local-' + service + '-full-integration-v1' or
             result.get('status') != 'incomplete' or result.get('source') != source or result.get('exit_code') != 0 or
             result.get('images') != expected or result.get('input_identity') != expected_inputs or
@@ -368,6 +373,18 @@ def _validate_full_go_report(result, service, source, inputs, output):
                 for key in ('events_sha256', 'source_archive_sha256', 'required_inventory_sha256')) or
             not isinstance(result.get('go_image_id'), str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', result['go_image_id']) or
             type(result.get('slot')) is not int or result['slot'] not in (0, 1) or
+            not isinstance(readback, dict) or
+            readback.get('limits') != {key: inputs['resource_limits'][key] for key in ('client', 'daemon')} or
+            not isinstance(ids, dict) or set(ids) != {'client', 'daemon'} or
+            any(not isinstance(ids.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', ids[key])
+                for key in ('client', 'daemon')) or ids.get('client') == ids.get('daemon') or
+            not isinstance(readback.get('daemon_id'), str) or
+            not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', readback['daemon_id']) or
+            not isinstance(host_job, dict) or
+            host_job.get('cpu_rate') != inputs['resource_limits']['host_job']['cpu_rate'] or
+            host_job.get('job_memory_bytes') != inputs['resource_limits']['host_job']['job_memory_bytes'] or
+            host_job.get('active_process_limit') != inputs['resource_limits']['host_job']['active_process_limit'] or
+            result.get('cleanup_evidence', {}).get('completed') is not True or
             not isinstance(result.get('unbound_inputs'), list) or not result['unbound_inputs'] or
             any(not isinstance(item, str) or not item for item in result['unbound_inputs'])):
         raise ValueError('full Go diagnostic identity or status differs')
@@ -460,7 +477,8 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             values = full_go_inputs[service]
             service_output = output / 'go-full' / service
             diagnostic = local_go_full_integration.run_supervised(plan, service, root, service_output,
-                values['helper'], values['helper_sha256'], values['archives'], go_binary, base=base, head_ref=head_ref)
+                values['helper'], values['helper_sha256'], values['archives'], go_binary, base=base, head_ref=head_ref,
+                resource_limits=values['resource_limits'])
             _validate_full_go_report(diagnostic, service, plan['source'], values, service_output)
             if local_source_snapshot.capture(root, head) != plan['source']:
                 raise ValueError('source changed during full Go diagnostic')
