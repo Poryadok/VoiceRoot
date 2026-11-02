@@ -39,11 +39,15 @@ class Tests(unittest.TestCase):
         owned=WORKFLOW.read_text(encoding='utf8').split('  owned-enrollment:',1)[1]
         lines=owned.splitlines()
         commands=[line.strip() for line in lines if line.strip().startswith("sudo -n sh -eu -c 'cd ")]
-        self.assertEqual(len(commands),2)
+        self.assertEqual(len(commands),3)
+        probe_commands=[command for command in commands if 'story_probe_loader_integration_test' in command]
+        self.assertEqual(len(probe_commands),1)
         checks=[line.strip() for line in lines if line.strip().startswith('if sudo -n test -d "$work"')]
         self.assertEqual(len(checks),1)
         with tempfile.TemporaryDirectory(prefix='voice-owned-workflow-test-',dir='/root') as tmp:
             work=Path(tmp);source=work/'source'
+            qualified=work/'qualified';qualified.mkdir(mode=0o700)
+            (qualified/'story-restored8-probe').write_bytes(b'fixture')
             for relative in ('scripts/ci','scripts/staging/nats-known-baseline',
                              'scripts/staging/nats-rollout-preservation','deploy/nats'):
                 shutil.copytree(ROOT/relative,source/relative)
@@ -53,6 +57,10 @@ class Tests(unittest.TestCase):
                 return subprocess.run(['runuser','-u',runner,'--','env','work='+str(work),
                                        'bash','-eu','-c',command],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=60)
             for command in commands:
+                if command in probe_commands:
+                    self.assertIn('VOICE_STORY_PROBE="$1/qualified/story-restored8-probe"',command)
+                    start=command.index('exec env ');end=command.index("' sh \"$work\"",start)
+                    command=command[:start]+'test -r "$1/qualified/story-restored8-probe"'+command[end:]
                 result=run(command)
                 self.assertEqual(result.returncode,0, result.stderr.decode('utf8',errors='replace')[-2000:])
             result=run(checks[0]+' :; else exit 1; fi')
