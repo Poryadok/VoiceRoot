@@ -20,6 +20,28 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets('history rating route fills $size with a centered dialog', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final requests = <http.Request>[];
+      await _pumpBanHistory(tester, requests, _BanDialogObserver());
+      await tester.tap(find.byKey(MatchHistoryScreen.rateKey('teammate')));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(MatchRatingOverlay)), size);
+      final dialog = find.byKey(const Key('match_rating_dialog'));
+      expect(tester.getSize(dialog).width, size.width > 600 ? 480 : 358);
+      expect(tester.getCenter(dialog), Offset(size.width / 2, size.height / 2));
+      await tester.tap(find.byKey(MatchRatingOverlay.skipAllButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(MatchRatingOverlay), findsNothing);
+      expect(requests, isEmpty);
+    });
+  }
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   for (final stars in [1, 2]) {
@@ -33,6 +55,7 @@ void main() {
           await tester.tap(find.byKey(MatchHistoryScreen.rateKey('teammate')));
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(stars)));
+          await tester.pump();
           await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
@@ -646,6 +669,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(MatchRatingOverlay), findsOneWidget);
       await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(4)));
+      await tester.pump();
       await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
       await tester.pumpAndSettle();
       expect(rateRequests, hasLength(1));

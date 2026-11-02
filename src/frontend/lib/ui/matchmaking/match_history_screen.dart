@@ -171,44 +171,47 @@ class _MatchHistoryScreenState extends ConsumerState<MatchHistoryScreen> {
     final raterId = ref.read(authControllerProvider).activeProfileId;
     if (raterId == null || raterId.isEmpty || raterId == profileId) return;
 
-    showModalBottomSheet<void>(
+    showGeneralDialog<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetContext) => MatchRatingOverlay(
-        match: match,
-        raterProfileId: raterId,
-        teammates: [
-          RatedTeammate(profileId: profileId, displayName: displayName),
-        ],
-        onRate: (ratedProfileId, stars) async {
-          final token = ref.read(authControllerProvider).session?.accessToken;
-          if (token == null || token.isEmpty) return false;
-          final result = await ref
-              .read(voiceMatchmakingClientProvider)
-              .rateMatch(
-                authorization: 'Bearer $token',
-                matchId: match.id,
-                ratedProfileId: ratedProfileId,
-                stars: stars,
-              );
-          if (!mounted) return false;
-          if (result is MatchmakingApiFailure) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  AppLocalizations.of(context)!.matchRatingSubmitError,
-                ),
-              ),
-            );
-            return false;
-          }
-          return true;
-        },
-        onBan: _submitParticipantBan,
-        onSkipAll: () => Navigator.of(sheetContext).pop(),
-        onDone: () => Navigator.of(sheetContext).pop(),
-      ),
+      barrierColor: Colors.transparent,
+      pageBuilder: (sheetContext, animation, secondaryAnimation) =>
+          MatchRatingOverlay(
+            match: match,
+            raterProfileId: raterId,
+            teammates: [
+              RatedTeammate(profileId: profileId, displayName: displayName),
+            ],
+            onRate: (ratedProfileId, stars) async {
+              final token = ref
+                  .read(authControllerProvider)
+                  .session
+                  ?.accessToken;
+              if (token == null || token.isEmpty) return false;
+              final result = await ref
+                  .read(voiceMatchmakingClientProvider)
+                  .rateMatch(
+                    authorization: 'Bearer $token',
+                    matchId: match.id,
+                    ratedProfileId: ratedProfileId,
+                    stars: stars,
+                  );
+              if (!mounted) return false;
+              if (result is MatchmakingApiFailure) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      AppLocalizations.of(context)!.matchRatingSubmitError,
+                    ),
+                  ),
+                );
+                return false;
+              }
+              return true;
+            },
+            onBan: _submitParticipantBan,
+            onSkipAll: () => Navigator.of(sheetContext).pop(),
+            onDone: () => Navigator.of(sheetContext).pop(),
+          ),
     );
   }
 

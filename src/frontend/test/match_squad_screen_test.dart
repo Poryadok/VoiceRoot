@@ -888,6 +888,7 @@ void main() {
 
     expect(find.byKey(MatchRatingOverlay.submitButtonKey), findsOneWidget);
     await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(1)));
+    await tester.pump();
     await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
@@ -1033,6 +1034,7 @@ void main() {
     await _openSquadAndLeave(tester);
 
     await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(1)));
+    await tester.pump();
     await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
     await tester.pump();
     await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
@@ -1050,7 +1052,13 @@ void main() {
     final l10n = AppLocalizations.of(
       tester.element(find.byKey(SocialPanel.panelKey)),
     )!;
-    expect(find.text(l10n.matchRatingSubmitError), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(MatchRatingOverlay),
+        matching: find.text(l10n.matchRatingSubmitError),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('private rating failure'), findsNothing);
     expect(find.byType(AlertDialog), findsNothing);
     expect(
