@@ -58,6 +58,7 @@ def canonical_stores():
 def populate_public_fixture_inventory(kube,live):
     """Share the synthetic canonical inventory with compiler transport."""
     for (kind,name),row in kube.objects.items():
+        if (kind,name) in (('Deployment','voice-gameintegration'),('Service','voice-gameintegration')):continue
         live.setdefault((kind.lower(),name),copy.deepcopy(row))
 
 
@@ -188,11 +189,28 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_public_inventory_is_added_after_first_install_prepare(self):
+        import staging_prerequisites,staging_prerequisites_test
+        def ready(actions,request,approved,execution,workspace,stage,live,*_):
+            kube,_,_=canonical_stores()
+            self.assertNotIn(('deployment','voice-gameintegration'),live)
+            staging_prerequisites.prepare_inputs(actions,request,approved,execution,workspace)
+            app=copy.deepcopy(live[('secret','voice-app-secrets')])
+            populate_public_fixture_inventory(kube,live)
+            self.assertEqual(live[('secret','voice-app-secrets')],app)
+            self.assertNotIn(('deployment','voice-gameintegration'),live)
+            self.assertNotIn(('service','voice-gameintegration'),live)
+        staging_prerequisites_test.PrepareCompositionTests()._cold_prepare(on_ready=ready)
+
     def test_public_fixture_compiler_uses_complete_canonical_inventory(self):
         import base64,compiler,source_plan,source_plan_test,staging_prerequisites_test
         def ready(actions,request,approved,execution,workspace,stage,live,*_):
             kube,params,_=canonical_stores()
+            params['gis_first_install']=True
+            self.assertNotIn(('deployment','voice-gameintegration'),live)
             populate_public_fixture_inventory(kube,live)
+            self.assertNotIn(('deployment','voice-gameintegration'),live)
+            self.assertNotIn(('service','voice-gameintegration'),live)
             align_public_fixture_app_secret(kube,live)
             for key in ('GAME_INTEGRATION_DATABASE_URL','GAME_INTEGRATION_DB_PASSWORD','REALTIME_DATABASE_URL'):
                 live[('secret','voice-app-secrets')]['data'][key]=base64.b64encode(b'synthetic-fixture').decode()
@@ -203,6 +221,9 @@ class CompositionTests(unittest.TestCase):
             plan=source_plan.compile_plan(workspace,params,source_plan_test.decoder,compiler.ProducerKube())
             self.assertEqual(plan['mode'],'app-only')
             self.assertTrue(plan['checks'])
+            live[('deployment','voice-gameintegration')]=copy.deepcopy(kube.objects[('Deployment','voice-gameintegration')])
+            with self.assertRaisesRegex(source_plan.PlanError,'gis_first_install_identity_present'):
+                source_plan.compile_plan(workspace,params,source_plan_test.decoder,compiler.ProducerKube())
         staging_prerequisites_test.PrepareCompositionTests()._cold_prepare(on_ready=ready,full_source=True)
 
     def test_real_c1_effect_uses_its_own_pending_checkpoint_for_fixture_cas(self):
@@ -627,7 +648,6 @@ class CompositionTests(unittest.TestCase):
             kube,params,policy=canonical_stores()
             if qualify:
                 import base64,cohort_hosted_pg
-                populate_public_fixture_inventory(kube,live)
                 live[('secret','voice-app-secrets')]['data']['POSTGRES_PASSWORD']=base64.b64encode(
                     cohort_hosted_pg.ADMIN_PASSWORD.encode()).decode()
                 align_public_fixture_app_secret(kube,live)
@@ -931,6 +951,7 @@ class CompositionTests(unittest.TestCase):
                             nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
                             prepared=actions.execute(request)
                             self.assertIsInstance(prepared,dict)
+                            populate_public_fixture_inventory(kube,live)
                             source_receipt=captured._read(installed/'source-authority'/(actions.tt_session.operation+'.json'))
                             self.assertEqual(source_receipt['approved_sha256'],captured.digest(approved))
                             authorize={'action':'authorize','operation':actions.tt_session.operation,'token':'fixture',
