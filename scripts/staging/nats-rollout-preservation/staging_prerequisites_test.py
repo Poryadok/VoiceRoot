@@ -363,6 +363,32 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
             realtime_source=True,fixture_complete_candidate=True)
 
+    def test_complete_fixture_storage_identity_reaches_compiler_endpoint_guard(self):
+        import copy,os,compiler,stage_runtime
+        if not os.environ.get('VOICE_QUALIFIED_BINARIES'):self.skipTest('qualified fixture binaries required')
+        def ready(actions,request,approved,execution,workspace,stage,*_):
+            claim=stage.expected['source_claim'];generation=stage.expected['generation']
+            with patch.object(compiler.release_policy_wiring,'source_input',return_value=None):
+                with self.assertRaisesRegex(compiler.Blocked,'rollout_compile_endpoint_invalid'):
+                    compiler.rendered_source(workspace,{'generation':generation,'dataPVC':claim,'s3_signing_endpoint':'invalid endpoint'},None)
+                with self.assertRaisesRegex(compiler.Blocked,'rollout_compile_identity_invalid'):
+                    compiler.rendered_source(workspace,{'generation':generation,'dataPVC':'fixture','s3_signing_endpoint':'invalid endpoint'},None)
+            self.assertEqual(stage.marker['data']['dataPVC'],claim)
+            self.assertEqual(stage.marker['data']['generation'],generation)
+            self.assertEqual(stage.final_claim['metadata']['name'],claim)
+            self.assertEqual(stage.final_pv['spec']['claimRef']['name'],claim)
+            self.assertTrue(str(stage.final_path).endswith('_voice-staging_'+claim))
+            claim_uid=stage.expected['source_claim_uid'];pv_uid=stage.expected['source_pv_uid']
+            self.assertEqual(stage_runtime.pv_storage_path(stage.final_pv,claim_uid,claim,pv_uid),str(stage.final_path))
+            changed=copy.deepcopy(stage.final_pv);changed['metadata']['uid']='00000000-0000-0000-0000-000000000000'
+            with self.assertRaisesRegex(stage_runtime.Blocked,'pv_storage_identity_changed'):
+                stage_runtime.pv_storage_path(changed,claim_uid,claim,pv_uid)
+            changed=copy.deepcopy(stage.final_pv);changed['spec']['local']['path']=str(stage.final_path).replace('_voice-staging_','_other-namespace_')
+            with self.assertRaisesRegex(stage_runtime.Blocked,'pv_storage_path_unsupported'):
+                stage_runtime.pv_storage_path(changed,claim_uid,claim,pv_uid)
+        self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
+            realtime_source=True,fixture_complete_candidate=True)
+
     def test_fixture_accepts_owned_installation_before_session_admission(self):
         import bootstrap_selection_test
         installation=bootstrap_selection_test.owned_fixture()[3]
@@ -563,16 +589,22 @@ class PrepareCompositionTests(unittest.TestCase):
                 extra=root/'extra.crt';extra_key=root/'extra.key'
                 openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',extra_key,'-out',extra,'-days','180','-subj','/CN=unrelated-root','-addext','basicConstraints=critical,CA:TRUE')
                 p3_issuer['trust']['space-client-ca.crt']+=extra.read_text();save(operator/'p3-issuer.json',p3_issuer)
-            marker={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'voice-nats-generation','namespace':'voice-staging','uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}}
+            claim_name='voice-nats-jsdata-d20260930a4' if fixture_complete_candidate else 'fixture'
+            marker={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'voice-nats-generation','namespace':'voice-staging','uid':'marker','resourceVersion':'1'},
+                'data':{'phase':'active','generation':session.installation.generation if fixture_complete_candidate else 'fixture','dataPVC':claim_name}}
             deployment={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user','namespace':'voice-staging','uid':'user','resourceVersion':'1','generation':1},
                 'spec':{'replicas':1,'template':{'metadata':{'labels':{'app':'voice-user'}},'spec':{'containers':[{'name':'user','image':card['observed']['images']['voice-user/user']}]}}}}
             live[('configmap','voice-nats-generation')]=marker;live[('deployment','voice-user')]=deployment
             claim_uid='00000000-0000-0000-0000-000000000002';pv_uid='00000000-0000-0000-0000-000000000003'
-            storage_path='/var/lib/rancher/k3s/storage/pvc-'+claim_uid+'_voice-staging_fixture'
-            claim={'metadata':{'name':'fixture','uid':claim_uid},'spec':{'volumeName':'fixture-pv'}}
-            pv={'metadata':{'name':'fixture-pv','uid':pv_uid},'spec':{'claimRef':{'uid':claim_uid},'local':{'path':storage_path},
+            storage_path='/var/lib/rancher/k3s/storage/pvc-'+claim_uid+'_voice-staging_'+claim_name
+            claim={'metadata':{'name':claim_name,'uid':claim_uid},'spec':{'volumeName':'fixture-pv'}}
+            claim_ref={'uid':claim_uid}
+            if fixture_complete_candidate:
+                claim['metadata']['namespace']='voice-staging'
+                claim_ref.update(name=claim_name,namespace='voice-staging')
+            pv={'metadata':{'name':'fixture-pv','uid':pv_uid},'spec':{'claimRef':claim_ref,'local':{'path':storage_path},
                 'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}}
-            live[('pvc','fixture')]=claim;live[('pv','fixture-pv')]=pv
+            live[('pvc',claim_name)]=claim;live[('pv','fixture-pv')]=pv
             writes=[];events=[];rv=[10];ready={}
             def get(kind,name):
                 commands.authority_guard(prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
@@ -638,7 +670,7 @@ class PrepareCompositionTests(unittest.TestCase):
             stage=object.__new__(runtime_stage.RolloutStage);stage.kube=kube;stage.operation=operation;stage.marker=copy.deepcopy(marker)
             stage.snapshots={'voice-user':copy.deepcopy(deployment)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
             stage.old_images=copy.deepcopy(card['observed']['images']);stage.expected={'namespace_uid':ns,'deployment_uids':{'voice-user':'user'},
-                'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid,'generation':session.installation.generation}
+                'source_claim':claim_name,'source_claim_uid':claim_uid,'source_pv_uid':pv_uid,'generation':session.installation.generation}
             stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
                 'index_sha256':'e'*64,'manifest_sha256':fixture_manifest,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+fixture_manifest})
