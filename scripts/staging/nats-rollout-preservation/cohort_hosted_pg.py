@@ -20,6 +20,19 @@ ADMIN_USER='voice'
 ADMIN_PASSWORD='isolated-test-only'
 
 
+def authorize_launch(argv,*,body=b'',timeout=30,limit=2<<20,env=None,pass_fds=()):
+    """Apply the same launch-bound guard as the real capture transport."""
+    import commands,resource_claim
+    guard=commands.authority_guard;session=getattr(guard,'__self__',None)
+    bound=type(session) is resource_claim.Session and getattr(guard,'__func__',None) is resource_claim.Session.check
+    privileged=bound and session._prerequisite_readonly_permit is not None
+    if bound:guard(argv,launch=commands.launch_snapshot(argv,body,timeout,limit,env,pass_fds))
+    else:guard(argv)
+    if privileged:
+        if commands.authority_guard!=guard:raise RuntimeError('staging_resource_guard_changed')
+        session.readonly_current()
+
+
 class HostedPostgres:
     def __init__(self, namespace_uid):
         if sys.platform!='linux' or os.geteuid()!=0 or os.environ.get('RUNNER_ENVIRONMENT')!='github-hosted':
@@ -173,27 +186,19 @@ class HostedPostgres:
 
     def actor_read(self,args):
         """Execute only the two fixed read-only actor observations on this PG."""
-        import actor_root,commands
+        import actor_root
         password=['exec','voice-postgres-0','--','sh','-ceu',
             'printf "{\\"password_sha256\\":\\"%s\\"}" "$(printf %s "$POSTGRES_PASSWORD" | sha256sum | cut -d" " -f1)"']
         if args not in (list(actor_root.STORY_SCHEMA_ARGS),password):raise RuntimeError('isolated_actor_read_invalid')
-        commands.authority_guard(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging',*args])
+        authorize_launch(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging',*args],
+            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'})
         return json.loads(self._docker('exec',self.cid,*args[args.index('--')+1:]))
 
     def capture(self,argv,*,body=b'',fallback,**kwargs):
-        import commands,resource_claim,staging_cohort_preservation_pg as pg
+        import staging_cohort_preservation_pg as pg
         def authorize():
-            guard=commands.authority_guard;session=getattr(guard,'__self__',None)
-            bound=type(session) is resource_claim.Session and getattr(guard,'__func__',None) is resource_claim.Session.check
-            privileged=bound and session._prerequisite_readonly_permit is not None
-            if bound:
-                launch=commands.launch_snapshot(argv,body,kwargs.get('timeout',30),kwargs.get('limit',2<<20),
-                    kwargs.get('env'),kwargs.get('pass_fds',()))
-                guard(argv,launch=launch)
-            else:guard(argv)
-            if privileged:
-                if commands.authority_guard!=guard:raise RuntimeError('staging_resource_guard_changed')
-                session.readonly_current()
+            authorize_launch(argv,body=body,timeout=kwargs.get('timeout',30),limit=kwargs.get('limit',2<<20),
+                env=kwargs.get('env'),pass_fds=kwargs.get('pass_fds',()))
         runtime_script=('IFS= read -r PGPASSWORD; export PGPASSWORD; '
             'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
             'exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
@@ -210,6 +215,11 @@ class HostedPostgres:
             return self._docker('exec','-i',self.cid,*argv[len(pg.EXEC):],body=body)
         identity=pg.owner.PREFIX+pg.IDENTITY_ARGS
         if argv==identity:
+            authorize()
+            return self._docker('exec',self.cid,*argv[argv.index('--')+1:])
+        import space_authority
+        space_password=pg.owner.PREFIX+list(space_authority.PASSWORD_ARGS)
+        if argv==space_password and body==b'':
             authorize()
             return self._docker('exec',self.cid,*argv[argv.index('--')+1:])
         import realtime_bootstrap
