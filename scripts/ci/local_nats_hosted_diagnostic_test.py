@@ -1,4 +1,5 @@
 """Fail-closed result accounting for the two hosted NATS diagnostics."""
+import ast
 import tempfile
 import unittest
 import json
@@ -15,6 +16,31 @@ import local_nats_hosted_diagnostic as diagnostic
 
 
 class NatsHostedDiagnosticTests(unittest.TestCase):
+    def test_project_module_allowlist_covers_transitive_local_imports(self):
+        root = Path(diagnostic.__file__).resolve().parent
+        pending = ['local_nats_hosted_diagnostic']
+        visited = set()
+        while pending:
+            module = pending.pop()
+            if module in visited:
+                continue
+            path = root / (module + '.py')
+            if not path.is_file():
+                continue
+            visited.add(module)
+            tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+            imports = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imports.update(alias.name.split('.')[0] for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    imports.add(node.module.split('.')[0])
+            pending.extend(name for name in imports
+                           if (root / (name + '.py')).is_file() and name not in visited)
+
+        missing = (visited - {'local_nats_hosted_diagnostic'}) - diagnostic.PROJECT_MODULES
+        self.assertEqual(missing, set(), 'isolated worker allowlist omits transitive local modules')
+
     def test_exact_inventory_and_success_without_skips(self):
         self.assertEqual(set(diagnostic.SCRIPTS), {
             'nats-jwt-leaf-hosted-proof.sh', 'nats-canonical-acl-hosted-proof.sh'})
