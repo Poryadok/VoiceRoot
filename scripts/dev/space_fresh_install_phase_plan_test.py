@@ -46,5 +46,40 @@ class FixedPlanTest(unittest.TestCase):
         with patch.object(plan.publish_candidate, 'source_snapshot', return_value={'source_sha':self.source,'files':self.files}):
             with self.assertRaises(plan.PlanError): plan.render(self.root,self.source,self.operation,'example.invalid/latest',self.build,'node-a')
 
+    def test_tracked_gitattributes_is_verified_but_not_published_as_sql(self):
+        path = self.root / plan.SQL_DIR / '.gitattributes'
+        path.write_bytes(b'*.sql text eol=lf\n')
+        self.files[plan.SQL_DIR + '/.gitattributes'] = hashlib.sha256(path.read_bytes()).hexdigest()
+        cm, _ = self.render()
+        self.assertNotIn('.gitattributes', cm['data'])
+        path.write_bytes(b'changed\n')
+        with self.assertRaises(plan.PlanError): self.render()
+
+    def test_untracked_metadata_or_unknown_entry_is_refused(self):
+        for name in ('.gitattributes', 'README', 'invalid.sql'):
+            path = self.root / plan.SQL_DIR / name
+            path.write_bytes(b'unexpected')
+            with self.subTest(name=name), self.assertRaises(plan.PlanError): self.render()
+            path.unlink()
+
+    def test_qualified_image_sql_directory_is_not_overlaid_by_projected_volume(self):
+        _, job = self.render()
+        pod = job['spec']['template']['spec']
+        container = pod['containers'][0]
+        self.assertFalse(any(m['mountPath'] == '/migrations' for m in container['volumeMounts']))
+        self.assertIn('--migrations-dir=/migrations', container['args'][0])
+
+    def test_complete_checkout_inventory_includes_tracked_metadata(self):
+        repo = Path(__file__).resolve().parents[2]
+        self.root = repo
+        paths = [repo / plan.TEMPLATE, *(repo / plan.SQL_DIR).iterdir()]
+        self.files = {p.relative_to(repo).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                      for p in paths}
+        self.assertIn(plan.SQL_DIR + '/.gitattributes', self.files)
+        cm, _ = self.render()
+        expected = {p.name for p in paths if p.suffix == '.sql'}
+        self.assertEqual(set(cm['data']), expected)
+        self.assertGreater(len(expected), 80)
+
 
 if __name__ == '__main__': unittest.main()

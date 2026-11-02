@@ -30,13 +30,15 @@ def render(root, source, operation, image, build_source_sha256, node):
         prefix = SQL_DIR + '/'
         expected = {key:value for key,value in snapshot['files'].items() if key.startswith(prefix)}
         paths = list((root / SQL_DIR).iterdir())
-        if not paths or any(not p.is_file() or p.is_symlink() or not re.fullmatch(r'[0-9]{6}_[a-z0-9_]+\.(?:up|down)\.sql',p.name) for p in paths): raise ValueError()
+        if not paths or any(not p.is_file() or p.is_symlink() or
+            (p.name != '.gitattributes' and not re.fullmatch(r'[0-9]{6}_[a-z0-9_]+\.(?:up|down)\.sql',p.name)) for p in paths): raise ValueError()
         if {prefix+p.name for p in paths} != set(expected): raise ValueError()
         data = {}
         for path in sorted(paths):
             contents = path.read_bytes()
             if hashlib.sha256(contents).hexdigest()!=expected[prefix+path.name] or b'\0' in contents: raise ValueError()
-            data[path.name] = contents.decode('utf-8')
+            if path.name != '.gitattributes': data[path.name] = contents.decode('utf-8')
+        if not data: raise ValueError()
         if sum(len(v.encode('utf-8')) for v in data.values()) > 900000: raise ValueError()
         input_hash = hashlib.sha256(json.dumps({'image':image,'source':build_source_sha256,
             'sql':{name:hashlib.sha256(value.encode()).hexdigest() for name,value in sorted(data.items())}},sort_keys=True).encode()).hexdigest()
@@ -44,14 +46,17 @@ def render(root, source, operation, image, build_source_sha256, node):
         cm={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':config_name,'namespace':'voice-dev',
             'annotations':{'voice.dev/cohort-operation':operation,'voice.io/source-sha':source}},'immutable':True,'data':data}
         container={'name':'migrate','image':image,'command':['/bin/sh','-ec'],
-            'args':['if [ "$SPACE_NATIVE_INSTALLER_MODE" = verify ]; then\n  exec native-migrate --mode=verify --prior-evidence=/evidence/prior.jsonl\nfi\nexec native-migrate --mode=provision\n'],
+            # /migrations is the ordinary-file image inventory authenticated by
+            # SpaceNativeToolPhase before drop_exact. ConfigMap projections are
+            # symlinks and must never shadow that compiled-source-gated input.
+            'args':['if [ "$SPACE_NATIVE_INSTALLER_MODE" = verify ]; then\n  exec native-migrate --migrations-dir=/migrations --mode=verify --prior-evidence=/evidence/prior.jsonl\nfi\nexec native-migrate --migrations-dir=/migrations --mode=provision\n'],
             'env':[{'name':'PGHOST','value':'voice-postgres'},{'name':'PGSSLMODE','value':'disable'},
                 {'name':'PGUSER','valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':'POSTGRES_USER'}}},
                 {'name':'PGPASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}},
                 {'name':'SPACE_NATIVE_INSTALLER_MODE','value':'provision'},
                 {'name':'SPACE_NATIVE_REQUIRED_SOURCE_SHA256','value':build_source_sha256}],
             'resources':{'requests':{'cpu':'20m','memory':'64Mi'},'limits':{'cpu':'2','memory':'3Gi'}},
-            'volumeMounts':[{'name':'migrations','mountPath':'/migrations','readOnly':True},
+            'volumeMounts':[{'name':'migrations','mountPath':'/source-migrations','readOnly':True},
                             {'name':'evidence','mountPath':'/evidence','readOnly':True}]}
         job={'apiVersion':'batch/v1','kind':'Job','metadata':{'name':job_name,'namespace':'voice-dev',
             'annotations':{'voice.dev/cohort-operation':operation,'voice.io/native-input-hash':input_hash,

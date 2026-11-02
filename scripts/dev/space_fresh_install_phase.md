@@ -15,6 +15,14 @@ obtain the exact fixed Job/config plan before reserving the drop. Existing
 Space backup is not a prerequisite for the explicitly disposable DEV target;
 ordinary preservation and backup requirements for other databases remain.
 
+The Job uses the immutable image's `/migrations` directory, authenticated by
+the native-tool phase before the drop: image extraction requires ordinary
+files, exact selected SQL hashes and the compiled installer source-gate probe.
+The operation SQL ConfigMap is retained separately at `/source-migrations` for
+source/evidence binding; its Kubernetes symlinks never overlay `/migrations`.
+Planning verifies tracked `.gitattributes` bytes against the source snapshot
+and excludes that metadata from SQL data. Unknown entries still refuse the plan.
+
 The drop is one-shot: durable local journal and shared ledger pending record
 precede any effect. A fixed `psql` command reads its SQL from stdin, checks
 the old OID and drops only `space_db`; it does not use `FORCE`. PostgreSQL

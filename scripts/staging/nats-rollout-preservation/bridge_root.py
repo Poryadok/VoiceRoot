@@ -1302,7 +1302,8 @@ class Actions:
         def validate(runtime,broker,tree,row,manifest,records):
             actual=nats_root_plan.closed_copy_preflight(Kube(),workspace,state['bootstrap_enrollment'],
                 state['contract'],compiler.decode_yaml,runtime,broker,tree,installation=self.installation)
-            if (actual['plan']!=state['nats_contract'] or actual['binding']!=state['nats_contract_binding']
+            if (actual['plan']!=state['nats_contract'] or not nats_root_plan.binding_matches(
+                actual['binding'],state['nats_contract_binding'],installation=self.installation)
                 or actual['scripts']!=state['nats_target_scripts']):
                 raise Blocked('expired_recovery_original_nats_authority_changed')
             # The authoritative archive's exact message-file bytes and complete

@@ -272,6 +272,12 @@ class PhaseTest(unittest.TestCase):
             with self.assertRaises(phase_module.SpaceFreshError):p.run()
         self.assertEqual(self.drops,[]);self.assertEqual(self.calls,[])
 
+    def test_unqualified_image_sql_blocks_before_database_drop(self):
+        p=self.phase()
+        with mock.patch.object(tools,'verify_completed',side_effect=tools.ToolIdentityError('SQL source gate failed')):
+            with self.assertRaises(phase_module.SpaceFreshError):p.run()
+        self.assertEqual(self.drops,[]);self.assertEqual(self.calls,[])
+
     def test_foreign_created_source_cannot_reach_runtime_grants(self):
         p=self.phase();self.logs=self.logs.replace(b'a'*40,b'f'*40)
         with mock.patch.object(p.runtime,'run',wraps=p.runtime.run) as grants:

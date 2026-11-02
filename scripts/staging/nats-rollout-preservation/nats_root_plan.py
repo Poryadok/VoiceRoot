@@ -20,6 +20,25 @@ V5_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-boot
 V6_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-bootstrap.yaml'):sha for path,sha in V6_SOURCE_HASHES.items()}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 
+def binding_matches(current,retained,*,installation=None):
+    """Compare immutable checkpoint intent using its original binding version."""
+    from resource_claim import require_installation,require_production
+    try:
+        installation=require_installation(installation)
+        fields={'plan_sha256','server_image','enrollment_sha256','sources'}
+        if not isinstance(current,dict) or not isinstance(retained,dict):return False
+        if 'live_auth_sha256' in current:fields.add('live_auth_sha256')
+        if (set(current)!=fields|{'schema','installation_sha256'} or
+            current['schema']!='voice-nats-root-plan-binding-v2' or
+            current['installation_sha256']!=installation.sha256):return False
+        if 'schema' in retained or 'installation_sha256' in retained:
+            return current==retained
+        # Historical records predate installation identity and are valid only
+        # in the fixed original production realm. Never rewrite their bytes.
+        require_production(installation)
+        return set(retained)==fields and {key:current[key] for key in fields}==retained
+    except (ValueError,RuntimeError):return False
+
 _LEGACY_AUTH_KEYS={'verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256'}
 _V3_AUTH_KEYS=_LEGACY_AUTH_KEYS|{'normalized_consumers','normalized_consumers_sha256'}
 _V4_AUTH_KEYS=_V3_AUTH_KEYS|{'schema'}

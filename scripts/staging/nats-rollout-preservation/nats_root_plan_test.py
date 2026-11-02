@@ -209,4 +209,48 @@ class CanonicalBootstrapTests(unittest.TestCase):
         with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):
             self.compatible(authority)
 
+class BindingCompatibilityTests(unittest.TestCase):
+    def setUp(self):
+        from resource_claim import production_installation
+        self.installation=production_installation()
+        self.legacy={'plan_sha256':'a'*64,'server_image':module.NATS_IMAGE,
+            'enrollment_sha256':'b'*64,'sources':{'source':'c'*64}}
+        self.current=dict(self.legacy,schema='voice-nats-root-plan-binding-v2',
+            installation_sha256=self.installation.sha256)
+
+    def matches(self,current=None,expected=None,installation=None):
+        return module.binding_matches(self.current if current is None else current,
+            self.legacy if expected is None else expected,installation=installation or self.installation)
+
+    def test_legacy_production_binding_compares_original_fields_without_rewriting(self):
+        for roster in (False,True):
+            current=copy.deepcopy(self.current);expected=copy.deepcopy(self.legacy)
+            if roster:
+                current['live_auth_sha256']=expected['live_auth_sha256']='d'*64
+            before=copy.deepcopy((current,expected))
+            self.assertTrue(self.matches(current,expected))
+            self.assertEqual((current,expected),before)
+
+    def test_legacy_binding_refuses_every_changed_original_field(self):
+        for key in self.legacy:
+            current=copy.deepcopy(self.current);current[key]='changed'
+            with self.subTest(key=key):self.assertFalse(self.matches(current))
+
+    def test_v2_binding_requires_exact_installation_schema_and_fields(self):
+        self.assertTrue(self.matches(expected=self.current))
+        for updates in ({'installation_sha256':'f'*64},{'schema':'unknown'},{'extra':True}):
+            with self.subTest(updates=updates):
+                self.assertFalse(self.matches(dict(self.current,**updates),self.current))
+        for field in ('schema','installation_sha256'):
+            partial=copy.deepcopy(self.current);partial.pop(field)
+            self.assertFalse(self.matches(expected=partial))
+
+    def test_isolated_authority_cannot_adopt_legacy_production_binding(self):
+        from resource_claim import InstallationAuthority
+        isolated=InstallationAuthority('owned-isolated-v1','11111111-1111-4111-8111-111111111111',
+            'r20261102a','a'*64,'b'*64,'c'*64)
+        current=dict(self.current,installation_sha256=isolated.sha256)
+        self.assertFalse(self.matches(current,installation=isolated))
+        self.assertTrue(self.matches(current,current,isolated))
+
 if __name__=='__main__':unittest.main()
