@@ -240,7 +240,8 @@ def report_restore_failure(original):
         import sys
         allowed={'story_media_backup_cohort_restore.py','story_media_backup_restore.py',
             'staging_cohort_preservation.py','staging_cohort_preservation_runtime.py',
-            'staging_cohort_preservation_pg.py','commands.py','cohort_hosted_pg.py','bridge_composition_test.py'}
+            'staging_cohort_preservation_pg.py','commands.py','cohort_hosted_pg.py','bridge_composition_test.py',
+            'story_fixture.py','story_witness.py','source_authority.py','resource_claim.py'}
         kinds={'RestoreError','RestoreUncertain','CohortRestoreError','CommandFailure',
             'Blocked','RuntimeError','ValueError','KeyError','AssertionError','OSError'}
         events=[];previous=sys.gettrace()
@@ -281,6 +282,17 @@ class CompositionTests(unittest.TestCase):
         output=io.StringIO()
         with contextlib.redirect_stderr(output):self.assertEqual(report_restore_failure(lambda:42)(),42)
         self.assertEqual(output.getvalue(),'');self.assertIs(sys.gettrace(),previous)
+
+    def test_restore_diagnostic_reports_preserved_story_failure_without_message(self):
+        import contextlib,io
+        marker='private-story-fixture-value'
+        namespace={}
+        exec(compile('def fail():\n    raise ValueError('+repr(marker)+')\n','story_fixture.py','exec'),namespace)
+        output=io.StringIO()
+        with contextlib.redirect_stderr(output):
+            with self.assertRaises(ValueError):report_restore_failure(namespace['fail'])()
+        text=output.getvalue();self.assertNotIn(marker,text)
+        self.assertIn(['story_fixture.py','fail',2,'ValueError'],json.loads(text.removeprefix('RESTORE_FIXTURE_FAILURE ')))
 
     def test_hosted_story_seed_uses_separate_nonsuperuser_owner(self):
         import actor_root,cohort_hosted_pg
