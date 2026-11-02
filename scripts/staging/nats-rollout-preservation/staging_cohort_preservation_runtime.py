@@ -291,6 +291,19 @@ def _command(session,argv,body):
     return DOCKER+args,path,state,resource,kind
 
 
+def revalidate_restore_large_input(session,permit,argv,body):
+    """Recheck the exact owned clone and tooling immediately before launch."""
+    import resource_claim
+    actual,_,state,resource,_=_command(session,argv,body)
+    tools=owner._read(owner._base(session)/'restore-tools.json')
+    if (type(permit) is not resource_claim._CohortRestoreLargePermit or permit.session is not session
+        or actual!=list(argv) or resource is None
+        or resource_claim.digest(state)!=permit.resources_sha256 or resource_claim.digest(tools)!=permit.tools_sha256
+        or (resource.get('cid'),resource.get('kind'),resource.get('status'))!=
+            (permit.resource_cid,permit.resource_kind,permit.resource_status)):
+        raise Blocked('cohort_restore_large_input_changed')
+
+
 def restore_command(session,argv,*,body=b'',timeout=120):
     if not isinstance(body,bytes) or len(body)>64<<20 or not 0<timeout<=900:raise Blocked('cohort_restore_command_invalid')
     argv,path,state,resource,kind=_command(session,argv,body)
@@ -309,14 +322,29 @@ def restore_command(session,argv,*,body=b'',timeout=120):
             '-U "$1" -d postgres -c "SHOW server_version_num" 2>/dev/null); then printf "%s" "$v"; exit 0; fi; '
             'i=$((i+1)); sleep 0.25; done; exit 1')
         argv=DOCKER+['exec',tail[1],'sh','-ec',script,'--',tail[6]];timeout=60
-    if len(body)>2<<20:
+    large=len(body)>2<<20
+    if large:
         tools=owner._read(owner._base(session)/'restore-tools.json')
         fixed_tool=(len(tail)==6 and tail[:2]==['exec','-i'] and tail[3:]==['sh','-ec',
             'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate'])
         fixed_probe=(len(tail)==3 and tail[:2]==['cp','-'] and resource is not None and resource['kind']=='story-probe')
         if not fixed_probe and (not fixed_tool or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256')):
             raise Blocked('cohort_restore_body_limit')
-    result=owner._observation(session,'restore',argv,body,limit=80<<20,timeout=timeout)
+        import resource_claim
+        row=session.check()
+        if (type(session) is not resource_claim.Session or row.get('phase')!='cohort-preservation'
+            or not row.get('cohort_preservation_sha256') or session._cohort_restore_large_permit is not None):
+            raise Blocked('cohort_restore_large_input_invalid')
+        session._cohort_restore_large_permit=resource_claim._CohortRestoreLargePermit(
+            session,resource_claim.digest(session.binding()),row['cohort_preservation_sha256'],tuple(argv),
+            hashlib.sha256(body).hexdigest(),len(body),timeout,80<<20,
+            tuple(sorted({'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'}.items())),(),
+            resource_claim.digest(state),resource_claim.digest(tools),resource['cid'],resource['kind'],resource['status'])
+    try:
+        result=owner._observation(session,'restore',argv,body,limit=80<<20,timeout=timeout)
+        if large and session._cohort_restore_large_permit is not None:raise Blocked('cohort_restore_large_input_not_consumed')
+    finally:
+        if large:session._cohort_restore_large_permit=None
     if owner._read(path)!=state:raise Blocked('cohort_restore_journal_changed')
     if kind=='image':
         rows=json.loads(result)

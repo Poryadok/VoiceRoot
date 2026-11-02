@@ -35,6 +35,25 @@ class _CohortNativePermit:
 
 
 @dataclass(frozen=True,slots=True)
+class _CohortRestoreLargePermit:
+    session: object
+    binding_sha256: str
+    lineage_sha256: str
+    argv: tuple
+    body_sha256: str
+    body_bytes: int
+    timeout: int
+    limit: int
+    env: tuple
+    pass_fds: tuple
+    resources_sha256: str
+    tools_sha256: str
+    resource_cid: str
+    resource_kind: str
+    resource_status: str
+
+
+@dataclass(frozen=True,slots=True)
 class InstallationAuthority:
     """Root-composed expected identity, never selected by an observed record."""
     profile: str
@@ -318,6 +337,7 @@ class Session:
         self._prerequisite_permit=None
         self._prerequisite_readonly_permit=None
         self._cohort_permit=None
+        self._cohort_restore_large_permit=None
         self._cohort_auth_permit=None
         self._cohort_native_capability=None
         self._cohort_native_permit=None
@@ -393,6 +413,24 @@ class Session:
         self.authority()
 
     def admit_request(self,request):self.admit(start=request['action'] in START_ACTIONS,request=request)
+
+    def consume_restore_large_input(self,argv,body,timeout,limit,env,pass_fds):
+        permit=self._cohort_restore_large_permit
+        self._cohort_restore_large_permit=None
+        row=self.check();cohort=self._cohort_permit
+        actual=(tuple(argv),hashlib.sha256(body).hexdigest(),len(body),timeout,limit,
+            None if env is None else tuple(sorted(env.items())),tuple(pass_fds))
+        if (type(permit) is not _CohortRestoreLargePermit or permit.session is not self
+            or row.get('phase')!='cohort-preservation' or not row.get('cohort_preservation_sha256')
+            or permit.lineage_sha256!=row['cohort_preservation_sha256']
+            or permit.binding_sha256!=digest(self.binding())
+            or not 2<<20<len(body)<=64<<20
+            or actual!=(permit.argv,permit.body_sha256,permit.body_bytes,permit.timeout,permit.limit,permit.env,permit.pass_fds)
+            or type(cohort) is not dict or set(cohort)!={'effect_id','argv','body_sha256'}
+            or not re.fullmatch(r'observe-restore-[a-f0-9]{16}',str(cohort['effect_id']))
+            or cohort['argv']!=list(argv) or cohort['body_sha256']!=permit.body_sha256):
+            raise RuntimeError('cohort_restore_large_input_invalid')
+        return permit
 
     def check(self,argv=None,*,launch=None):
         readonly=None
