@@ -3,11 +3,14 @@ import tempfile
 import subprocess
 import hashlib
 import json
+import io
 import os
 import shutil
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import redirect_stdout
 
 import local_preflight
 
@@ -756,7 +759,7 @@ class LocalPreflightTests(unittest.TestCase):
         plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
         routing = {'schema':'voice-local-ci-routing-diagnostic-v1','status':'incomplete','source':self.source,
                    'commands':[{'name':'gate-shell','tests':None}, {'name':'gate','tests':8}, {'name':'router','tests':4}]}
-        component = {'schema':'voice-local-policy-component-v1','status':'complete',
+        component = {'schema':'voice-local-policy-component-v1','status':'diagnostic',
                      'scope':'ci-script-tests/policy','source':self.source,'base':'c'*40,
                      'remaining_shards':['runtime','staging','proofs']}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
@@ -771,6 +774,7 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(report['checks']['ci-script-tests']['status'], 'not_run')
         self.assertEqual(report['ci_policy_component'], 'ci-policy-component/policy-component.json')
         self.assertEqual(report['ci_routing_report'], 'ci-routing/diagnostic.json')
+        self.assertEqual(component['status'], 'diagnostic')
 
     def test_fetched_proofs_component_keeps_ci_matrix_and_other_checks_not_run(self):
         plan = {'source': self.source,
@@ -1130,7 +1134,7 @@ class PolicyWindowsEvidenceTests(unittest.TestCase):
             (out/'windows.stdout').write_bytes(stdout); (out/'windows.stderr').write_bytes(stderr)
             names = ['test.Module.test_'+str(i) for i in range(39)]
             source = {'head':'a'*40}; base = 'b'*40
-            report = {'schema':'voice-local-policy-component-v1', 'status':'complete',
+            report = {'schema':'voice-local-policy-component-v1', 'status':'diagnostic',
                       'scope':'ci-script-tests/policy', 'source':source, 'base':base,
                       'remaining_shards':['runtime','staging','proofs'], 'windows_tests':names,
                       'windows_stdout_sha256':hashlib.sha256(stdout).hexdigest(),
@@ -1141,6 +1145,52 @@ class PolicyWindowsEvidenceTests(unittest.TestCase):
                 with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
                 with self.assertRaises(ValueError):
                     local_preflight.local_ci_policy_component.verify_component('root', out, source, base, dict(report, remaining_shards=[]))
+
+
+class LocalPreflightCliExitTests(unittest.TestCase):
+    def test_handoff_incomplete_exits_two(self):
+        output = io.StringIO()
+        report = {'status': 'incomplete', 'checks': {'ci-script-tests': {'status': 'not_run'}}}
+        argv = ['local_preflight.py', '--base', 'a' * 40, '--head', 'b' * 40,
+                '--head-ref', 'codex/test', '--output', 'unused-output', '--handoff']
+        with patch.object(sys, 'argv', argv), \
+             patch.object(local_preflight, 'run_handoff', return_value=report), \
+             redirect_stdout(output):
+            result = local_preflight.main()
+        self.assertEqual(result, 2)
+        self.assertEqual(json.loads(output.getvalue()), report)
+
+    def test_handoff_fake_complete_with_unrun_selected_check_still_exits_two(self):
+        output = io.StringIO()
+        report = {'status': 'complete', 'checks': {'ci-script-tests': {'status': 'not_run'}}}
+        argv = ['local_preflight.py', '--base', 'a' * 40, '--head', 'b' * 40,
+                '--head-ref', 'codex/test', '--output', 'unused-output', '--handoff']
+        with patch.object(sys, 'argv', argv), \
+             patch.object(local_preflight, 'run_handoff', return_value=report), \
+             redirect_stdout(output):
+            result = local_preflight.main()
+        self.assertEqual(result, 2)
+        self.assertEqual(json.loads(output.getvalue()), report)
+
+    def test_legacy_policy_diagnostic_exits_two_without_running_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            assets_path = Path(directory) / 'assets.json'
+            assets_path.write_text('{}', encoding='utf-8')
+            output = io.StringIO()
+            diagnostic = {'schema': 'voice-local-policy-component-v1', 'status': 'diagnostic',
+                          'remaining_shards': ['runtime', 'staging', 'proofs']}
+            argv = ['local_ci_policy_component.py', '--base', 'a' * 40, '--head', 'b' * 40,
+                    '--head-ref', 'codex/test', '--output', str(Path(directory) / 'out'),
+                    '--assets', str(assets_path)]
+            component = local_preflight.local_ci_policy_component
+            with patch.object(sys, 'argv', argv), \
+                 patch.object(component.staging.contract, 'parse_assets', return_value={}), \
+                 patch.object(component, 'run', return_value=diagnostic) as run, \
+                 redirect_stdout(output):
+                result = component.main()
+            self.assertEqual(result, 2)
+            run.assert_called_once()
+            self.assertEqual(json.loads(output.getvalue()), diagnostic)
 
 
 if __name__ == '__main__':
