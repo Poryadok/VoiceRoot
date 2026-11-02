@@ -1,8 +1,9 @@
-"""Run affected-plan diagnostics or the narrow current-diff/overlay handoff.
+"""Run affected-plan diagnostics or selected local components.
 
-The diagnostic mode remains incomplete. Handoff mode accepts only its fully
-executed current-diff and overlay plans; GitHub merge-candidate checks remain mandatory.
-The opt-in Auth case assumes trusted exclusive daemon/socket custody and does
+Diagnostic runs remain incomplete. Handoff can complete only the fetched
+current-diff-contract component; other selected checks remain not_run and the
+aggregate stays incomplete. Synthetic current-diff candidates are diagnostic
+only. The opt-in Auth case assumes trusted exclusive daemon/socket custody and
 not authenticate images, helper or Maven cache, or establish crash coverage.
 """
 import argparse

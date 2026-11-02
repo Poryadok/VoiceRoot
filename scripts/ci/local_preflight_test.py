@@ -239,8 +239,9 @@ class HandoffRefsTest(unittest.TestCase):
             git('update-ref', 'refs/remotes/origin/master', base)
             git('update-ref', 'refs/remotes/origin/feature/docs', head)
             report = local_preflight.run_handoff(root, base, head, 'feature/docs', Path(directory) / 'proof')
-            self.assertEqual(report['status'], 'complete')
+            self.assertEqual(report['status'], 'incomplete')
             self.assertEqual(set(report['checks']), {'current-diff-contract'})
+            self.assertEqual(report['checks']['current-diff-contract']['status'], 'diagnostic')
 
 
 class LocalPreflightTests(unittest.TestCase):
