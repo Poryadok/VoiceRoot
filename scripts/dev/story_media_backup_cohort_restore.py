@@ -221,7 +221,7 @@ def _decrypt_command(root, key, binding, databases, manifest, member, command):
             except OSError: pass
 
 
-def _install_go(cid, sources, plans, changed):
+def _install_go(cid, sources, plans, changed, *, story_reference=False):
     payload = io.BytesIO()
     with tarfile.open(fileobj=payload, mode='w', format=tarfile.USTAR_FORMAT) as archive:
         for db in changed:
@@ -230,6 +230,13 @@ def _install_go(cid, sources, plans, changed):
                 version = int(GO_SQL.fullmatch(name).group(1))
                 if plan['from'] <= version <= plan['to']:
                     entry = tarfile.TarInfo(db + '/' + name); entry.mode = 0o444; entry.size = len(raw)
+                    archive.addfile(entry, io.BytesIO(raw))
+        if story_reference:
+            if 'story_db' not in changed or (plans['story_db']['from'], plans['story_db']['to']) != (4, 8):
+                raise CohortRestoreError('story reference migration plan invalid')
+            for name, raw in sorted(sources['story_db'].items()):
+                if int(GO_SQL.fullmatch(name).group(1)) <= 8:
+                    entry = tarfile.TarInfo('story_reference/' + name); entry.mode = 0o444; entry.size = len(raw)
                     archive.addfile(entry, io.BytesIO(raw))
     media_restore._docker('exec', '-i', cid, 'sh', '-ec',
         'mkdir -p /tmp/voice-cohort-migrations && tar -xf - -C /tmp/voice-cohort-migrations', input=payload.getvalue())
@@ -276,7 +283,7 @@ def _qualified_staging_roles(session, binding, databases, metadata, changed, cat
     return roles
 
 
-def _run_go_as_role(cid, admin, db, role):
+def _run_go_as_role(cid, admin, db, role, *, story_reference=False):
     """Run the pinned migration binary as a restored login, with a clone-only password."""
     password = secrets.token_hex(32)
     statement = 'ALTER ROLE ' + media_restore._quote_identifier(role) + " PASSWORD '" + password + "'"
@@ -293,8 +300,38 @@ def _run_go_as_role(cid, admin, db, role):
         if actual != [role, role]: raise CohortRestoreError('clone login identity mismatch')
     identity()
     url = 'postgres://' + quote(role, safe='') + '@127.0.0.1:5432/' + quote(db, safe='') + '?sslmode=disable'
-    run('/tmp/voice-migrate', '-path', '/tmp/voice-cohort-migrations/' + db, '-database', url, 'up')
+    path = 'story_reference' if story_reference else db
+    run('/tmp/voice-migrate', '-path', '/tmp/voice-cohort-migrations/' + path, '-database', url, 'up')
     identity()
+
+
+def _story_reference(postgres, admin, role, properties, before):
+    """Build an independent target catalog in the same disposable clone."""
+    import story_fixture
+    def literal(value):
+        if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9._@-]{1,256}', value):
+            raise CohortRestoreError('story reference locale invalid')
+        return "'" + value + "'"
+    name = 'voice_story_reference_' + secrets.token_hex(12)
+    provider = properties['locale_provider']
+    if provider not in ('c', 'i'):
+        raise CohortRestoreError('story reference locale provider invalid')
+    options = (' TEMPLATE template0 OWNER ' + media_restore._quote_identifier(role)
+               + ' ENCODING ' + literal(properties['encoding'])
+               + ' LC_COLLATE ' + literal(properties['collate'])
+               + ' LC_CTYPE ' + literal(properties['ctype']))
+    if provider == 'i':
+        options += ' LOCALE_PROVIDER icu ICU_LOCALE ' + literal(properties['icu_locale'])
+    media_restore._psql(postgres, admin, 'postgres',
+                        'CREATE DATABASE ' + media_restore._quote_identifier(name) + options)
+    media_restore._psql(postgres, admin, name,
+                        'ALTER SCHEMA public OWNER TO ' + media_restore._quote_identifier(role))
+    sql=lambda query: media_restore._psql(postgres, admin, name, query)
+    authority=json.loads(sql(story_fixture.PRESERVED_AUTHORITY_SQL))
+    if any(authority[field] != before['authority'][field] for field in ('database','schema','defaults')):
+        raise CohortRestoreError('story reference authority differs')
+    _run_go_as_role(postgres, admin, name, role, story_reference=True)
+    return story_fixture.preserved_snapshot(sql)
 
 
 def _qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal,
@@ -392,10 +429,21 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             if json.loads(media_restore._psql(postgres, admin, db, query)) != source_metadata['catalog'][db]:
                 raise CohortRestoreError('restored database catalog differs')
+        story_before = story_reference = None
+        if _staging is not None and 'story_db' in databases:
+            if staging.story_restore_inputs(session,binding,source_metadata,postgres) is not None:
+                import story_fixture
+                if 'story_db' not in changed:
+                    raise CohortRestoreError('story reference requires migration')
+                story_before=story_fixture.preserved_snapshot(
+                    lambda query:media_restore._psql(postgres,admin,'story_db',query))
         if changed:
             media_restore._docker('exec', '-i', postgres, 'sh', '-ec',
                                   'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate', input=tool)
-            _install_go(postgres, sources, source_metadata['migrations'], changed)
+            _install_go(postgres, sources, source_metadata['migrations'], changed, story_reference=story_before is not None)
+        if story_before is not None:
+            story_reference=_story_reference(postgres,admin,migration_roles['story_db']['role'],
+                binding['full_catalog']['properties']['story_db'],story_before)
         results = {}
         for db in databases:
             plan = source_metadata['migrations'][db]
@@ -422,6 +470,10 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             elif actual['history'] != [{'version': plan['to'], 'dirty': False}]:
                 raise CohortRestoreError('migrated ledger differs')
             results[db] = {'mode': mode, 'from': plan['from'], 'to': plan['to']}
+        story_proof=None
+        if story_before is not None:
+            story_proof=story_fixture.prove_preserved(session,postgres,admin,story_before,story_reference,
+                                                       resources,journal,binding,source_metadata)
         if full_catalog:
             if _staging is None:
                 unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
@@ -438,6 +490,8 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
         if migration_roles:
             receipt['migration_logins'] = {db: {'role': migration_roles[db]['role'], 'from': results[db]['from'],
                                                 'to': results[db]['to']} for db in changed}
+        if story_proof is not None:
+            receipt['story_target8'] = story_proof
     except media_restore.RestoreUncertain:
         raise CohortRestoreError('cohort resources uncertain; retain operation') from None
     except Exception:
