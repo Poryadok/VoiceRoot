@@ -689,6 +689,32 @@ provenance and exclusive Docker daemon/socket custody remain assumptions;
 interruption and crash recovery acceptance is not established. Run the command again after any source, base, head
 or selected-check change; do not reuse its JSON as a verifier.
 
+When the selected `ci-script-tests` job includes its `proofs` shard, the
+optional Windows-only `--ci-script-tests-proofs` handoff requires all three
+caller-selected limits: `--proofs-cpu-rate` (1 through 10000 units of 1/10000
+CPU capacity), `--proofs-job-memory-bytes` (positive bytes), and
+`--proofs-active-process-limit` (at least 2 for the broker and command). There
+are no inferred quota defaults. Each Make invocation receives a unique named
+Windows Job Object, and the receipt binds the requested limits, queried
+configuration, post-cleanup counters, and Job name. A host-shared two-slot
+lease coordinates only cooperating local proofs runners; it does not prove
+host-wide saturation prevention or constrain unrelated processes and Docker.
+The durable journal is written before the owner-bound slot marker; recovery
+releases a slot only after reacquiring that exact owner and proving each
+journaled Job absent. A present Job, failed query, corrupt or missing intent,
+or uncertain process cleanup leaves the owner-bound lease unavailable. The
+slot transitions to idle before the journal is removed; a crash in between can
+leave a stale journal without blocking that slot. Same-user journal and Job
+Object custody is assumed. The journal binds recovery to the creating Windows
+boot, session, and logon identity because `Local\` Job Objects are
+session-scoped; a mismatch leaves that slot busy while another free host slot
+remains usable and requires separate manual reconciliation. Windows
+directory-entry durability across sudden power loss is not established, so
+this is not general crash recovery. The
+command still completes only the fetched-candidate proofs component; other
+selected checks, the remaining CI-script shards, and aggregate local preflight
+remain incomplete.
+
 The local current-diff diagnostic runs private Git preparation and the four
 subsequent Git/validator commands under a Windows Job with bounded output.
 Snapshot capture uses its own supervisor and does not bound its temporary files

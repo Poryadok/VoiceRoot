@@ -8,11 +8,13 @@ window is not crash-safe and the caller must not claim crash-safe execution.
 """
 import ctypes
 from contextlib import ExitStack
+from dataclasses import dataclass
 import io
 import math
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -31,8 +33,34 @@ MAX_CAPTURE_BYTES = 64 * 1024 * 1024
 MAX_INPUT_BYTES = 64 * 1024 * 1024
 
 
-def _windows_job():
+@dataclass(frozen=True)
+class JobLimits:
+    """Explicit Windows Job Object hard limits; no policy defaults are inferred."""
+    cpu_rate: int
+    job_memory_bytes: int
+    active_process_limit: int
+
+    def __post_init__(self):
+        if type(self.cpu_rate) is not int or not 1 <= self.cpu_rate <= 10000:
+            raise ValueError('CPU hard-cap rate must be an integer from 1 through 10000')
+        if (type(self.job_memory_bytes) is not int or self.job_memory_bytes <= 0 or
+                self.job_memory_bytes > (1 << (ctypes.sizeof(ctypes.c_size_t) * 8)) - 1):
+            raise ValueError('job memory limit must be a positive size_t value')
+        if type(self.active_process_limit) is not int or not 2 <= self.active_process_limit <= 0xffffffff:
+            raise ValueError('active process limit must include the broker and command')
+
+    def to_dict(self):
+        return {'cpu_rate': self.cpu_rate, 'job_memory_bytes': self.job_memory_bytes,
+                'active_process_limit': self.active_process_limit}
+
+
+def _windows_job(job_limits=None, job_name=None):
     from ctypes import wintypes
+    if job_limits is not None and not isinstance(job_limits, JobLimits):
+        raise ValueError('invalid Windows job limits')
+    if job_name is not None and (not isinstance(job_name, str) or
+                                 not re.fullmatch(r'Local\\VoiceCIProof-[A-Za-z0-9_-]{1,96}', job_name)):
+        raise ValueError('invalid named Windows job')
     class BasicLimit(ctypes.Structure):
         _fields_ = [('PerProcessUserTimeLimit', ctypes.c_longlong), ('PerJobUserTimeLimit', ctypes.c_longlong),
                     ('LimitFlags', wintypes.DWORD), ('MinimumWorkingSetSize', ctypes.c_size_t),
@@ -52,6 +80,8 @@ def _windows_job():
                     ('ThisPeriodTotalUserTime', ctypes.c_longlong), ('ThisPeriodTotalKernelTime', ctypes.c_longlong),
                     ('TotalPageFaultCount', wintypes.DWORD), ('TotalProcesses', wintypes.DWORD),
                     ('ActiveProcesses', wintypes.DWORD), ('TotalTerminatedProcesses', wintypes.DWORD)]
+    class CpuRate(ctypes.Structure):
+        _fields_ = [('ControlFlags', wintypes.DWORD), ('CpuRate', wintypes.DWORD)]
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
     kernel.CreateJobObjectW.restype = wintypes.HANDLE
@@ -60,15 +90,136 @@ def _windows_job():
     kernel.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
     kernel.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p]
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-    job = kernel.CreateJobObjectW(None, None)
+    ctypes.set_last_error(0)
+    job = kernel.CreateJobObjectW(None, job_name)
     if not job:
         raise SupervisionError('cannot create job object')
+    if job_name is not None and ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+        collision = SupervisionError('named Windows job collision: already exists')
+        if not kernel.CloseHandle(job):
+            raise BaseExceptionGroup('named job collision and handle close failed',
+                                     [collision, SupervisionError('cannot close colliding job handle')])
+        raise collision
     limits = Extended()
     limits.BasicLimitInformation.LimitFlags = 0x2000  # KILL_ON_JOB_CLOSE
-    if not kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
-        kernel.CloseHandle(job)
-        raise SupervisionError('cannot configure job object')
+    if job_limits is not None:
+        limits.BasicLimitInformation.LimitFlags |= 0x8 | 0x200  # ACTIVE_PROCESS | JOB_MEMORY
+        limits.BasicLimitInformation.ActiveProcessLimit = job_limits.active_process_limit
+        limits.JobMemoryLimit = job_limits.job_memory_bytes
+    try:
+        if not kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+            raise SupervisionError('cannot configure job object limits')
+        if job_limits is not None:
+            cpu = CpuRate()
+            cpu.ControlFlags = 0x1 | 0x4  # ENABLE | HARD_CAP
+            cpu.CpuRate = job_limits.cpu_rate
+            if not kernel.SetInformationJobObject(job, 15, ctypes.byref(cpu), ctypes.sizeof(cpu)):
+                raise SupervisionError('cannot configure job CPU hard cap')
+            _verify_job_limits(kernel, job, Extended, CpuRate, job_limits)
+    except BaseException as original:
+        if not kernel.CloseHandle(job):
+            raise BaseExceptionGroup('job configuration and handle close failed',
+                                     [original, SupervisionError('cannot close failed job handle')])
+        raise
+    Accounting.Extended = Extended
+    Accounting.CpuRate = CpuRate
     return kernel, job, Accounting
+
+
+def _verify_job_limits(kernel, job, Extended, CpuRate, expected):
+    extended, cpu = Extended(), CpuRate()
+    if (not kernel.QueryInformationJobObject(job, 9, ctypes.byref(extended), ctypes.sizeof(extended), None) or
+            not kernel.QueryInformationJobObject(job, 15, ctypes.byref(cpu), ctypes.sizeof(cpu), None)):
+        raise SupervisionError('cannot verify Windows job limits')
+    basic = extended.BasicLimitInformation
+    required_flags = 0x2000 | 0x8 | 0x200
+    if (basic.LimitFlags & required_flags != required_flags or
+            basic.ActiveProcessLimit != expected.active_process_limit or
+            extended.JobMemoryLimit != expected.job_memory_bytes or
+            cpu.ControlFlags != (0x1 | 0x4) or cpu.CpuRate != expected.cpu_rate):
+        raise SupervisionError('Windows job limits differ from requested values')
+
+
+def _job_evidence(kernel, job, Accounting, expected, job_name=None):
+    extended, cpu, accounting = Accounting.Extended(), Accounting.CpuRate(), Accounting()
+    if (not kernel.QueryInformationJobObject(job, 9, ctypes.byref(extended), ctypes.sizeof(extended), None) or
+            not kernel.QueryInformationJobObject(job, 15, ctypes.byref(cpu), ctypes.sizeof(cpu), None) or
+            not kernel.QueryInformationJobObject(job, 1, ctypes.byref(accounting), ctypes.sizeof(accounting), None)):
+        raise SupervisionError('cannot read Windows job accounting')
+    basic = extended.BasicLimitInformation
+    required_flags = 0x2000 | 0x8 | 0x200
+    if (basic.LimitFlags & required_flags != required_flags or
+            basic.ActiveProcessLimit != expected.active_process_limit or
+            extended.JobMemoryLimit != expected.job_memory_bytes or
+            cpu.ControlFlags != (0x1 | 0x4) or cpu.CpuRate != expected.cpu_rate or
+            accounting.ActiveProcesses != 0 or accounting.TotalProcesses < 1 or
+            extended.PeakJobMemoryUsed > expected.job_memory_bytes):
+        raise SupervisionError('Windows job accounting or configured limits differ')
+    return {**expected.to_dict(), 'job_name': job_name,
+            'peak_job_memory_bytes': extended.PeakJobMemoryUsed,
+            'total_processes': accounting.TotalProcesses,
+            'active_processes_after_cleanup': accounting.ActiveProcesses}
+
+
+def named_job_exists(job_name):
+    """Read-only exact-name probe; only ERROR_FILE_NOT_FOUND proves absence."""
+    from ctypes import wintypes
+    if os.name != 'nt':
+        raise SupervisionError('named Windows jobs are unavailable on this platform')
+    if not isinstance(job_name, str) or not re.fullmatch(
+            r'Local\\VoiceCIProof-[A-Za-z0-9_-]{1,96}', job_name):
+        raise ValueError('invalid named Windows job')
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenJobObjectW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.OpenJobObjectW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.OpenJobObjectW(0x0004, False, job_name)  # JOB_OBJECT_QUERY
+    if handle:
+        if not kernel.CloseHandle(handle):
+            raise SupervisionError('cannot close queried named job handle')
+        return True
+    error = ctypes.get_last_error()
+    if error == 2:  # ERROR_FILE_NOT_FOUND
+        return False
+    raise SupervisionError(f'cannot query named Windows job (error {error})')
+
+
+def _close_broker_resources(pipe_api, kernel, pipe, process, job, job_name):
+    """Attempt every independent broker close and verify named Job absence."""
+    errors = []
+    try:
+        pipe_api.CloseHandle(pipe)
+    except BaseException as error:
+        errors.append(error)
+    if process is not None:
+        try:
+            process.close()
+        except BaseException as error:
+            errors.append(error)
+    try:
+        if not kernel.CloseHandle(job):
+            raise SupervisionError('cannot close owned job handle')
+    except BaseException as error:
+        errors.append(error)
+    if job_name is not None:
+        try:
+            if named_job_exists(job_name):
+                raise SupervisionError('named Windows job remains after handle cleanup')
+        except BaseException as error:
+            errors.append(error)
+    return errors
+
+
+def _finish_broker(result, failure, cleanup_errors):
+    if cleanup_errors:
+        cleanup = (cleanup_errors[0] if len(cleanup_errors) == 1 else
+                   BaseExceptionGroup('broker cleanup errors', cleanup_errors))
+        if failure is not None:
+            raise BaseExceptionGroup('broker execution and cleanup failed', [failure, cleanup])
+        raise SupervisionError('broker cleanup failed') from cleanup
+    if failure is not None:
+        raise failure
+    return result
 
 
 def _settle_windows(kernel, job, Accounting, deadline):
@@ -201,7 +352,8 @@ def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, s
             self.returncode = result.value
             return self.returncode
         def close(self):
-            kernel.CloseHandle(self.handle)
+            if not kernel.CloseHandle(self.handle):
+                raise SupervisionError('cannot close broker process handle')
     if not broker and threading.active_count() != 1:
         raise SupervisionError('atomic launcher requires an isolated single-threaded broker')
     exe, command_line = _atomic_command_line(command, env)
@@ -383,7 +535,8 @@ def _require_broker_pid(kernel, pipe, expected):
         raise SupervisionError('broker pipe client identity mismatch')
 
 
-def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, stdin=None, cleanup_timeout=10):
+def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, stdin=None, cleanup_timeout=10,
+                            job_limits=None, job_name=None):
     """Experimental broker; public API stays closed pending independent review.
 
     The first-instance random pipe checks the connected process PID before any
@@ -409,7 +562,7 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, stdi
                                   _winapi.PIPE_TYPE_MESSAGE | _winapi.PIPE_READMODE_MESSAGE | _winapi.PIPE_WAIT,
                                   1, 32768, 32768, 0, _winapi.NULL)
     try:
-        kernel, job, accounting = _windows_job()
+        kernel, job, accounting = _windows_job(job_limits, job_name=job_name)
     except BaseException:
         _winapi.CloseHandle(pipe)
         raise
@@ -450,26 +603,23 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, stdi
         result = subprocess.CompletedProcess(command, response['exit_code'])
     except BaseException as error:
         failure = error
+    cleanup_errors = []
     try:
         _settle_windows(kernel, job, accounting, time.monotonic() + cleanup_timeout)
         if process is not None:
             process.wait(cleanup_timeout)
+        if failure is None and job_limits is not None:
+            result.job_evidence = _job_evidence(kernel, job, accounting, job_limits, job_name)
     except BaseException as cleanup:
-        if failure is not None:
-            raise BaseExceptionGroup('broker execution and cleanup failed', [failure, cleanup])
-        raise SupervisionError('broker cleanup failed') from cleanup
+        cleanup_errors.append(cleanup)
     finally:
-        _winapi.CloseHandle(pipe)
-        if process is not None:
-            process.close()
-        kernel.CloseHandle(job)
-    if failure is not None:
-        raise failure
-    return result
+        cleanup_errors.extend(_close_broker_resources(
+            _winapi, kernel, pipe, process, job, job_name))
+    return _finish_broker(result, failure, cleanup_errors)
 
 
 def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=None,
-                   capture_output=False, check=False, input=None):
+                   capture_output=False, check=False, input=None, job_limits=None, job_name=None):
     """Run a Windows-only diagnostic with caller-owned binary output streams.
 
     This does not establish complete preflight or generic daemon cancellation.
@@ -489,6 +639,11 @@ def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=
         raise ValueError('positive finite timeout required')
     if check is not False or type(capture_output) is not bool:
         raise ValueError('unsupported subprocess options')
+    if job_limits is not None and not isinstance(job_limits, JobLimits):
+        raise ValueError('explicit JobLimits are required when resource limits are supplied')
+    if job_name is not None and (job_limits is None or not isinstance(job_name, str) or
+                                 not re.fullmatch(r'Local\\VoiceCIProof-[A-Za-z0-9_-]{1,96}', job_name)):
+        raise ValueError('a valid named Job Object requires explicit JobLimits')
     if input is not None and (type(input) is not bytes or len(input) > MAX_INPUT_BYTES):
         raise ValueError('input must be bounded bytes')
     if env is not None and (not isinstance(env, dict) or
@@ -502,7 +657,8 @@ def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=
             source.write(input)
             source.flush()
             source.seek(0)
-        return _run_diagnostic_with_input(command, timeout, cwd, env, stdout, stderr, capture_output, source)
+        return _run_diagnostic_with_input(command, timeout, cwd, env, stdout, stderr, capture_output,
+                                          source, job_limits=job_limits, job_name=job_name)
 
 
 def _private_windows_input():
@@ -531,24 +687,30 @@ def _private_windows_input():
         raise
 
 
-def _run_diagnostic_with_input(command, timeout, cwd, env, stdout, stderr, capture_output, source):
+def _run_diagnostic_with_input(command, timeout, cwd, env, stdout, stderr, capture_output, source,
+                               job_limits=None, job_name=None):
     if capture_output:
         if stdout is not None or stderr is not None:
             raise ValueError('capture_output cannot be combined with explicit streams')
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             _validate_output_files(out, err)
             result = _run_broker_experimental(command, timeout=timeout, cwd=cwd, env=env,
-                                              stdout=out, stderr=err, stdin=source)
+                                              stdout=out, stderr=err, stdin=source,
+                                              job_limits=job_limits, job_name=job_name)
             out.seek(0); err.seek(0)
             output, errors = out.read(MAX_CAPTURE_BYTES + 1), err.read(MAX_CAPTURE_BYTES + 1)
             if len(output) > MAX_CAPTURE_BYTES or len(errors) > MAX_CAPTURE_BYTES:
                 raise ValueError('capture exceeds per-stream limit')
-            return subprocess.CompletedProcess(command, result.returncode, output, errors)
+            completed = subprocess.CompletedProcess(command, result.returncode, output, errors)
+            if hasattr(result, 'job_evidence'):
+                completed.job_evidence = result.job_evidence
+            return completed
     if stdout is None or stderr is None:
         raise ValueError('explicit stdout and stderr are required')
     _validate_output_files(stdout, stderr)
     return _run_broker_experimental(command, timeout=timeout, cwd=cwd, env=env,
-                                    stdout=stdout, stderr=stderr, stdin=source)
+                                    stdout=stdout, stderr=stderr, stdin=source,
+                                    job_limits=job_limits, job_name=job_name)
 
 
 def _validate_output_files(stdout, stderr):

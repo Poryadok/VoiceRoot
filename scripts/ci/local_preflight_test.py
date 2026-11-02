@@ -705,6 +705,8 @@ class LocalPreflightTests(unittest.TestCase):
                    'base': 'c' * 40}
         component = {'schema': 'voice-local-ci-proofs-component-v1', 'status': 'complete',
                      'scope': 'ci-script-tests/proofs', 'aggregate_preflight': 'incomplete'}
+        job_limits = local_preflight.local_process_supervision.JobLimits(
+            cpu_rate=1800, job_memory_bytes=16 * 1024 * 1024, active_process_limit=5)
         with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
              patch.object(local_preflight, '_handoff_refs'), \
              patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
@@ -715,10 +717,12 @@ class LocalPreflightTests(unittest.TestCase):
             report = local_preflight.run_handoff(
                 self.root, 'c' * 40, self.source['head'], 'codex/test', self.output,
                 candidate_ref='refs/pull/1089/merge', proofs_shard=True,
+                proofs_job_limits=job_limits,
                 proofs_bash='C:/Git/bash.exe', proofs_make='C:/Git/make.exe')
         current_run.assert_called_once()
         run.assert_called_once_with(self.root, 'c' * 40, self.source['head'], 'codex/test',
                                     'refs/pull/1089/merge', self.output / 'ci-script-tests-proofs',
+                                    job_limits=job_limits,
                                     bash_binary='C:/Git/bash.exe', make_binary='C:/Git/make.exe')
         verify.assert_called_once_with(self.root, self.output / 'ci-script-tests-proofs', component)
         self.assertEqual(report['status'], 'incomplete')
