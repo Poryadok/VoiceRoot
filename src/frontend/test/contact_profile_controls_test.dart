@@ -42,6 +42,231 @@ import 'support/gateway_test_client.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final boundary in [
+    'mutation-queue',
+    'cache-purge',
+    'response',
+    'response-error',
+  ]) {
+    testWidgets('Block fences changed viewer at $boundary', (tester) async {
+      final gate = Completer<void>();
+      final response = Completer<http.Response>();
+      var writes = 0;
+      final client = MockClient((request) async {
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/friends/blocks') {
+          writes++;
+          return response.future;
+        }
+        return _json({});
+      });
+      final container = _container(client);
+      try {
+        await _open(tester, container);
+        if (boundary == 'mutation-queue') {
+          unawaited(
+            container
+                .read(socialBlockMutationQueueProvider)
+                .enqueue(() => gate.future, onPendingChanged: (_) {}),
+          );
+        } else if (boundary == 'cache-purge') {
+          unawaited(
+            container
+                .read(messageCacheMutationQueueProvider)
+                .enqueue(() => gate.future),
+          );
+        }
+        await tester.tap(find.byKey(const Key('profile_more')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile_more_block')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(FilledButton),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(writes, boundary.startsWith('response') ? 1 : 0);
+        final revision = container
+            .read(socialBlockVisibilityBarrierProvider)
+            .revision;
+        container.read(profileSwitchInProgressProvider.notifier).state = true;
+        await tester.pump();
+        container.read(profileSwitchInProgressProvider.notifier).state = false;
+        gate.complete();
+        response.complete(
+          http.Response('', boundary == 'response-error' ? 503 : 204),
+        );
+        await tester.pumpAndSettle();
+        expect(writes, boundary.startsWith('response') ? 1 : 0);
+        expect(
+          container.read(socialBlockVisibilityBarrierProvider).revision,
+          revision,
+        );
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        if (!gate.isCompleted) gate.complete();
+        if (!response.isCompleted) response.complete(http.Response('', 503));
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+    testWidgets('Block pending failure and retry stay usable at ${size.width}', (
+      tester,
+    ) async {
+      final pending = Completer<http.Response>();
+      var writes = 0;
+      final client = MockClient((request) async {
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/friends/blocks') {
+          writes++;
+          expect(request.headers['authorization'], 'Bearer test-access');
+          expect(jsonDecode(request.body), {
+            'blocked_account_id': 'a-target',
+            'blocked_profile_id': 'p-target',
+          });
+          return writes == 1 ? pending.future : http.Response('', 204);
+        }
+        return _json({});
+      });
+      final container = _container(client);
+      final theme = await _captureTheme(tester, forceProduction: true);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      try {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.binding.setSurfaceSize(size);
+        await _open(tester, container, theme: theme);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byKey(ProfileDetailSheet.sheetKey)),
+        )!;
+        await tester.tap(find.byKey(const Key('profile_more')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile_more_block')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(FilledButton),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(writes, 1);
+        final block = find.byKey(ProfileDetailSheet.blockKey);
+        expect(tester.widget<TextButton>(block).onPressed, isNull);
+        await tester.tap(find.byKey(const Key('profile_more')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<PopupMenuItem>(
+                find.byKey(const Key('profile_more_block')),
+              )
+              .enabled,
+          isFalse,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        pending.complete(
+          _json({'message': 'private-block-diagnostic'}, status: 503),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+        expect(find.textContaining('private-block-diagnostic'), findsNothing);
+        expect(tester.widget<TextButton>(block).onPressed, isNotNull);
+        await tester.ensureVisible(block);
+        await tester.pumpAndSettle();
+        await _capture(
+          tester,
+          'contact-block-recovery-${size.width > size.height ? 'h' : 'v'}.png',
+        );
+        await tester.tap(block);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text(l10n.profileBlock),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(writes, 2);
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        if (!pending.isCompleted) pending.complete(http.Response('', 503));
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
+  for (final change in ['account', 'profile', 'token', 'switch']) {
+    testWidgets('Block confirmation rejects changed viewer $change', (
+      tester,
+    ) async {
+      var writes = 0;
+      final client = MockClient((request) async {
+        if (request.method == 'POST' &&
+            request.url.path == '/api/v1/friends/blocks') {
+          writes++;
+          return http.Response('', 204);
+        }
+        return _json({});
+      });
+      final container = _container(client);
+      try {
+        await _open(tester, container);
+        await tester.tap(find.byKey(const Key('profile_more')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('profile_more_block')));
+        await tester.pumpAndSettle();
+        if (change == 'switch') {
+          container.read(profileSwitchInProgressProvider.notifier).state = true;
+        } else {
+          container.read(authControllerProvider.notifier).state = AuthState(
+            session: AuthSession(
+              accessToken: change == 'token' ? 'changed-access' : 'test-access',
+              refreshToken: 'test-refresh',
+              accountId: change == 'account' ? 'other-account' : 'acc-test',
+              activeProfileId: change == 'profile'
+                  ? 'other-profile'
+                  : 'prof-test',
+              expiresInSeconds: 900,
+            ),
+          );
+        }
+        await tester.pump();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(FilledButton),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(writes, 0);
+        expect(find.byKey(ProfileDetailSheet.sheetKey), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      } finally {
+        container.dispose();
+        client.close();
+      }
+    });
+  }
+
   for (final locale in [const Locale('en'), const Locale('ru')]) {
     testWidgets('filtered game activity is localized, revocable and accessible in ${locale.languageCode}', (tester) async {
       const game = 'A deliberately long game title with several words and expansions';
@@ -1761,8 +1986,12 @@ class _HttpDmChatsClient extends FakeVoiceChatsClient {
   );
 }
 
-Future<void> _open(WidgetTester tester, ProviderContainer container) async {
-  await tester.pumpWidget(_app(container));
+Future<void> _open(
+  WidgetTester tester,
+  ProviderContainer container, {
+  ThemeData? theme,
+}) async {
+  await tester.pumpWidget(_app(container, theme: theme));
   await tester.tap(find.byKey(const Key('open_contact_profile')));
   await tester.pumpAndSettle();
 }
