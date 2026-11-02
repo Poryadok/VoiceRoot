@@ -85,6 +85,8 @@ class FullGoTests(unittest.TestCase):
                  mock.patch.object(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
                  mock.patch.object(sys, 'stdout', new_callable=io.StringIO), \
                  mock.patch.object(subject.auth_broker, '_require_worker_job'), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 12 * 1024 * 1024 * 1024}), \
                  mock.patch.object(subject, 'run_selected', return_value={'status': 'incomplete',
                      'source': {'head': 'f' * 40}, 'resource_limit_readback': readback}) as run:
                 self.assertEqual(subject.main(), 0)
@@ -131,6 +133,8 @@ class FullGoTests(unittest.TestCase):
             foreign_journal.parent.mkdir()
             foreign_journal.write_text('{}', encoding='utf-8')
             with mock.patch.object(subject, 'os', SimpleNamespace(name='nt')), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 12 * 1024 * 1024 * 1024}), \
                  mock.patch.object(subject.chat, 'validate_archives') as archives, \
                  mock.patch.object(subject, 'DockerCLI') as engine, \
                  self.assertRaisesRegex(ValueError, 'not bound to its parent output'):
@@ -413,6 +417,8 @@ class FullGoTests(unittest.TestCase):
             with mock.patch.object(subject, '_worker_command', return_value=['worker']), \
                  mock.patch.object(subject, 'DockerCLI', return_value=engine), \
                  mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 12 * 1024 * 1024 * 1024}), \
                  mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=interrupted_worker), \
                  probe_patch as exists, identity_patch, self.assertRaisesRegex(RuntimeError, 'uncertain'):
                 subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
@@ -487,6 +493,8 @@ class FullGoTests(unittest.TestCase):
             with mock.patch.object(subject, '_worker_command', return_value=['worker']), \
                  mock.patch.object(subject, 'DockerCLI', return_value=engine), \
                  mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 12 * 1024 * 1024 * 1024}), \
                  mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=worker), \
                  mock.patch.object(subject.supervision, 'named_job_exists', return_value=False), \
                  self.assertRaises(ValueError):
