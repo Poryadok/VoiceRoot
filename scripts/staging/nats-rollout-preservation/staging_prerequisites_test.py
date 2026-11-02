@@ -389,6 +389,20 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
             realtime_source=True,fixture_complete_candidate=True)
 
+    def test_fixture_compiler_producer_reads_live_secret_metadata(self):
+        import compiler
+        def ready(actions,request,approved,execution,workspace,stage,live,transport,*_):
+            expected=live[('secret','voice-app-secrets')]['metadata']
+            self.assertEqual(compiler.ProducerKube().secret_meta('voice-app-secrets'),
+                {key:expected[key] for key in ('uid','resourceVersion')})
+            self.assertEqual(compiler.ProducerKube().get('Secret','voice-app-secrets'),
+                live[('secret','voice-app-secrets')])
+            with self.assertRaises((AssertionError,RuntimeError)):
+                compiler.capture(['kubectl','--namespace','another-namespace','get','secret','voice-app-secrets','-o','json'])
+            with self.assertRaises((AssertionError,RuntimeError)):
+                compiler.capture(['kubectl','--namespace','voice-staging','delete','secret','voice-app-secrets','-o','json'])
+        self._cold_prepare(on_ready=ready)
+
     def test_fixture_accepts_owned_installation_before_session_admission(self):
         import bootstrap_selection_test
         installation=bootstrap_selection_test.owned_fixture()[3]
@@ -665,6 +679,17 @@ class PrepareCompositionTests(unittest.TestCase):
                 row['metadata']['resourceVersion']=str(rv[0])
                 if fault=='lost-app-reply':raise RuntimeError('synthetic_lost_app_response')
                 return prereq._bytes(row)
+            def compiler_transport(argv,*,body=b'',**kwargs):
+                if argv[:3]!=['kubectl','--namespace','voice-staging']:
+                    return transport(argv,body=body,**kwargs)
+                commands.authority_guard(argv)
+                args=argv[3:]
+                self.assertEqual(len(args),5)
+                self.assertEqual(args[0],'get');self.assertEqual(args[3],'-o')
+                row=copy.deepcopy(live[(args[1].lower(),args[2])])
+                if args[4]=='json':return prereq._bytes(row)
+                self.assertEqual(args[4],"jsonpath-as-json={.metadata['uid','resourceVersion']}")
+                return prereq._bytes([row['metadata'][key] for key in ('uid','resourceVersion')])
             kube=stage_runtime.Kube()
             stage=object.__new__(runtime_stage.RolloutStage);stage.kube=kube;stage.operation=operation;stage.marker=copy.deepcopy(marker)
             stage.snapshots={'voice-user':copy.deepcopy(deployment)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
@@ -691,7 +716,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
                 stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
             stack.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get));stack.enter_context(patch.object(commands,'capture',side_effect=transport))
-            stack.enter_context(patch.object(compiler,'capture',side_effect=transport));stack.enter_context(patch.object(stage_runtime,'capture',side_effect=transport))
+            stack.enter_context(patch.object(compiler,'capture',side_effect=compiler_transport));stack.enter_context(patch.object(stage_runtime,'capture',side_effect=transport))
             stack.enter_context(patch.object(p3,'probe_jwks',return_value=None));stack.enter_context(resource_claim.command_scope(session.check))
             for slot in prereq.SLOTS:
                 module=__import__(prereq.CHILD_MODULES[slot]);original=module.preflight_payloads
