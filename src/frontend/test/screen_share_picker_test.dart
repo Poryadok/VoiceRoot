@@ -115,6 +115,23 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
+  testWidgets(
+    'narrow picker keeps cancel and share visible while content scrolls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await open(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Cancel').hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const Key('screen_share_picker_start')).hitTestable(),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('empty catalog cannot start a fabricated source', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
