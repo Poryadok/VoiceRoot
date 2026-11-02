@@ -27,6 +27,7 @@ import local_compose_bridge
 import local_current_diff
 from local_docker_owned import DockerCLI, OwnedRun, OwnershipError
 import local_flutter_execution
+import local_flutter_driver_component
 import local_go_plan
 import local_go_full_integration
 import local_golangci_execution
@@ -360,7 +361,7 @@ def _validate_full_go_report(result, service, source, inputs, output):
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
         auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None,
         full_go_inputs=None, lint_inputs=None, overlay_inputs=None, policy_component_assets=None,
-        protobuf_component=False):
+        protobuf_component=False, flutter_driver_component=False):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -393,6 +394,8 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
         if type(protobuf_component) is not bool or (protobuf_component and 'protobuf' not in plan['checks']):
             raise ValueError('protobuf component requires selected protobuf check')
+        if type(flutter_driver_component) is not bool or (flutter_driver_component and 'flutter-device-driver' not in plan['checks']):
+            raise ValueError('driver component requires selected Flutter device-driver check')
         if policy_component_assets is not None and ('ci-script-tests' not in plan['checks'] or staging_assets is not None):
             raise ValueError('policy component requires selected CI scripts and cannot duplicate staging assets')
         if overlay_inputs is not None:
@@ -523,6 +526,10 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                 raise ValueError('current-diff diagnostic did not match the planned source and base')
             report['checks']['current-diff-contract'] = {'status': 'diagnostic',
                                                          'report': 'current-diff/diagnostic.json'}
+        if flutter_driver_component:
+            component = local_flutter_driver_component.run(root, base, head, head_ref, output/'flutter-driver-component', flutter)
+            local_flutter_driver_component.verify_component(output/'flutter-driver-component', plan['source'], base, component)
+            report['checks']['flutter-device-driver'] = {'status':'complete', 'report':'flutter-driver-component/flutter-driver-component.json'}
         if 'protobuf' in plan['checks'] and protobuf_component:
             component = local_proto_execution.run_component(root, base, head, head_ref, output/'protobuf-component',
                                                             go_binary, buf_binary)
@@ -670,6 +677,7 @@ def main():
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-policy-assets', help='JSON mapping of pinned inputs for the policy component only')
     parser.add_argument('--protobuf-component', action='store_true', help='execute the selected protobuf component with candidate validation')
+    parser.add_argument('--flutter-driver-component', action='store_true', help='execute selected host Flutter device-driver component')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
     for name in ('go', 'go-sha256', 'lint', 'lint-sha256'):
@@ -690,8 +698,8 @@ def main():
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     if args.handoff:
-        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'overlay_image_id', 'overlay_kubectl', 'protobuf_component'}
-        if args.protobuf_component or any(value is not None for key, value in vars(args).items() if key not in allowed):
+        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'overlay_image_id', 'overlay_kubectl', 'protobuf_component', 'flutter_driver_component'}
+        if args.protobuf_component or args.flutter_driver_component or any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
         report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output,
                              overlay_image_id=args.overlay_image_id, overlay_kubectl=args.overlay_kubectl)
@@ -744,7 +752,7 @@ def main():
                  full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs,
                  lint_inputs if any(value is not None for value in lint_inputs.values()) else None,
                  overlay_inputs if any(value is not None for value in overlay_inputs.values()) else None,
-                 policy_component_assets, args.protobuf_component)
+                 policy_component_assets, args.protobuf_component, args.flutter_driver_component)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

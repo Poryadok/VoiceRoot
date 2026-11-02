@@ -218,6 +218,21 @@ class HandoffRefsTest(unittest.TestCase):
 
 
 class LocalPreflightTests(unittest.TestCase):
+    def test_driver_component_composes_without_completing_other_checks(self):
+        plan = {'source':self.source,'checks':{'flutter-device-driver':['client'],'backend-auth':['shared']}}
+        component = {'schema':'voice-local-flutter-driver-component-v1','status':'complete',
+                     'scope':'flutter-device-driver','source':self.source,'base':'c'*40,'platform':'windows'}
+        with patch.object(local_preflight.affected_check_plan,'build_local_plan',return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot,'capture',return_value=self.source), \
+             patch.object(local_preflight.local_flutter_driver_component,'run',return_value=component) as run, \
+             patch.object(local_preflight.local_flutter_driver_component,'verify_component') as verify:
+            report = local_preflight.run(self.root,'c'*40,self.source['head'],self.output,'flutter',
+                                         head_ref='codex/test',flutter_driver_component=True)
+        run.assert_called_once(); verify.assert_called_once()
+        self.assertEqual(report['status'],'incomplete')
+        self.assertEqual(report['checks']['flutter-device-driver']['status'],'complete')
+        self.assertEqual(report['checks']['backend-auth']['status'],'not_run')
+
     def test_overlay_opt_in_preserves_incomplete_and_hosted_check(self):
         plan = {'source': self.source, 'checks': {'match-squad-overlay': ['overlay']}}
         inputs = {'image_id': local_preflight.local_overlay_execution.PYTHON_IMAGE, 'kubectl': 'kubectl'}
