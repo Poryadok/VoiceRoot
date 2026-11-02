@@ -5,6 +5,8 @@ import subprocess
 import tarfile
 import time
 import unittest
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 import story_media_backup_cohort_restore as restore
@@ -15,6 +17,54 @@ from story_media_backup_restore_integration_test import Journal, MIGRATE
 
 
 class GoRoleIntegrationTest(unittest.TestCase):
+    def test_story_reference_is_independent_and_matches_real_migration(self):
+        import story_fixture
+        fixture = fixtures.PopulatedRestoreTest()
+        self.addCleanup(cleanup_fixture, fixture)
+        fixture.setUp()
+        pg=fixture.target; admin='target_admin'; role='story_owner'
+        deadline=time.monotonic()+60
+        while True:
+            ready=subprocess.run(['docker','exec',pg,'sh','-ec',
+                'test "$(cat /proc/1/comm)" = postgres && exec psql -X -qAt -v ON_ERROR_STOP=1 -U target_admin -d postgres -c "SELECT 1"'],
+                stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10)
+            if ready.returncode==0 and ready.stdout.strip()==b'1':break
+            if time.monotonic()>=deadline:self.fail('target readiness failed')
+        fixture.sql(pg,admin,'postgres','CREATE ROLE story_owner LOGIN')
+        fixture.sql(pg,admin,'postgres','CREATE DATABASE story_db OWNER story_owner TEMPLATE template0')
+        fixture.sql(pg,admin,'story_db','ALTER SCHEMA public OWNER TO story_owner')
+        journal=Journal(); resources=[]
+        try:
+            tool_container=media._create(journal,resources,'migrate',MIGRATE,['--entrypoint','/bin/true'])
+            packed=media._docker('cp',tool_container+':/usr/local/bin/migrate','-')
+            with tarfile.open(fileobj=io.BytesIO(packed),mode='r:') as archive:
+                raw=archive.extractfile(archive.getmembers()[0]).read()
+            tool=media._tool_bytes(tool_container,hashlib.sha256(raw).hexdigest())
+            media._docker('exec','-i',pg,'sh','-ec',
+                'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate',input=tool)
+            files={p.name:p.read_bytes() for p in Path('/repo/src/backend/migrations/story_db').glob('*.sql')}
+            restore._install_go(pg,{'story_db':files},{'story_db':{'from':1,'to':4}},['story_db'])
+            restore._run_go_as_role(pg,admin,'story_db',role)
+            sql=lambda query:media._psql(pg,admin,'story_db',query)
+            before=story_fixture.preserved_snapshot(sql)
+            restore._install_go(pg,{'story_db':files},{'story_db':{'from':4,'to':8}},['story_db'],story_reference=True)
+            props=json.loads(fixture.sql(pg,admin,'story_db',"SELECT json_build_object('encoding',pg_encoding_to_char(encoding),'collate',datcollate,'ctype',datctype,'locale_provider',datlocprovider,'icu_locale',daticulocale) FROM pg_database WHERE datname=current_database()"))
+            reference=restore._story_reference(pg,admin,role,props,before)
+            restore._run_go_as_role(pg,admin,'story_db',role)
+            migrated=story_fixture.preserved_snapshot(sql)
+            story_fixture.validate_preserved_migration(before['rows'],migrated['rows'])
+            story_fixture.retained_authority(before['authority'],migrated['authority'],reference['authority'])
+            self.assertEqual(reference['structure'],migrated['structure'])
+            self.assertEqual(set(reference['rows']),set(migrated['rows']))
+            self.assertNotEqual(reference['rows']['story_reference_inventory_gate'],migrated['rows']['story_reference_inventory_gate'])
+            fixture.sql(pg,admin,'story_db','REVOKE USAGE ON SCHEMA public FROM PUBLIC')
+            changed=story_fixture.preserved_snapshot(sql)
+            self.assertNotEqual(changed['authority']['schema'],before['authority']['schema'])
+            with self.assertRaisesRegex(restore.CohortRestoreError,'story reference authority differs'):
+                restore._story_reference(pg,admin,role,props,changed)
+        finally:
+            media._cleanup(journal,resources)
+
     def test_direct_login_migration_succeeds_with_grant_and_denies_without(self):
         fixture = fixtures.PopulatedRestoreTest()
         self.addCleanup(cleanup_fixture, fixture)
