@@ -21,6 +21,7 @@ class NotificationSettingsScreen extends ConsumerStatefulWidget {
   static const Key saveButtonKey = Key('notification_save');
   static const Key pushPermissionKey = Key('notification_push_permission');
   static const Key quietHoursKey = Key('notification_quiet_hours');
+  static const Key globalEnabledKey = Key('notification_global_enabled');
 
   final String? chatId;
 
@@ -97,10 +98,7 @@ class _NotificationSettingsScreenState
               ? data.copyWith(profileId: profileId)
               : data;
           if (widget.isChatScope) {
-            next = next.copyWith(
-              scopeType: 'chat',
-              scopeId: widget.chatId,
-            );
+            next = next.copyWith(scopeType: 'chat', scopeId: widget.chatId);
           }
           _settings = next;
           _quietHours = quietHours;
@@ -212,19 +210,25 @@ class _NotificationSettingsScreenState
       PushPermissionStatus.unsupported => l10nAfter.notificationPushUnsupported,
       PushPermissionStatus.notDetermined => l10nAfter.notificationPushDenied,
     };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _eventLabel(AppLocalizations l10n, String type) {
     return switch (type) {
       NotificationEventTypes.newMessage => l10n.notificationTypeNewMessage,
-      NotificationEventTypes.messageRequest => l10n.notificationTypeMessageRequest,
+      NotificationEventTypes.messageRequest =>
+        l10n.notificationTypeMessageRequest,
       NotificationEventTypes.mention => l10n.notificationTypeMention,
       NotificationEventTypes.reply => l10n.notificationTypeReply,
       NotificationEventTypes.reaction => l10n.notificationTypeReaction,
-      NotificationEventTypes.friendRequest => l10n.notificationTypeFriendRequest,
+      NotificationEventTypes.friendRequest =>
+        l10n.notificationTypeFriendRequest,
       NotificationEventTypes.matchFound => l10n.notificationTypeMatchFound,
       NotificationEventTypes.system => l10n.notificationTypeSystem,
+      NotificationEventTypes.voiceMemberJoined =>
+        l10n.notificationTypeVoiceMemberJoined,
       _ => type,
     };
   }
@@ -233,8 +237,10 @@ class _NotificationSettingsScreenState
     return switch (_pushPermission) {
       PushPermissionStatus.granted => l10n.notificationPushStatusGranted,
       PushPermissionStatus.denied => l10n.notificationPushStatusDenied,
-      PushPermissionStatus.unsupported => l10n.notificationPushStatusUnsupported,
-      PushPermissionStatus.notDetermined => l10n.notificationPushStatusNotDetermined,
+      PushPermissionStatus.unsupported =>
+        l10n.notificationPushStatusUnsupported,
+      PushPermissionStatus.notDetermined =>
+        l10n.notificationPushStatusNotDetermined,
     };
   }
 
@@ -248,7 +254,10 @@ class _NotificationSettingsScreenState
       hour: int.tryParse(parts.first) ?? 0,
       minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
     );
-    final picked = await showTimePicker(context: context, initialTime: initialTime);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
     if (picked == null) return;
     final formatted =
         '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
@@ -267,10 +276,7 @@ class _NotificationSettingsScreenState
     return Scaffold(
       key: NotificationSettingsScreen.screenKey,
       backgroundColor: voice.canvas,
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: voice.surface,
-      ),
+      appBar: AppBar(title: Text(title), backgroundColor: voice.surface),
       body: SafeArea(
         child: _loading
             ? const VoiceListSkeleton(rowCount: 6)
@@ -288,125 +294,175 @@ class _NotificationSettingsScreenState
                 onAction: _load,
               )
             : SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 24,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!widget.isChatScope) ...[
-                      Text(
-                        l10n.notificationPushSectionTitle,
-                        style: TextStyle(color: voice.textSecondary),
-                      ),
-                      const SizedBox(height: 8),
-                      ListTile(
-                        key: NotificationSettingsScreen.pushPermissionKey,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(l10n.notificationPushEnableTitle),
-                        subtitle: Text(_pushStatusLabel(l10n)),
-                        trailing: _pushPermission == PushPermissionStatus.granted
-                            ? Icon(Icons.check_circle_outline, color: voice.textSecondary)
-                            : const Icon(Icons.chevron_right),
-                        onTap: _pushPermission == PushPermissionStatus.granted
-                            ? null
-                            : _showPushPermissionExplainer,
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        widget.isChatScope
-                            ? l10n.notificationChatEnabled
-                            : l10n.notificationGlobalEnabled,
-                      ),
-                      value: settings.enabled,
-                      onChanged: (v) =>
-                          setState(() => _settings = settings.copyWith(enabled: v)),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      l10n.notificationEventTypesTitle,
-                      style: TextStyle(color: voice.textSecondary),
-                    ),
-                    const SizedBox(height: 8),
-                    for (final type in NotificationEventTypes.all)
-                      SwitchListTile(
-                        key: Key('notification_type_$type'),
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(_eventLabel(l10n, type)),
-                        value: settings.enabled && settings.isTypeEnabled(type),
-                        onChanged: settings.enabled
-                            ? (v) => setState(
-                                () => _settings = settings.withTypeEnabled(type, v),
-                              )
-                            : null,
-                      ),
-                    if (!widget.isChatScope) ...[
-                      const SizedBox(height: 24),
-                      Text(
-                        l10n.notificationQuietHoursTitle,
-                        style: TextStyle(color: voice.textSecondary),
-                      ),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        key: NotificationSettingsScreen.quietHoursKey,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(l10n.notificationQuietHoursEnabled),
-                        value: _quietHours.enabled,
-                        onChanged: (v) => setState(
-                          () => _quietHours = _quietHours.copyWith(enabled: v),
-                        ),
-                      ),
-                      if (_quietHours.enabled) ...[
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(l10n.notificationQuietHoursStart),
-                          trailing: Text(_quietHours.startTime),
-                          onTap: () => _pickQuietHour(
-                            context,
-                            initial: _quietHours.startTime,
-                            onSelected: (v) => setState(
-                              () => _quietHours = _quietHours.copyWith(startTime: v),
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 760),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (!widget.isChatScope) ...[
+                              Text(
+                                l10n.notificationPushSectionTitle,
+                                style: TextStyle(color: voice.textSecondary),
+                              ),
+                              const SizedBox(height: 8),
+                              ListTile(
+                                key: NotificationSettingsScreen
+                                    .pushPermissionKey,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(l10n.notificationPushEnableTitle),
+                                subtitle: Text(_pushStatusLabel(l10n)),
+                                trailing:
+                                    _pushPermission ==
+                                        PushPermissionStatus.granted
+                                    ? Icon(
+                                        Icons.check_circle_outline,
+                                        color: voice.textSecondary,
+                                      )
+                                    : const Icon(Icons.chevron_right),
+                                onTap:
+                                    _pushPermission ==
+                                            PushPermissionStatus.granted ||
+                                        _pushPermission ==
+                                            PushPermissionStatus.unsupported
+                                    ? null
+                                    : _showPushPermissionExplainer,
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                            SwitchListTile(
+                              key: widget.isChatScope
+                                  ? null
+                                  : NotificationSettingsScreen.globalEnabledKey,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                widget.isChatScope
+                                    ? l10n.notificationChatEnabled
+                                    : l10n.notificationGlobalEnabled,
+                              ),
+                              value: settings.enabled,
+                              onChanged: (v) => setState(
+                                () => _settings = settings.copyWith(enabled: v),
+                              ),
                             ),
-                          ),
-                        ),
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(l10n.notificationQuietHoursEnd),
-                          trailing: Text(_quietHours.endTime),
-                          onTap: () => _pickQuietHour(
-                            context,
-                            initial: _quietHours.endTime,
-                            onSelected: (v) => setState(
-                              () => _quietHours = _quietHours.copyWith(endTime: v),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.notificationEventTypesTitle,
+                              style: TextStyle(color: voice.textSecondary),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            for (final type in NotificationEventTypes.all)
+                              SwitchListTile(
+                                key: Key('notification_type_$type'),
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(_eventLabel(l10n, type)),
+                                value:
+                                    settings.enabled &&
+                                    settings.isTypeEnabled(type),
+                                onChanged: settings.enabled
+                                    ? (v) => setState(
+                                        () => _settings = settings
+                                            .withTypeEnabled(type, v),
+                                      )
+                                    : null,
+                              ),
+                            if (!widget.isChatScope) ...[
+                              const SizedBox(height: 24),
+                              Text(
+                                l10n.notificationQuietHoursTitle,
+                                style: TextStyle(color: voice.textSecondary),
+                              ),
+                              const SizedBox(height: 8),
+                              SwitchListTile(
+                                key: NotificationSettingsScreen.quietHoursKey,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(l10n.notificationQuietHoursEnabled),
+                                value: _quietHours.enabled,
+                                onChanged: (v) => setState(
+                                  () => _quietHours = _quietHours.copyWith(
+                                    enabled: v,
+                                  ),
+                                ),
+                              ),
+                              if (_quietHours.enabled) ...[
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(l10n.notificationQuietHoursStart),
+                                  trailing: Text(_quietHours.startTime),
+                                  onTap: () => _pickQuietHour(
+                                    context,
+                                    initial: _quietHours.startTime,
+                                    onSelected: (v) => setState(
+                                      () => _quietHours = _quietHours.copyWith(
+                                        startTime: v,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(l10n.notificationQuietHoursEnd),
+                                  trailing: Text(_quietHours.endTime),
+                                  onTap: () => _pickQuietHour(
+                                    context,
+                                    initial: _quietHours.endTime,
+                                    onSelected: (v) => setState(
+                                      () => _quietHours = _quietHours.copyWith(
+                                        endTime: v,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    l10n.notificationQuietHoursTimezone,
+                                  ),
+                                  trailing: Text(_quietHours.timezone),
+                                ),
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    l10n.notificationQuietHoursOverrideMentions,
+                                  ),
+                                  subtitle: Text(
+                                    l10n.notificationQuietHoursOverrideMentionsHint,
+                                  ),
+                                  value: _quietHours.overrideMentions,
+                                  onChanged: (v) => setState(
+                                    () => _quietHours = _quietHours.copyWith(
+                                      overrideMentions: v,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                            if (_error != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                _error!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 24),
+                            VoicePrimaryButton(
+                              key: NotificationSettingsScreen.saveButtonKey,
+                              onPressed: _saving ? null : _save,
+                              isLoading: _saving,
+                              child: Text(l10n.commonSave),
+                            ),
+                          ],
                         ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(l10n.notificationQuietHoursOverrideMentions),
-                          subtitle: Text(l10n.notificationQuietHoursOverrideMentionsHint),
-                          value: _quietHours.overrideMentions,
-                          onChanged: (v) => setState(
-                            () => _quietHours =
-                                _quietHours.copyWith(overrideMentions: v),
-                          ),
-                        ),
-                      ],
-                    ],
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
-                    ],
-                    const SizedBox(height: 24),
-                    VoicePrimaryButton(
-                      key: NotificationSettingsScreen.saveButtonKey,
-                      onPressed: _saving ? null : _save,
-                      isLoading: _saving,
-                      child: Text(l10n.commonSave),
                     ),
                   ],
                 ),

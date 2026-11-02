@@ -87,6 +87,17 @@ before the recipient batch is sent.
 - Отдельно для каждого канала / чата
 - По типу события
 
+The current Flutter settings screen edits global settings and an exact chat
+scope supplied by its caller. The API has no endpoint to enumerate configured
+overrides, and delivery currently loads global + chat/channel scopes only; it
+does not load effective Space settings. Mentions-only, a saved sound preference,
+and a separate "mentions break mute" preference have no persisted settings
+fields. The quiet-hours `override_mentions` field applies only to scheduled
+quiet hours. Do not infer or persist these missing controls in the client.
+The settings `enabled` flag is not a universal push-off switch: current delivery
+policy only suppresses the new-message path for a disabled scope, while mention
+and other event rules retain their documented exceptions.
+
 ## Тихие часы (DND по расписанию)
 
 - Можно задать временной диапазон (например, 23:00–8:00) + timezone
