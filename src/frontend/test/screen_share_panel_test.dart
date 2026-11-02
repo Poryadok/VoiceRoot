@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -15,6 +19,8 @@ import 'package:voice_frontend/state/call_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/state/screen_share_providers.dart';
 import 'package:voice_frontend/ui/call/screen_share_panel.dart';
+import 'package:voice_frontend/theme/voice_theme.dart';
+import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
@@ -84,6 +90,8 @@ class _EmptySourceCatalog implements ScreenShareSourceCatalog {
 Future<ProviderContainer> _pumpSourcePicker(
   WidgetTester tester, {
   bool emptySources = false,
+  ThemeData? theme,
+  bool expandedPanel = false,
 }) async {
   final container = ProviderContainer(
     overrides: [
@@ -113,11 +121,15 @@ Future<ProviderContainer> _pumpSourcePicker(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        theme: voiceTestTheme(),
+        theme: theme ?? voiceTestTheme(),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: const Scaffold(
-          body: Column(children: [ScreenSharePanel(), ScreenShareCallButton()]),
+        home: Scaffold(
+          body: expandedPanel
+              ? const SizedBox.expand(child: ScreenSharePanel(bottomInset: 0))
+              : const Column(
+                  children: [ScreenSharePanel(), ScreenShareCallButton()],
+                ),
         ),
       ),
     ),
@@ -127,6 +139,190 @@ Future<ProviderContainer> _pumpSourcePicker(
 }
 
 void main() {
+  _testWindowsWidgets(
+    'source picker result cannot start a share in a different call',
+    (tester) async {
+      final container = await _pumpSourcePicker(tester);
+      await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Test screen'));
+      container.read(callControllerProvider.notifier).state = const CallState(
+        phase: CallPhase.active,
+        session: VoiceCallSession(
+          roomId: 'different-room',
+          livekitRoomName: 'different-media',
+          chatId: 'different-chat',
+          initiatorProfileId: 'prof-test',
+          calleeProfileId: 'prof-peer',
+          mediaKind: VoiceCallMediaKind.audio,
+          status: VoiceCallStatus.active,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('screen_share_picker_start')));
+      await tester.pumpAndSettle();
+      expect(container.read(screenShareControllerProvider).isSharing, isFalse);
+      expect(
+        container.read(screenShareControllerProvider).errorMessage,
+        isNull,
+      );
+      expect(
+        container.read(callControllerProvider).session!.roomId,
+        'different-room',
+      );
+    },
+  );
+
+  _testWindowsWidgets('three active streams disable starting another share', (
+    tester,
+  ) async {
+    final container = await _pumpSourcePicker(tester);
+    container
+        .read(screenShareControllerProvider.notifier)
+        .state = const ScreenShareUiState(
+      streams: [
+        ActiveScreenShare(roomId: 'room-1', profileId: 'one', streamId: '1'),
+        ActiveScreenShare(roomId: 'room-1', profileId: 'two', streamId: '2'),
+        ActiveScreenShare(roomId: 'room-1', profileId: 'three', streamId: '3'),
+      ],
+      selectedProfileId: 'one',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(ScreenSharePanel.shareButtonKey))
+          .onPressed,
+      isNull,
+    );
+    expect(find.textContaining('Limit reached:'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('capture responsive waiting viewer', (tester) async {
+    final directory = Platform.environment['VOICE_SCREEN_SHARE_CAPTURE_DIR'];
+    if (directory == null) return;
+    final theme = await tester.runAsync(() async {
+      await (FontLoader(VoiceTheme.fontFamily)
+            ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'))
+            ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf')))
+          .load();
+      final iconBytes = await File(
+        '${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+      ).readAsBytes();
+      await (FontLoader(
+        'MaterialIcons',
+      )..addFont(Future.value(ByteData.sublistView(iconBytes)))).load();
+      final catalog = await VoiceTokenCatalog.load();
+      return VoiceTheme.build(
+        catalog: catalog,
+        mode: VoiceThemeMode.light,
+        profileAccent: catalog.profileAccentAt(0),
+      );
+    });
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      final container = await _pumpSourcePicker(
+        tester,
+        theme: theme,
+        expandedPanel: true,
+      );
+      container
+          .read(screenShareControllerProvider.notifier)
+          .state = const ScreenShareUiState(
+        streams: [
+          ActiveScreenShare(
+            roomId: 'room-1',
+            profileId: 'Alex',
+            streamId: 'stream-1',
+          ),
+          ActiveScreenShare(
+            roomId: 'room-1',
+            profileId: 'Maria',
+            streamId: 'stream-2',
+          ),
+        ],
+        selectedProfileId: 'Alex',
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byType(RepaintBoundary).first,
+      );
+      await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        final file = File(
+          '$directory/screen-share-${size.width > 600 ? 'h' : 'v'}.png',
+        );
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+  });
+  testWidgets('waiting viewer can close without stopping the call', (
+    tester,
+  ) async {
+    final container = await _pumpSourcePicker(tester);
+    container
+        .read(screenShareControllerProvider.notifier)
+        .state = const ScreenShareUiState(
+      streams: [
+        ActiveScreenShare(
+          roomId: 'room-1',
+          profileId: 'prof-peer',
+          streamId: 'peer-stream',
+        ),
+      ],
+      selectedProfileId: 'prof-peer',
+    );
+    await tester.pump();
+    expect(find.text('Waiting for screen video…'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close viewer'));
+    await tester.pump();
+    expect(find.text('Waiting for screen video…'), findsNothing);
+    expect(container.read(callControllerProvider).isActive, isTrue);
+    expect(container.read(screenShareControllerProvider).streams, hasLength(1));
+    await tester.tap(find.text('Watch stream'));
+    await tester.pump();
+    expect(find.text('Waiting for screen video…'), findsOneWidget);
+  });
+
+  testWidgets(
+    'mobile viewer keeps thumbnails reachable without local capture controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final container = await _pumpSourcePicker(tester);
+      container
+          .read(screenShareControllerProvider.notifier)
+          .state = const ScreenShareUiState(
+        streams: [
+          ActiveScreenShare(
+            roomId: 'room-1',
+            profileId: 'prof-peer',
+            streamId: 'peer-stream',
+          ),
+        ],
+        selectedProfileId: 'prof-peer',
+      );
+      await tester.pump();
+      expect(find.text('Screen shares'), findsOneWidget);
+      expect(
+        find.byKey(const Key('screen_share_thumbnail_prof-peer')),
+        findsOneWidget,
+      );
+      expect(find.text('Pause'), findsNothing);
+      expect(find.text('Stop sharing'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   _testWindowsWidgets('unavailable desktop sources show a safe error', (
     tester,
   ) async {
@@ -148,7 +344,7 @@ void main() {
       await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
       await tester.pumpAndSettle();
       expect(find.text('Test screen'), findsOneWidget);
-      expect(find.text('Test window'), findsOneWidget);
+      expect(find.text('Test window'), findsNothing);
       await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
@@ -240,19 +436,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(ScreenSharePanel.streamPickerKey), findsOneWidget);
-      expect(
-        find.byKey(const Key('screen_share_local_preview')),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Waiting for video'), findsNothing);
-      expect(
-        find.byKey(Key('screen_share_remote_$peerProfileId')),
-        findsOneWidget,
-      );
+      // The fake room has no video track: a subtree key must not pretend that
+      // media was rendered. The selected share stays in its waiting state.
+      expect(find.text('Waiting for screen video…'), findsOneWidget);
+      expect(find.byType(livekit.VideoTrackRenderer), findsNothing);
 
-      await tester.tap(find.text('prof-pee'));
+      await tester.tap(
+        find.byKey(const Key('screen_share_thumbnail_prof-peer')),
+      );
       await tester.pump();
       expect(find.byKey(const Key('screen_share_local_preview')), findsNothing);
+      expect(
+        container.read(screenShareControllerProvider).selectedProfileId,
+        peerProfileId,
+      );
     },
   );
 
@@ -563,9 +760,19 @@ void main() {
           Future<void> startShare() async {
             await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
             await tester.pumpAndSettle();
+            await tester.tap(find.text(l10n.screenShareWindow));
+            await tester.pumpAndSettle();
             await tester.tap(find.text('Test window'));
             await tester.pumpAndSettle();
-            await tester.tap(find.text(l10n.screenShareQuality720p15));
+            await tester.tap(find.byType(SwitchListTile));
+            await tester.pumpAndSettle();
+            await tester.tap(find.byType(DropdownButtonFormField<double>));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('15 FPS').last);
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.byKey(const Key('screen_share_picker_start')),
+            );
             await tester.pumpAndSettle();
           }
 
