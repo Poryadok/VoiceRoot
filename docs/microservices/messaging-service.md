@@ -84,6 +84,20 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
+History cursors anchor a public UUIDv7 to its private `messages.history_position`.
+Migration `000039` allocates that position under the per-chat transaction advisory
+lock before insertion and holds the lock through commit/rollback. History pages
+use this order for latest/before/after, so a delayed insertion with an earlier UUID
+is recovered after an already observed commit. Different chats remain independent;
+the sequence is not a global API cursor. Legacy rows are backfilled in UUID order
+under an exclusive table lock. Positions and their chat binding are immutable;
+the metadata-only backfill temporarily suspends the message lifecycle row trigger
+inside that exclusive transaction and restores its original enable mode before
+commit, including when retained messages belong to a frozen Space. Payload writes
+remain fenced after migration. Gaps from rollback/idempotent retries are harmless. Deploy the migration before
+the reader change; rollback to the old reader before DOWN. DOWN preserves message
+IDs/data but restores the old reader's late-commit limitation.
+
 ### Durable message-event publication (BE-188 A1)
 
 Enabled Messaging mutations persist their immutable `MessageStreamEvent` bytes,
