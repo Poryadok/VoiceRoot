@@ -558,3 +558,5 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 
 > Story backend-хвосты — [backend.md](backend.md) § Low § Story.
 > Design/Penpot — [design.md](design.md).
+
+- Post-match story result contract (UIV3-OVERLAY-MATCHMAKING-STORYSUGGESTION; producer closure PL-ST-01): stories canon requires victory/defeat, but MatchData and current completed-match payload have no authoritative outcome/score. The client draft uses Match completed with real game and teammate mentions until a documented backend result contract is supplied; never infer a victory from leaving a match or the HTML example.

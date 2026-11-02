@@ -920,6 +920,9 @@ void main() {
       'reason': 'low_match_rating',
     });
 
+    expect(find.text('Share your match'), findsOneWidget);
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('social_match_history_entry')));
     await tester.pumpAndSettle();
     expect(find.byKey(MatchHistoryScreen.listKey), findsOneWidget);

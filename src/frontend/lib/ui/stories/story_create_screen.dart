@@ -31,7 +31,18 @@ enum StoryCreateType { text, photo, video }
 
 /// Create a text, photo, or video story (stories (docs/features/stories.md) basics).
 class StoryCreateScreen extends ConsumerStatefulWidget {
-  const StoryCreateScreen({super.key});
+  const StoryCreateScreen({
+    super.key,
+    this.initialText = '',
+    this.initialGameTag,
+    this.initialGameTagLabel,
+    this.initialMentionProfileIds = const [],
+  });
+
+  final String initialText;
+  final String? initialGameTag;
+  final String? initialGameTagLabel;
+  final List<String> initialMentionProfileIds;
 
   static const Key screenKey = Key('story_create_screen');
   static const Key textFieldKey = Key('story_create_text');
@@ -65,6 +76,10 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
   @override
   void initState() {
     super.initState();
+    _textController.text = widget.initialText;
+    _gameTag = widget.initialGameTag;
+    _gameTagLabel = widget.initialGameTagLabel;
+    _mentionedProfileIds.addAll(widget.initialMentionProfileIds);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrivacyDefault());
   }
 
@@ -348,7 +363,7 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
           _MentionPicker(
             key: StoryCreateScreen.mentionPickerKey,
             queryController: _mentionQueryController,
-            friendIds: friendIds,
+            friendIds: {...friendIds, ..._mentionedProfileIds}.toList(),
             selectedIds: _mentionedProfileIds,
             onQueryChanged: () => setState(() {}),
             onToggle: (profileId, selected) {
@@ -533,6 +548,15 @@ class _MentionChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileProvider(profileId));
+    // A pre-filled teammate mention must remain removable even if their profile
+    // is unavailable or still loading.
+    if (selected && profileAsync.valueOrNull == null) {
+      return FilterChip(
+        label: Text(profileId),
+        selected: true,
+        onSelected: (value) => onToggle(profileId, value),
+      );
+    }
     return profileAsync.when(
       loading: () => const SizedBox.shrink(),
       error: (_, _) => const SizedBox.shrink(),
