@@ -389,6 +389,29 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
             realtime_source=True,fixture_complete_candidate=True)
 
+    def test_fixture_preserved_root_cli_uses_isolated_rollout_directory(self):
+        import guard,root_cli,staging_cohort_preservation as cohort,transaction
+        class ReachedTransaction(Exception):pass
+        original_root=root_cli.ROOT
+        def ready(actions,request,approved,execution,workspace,stage,live,*_):
+            self.assertEqual(root_cli.ROOT,guard.ROOT)
+            session=actions.tt_session;ref={'fixture':'qualified'}
+            base=guard.ROOT/('rollout-'+session.operation);base.mkdir(mode=0o700)
+            value={'target':{'cohort_preservation_sha256':transaction.canonical(ref)},'manifests':[],
+                'contract':{},'migrations':[],'nonnats':{}}
+            with patch.object(cohort,'load_qualified',return_value=ref),\
+                 patch.object(transaction,'prepare_preserved',side_effect=ReachedTransaction) as prepare:
+                with self.assertRaises(ReachedTransaction):
+                    root_cli.prepare_preserved_value(value,workspace,{},session.operation,resource_session=session,
+                        preservation_ref=ref,nats_authority=None,actor_authority=None,actor_services=[],
+                        renderer_authority=None,gis_source_authority=None,gis_source_root=None,
+                        gis_source_capture=None,gis_transition=None,gis_binding=None,
+                        realtime_bootstrap_receipt=None,prerequisites_capture=None)
+                self.assertEqual(prepare.call_args.args[1],base)
+                self.assertTrue((base/'code'/'capture-manifest.json').is_file())
+        self._cold_prepare(on_ready=ready)
+        self.assertEqual(root_cli.ROOT,original_root)
+
     def test_fixture_compiler_producer_reads_live_secret_metadata(self):
         import compiler
         def ready(actions,request,approved,execution,workspace,stage,live,transport,*_):
@@ -485,7 +508,7 @@ class PrepareCompositionTests(unittest.TestCase):
                       fixture_manifest='d'*64,fixture_publisher_drift=False,fixture_complete_candidate=False):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
-        import bridge_root, commands, compiler, runtime_stage, stage_runtime
+        import bridge_root, commands, compiler, root_cli, runtime_stage, stage_runtime
         import staging_gis_material as gis
         import staging_p3_prerequisites as p3
         import staging_p3_prerequisites_crypto as crypto
@@ -707,6 +730,7 @@ class PrepareCompositionTests(unittest.TestCase):
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
                 'index_sha256':'e'*64,'manifest_sha256':fixture_manifest,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+fixture_manifest})
             stack.enter_context(patch.object(guard,'ROOT',root))
+            stack.enter_context(patch.object(root_cli,'ROOT',root))
             if not strict_helpers:
                 stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
                 stack.enter_context(patch.object(prereq,'BINARY_PINS',{}))
