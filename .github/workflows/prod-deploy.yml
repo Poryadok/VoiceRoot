@@ -87,6 +87,10 @@ jobs:
 
       - name: Apply production manifests
         env:
+          # Selected by the release owner in the protected production environment.
+          PROD_RELEASE_POLICY_INPUT_JSON: ${{ secrets.PROD_RELEASE_POLICY_INPUT }}
+          SPACE_NATIVE_INSTALLER_IMAGE: ${{ vars.SPACE_NATIVE_INSTALLER_IMAGE }}
+          SPACE_NATIVE_INSTALLER_SOURCE_SHA: ${{ vars.SPACE_NATIVE_INSTALLER_SOURCE_SHA }}
           PROD_APP_SECRETS_YAML_B64: ${{ secrets.PROD_APP_SECRETS_YAML }}
           PROD_STAFF_TOKEN: ${{ secrets.PROD_STAFF_TOKEN }}
           VOICE_DEVELOPER_PORTAL_INGRESS_HOST: ${{ vars.VOICE_PROD_DEVELOPER_PORTAL_INGRESS_HOST }}
@@ -109,7 +113,11 @@ jobs:
           NEEDS_USER_SPACE_ROLLOUT: ${{ inputs.needs_user_space_rollout }}
           CHANGED_SERVICES: ${{ steps.verify_image.outputs.changed_services }}
         run: |
-          set -eux
+          set -eu
+          umask 077
+          export VOICE_RELEASE_POLICY_INPUT="${RUNNER_TEMP}/voice-prod-release-policy.json"
+          trap 'rm -f -- "${VOICE_RELEASE_POLICY_INPUT}"' EXIT
+          printf '%s' "${PROD_RELEASE_POLICY_INPUT_JSON}" > "${VOICE_RELEASE_POLICY_INPUT}"
           source scripts/prod/load-prod-domains.sh
           source scripts/prod/map-prod-env.sh
           REGISTRY="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
