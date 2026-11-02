@@ -808,7 +808,7 @@ run_probe_input_guard_cases() (
   local kind output result
   PROBE_RAW_DSN="${TEST_TMP}/raw-dsn"
   migration_target_dsn() { cat "${PROBE_RAW_DSN}"; }
-  for kind in tab space nul; do
+  for kind in tab space nul scheme userinfo reconstruction; do
     reset_mock || return 1
     migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}"
     : >"${JOB_EXISTS}"
@@ -817,6 +817,9 @@ run_probe_input_guard_cases() (
       tab) printf 'postgres://voice:probe-pass@voi\tce-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
       space) printf ' postgres://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
       nul) printf 'postgres://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable\0' >"${PROBE_RAW_DSN}" ;;
+      scheme) printf 'POSTGRES://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      userinfo) printf 'postgres://voice:probe@pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      reconstruction) printf 'postgres://voice:probe-pass@voice-postgres:5432/voice_db?' >"${PROBE_RAW_DSN}" ;;
     esac
     set +e
     output="$(apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations 2>&1)"

@@ -207,9 +207,11 @@ sys.stdout.buffer.write(raw)' 2>/dev/null)"; then
 import base64, re, sys
 from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 try:
-    uri = urlsplit(sys.stdin.read())
+    raw = sys.stdin.read()
+    uri = urlsplit(raw)
     selectors = {"password", "sslpassword", "passfile", "service", "servicefile", "user", "dbname", "host", "hostaddr", "port"}
-    if (uri.scheme not in ("postgres", "postgresql") or not uri.hostname or
+    if (not raw.startswith(("postgres://", "postgresql://")) or
+        urlunsplit(uri) != raw or uri.netloc.count("@") != 1 or not uri.hostname or
         uri.username is None or uri.password is None or uri.fragment or
         re.search(r"%(?![0-9a-fA-F]{2})", uri.password) or
         any(key.lower() in selectors for key, _ in parse_qsl(uri.query, keep_blank_values=True))):
