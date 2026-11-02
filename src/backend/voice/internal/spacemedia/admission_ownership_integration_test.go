@@ -455,11 +455,44 @@ func TestSpaceAdmissionRecoveryDoesNotStealLiveWriter(t *testing.T) {
 			if boundary == "COMMITTED" {
 				require.NoError(t, foreground.MarkCommitted(ctx, a.OperationID, a.Generation))
 			}
+			// Preserve the complete durable records, including ownership, exact
+			// fences, counters and frozen event bytes, across both public sweeps.
+			snapshot := func() string {
+				var value string
+				require.NoError(t, pool.QueryRow(ctx, `SELECT jsonb_build_object(
+				'admissions',(SELECT jsonb_agg(to_jsonb(a) ORDER BY operation_id) FROM voice_space_media_admissions a),
+				'owners',(SELECT jsonb_agg(to_jsonb(o) ORDER BY operation_id) FROM voice_space_media_admission_owners o),
+				'heads',(SELECT jsonb_agg(to_jsonb(h) ORDER BY voice_room_id,room_generation) FROM voice_space_media_room_heads h),
+				'fences',(SELECT jsonb_agg(to_jsonb(f) ORDER BY account_id) FROM voice_account_voice_fences f),
+				'events',(SELECT jsonb_agg(to_jsonb(e) ORDER BY event_id) FROM voice_space_media_admission_outbox e),
+				'roster',(SELECT jsonb_agg(to_jsonb(r) ORDER BY event_id) FROM voice_roster_outbox r))::text`).Scan(&value))
+				return value
+			}
+			before := snapshot()
 			calls := store.NewMemoryCallStore()
 			coordinator := &Coordinator{ProjectionGates: spacegatetest.New(), Store: calls,
 				Calls: calls, Admissions: recovery, Access: fakeAccess{}, Grants: fakeGrants{},
 				SessionEpochChecker: currentEpochChecker{}}
-			require.NoError(t, coordinator.reconcileAdmissions(ctx))
+			// Run must execute its startup sweep immediately. Cancellation is
+			// driven by the completed readiness callback, never by a timer/sleep.
+			// Recovery gets no foreground ownership capability in its context.
+			runCtx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ready := false
+			var runError error
+			coordinator.OnReadiness = func(value bool) {
+				if value {
+					ready = true
+					cancel()
+				}
+			}
+			coordinator.OnError = func(err error) { runError = err; cancel() }
+			require.ErrorIs(t, coordinator.Run(runCtx), context.Canceled)
+			require.NoError(t, runError)
+			require.True(t, ready, "startup must finish its recovery pass while the live writer is paused")
+			require.Equal(t, before, snapshot())
+			require.NoError(t, coordinator.ReconcileAll(context.Background()))
+			require.Equal(t, before, snapshot(), "periodic recovery must preserve the live writer's durable state")
 			var state string
 			require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM voice_space_media_admissions WHERE operation_id=$1`, a.OperationID).Scan(&state))
 			require.Equal(t, boundary, state, "a recovery process cannot abort an admission while its foreground writer retains authority")
