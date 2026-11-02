@@ -2,7 +2,6 @@ package voice.backend.auth.repository;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,9 +24,13 @@ public class InMemoryOtpCodeRepository implements OtpCodeRepository {
 
   @Override
   public synchronized Optional<OtpCodeRecord> findLatestValid(UUID accountId, String type, Instant now) {
-    return records.stream()
-        .filter(r -> r.accountId().equals(accountId) && r.type().equals(type) && r.isUsable(now))
-        .max(Comparator.comparing(OtpCodeRecord::expiresAt));
+    for (int i = records.size() - 1; i >= 0; i--) {
+      var record = records.get(i);
+      if (record.accountId().equals(accountId) && record.type().equals(type)) {
+        return Optional.of(record).filter(r -> r.isUsable(now));
+      }
+    }
+    return Optional.empty();
   }
 
   @Override
