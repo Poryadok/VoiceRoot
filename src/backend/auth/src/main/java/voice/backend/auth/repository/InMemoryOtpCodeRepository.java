@@ -13,6 +13,10 @@ public class InMemoryOtpCodeRepository implements OtpCodeRepository {
   @Override
   public synchronized OtpCodeRecord create(
       UUID accountId, String codeHash, String type, Instant expiresAt, Instant now) {
+    records.replaceAll(current -> current.accountId().equals(accountId)
+        && current.type().equals(type) && current.usedAt() == null
+        ? new OtpCodeRecord(current.id(), current.accountId(), current.codeHash(),
+            current.type(), current.expiresAt(), now) : current);
     OtpCodeRecord record =
         new OtpCodeRecord(UUID.randomUUID(), accountId, codeHash, type, expiresAt, null);
     records.add(record);
@@ -30,7 +34,7 @@ public class InMemoryOtpCodeRepository implements OtpCodeRepository {
   public synchronized void markUsed(UUID id, Instant usedAt) {
     for (int i = 0; i < records.size(); i++) {
       OtpCodeRecord current = records.get(i);
-      if (current.id().equals(id)) {
+      if (current.id().equals(id) && current.isUsable(usedAt)) {
         records.set(
             i,
             new OtpCodeRecord(
@@ -43,5 +47,6 @@ public class InMemoryOtpCodeRepository implements OtpCodeRepository {
         return;
       }
     }
+    throw new voice.backend.auth.service.AuthException("invalid_otp");
   }
 }
