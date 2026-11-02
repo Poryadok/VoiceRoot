@@ -4,6 +4,7 @@ import ast
 import hashlib
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import local_ci_matrix_inventory as inventory
 
@@ -41,6 +42,15 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_matrix_inventory_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_proofs_component_test.py' in row['recipe'] for row in result['shards']['policy']))
+        proof_entries = [row for row in result['shards']['proofs']
+                         if 'compose-a1-multi-account-proof_test.sh' in row['recipe'] or
+                         'e2e-manifest_test.sh' in row['recipe'] or
+                         'e2e-manifest_helper_test.sh' in row['recipe']]
+        helper = root / 'scripts/ci/manifest-lines.sh'
+        helper_sha = hashlib.sha256(helper.read_bytes()).hexdigest()
+        self.assertEqual(len(proof_entries), 3)
+        self.assertTrue(all(row['source_sha256']['scripts/ci/manifest-lines.sh'] == helper_sha
+                            for row in proof_entries))
         self.assertTrue(any('local_auth_private_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_full_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_full_orchestration_test.py' in row['recipe'] for row in result['shards']['policy']))
@@ -64,6 +74,22 @@ class MatrixInventoryTest(unittest.TestCase):
             self.assertEqual(len(rows), 7 if shard in ('policy', 'staging') else 6)
             base = next(row for row in rows if 'resolve-voice-r22-base.sh' in row.get('command', ''))
             self.assertIn('GITHUB_ENV', base['command'])
+
+    def test_transitive_helper_digest_is_bound_and_changes_on_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'scripts/ci/compose-a1-multi-account-proof.sh'
+            helper = root / 'scripts/ci/manifest-lines.sh'
+            source.parent.mkdir(parents=True)
+            source.write_text('entrypoint', encoding='utf-8')
+            helper.write_text('helper-v1', encoding='utf-8')
+            before = inventory._recipe_sources(root, ['scripts/ci/compose-a1-multi-account-proof.sh'])
+            helper.write_text('helper-v2', encoding='utf-8')
+            after = inventory._recipe_sources(root, ['scripts/ci/compose-a1-multi-account-proof.sh'])
+            self.assertEqual(before['scripts/ci/compose-a1-multi-account-proof.sh'],
+                             after['scripts/ci/compose-a1-multi-account-proof.sh'])
+            self.assertNotEqual(before['scripts/ci/manifest-lines.sh'],
+                                after['scripts/ci/manifest-lines.sh'])
 
     def test_symlinked_recipe_source_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:

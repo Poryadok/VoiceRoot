@@ -14,6 +14,12 @@ MAKEFILE_SHA256 = '486649f8ae3951312e7738cd43b051e51bd8bb4f0713926c55ba635ce9cce
 WORKFLOW_SHA256 = 'e036f5fc2b1a8241bd2728c7bc80e01fad9cf57d4f480dbf86dbc0852d21f4aa'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
 SHARD_RECIPE_COUNTS = {'policy': 77, 'runtime': 23, 'staging': 34, 'proofs': 15}
+TRANSITIVE_SOURCE_DEPENDENCIES = {
+    'scripts/ci/compose-a1-multi-account-proof.sh': ('scripts/ci/manifest-lines.sh',),
+    'scripts/ci/compose-a1-multi-account-proof_test.sh': ('scripts/ci/manifest-lines.sh',),
+    'scripts/ci/e2e-manifest_test.sh': ('scripts/ci/manifest-lines.sh',),
+    'scripts/ci/e2e-manifest_helper_test.sh': ('scripts/ci/manifest-lines.sh',),
+}
 
 
 def _sha(data):
@@ -34,6 +40,20 @@ def _recipe_source(root, name):
     if current.is_file():
         return name, _sha(current.read_bytes())
     raise ValueError('CI matrix recipe source missing or unsupported: ' + name)
+
+
+def _recipe_sources(root, names):
+    """Hash recipe entrypoints and their explicitly reviewed local helpers."""
+    pending, seen, hashes = list(names), set(), {}
+    while pending:
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        key, digest = _recipe_source(root, name)
+        hashes[key] = digest
+        pending.extend(TRANSITIVE_SOURCE_DEPENDENCIES.get(name, ()))
+    return hashes
 
 
 def collect(text, target):
@@ -95,11 +115,7 @@ def build(snapshot):
     for rows in shards.values():
         for row in rows:
             sources = re.findall(r'\$\(ROOT\)/([^"\s]+)', row['recipe'])
-            hashes = {}
-            for name in sources:
-                key, digest = _recipe_source(root, name)
-                hashes[key] = digest
-            row['source_sha256'] = hashes
+            row['source_sha256'] = _recipe_sources(root, sources)
     workflow_steps = {}
     for name in SHARDS:
         rows = [{'action': 'actions/checkout@v5', 'with': {'fetch-depth': 0}, 'status': 'not_run'}]
