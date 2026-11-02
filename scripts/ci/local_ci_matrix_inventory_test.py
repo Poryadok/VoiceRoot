@@ -37,6 +37,20 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertEqual(set(result['shards']), {'policy', 'runtime', 'staging', 'proofs'})
         self.assertEqual({key: len(rows) for key, rows in result['shards'].items()},
                          inventory.SHARD_RECIPE_COUNTS)
+        policy = result['shards']['policy']
+        self.assertEqual(len(policy), 79)
+        self.assertIn('space_large34_proof_test.py', policy[78]['recipe'])
+        dependencies = {
+            'scripts/ci/space_large34_proof_test.py', 'scripts/ci/space_large34_proof.sh',
+            'scripts/ci/space_large34_source.py', 'scripts/ci/space_large34_manifest.py',
+            'scripts/ci/space_large34_required.json', 'scripts/ci/space_over100_proof.sh',
+            'scripts/ci/go_integration_matrix.py', 'scripts/ci/go_integration_receipts.py',
+            'scripts/ci/go_integration_source_audit.py', 'scripts/ci/go_integration_exceptions.json',
+        }
+        self.assertEqual(set(policy[78]['source_sha256']), dependencies)
+        for dependency in dependencies:
+            self.assertEqual(policy[78]['source_sha256'][dependency],
+                             hashlib.sha256((root / dependency).read_bytes()).hexdigest())
         self.assertTrue(any('local_ci_staging_execution_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_staging_owned_tmp_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))
