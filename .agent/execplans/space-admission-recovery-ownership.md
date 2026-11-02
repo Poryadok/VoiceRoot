@@ -1,5 +1,53 @@
 # ExecPlan: Space admission live-writer and recovery ownership
 
+## Current-source qualification (Cedar1102-22)
+
+Base `ffad84570c38455ec77f387ad9ec04fd94411004` already contains the durable
+owner and sink-fencing implementation described below. TT returned the task to
+available after the prior run stopped; that is not evidence that the production
+fix is absent. This continuation strengthens the existing real-PostgreSQL
+live-writer regression through public `Run` startup and `ReconcileAll`, rather
+than replacing the accepted protocol.
+
+Acceptance: pause the foreground at PREPARED, FENCED and COMMITTED, run the
+independent recovery store without its ownership context, require startup
+readiness, preserve complete admissions/owners/heads/fences/event/roster rows,
+then finish the foreground projection successfully. Readiness cancels `Run`
+synchronously after its first full sweep; no timer selects the interleaving.
+Existing lease-expiry, stale-candidate, sink takeover, crash cleanup and P3
+tests remain the opposite-side recovery and fencing coverage.
+
+Risk is concurrency, requiring independent review. The same author owns the
+test change. Qualification uses an owned Linux runner, PostgreSQL16 and Redis7
+with no published ports; shared DEV/STG is outside this continuation.
+
+- [x] Recheck current criteria, claim TT and obtain WT81 lease.
+- [x] Strengthen the live-writer oracle through both public recovery entrypoints.
+- [x] Focused regression passes all three boundaries; removing the recovery
+  enumeration/CAS ownership guards fails all three on changed durable state.
+- [x] Affected ownership/PG/Redis/P3 race selection: 76 PASS events, no skips or
+  failures (163.076s); production factory race checks pass (49.529s), including
+  all three existing production live-admission startup boundaries. Package
+  short checks and vet pass. Repository-pinned package lint 2.6.1 passes with
+  zero issues on Go1.26.10.
+- [x] Required AST refresh completed: 132,623 nodes and 289,366 edges, no
+  clustering. `graphify-out/` is ignored by the current repository; there are
+  no generated tracked changes. Source review CLEAR is TT c24 from independent
+  Cedar1102-21 at `ebbd3396947fbc8a922de320892485be2b37686b`.
+- [x] Develop PR [1097](https://github.com/Poryadok/VoiceRoot/pull/1097) contains
+  the tested regression and this continuation. Hosted CI remains a delivery
+  gate; source qualification does not advance deployment or final acceptance.
+
+Native Linux Go1.26.10 inputs are bound to all 5,260 backend files from the
+base archive plus changed test SHA256
+`c85354ca3c0894800d280d38a04735972afcf8629b300f4607d8321a94bd0b89`.
+No missing, unexpected or mismatched files were found. TT c22 and its focused
+and negative log attachments retain the source/result distinctions; these
+checks qualify current source only, without rollout or final acceptance.
+
+Operational receipts and current commands live in TT and ignored
+`tmp/swarm/cedar1102/`; historical evidence below retains its original scope.
+
 ## Purpose
 
 An immediate or periodic Space media recovery pass must not steal an admission
