@@ -43,6 +43,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('4').at(0));
       await tester.tap(find.byTooltip('5').at(1));
+      await tester.pump();
       await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
       await tester.pumpAndSettle();
       expect(done, 0);
@@ -73,6 +74,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(1)));
+      await tester.pump();
       await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
@@ -112,11 +114,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(4)));
+    await tester.pump();
     await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
     await tester.pump();
     await tester.tap(find.byKey(MatchRatingOverlay.skipAllButtonKey));
     await tester.tap(find.byKey(MatchRatingOverlay.skipTeammateKey('p2')));
-    await tester.tap(find.byKey(MatchRatingOverlay.banButtonKey('p2')));
+    expect(find.byKey(MatchRatingOverlay.banButtonKey('p2')), findsNothing);
     expect(bans, 0);
     expect(skipped, 0);
     vote.complete(true);
@@ -210,6 +213,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(MatchRatingOverlay.starButtonKey(2)));
+    await tester.pump();
     await tester.tap(find.byKey(MatchRatingOverlay.banButtonKey('p2')));
     await tester.pumpAndSettle();
 
