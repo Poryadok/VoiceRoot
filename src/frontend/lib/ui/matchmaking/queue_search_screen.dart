@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,7 @@ import '../../state/matchmaking_providers.dart';
 import '../../state/matchmaking_search_controller.dart';
 import '../../theme/voice_colors.dart';
 import '../core/voice_compact_banner.dart';
+import 'game_detail_screen.dart';
 import 'match_rating_overlay.dart';
 
 /// Solo queue search: criteria form, searching state, cancel.
@@ -107,6 +110,9 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final globalSession = ref.watch(activeSearchSessionProvider);
     final searchState = ref.watch(matchmakingSearchControllerProvider);
     final session = _session ?? globalSession;
+    final region = session == null
+        ? _region
+        : _sessionCriteria(session)['region'];
     final searching = session != null && session.status == 'searching';
     final recoveryReason = searchState.recoveryReason;
     final showTimeoutRecovery =
@@ -142,7 +148,15 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
-          Text(widget.mode.name, style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            [
+              widget.mode.name,
+              if (region is String && region.isNotEmpty) region,
+            ].join(' · '),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: voice.textSecondary),
+          ),
           const SizedBox(height: 16),
           if (showTimeoutRecovery)
             MatchmakingRecoveryCard(
@@ -168,37 +182,76 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
                   },
                 ),
               ),
-            if (searchState.nudgeVisible)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: VoiceCompactBanner(
-                  key: QueueSearchScreen.nudgeBannerKey,
-                  message:
-                      '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
-                  tone: VoiceBannerTone.warning,
-                  actionLabel: MaterialLocalizations.of(
-                    context,
-                  ).closeButtonLabel,
-                  onAction: () => ref
-                      .read(matchmakingSearchControllerProvider.notifier)
-                      .dismissNudge(),
-                ),
-              ),
-            Card(
+            Center(
               key: QueueSearchScreen.searchingStateKey,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(l10n.queueSearchSearching),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      key: QueueSearchScreen.cancelButtonKey,
-                      onPressed: _busy ? null : _cancelSearch,
-                      child: Text(l10n.queueSearchCancel),
-                    ),
-                  ],
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 410),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 56),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 5,
+                          color: voice.profileAccent,
+                          backgroundColor: voice.muted,
+                          semanticsLabel: l10n.queueSearchSearching,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          l10n.queueSearchSearching,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          for (final label in _sessionLabels(session))
+                            Chip(label: Text(label)),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      OutlinedButton(
+                        key: QueueSearchScreen.cancelButtonKey,
+                        onPressed: _busy ? null : _cancelSearch,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: voice.error,
+                          side: BorderSide(color: voice.error),
+                        ),
+                        child: Text(l10n.queueSearchCancel),
+                      ),
+                      if (searchState.nudgeVisible) ...[
+                        const SizedBox(height: 24),
+                        VoiceCompactBanner(
+                          key: QueueSearchScreen.nudgeBannerKey,
+                          message:
+                              '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
+                          tone: VoiceBannerTone.warning,
+                          actionLabel: 'Change search parameters',
+                          onAction: _busy
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => GameDetailScreen(
+                                      game: widget.game,
+                                      spaceId: widget.spaceId,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -240,10 +293,6 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
                 onChanged: (v) => setState(() => _soughtMax = v),
               ),
             ],
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: voice.error)),
-            ],
             const SizedBox(height: 16),
             FilledButton(
               key: QueueSearchScreen.startButtonKey,
@@ -251,9 +300,45 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
               child: Text(l10n.queueSearchStart),
             ),
           ],
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: voice.error),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  Map<String, dynamic> _sessionCriteria(SearchSessionData? session) {
+    if (session == null) return const {};
+    try {
+      final criteria = jsonDecode(session.criteriaJson);
+      return criteria is Map<String, dynamic> ? criteria : const {};
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  List<String> _sessionLabels(SearchSessionData? session) {
+    final criteria = _sessionCriteria(session);
+    final self = criteria['self'];
+    final sought = criteria['sought'];
+    return [
+      if (sought is Map &&
+          sought['rank_min'] is String &&
+          sought['rank_max'] is String)
+        '${sought['rank_min']} — ${sought['rank_max']}'
+      else if (self is Map && self['rank'] is String)
+        self['rank'] as String,
+      if (self is Map && self['role'] is String) self['role'] as String,
+    ];
   }
 
   Widget _dropdown({
@@ -341,11 +426,14 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
 
   Future<void> _cancelSearch() async {
     final l10n = AppLocalizations.of(context)!;
-    final session = _session;
+    final session = _session ?? ref.read(activeSearchSessionProvider);
     if (session == null) return;
     final token = ref.read(authControllerProvider).session?.accessToken;
     if (token == null || token.isEmpty) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     final client = ref.read(voiceMatchmakingClientProvider);
     final result = await client.cancelSearch(
       authorization: 'Bearer $token',
