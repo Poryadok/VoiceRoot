@@ -134,13 +134,9 @@ class LargeInputTests(unittest.TestCase):
                 state['resources']['clone']['status']='ACTIVE';tools['migrate_binary_sha256']=hashlib.sha256(body).hexdigest()
             self.assertIsNone(self.session._cohort_restore_large_permit)
 
-    def test_probe_tar_is_digest_bound_before_large_permit(self):
+    def test_probe_stdin_is_digest_bound_before_large_permit(self):
         import story_fixture
-        payload=b'p'*((2<<20)+1);raw=io.BytesIO()
-        with tarfile.open(fileobj=raw,mode='w:') as archive:
-            member=tarfile.TarInfo('voice-story-restored8-probe');member.size=len(payload);member.mode=0o555
-            archive.addfile(member,io.BytesIO(payload))
-        body=raw.getvalue();cid='b'*64;argv=runtime.DOCKER+['cp','-',cid+':/tmp/']
+        body=b'p'*((2<<20)+1);cid='b'*64;argv=runtime.DOCKER+['start','--attach','--interactive',cid]
         state={'resources':{'probe':{'cid':cid,'kind':'story-probe','status':'ACTIVE'}}}
         tools={'images':{},'ids':{}};path=Path('/fixture/resources.json')
         def read(p):return copy.deepcopy(tools if str(p).endswith('restore-tools.json') else state)
@@ -150,17 +146,28 @@ class LargeInputTests(unittest.TestCase):
             session.check(actual)
             runtime.revalidate_restore_large_input(session,permit,actual,data)
             return b'ok'
-        with patch.object(story_fixture,'PRESERVED_CALLER_SHA256',hashlib.sha256(payload).hexdigest()),\
+        with patch.object(story_fixture,'PRESERVED_CALLER_SHA256',hashlib.sha256(body).hexdigest()),\
+             patch.object(runtime,'STORY_PROBE_SHA256',hashlib.sha256(body).hexdigest()),\
              patch.object(runtime,'_resources',return_value=(path,state)),patch.object(owner,'_base',return_value=Path('/fixture')),\
-             patch.object(owner,'_read',side_effect=read),patch.object(owner,'_observation',side_effect=observation):
+             patch.object(owner,'_read',side_effect=read),patch.object(owner,'save'),patch.object(owner,'_observation',side_effect=observation):
             self.assertEqual(runtime.restore_command(self.session,argv,body=body),b'ok')
+            with self.assertRaisesRegex(runtime.Blocked,'cohort_story_caller_changed'):
+                runtime.restore_command(self.session,argv,body=body)
+            state['resources']['probe'].pop('probe_started')
             with patch.object(story_fixture,'PRESERVED_CALLER_SHA256','0'*64):
                 with self.assertRaisesRegex(runtime.Blocked,'cohort_story_caller_changed'):
                     runtime.restore_command(self.session,argv,body=body)
             for status in ('OBSERVED','REMOVING'):
                 state['resources']['probe']['status']=status
-                with self.subTest(status=status),self.assertRaisesRegex(runtime.Blocked,'cohort_restore_body_limit'):
+                with self.subTest(status=status),self.assertRaisesRegex(runtime.Blocked,'cohort_story_caller_changed'):
                     runtime.restore_command(self.session,argv,body=body)
+            state['resources']['probe']['status']='ACTIVE'
+            with patch.object(owner,'_observation',side_effect=RuntimeError('lost response')):
+                with self.assertRaisesRegex(RuntimeError,'lost response'):
+                    runtime.restore_command(self.session,argv,body=body)
+            self.assertTrue(state['resources']['probe']['probe_started'])
+            with self.assertRaisesRegex(runtime.Blocked,'cohort_story_caller_changed'):
+                runtime.restore_command(self.session,argv,body=body)
             self.assertIsNone(self.session._cohort_restore_large_permit)
 
 

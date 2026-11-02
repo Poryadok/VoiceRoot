@@ -186,16 +186,10 @@ def prove_preserved(session,postgres,admin,before,reference,resources,journal,bi
             journal.uncertain(kind,nonce);raise
     def invoke(image,baseline,unrelated,mode):
         cid=create('story-probe',image,baseline,unrelated,mode)
-        payload=io.BytesIO()
-        with tarfile.open(fileobj=payload,mode='w',format=tarfile.USTAR_FORMAT) as archive:
-            entry=tarfile.TarInfo('voice-story-restored8-probe');entry.mode=0o555;entry.size=len(caller)
-            archive.addfile(entry,io.BytesIO(caller))
-        restore._docker('cp','-',cid+':/tmp/',input=payload.getvalue())
-        restore._docker('start',cid)
-        status=restore._docker('wait',cid,timeout=60).decode().strip()
-        output=restore._docker('logs',cid)
-        if status not in ('0','17'):raise Blocked('story_preserved_probe_exit_invalid')
-        return json.loads(output),int(status)
+        output=restore._docker('start','--attach','--interactive',cid,input=caller,timeout=60)
+        match=re.fullmatch(rb'([^\n]+)\n{1,2}VOICE_PROBE_EXIT=(0|17)\n',output)
+        if match is None:raise Blocked('story_preserved_probe_exit_invalid')
+        return json.loads(match.group(1)),int(match.group(2))
     results=[];current=migrated
     for key,image in context['images'].items():
         unchanged();image_id=restore._check_image(image)
