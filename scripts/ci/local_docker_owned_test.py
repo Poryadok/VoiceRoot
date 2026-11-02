@@ -16,6 +16,7 @@ class FakeEngine:
         self.identity = 'daemon-a'
         self.resources = {}
         self.removed = []
+        self.started = []
         self.uncertain_create = False
         self.uncertain_container_create = False
         self.uncertain_remove = False
@@ -60,18 +61,21 @@ class FakeEngine:
         if not self.rootless_profile_valid:
             raise OwnershipError('rootless profile differs')
 
-    def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None):
+    def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
+                         resource_limits=None):
         identifier = 'c' + name.encode().hex().ljust(63, '0')[:63]
         self.resources[('container', name)] = {'id': identifier, 'name': name, 'kind': 'container',
                                                'labels': dict(labels), 'image': image_id, 'network': network_id,
                                                'mounts': dict(mounts), 'ports': list(ports), 'running': False,
-                                               'command': command, 'entrypoint': []}
+                                               'command': command, 'entrypoint': [],
+                                               'resource_limits': dict(resource_limits) if resource_limits is not None else None}
         if self.uncertain_container_create:
             raise OwnershipError('container create outcome unknown')
         return identifier
 
     def start(self, identifier):
         value = next(value for key, value in self.resources.items() if key[0] == 'container' and value['id'] == identifier)
+        self.started.append(identifier)
         value['running'] = True
         if self.uncertain_start:
             raise OwnershipError('start outcome unknown')
@@ -188,6 +192,204 @@ class RootlessEndpointTests(unittest.TestCase):
     def test_explicit_local_unix_socket_is_retained(self):
         env = self.engine({'DOCKER_HOST': 'unix:///var/run/docker.sock'}).rootless_creator_env()
         self.assertEqual(env['DOCKER_HOST'], 'unix:///var/run/docker.sock')
+
+
+class DockerResourceLimitTests(unittest.TestCase):
+    @staticmethod
+    def option_value(command, option):
+        for index, value in enumerate(command):
+            if value == option:
+                return command[index + 1]
+            if value.startswith(option + '='):
+                return value.split('=', 1)[1]
+        raise AssertionError('missing Docker option ' + option)
+
+    @staticmethod
+    def limits():
+        return {'nano_cpus': 1500000000, 'memory_bytes': 2 * 1024 * 1024 * 1024,
+                'memory_swap_bytes': 3 * 1024 * 1024 * 1024, 'pids_limit': 384}
+
+    def test_docker_cli_create_applies_exact_resource_limits(self):
+        engine = DockerCLI.__new__(DockerCLI)
+        calls = []
+        engine._call = lambda *args: calls.append(args) or 'c' * 64
+        limits = self.limits()
+        engine.create_container('owned', {}, 'sha256:' + 'a' * 64, 'b' * 64, {}, [],
+                                command=['sleep', 'infinity'], resource_limits=limits)
+        command = calls[0]
+        self.assertEqual(self.option_value(command, '--cpus'), '1.5')
+        for option, expected in (('--memory', str(limits['memory_bytes'])),
+                                 ('--memory-swap', str(limits['memory_swap_bytes'])),
+                                 ('--pids-limit', str(limits['pids_limit']))):
+            with self.subTest(option=option):
+                self.assertEqual(self.option_value(command, option), expected)
+
+    def test_docker_cli_inspection_returns_exact_normalized_resource_limits(self):
+        limits = self.limits()
+        raw = {'Id': 'c' * 64, 'Name': '/owned', 'Image': 'sha256:' + 'a' * 64,
+               'HostConfig': {'NetworkMode': 'b' * 64, 'Privileged': False, 'Binds': None,
+                              'PortBindings': {}, 'NanoCpus': limits['nano_cpus'],
+                              'Memory': limits['memory_bytes'], 'MemorySwap': limits['memory_swap_bytes'],
+                              'PidsLimit': limits['pids_limit']},
+               'Mounts': [], 'Config': {'Labels': {}, 'Cmd': ['sleep', 'infinity'], 'Entrypoint': []},
+               'State': {'Running': False}, 'NetworkSettings': {'Networks': {}, 'Ports': {}}}
+        engine = DockerCLI.__new__(DockerCLI)
+        engine._call = lambda *args: json.dumps([raw])
+        observed = engine.inspect('container', 'owned')
+        self.assertEqual(observed['resource_limits'], limits)
+
+    def test_owned_run_journals_limit_mismatch_and_never_removes_resource(self):
+        limits = self.limits()
+
+        class MismatchedEngine(FakeEngine):
+            def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
+                                 resource_limits=None):
+                identifier = super().create_container(name, labels, image_id, network_id, mounts, ports,
+                                                      command, resource_limits)
+                self.resources[('container', name)]['resource_limits']['pids_limit'] += 1
+                return identifier
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = MismatchedEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {}, [],
+                                              command=['sleep', 'infinity'], resource_limits=limits)
+                self.fail('a resource limit mismatch must prevent successful creation')
+            except OwnershipError:
+                item = owner.state['resources'][-1]
+                self.assertEqual(item['resource_limits'], limits)
+                self.assertEqual(item['state'], 'creating')
+                self.assertEqual(item['id'], engine.resources[('container', item['name'])]['id'])
+                self.assertEqual(item['observed_resource_limits']['pids_limit'], limits['pids_limit'] + 1)
+                self.assertEqual(engine.removed, [])
+                self.assertEqual(engine.started, [])
+                with self.assertRaises(OwnershipError):
+                    owner.reconcile_creation(item['name'])
+                self.assertIn(('container', item['name']), engine.resources)
+                self.assertEqual(engine.removed, [])
+            finally:
+                owner.close()
+
+    def test_rootless_daemon_limits_are_journaled_inspected_and_verified_before_start(self):
+        limits = {'nano_cpus': 1_000_000_000, 'memory_bytes': 512 * 1024 * 1024,
+                  'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256}
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in rootless.TARGETS}
+                created = []
+
+                def creator(request):
+                    self.assertEqual(request['resource_limits'], limits)
+                    journal = json.loads((owner.directory / 'ownership.json').read_text(encoding='utf-8'))
+                    pending = journal['resources'][-1]
+                    self.assertEqual(pending['state'], 'creating')
+                    self.assertEqual(pending['resource_limits'], limits)
+                    self.assertNotIn('verified_resource_limits', pending)
+                    name = request['name']
+                    identifier = 'f' * 64
+                    engine.resources[('container', name)] = {
+                        'id': identifier, 'name': name, 'kind': 'container',
+                        'labels': {'voice.ci.run': request['run_id'], 'voice.ci.resource': request['nonce'],
+                                   'voice.ci.kind': 'container'},
+                        'image': rootless.IMAGE, 'network': request['network'], 'mounts': dict(mounts),
+                        'ports': [], 'running': False, 'profile': 'rootless-unix-v1',
+                        'resource_limits': dict(request['resource_limits'])}
+                    created.append(identifier)
+                    return identifier
+
+                name = owner.create_rootless_container(network, mounts, creator, resource_limits=limits)
+                item = next(resource for resource in owner.state['resources'] if resource['name'] == name)
+                self.assertEqual(item['state'], 'ready')
+                self.assertEqual(item['resource_limits'], limits)
+                self.assertEqual(item['verified_resource_limits'], limits)
+                self.assertEqual(engine.started, [])
+                owner.start_container(name)
+                self.assertEqual(engine.started, created)
+            finally:
+                owner.close()
+
+    def test_rootless_daemon_limit_mismatch_is_journaled_without_start_or_foreign_cleanup(self):
+        limits = {'nano_cpus': 1_000_000_000, 'memory_bytes': 512 * 1024 * 1024,
+                  'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256}
+        observed = dict(limits, pids_limit=255)
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in rootless.TARGETS}
+                foreign_key = ('volume', 'foreign-sentinel')
+                engine.resources[foreign_key] = {'id': 'foreign-sentinel', 'name': 'foreign-sentinel',
+                                                  'kind': 'volume', 'labels': {'owner': 'foreign'}}
+
+                def creator(request):
+                    self.assertEqual(request['resource_limits'], limits)
+                    name = request['name']
+                    engine.resources[('container', name)] = {
+                        'id': 'e' * 64, 'name': name, 'kind': 'container',
+                        'labels': {'voice.ci.run': request['run_id'], 'voice.ci.resource': request['nonce'],
+                                   'voice.ci.kind': 'container'},
+                        'image': rootless.IMAGE, 'network': request['network'], 'mounts': dict(mounts),
+                        'ports': [], 'running': False, 'profile': 'rootless-unix-v1',
+                        'resource_limits': dict(request['resource_limits'], pids_limit=255)}
+                    return 'e' * 64
+
+                with self.assertRaises(OwnershipError):
+                    owner.create_rootless_container(network, mounts, creator, resource_limits=limits)
+                item = owner.state['resources'][-1]
+                self.assertEqual(item['resource_limits'], limits)
+                self.assertEqual(item['observed_resource_limits'], observed)
+                self.assertEqual(item['state'], 'creating')
+                self.assertEqual(engine.started, [])
+                self.assertEqual(engine.removed, [])
+                self.assertIn(foreign_key, engine.resources)
+                self.assertTrue(engine.exists('container', item['id']))
+            finally:
+                owner.close()
+
+    def test_existing_owned_container_callers_remain_unbounded_without_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                              command=['sleep', 'infinity'])
+                self.assertIsNone(engine.resources[('container', name)]['resource_limits'])
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_version_two_run_journals_named_host_job_intent_and_keeps_v1_callers_valid(self):
+        owner_id = 'voiceci-' + 'a' * 32
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + 'a' * 32],
+                    'limits': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                               'active_process_limit': 512},
+                    'session_identity': {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}}
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine, run_id=owner_id, host_job=host_job)
+            run_directory = owner.directory
+            try:
+                receipt = json.loads((run_directory / 'ownership.json').read_text(encoding='utf-8'))
+                self.assertEqual(receipt['version'], 2)
+                self.assertEqual(receipt['run_id'], owner_id)
+                self.assertEqual(receipt['host_job'], host_job)
+                self.assertEqual(receipt['resources'], [])
+            finally:
+                owner.close()
+            recovered = OwnedRun.load(run_directory, engine)
+            try:
+                self.assertEqual(recovered.state['host_job'], host_job)
+            finally:
+                recovered.close()
 
 
 class OwnedRunTests(unittest.TestCase):

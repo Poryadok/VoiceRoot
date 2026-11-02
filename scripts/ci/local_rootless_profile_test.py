@@ -69,7 +69,8 @@ class RootlessProfileTests(unittest.TestCase):
             ('PublishAllPorts', True), ('Devices', [{'PathOnHost': '/dev/kmsg'}]),
             ('DeviceRequests', [{'Driver': 'x'}]), ('DeviceCgroupRules', ['a *:* rwm']),
             ('Sysctls', {'net.ipv4.ip_forward': '1'}), ('GroupAdd', ['0']),
-            ('ReadonlyPaths', []), ('MaskedPaths', []), ('Memory', 0), ('PidsLimit', 0),
+            ('ReadonlyPaths', []), ('MaskedPaths', []), ('Memory', 0), ('MemorySwap', 0),
+            ('NanoCpus', 0), ('PidsLimit', 0),
             ('RestartPolicy', {'Name': 'always', 'MaximumRetryCount': 0}), ('AutoRemove', True),
         ]
         for key, value in mutations:

@@ -12,6 +12,178 @@ from local_heavy_slots import acquire, host_slot_directory
 
 
 class HeavySlotsTest(unittest.TestCase):
+    def test_budget_above_measured_cpu_or_memory_rejects_before_slot_creation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for budget in (
+                {'nano_cpus': 8_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 512},
+                {'nano_cpus': 4_000_000_000, 'memory_bytes': 16_000, 'pids_limit': 512},
+            ):
+                with self.subTest(budget=budget), \
+                     mock.patch.object(slots, 'measured_host_capacity', return_value={
+                         'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000}), \
+                     self.assertRaisesRegex(ValueError, 'measured host capacity'):
+                    acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + 'c' * 32,
+                            resource_claim={'nano_cpus': 1, 'memory_bytes': 1, 'pids_limit': 1},
+                            capacity_budget=budget)
+                self.assertEqual(list(root.iterdir()), [])
+
+    def test_bounded_claims_reserve_aggregate_budget_under_the_shared_lock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            budget = {'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 800}
+            first_claim = {'nano_cpus': 2_500_000_000, 'memory_bytes': 5_000, 'pids_limit': 500}
+            second_claim = {'nano_cpus': 1_500_000_000, 'memory_bytes': 3_000, 'pids_limit': 300}
+            first = acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '1' * 32,
+                            resource_claim=first_claim, capacity_budget=budget)
+            second = None
+            try:
+                second = acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '2' * 32,
+                                 resource_claim=second_claim, capacity_budget=budget)
+                with self.assertRaises(TimeoutError):
+                    acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '3' * 32,
+                            resource_claim={'nano_cpus': 1, 'memory_bytes': 1, 'pids_limit': 1},
+                            capacity_budget=budget)
+            finally:
+                if second is not None:
+                    second.close()
+                first.close()
+
+    def test_budget_configuration_mismatch_and_overcommit_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            budget = {'nano_cpus': 2_000_000_000, 'memory_bytes': 4_000, 'pids_limit': 400}
+            lease = acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '4' * 32,
+                            resource_claim={'nano_cpus': 1_000_000_000, 'memory_bytes': 2_000,
+                                            'pids_limit': 200}, capacity_budget=budget)
+            try:
+                with self.assertRaisesRegex(ValueError, 'budget'):
+                    acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '5' * 32,
+                            resource_claim={'nano_cpus': 1, 'memory_bytes': 1, 'pids_limit': 1},
+                            capacity_budget={'nano_cpus': 3_000_000_000, 'memory_bytes': 4_000,
+                                             'pids_limit': 400})
+                with self.assertRaises((ValueError, TimeoutError)):
+                    acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '6' * 32,
+                            resource_claim={'nano_cpus': 1_000_000_001, 'memory_bytes': 2_001,
+                                            'pids_limit': 201}, capacity_budget=budget)
+            finally:
+                lease.close()
+
+    def test_bounded_claim_refuses_legacy_busy_slot_with_unknown_usage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = acquire(root, timeout=0, capacity=2)
+            legacy.abandon()
+            with self.assertRaises((ValueError, TimeoutError)):
+                acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '7' * 32,
+                        resource_claim={'nano_cpus': 1, 'memory_bytes': 1, 'pids_limit': 1},
+                        capacity_budget={'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2})
+
+    def test_unbounded_acquire_cannot_cross_a_live_bounded_reservation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bounded = acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + '8' * 32,
+                              resource_claim={'nano_cpus': 1, 'memory_bytes': 1, 'pids_limit': 1},
+                              capacity_budget={'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2})
+            try:
+                with self.assertRaises((ValueError, TimeoutError)):
+                    acquire(root, timeout=0, capacity=2)
+            finally:
+                bounded.close()
+
+    def test_abandoned_bounded_reservation_survives_and_recovery_releases_after_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner_id = 'voiceci-' + '9' * 32
+            budget = {'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2}
+            claim = {'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2}
+            child = '''import sys
+from local_heavy_slots import acquire
+lease = acquire(sys.argv[1], timeout=0, capacity=2, owner_id='voiceci-' + '9' * 32,
+                resource_claim={'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2},
+                capacity_budget={'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2})
+print(lease.slot, flush=True)
+sys.stdin.readline()
+lease.abandon()
+'''
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent))
+            process = subprocess.Popen([sys.executable, '-u', '-c', child, str(root)], env=env,
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True)
+            slot_line = process.stdout.readline().strip()
+            if not slot_line:
+                error = process.stderr.read()
+                process.wait(timeout=5)
+                self.fail('bounded child failed before persisting its reservation: ' + error)
+            slot = int(slot_line)
+            process.kill()
+            process.wait(timeout=5)
+            process.stdin.close()
+            process.stdout.close()
+            process.stderr.close()
+            self.assertEqual(slots.active_resource_reservation(root, owner_id), claim)
+
+            with self.assertRaises((ValueError, TimeoutError)):
+                acquire(root, timeout=0, capacity=2, owner_id='voiceci-' + 'a' * 32,
+                        resource_claim={'nano_cpus': 1, 'memory_bytes': 1, 'pids_limit': 1},
+                        capacity_budget=budget)
+
+            recovered = slots.recover_bound(root, slot, owner_id, capacity=2)
+            try:
+                self.assertEqual(slots.active_resource_reservation(root, owner_id), claim)
+                with self.assertRaisesRegex(ValueError, 'cleanup'):
+                    slots.release_resource_reservation(root, owner_id, cleanup_verified=False)
+                self.assertEqual(slots.active_resource_reservation(root, owner_id), claim)
+                slots.release_resource_reservation(root, owner_id, cleanup_verified=True)
+                self.assertIsNone(slots.active_resource_reservation(root, owner_id))
+            finally:
+                recovered.close()
+
+    def test_bounded_and_legacy_processes_race_through_one_admission_lock(self):
+        child = '''import sys
+from local_heavy_slots import acquire
+mode, directory = sys.argv[1:]
+print('ready', flush=True)
+sys.stdin.readline()
+try:
+    if mode == 'bounded':
+        lease = acquire(directory, timeout=0.5, capacity=2, owner_id='voiceci-' + 'b' * 32,
+                        resource_claim={'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2},
+                        capacity_budget={'nano_cpus': 2, 'memory_bytes': 2, 'pids_limit': 2})
+    else:
+        lease = acquire(directory, timeout=0.5, capacity=2)
+except (ValueError, TimeoutError):
+    print('rejected', flush=True)
+else:
+    print('acquired', flush=True)
+    sys.stdin.readline()
+    lease.close()
+'''
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent))
+        for _ in range(4):
+            with tempfile.TemporaryDirectory() as directory:
+                workers = [subprocess.Popen([sys.executable, '-u', '-c', child, mode, directory],
+                                            env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, text=True)
+                           for mode in ('bounded', 'legacy')]
+                try:
+                    self.assertEqual([process.stdout.readline().strip() for process in workers],
+                                     ['ready', 'ready'])
+                    for process in workers:
+                        process.stdin.write('\n')
+                        process.stdin.flush()
+                    outcomes = [process.stdout.readline().strip() for process in workers]
+                    self.assertCountEqual(outcomes, ['acquired', 'rejected'])
+                finally:
+                    for process in workers:
+                        if process.poll() is None:
+                            process.stdin.write('\n')
+                            process.stdin.flush()
+                            process.wait(timeout=6)
+                        process.stdin.close()
+                        process.stdout.close()
+                        process.stderr.close()
+
     def test_owner_id_is_persisted_in_busy_marker_and_legacy_acquire_stays_compatible(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

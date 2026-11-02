@@ -1,4 +1,5 @@
 """Selected Chat diagnostic never treats failed work or cleanup as a pass."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,22 @@ import local_chat_orchestration as subject
 
 
 class OrchestrationTests(unittest.TestCase):
+    def test_creator_keeps_resource_limits_internal_and_preserves_helper_json_abi(self):
+        request = {'name': 'owned', 'run_id': 'voiceci-' + 'a' * 32, 'nonce': 'b' * 32,
+                   'daemon': 'daemon-a', 'network': 'c' * 64, 'data_volume': 'data',
+                   'legacy_volume': 'legacy', 'socket_volume': 'socket',
+                   'resource_limits': {'nano_cpus': 1_000_000_000, 'memory_bytes': 512 * 1024 * 1024,
+                                       'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256}}
+        completed = mock.Mock(returncode=0, stdout=('d' * 64 + '\n').encode())
+        with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=completed) as run, \
+             mock.patch.object(subject, '_verify_file'):
+            self.assertEqual(subject._create_daemon('helper.exe', 'f' * 64, {'DOCKER_HOST': 'local'}, request),
+                             'd' * 64)
+        serialized = json.loads(run.call_args.kwargs['input'])
+        self.assertEqual(set(serialized), {'name', 'run_id', 'nonce', 'daemon', 'network',
+                                           'data_volume', 'legacy_volume', 'socket_volume'})
+        self.assertNotIn('resource_limits', serialized)
+
     def test_creator_uses_broker_binary_input_and_preserves_uncertainty(self):
         request = {'name': 'owned'}
         completed = mock.Mock(returncode=0, stdout=('a' * 64 + '\n').encode())
