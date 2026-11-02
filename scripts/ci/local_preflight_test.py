@@ -1040,18 +1040,18 @@ class PolicyWindowsEvidenceTests(unittest.TestCase):
                               'local_source_snapshot_test.Snapshot.test_timeout'])
 
     def test_windows_summary_rejects_skip_failure_or_incomplete_count(self):
-        self.assertEqual(local_preflight.local_ci_policy_component.windows_test_count(b'Ran 37 tests in 1.2s\n\nOK\n', 0, 37), 37)
-        for text, code in ((b'Ran 36 tests in 1s\nOK\n', 0),
-                           (b'Ran 37 tests in 1s\nOK (skipped=1)\n', 0),
-                           (b'Ran 37 tests in 1s\nOK\n', 1)):
-            with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.windows_test_count(text, code, 37)
+        self.assertEqual(local_preflight.local_ci_policy_component.windows_test_count(b'Ran 39 tests in 1.2s\n\nOK\n', 0, 39), 39)
+        for text, code in ((b'Ran 38 tests in 1s\nOK\n', 0),
+                           (b'Ran 39 tests in 1s\nOK (skipped=1)\n', 0),
+                           (b'Ran 39 tests in 1s\nOK\n', 1)):
+            with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.windows_test_count(text, code, 39)
 
     def test_component_rejects_tampered_windows_log_and_missing_shards(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp); (out/'linux').mkdir(); (out/'linux/diagnostic.json').write_text('{}')
-            stdout, stderr = b'', b'Ran 37 tests in 1s\n\nOK\n'
+            stdout, stderr = b'', b'Ran 39 tests in 1s\n\nOK\n'
             (out/'windows.stdout').write_bytes(stdout); (out/'windows.stderr').write_bytes(stderr)
-            names = ['test.Module.test_'+str(i) for i in range(37)]
+            names = ['test.Module.test_'+str(i) for i in range(39)]
             source = {'head':'a'*40}; base = 'b'*40
             report = {'schema':'voice-local-policy-component-v1', 'status':'complete',
                       'scope':'ci-script-tests/policy', 'source':source, 'base':base,
@@ -1060,7 +1060,7 @@ class PolicyWindowsEvidenceTests(unittest.TestCase):
                       'windows_stderr_sha256':hashlib.sha256(stderr).hexdigest()}
             with unittest.mock.patch.object(local_preflight.local_ci_policy_component, 'verify_linux_evidence', return_value=names):
                 local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
-                (out/'windows.stderr').write_bytes(b'Ran 37 tests in 1s\nOK (skipped=1)\n')
+                (out/'windows.stderr').write_bytes(b'Ran 39 tests in 1s\nOK (skipped=1)\n')
                 with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
                 with self.assertRaises(ValueError):
                     local_preflight.local_ci_policy_component.verify_component('root', out, source, base, dict(report, remaining_shards=[]))

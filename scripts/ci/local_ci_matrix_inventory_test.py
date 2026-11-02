@@ -42,6 +42,7 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_matrix_inventory_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_proofs_component_test.py' in row['recipe'] for row in result['shards']['policy']))
+        self.assertTrue(any('local_ci_proofs_scheduler_test.py' in row['recipe'] for row in result['shards']['policy']))
         proof_entries = [row for row in result['shards']['proofs']
                          if 'compose-a1-multi-account-proof_test.sh' in row['recipe'] or
                          'e2e-manifest_test.sh' in row['recipe'] or

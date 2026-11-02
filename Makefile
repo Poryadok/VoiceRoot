@@ -352,6 +352,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/local_ci_routing_test.py"
 	python3 "$(ROOT)/scripts/ci/local_ci_matrix_inventory_test.py"
 	python3 "$(ROOT)/scripts/ci/local_ci_proofs_component_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_proofs_scheduler_test.py"
 	python3 "$(ROOT)/scripts/ci/local_ci_staging_dispatch_test.py"
 	python3 "$(ROOT)/scripts/ci/local_ci_staging_network_test.py"
 	python3 "$(ROOT)/scripts/ci/local_ci_staging_request_test.py"

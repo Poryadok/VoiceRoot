@@ -317,7 +317,7 @@ def main():
             raise RuntimeError('client package output exceeded limit')
         import importlib.util
         dispatch_path = Path(__file__).with_name('local_ci_staging_dispatch.py')
-        dispatch_sha = '19f018aee53ee2c01e3f2d16c3c0098a487a4cbdd1acc16d0de0b1f3b0fe7c80'
+        dispatch_sha = '74a46d16e80dc0cbbd8629aaf408b5e78c5e85af61c7b36eb042bb91013ecf0a'
         chat._verify_file(dispatch_path, dispatch_sha)
         spec = importlib.util.spec_from_file_location('staging_dispatch', dispatch_path)
         dispatch = importlib.util.module_from_spec(spec); spec.loader.exec_module(dispatch)
@@ -574,7 +574,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
         hosted_policy_tests = 0
         if SHARD == 'policy':
-            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=77','bash','-ec',hosted_policy_script()], timeout=600)
+            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=78','bash','-ec',hosted_policy_script()], timeout=600)
             if any((BASE/('hosted-policy.' + suffix)).stat().st_size > 16 * 1024 * 1024 for suffix in ('stdout', 'stderr')):
                 raise RuntimeError('hosted policy output exceeded limit')
             hosted_output = (BASE/'hosted-policy.stdout').read_bytes() + (BASE/'hosted-policy.stderr').read_bytes()
@@ -632,8 +632,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         if SHARD == 'policy':
             execute('policy-skips', client, ['sh','-ec','[ "$(wc -c < /run/user/1000/policy-skips)" -le 1048576 ]; cat /run/user/1000/policy-skips'])
             skip_events = dispatch.parse_policy_skip_events((BASE/'policy-skips.stdout').read_bytes())
-            if any(index not in expected_skips for index in skip_events):
-                raise RuntimeError('unexpected policy skip recipe')
+            dispatch.validate_policy_skip_inventory(skip_events, expected_skips)
         for index in range(len(recipes)):
             data = (BASE/('recipe-log-'+str(index)+'.stdout')).read_bytes()
             if SHARD == 'policy': dispatch.validate_policy_recipe(index, data, skip_events.get(index, set()), expected_skips)

@@ -10,10 +10,10 @@ import re
 import sys
 
 
-MAKEFILE_SHA256 = '486649f8ae3951312e7738cd43b051e51bd8bb4f0713926c55ba635ce9cce8bd'
+MAKEFILE_SHA256 = '4e2056f162581dbd57ff61ef5d3478fe4ba5075aa34f36766988f3bde0009c09'
 WORKFLOW_SHA256 = '7bbccbb3edda71254e417860a9dfad0b096cee26af150a24893a0e94c975708a'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
-SHARD_RECIPE_COUNTS = {'policy': 77, 'runtime': 23, 'staging': 34, 'proofs': 15}
+SHARD_RECIPE_COUNTS = {'policy': 78, 'runtime': 23, 'staging': 34, 'proofs': 15}
 TRANSITIVE_SOURCE_DEPENDENCIES = {
     'scripts/ci/compose-a1-multi-account-proof.sh': ('scripts/ci/manifest-lines.sh',),
     'scripts/ci/compose-a1-multi-account-proof_test.sh': ('scripts/ci/manifest-lines.sh',),

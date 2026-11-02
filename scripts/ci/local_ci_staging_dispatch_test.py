@@ -61,10 +61,15 @@ class DispatchTests(unittest.TestCase):
             program = ('import unittest\nclass T(unittest.TestCase):\n'
                        ' @unittest.skip("reviewed reason")\n def test_case(self): pass\n'
                        'unittest.main()\n')
-            env = dict(os.environ, PYTHONPATH=str(root), VOICE_CI_SKIP_LOG=str(log), VOICE_CI_RECIPE_INDEX='21')
+            env = dict(os.environ, PYTHONPATH=str(root), VOICE_CI_SKIP_LOG=str(log), VOICE_CI_RECIPE_INDEX='78')
             result = subprocess.run([sys.executable, '-B', '-c', program], env=env, capture_output=True, timeout=20)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(m.parse_policy_skip_events(log.read_bytes()), {21: {('__main__.T.test_case', 'reviewed reason')}})
+            events = m.parse_policy_skip_events(log.read_bytes())
+            self.assertEqual(events, {78: {('__main__.T.test_case', 'reviewed reason')}})
+            with self.assertRaises(ValueError): m.validate_policy_skip_inventory(events, {})
+            with self.assertRaises(subprocess.CalledProcessError):
+                subprocess.run([sys.executable, '-B', '-c', program],
+                               env=dict(env, VOICE_CI_RECIPE_INDEX='79'), capture_output=True, timeout=20, check=True)
             with self.assertRaises(ValueError): m.parse_policy_skip_events(log.read_bytes() * 2)
             with self.assertRaises(ValueError): m.parse_policy_skip_events(b'not-json\n')
     def test_policy_skips_are_named_source_pinned_and_counted(self):
@@ -72,22 +77,31 @@ class DispatchTests(unittest.TestCase):
         rows = matrix.build(root)['shards']['policy']
         expected = m.policy_expected_skips(root, rows)
         recipes = m.inventory(rows, shard='policy')
-        self.assertEqual(len(recipes), 77)
+        self.assertEqual(len(recipes), 78)
         self.assertEqual({index: recipes[index][1] for index in m.POLICY_SHELL_MARKERS},
                          {1: 'scripts/ci/resolve-staging-matrix_test.sh',
                           2: 'scripts/ci/resolve-go-matrix_test.sh',
                           3: '.github/ci/verify-required-jobs_test.sh',
                           5: 'scripts/ci/buf-generate-ci-local-template_test.sh',
                           6: 'scripts/ci/check-image-catalog-drift.sh',
-                          56: 'scripts/ci/testcontainers-prune_test.sh',
-                          64: 'scripts/ci/ci-script-tests-reachability_test.sh',
-                          65: 'scripts/ci/check-auth-testcontainers-reports_test.sh',
-                          66: 'scripts/ci/check-auth-proto-sync_test.sh',
-                          67: 'scripts/ci/minio-mc-image-ci-contract_test.sh',
-                          68: 'scripts/ci/minio-compose-image-override-contract_test.sh',
-                          69: 'scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh'})
+                          57: 'scripts/ci/testcontainers-prune_test.sh',
+                          65: 'scripts/ci/ci-script-tests-reachability_test.sh',
+                          66: 'scripts/ci/check-auth-testcontainers-reports_test.sh',
+                          67: 'scripts/ci/check-auth-proto-sync_test.sh',
+                          68: 'scripts/ci/minio-mc-image-ci-contract_test.sh',
+                          69: 'scripts/ci/minio-compose-image-override-contract_test.sh',
+                          70: 'scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh'})
         self.assertIn(b'export VOICE_CI_RECIPE_INDEX="$idx"', m.wrappers(recipes, shard='policy')['python'])
-        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 33, 33: 1, 42: 2})
+        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 35, 33: 1, 43: 2})
+        m.validate_policy_recipe(77, b'Ran 1 test in 0s\nOK\n', set(), expected)
+        with self.assertRaises(ValueError):
+            m.validate_policy_recipe(78, b'Ran 1 test in 0s\nOK\n', set(), expected)
+        self.assertEqual(m.parse_policy_skip_events(b'{"recipe":77,"id":"last.test","reason":"skip"}\n'),
+                         {77: {('last.test', 'skip')}})
+        self.assertEqual(m.parse_policy_skip_events(b'{"recipe":78,"id":"hosted.test","reason":"skip"}\n'),
+                         {78: {('hosted.test', 'skip')}})
+        with self.assertRaises(ValueError):
+            m.parse_policy_skip_events(b'{"recipe":79,"id":"past.last.test","reason":"skip"}\n')
         event = next(iter(expected[21]))
         summary = b'Ran 3 tests in 0.1s\nOK (skipped=1)\n'
         m.validate_policy_recipe(21, summary, {event}, expected)
