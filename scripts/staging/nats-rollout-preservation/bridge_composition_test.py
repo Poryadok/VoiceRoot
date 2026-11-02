@@ -362,6 +362,39 @@ class CompositionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'closed'):pg.actor_read(args)
             docker.assert_not_called()
 
+    def test_hosted_story_schema_capture_routes_exact_final_prepare_read(self):
+        import actor_root,cohort_hosted_pg,commands,staging_cohort_preservation_pg as pg
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='owned-pg'
+        argv=pg.owner.PREFIX+list(actor_root.STORY_SCHEMA_ARGS)
+        response=b'{"database":"story_db","username":"voice","version":4,"dirty":false}'
+        fallback=Mock(side_effect=AssertionError('Story read escaped owned PostgreSQL'))
+        with patch.object(commands,'authority_guard') as guard,\
+             patch.object(cohort_hosted_pg,'authorize_launch',wraps=cohort_hosted_pg.authorize_launch) as authorize,\
+             patch.object(adapter,'_docker',return_value=response) as docker:
+            self.assertTrue(postgres_capture_required(argv))
+            self.assertEqual(adapter.capture(argv,fallback=fallback,timeout=40),response)
+            guard.assert_called_once_with(argv)
+            self.assertEqual(authorize.call_args.kwargs['timeout'],40)
+            docker.assert_called_once_with('exec',adapter.cid,*argv[argv.index('--')+1:])
+            fallback.assert_not_called()
+        with patch.object(commands,'authority_guard',side_effect=RuntimeError('closed')),\
+             patch.object(adapter,'_docker') as docker:
+            with self.assertRaisesRegex(RuntimeError,'closed'):
+                adapter.capture(argv,fallback=fallback,timeout=40)
+            docker.assert_not_called()
+
+    def test_hosted_story_schema_capture_does_not_adopt_changed_sql_or_body(self):
+        import actor_root,cohort_hosted_pg,commands,staging_cohort_preservation_pg as pg
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='owned-pg'
+        argv=pg.owner.PREFIX+list(actor_root.STORY_SCHEMA_ARGS)
+        for selected,body in ((argv[:-1]+['SELECT 1'],b''),(argv,b'changed')):
+            fallback=Mock(return_value=b'fallback')
+            with self.subTest(body=body),patch.object(commands,'authority_guard') as guard,\
+                 patch.object(adapter,'_docker') as docker:
+                self.assertEqual(adapter.capture(selected,body=body,fallback=fallback),b'fallback')
+                fallback.assert_called_once_with(selected,body=body)
+                guard.assert_not_called();docker.assert_not_called()
+
     def test_public_baseline_captures_all_first_install_workloads(self):
         import gis_first_install,gis_prerequisite,resource_claim,staging_cohort_preservation as cohort
         import staging_prerequisites,realtime_bootstrap,transaction

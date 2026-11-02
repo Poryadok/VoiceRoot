@@ -217,6 +217,11 @@ class HostedPostgres:
         if argv==identity:
             authorize()
             return self._docker('exec',self.cid,*argv[argv.index('--')+1:])
+        import actor_root
+        story_schema=pg.owner.PREFIX+list(actor_root.STORY_SCHEMA_ARGS)
+        if argv==story_schema and body==b'':
+            authorize()
+            return self._docker('exec',self.cid,*argv[argv.index('--')+1:])
         import space_authority
         space_password=pg.owner.PREFIX+list(space_authority.PASSWORD_ARGS)
         if argv==space_password and body==b'':
