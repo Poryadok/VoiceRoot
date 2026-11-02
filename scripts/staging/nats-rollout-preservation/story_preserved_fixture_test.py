@@ -17,14 +17,19 @@ class PreservedWriterTests(unittest.TestCase):
         for kind in ('story','story-probe'):
             args=runtime.story_create(name,pg,image,kind,dsn)
             runtime._story_create_check(args,{'kind':kind},targets,tools)
-            for mutation in ('foreign-network','host-network','image','mount','privileged','entrypoint'):
+            mutations=('foreign-network','host-network','image','mount','privileged','entrypoint')
+            if kind=='story-probe':mutations+=('loader','tmpfs','arguments')
+            for mutation in mutations:
                 changed=list(args)
                 if mutation=='foreign-network':changed[4]='container:'+'f'*64
                 elif mutation=='host-network':changed[4]='host'
                 elif mutation=='image':changed[-1]='sha256:'+'f'*64
                 elif mutation=='mount':changed[7:7]=['--mount','type=bind,src=/,dst=/host']
                 elif mutation=='privileged':changed[7:7]=['--privileged']
-                else:changed[changed.index('--entrypoint')+1]='/bin/sh'
+                elif mutation=='entrypoint':changed[changed.index('--entrypoint')+1]='/bin/false'
+                elif mutation=='loader':changed[changed.index(runtime.STORY_PROBE_LOADER)]='true'
+                elif mutation=='tmpfs':changed[changed.index(runtime.STORY_PROBE_TMPFS)]='/tmp:rw'
+                else:changed.append('foreign')
                 with self.subTest(kind=kind,mutation=mutation),self.assertRaises(Blocked):
                     runtime._story_create_check(changed,{'kind':kind},targets,tools)
 

@@ -161,6 +161,11 @@ class RestoreJournal:
 
 
 STORY_HEALTH='i=0; while [ "$i" -lt 45 ]; do if wget -q -O - http://127.0.0.1:8080/health; then exit 0; fi; i=$((i+1)); sleep 1; done; exit 1'
+STORY_PROBE_TMPFS='/tmp:rw,exec,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=0700'
+STORY_PROBE_SHA256='458e4e3e5e940137cddddaf42dda1c22505f92de5792600364907a343b209be0'
+STORY_PROBE_LOADER=('set -eu; cat > /tmp/voice-story-restored8-probe; chmod 0500 /tmp/voice-story-restored8-probe; '
+    'test "$(sha256sum /tmp/voice-story-restored8-probe)" = "'+STORY_PROBE_SHA256+'  /tmp/voice-story-restored8-probe"; '
+    'set +e; /tmp/voice-story-restored8-probe "$@"; result=$?; printf "\\nVOICE_PROBE_EXIT=%s\\n" "$result"; exit 0')
 
 
 def story_create(name,postgres,image,kind,dsn,baseline=0,unrelated=0,mode='positive'):
@@ -178,8 +183,9 @@ def story_create(name,postgres,image,kind,dsn,baseline=0,unrelated=0,mode='posit
         if baseline or unrelated or mode!='positive':raise Blocked('cohort_story_command_invalid')
         return args+['-e','DATABASE_URL='+dsn,'-e','LISTEN_ADDR=:8080','-e','STORY_GRPC_LISTEN=:9090',
             '-e','USER_GRPC_ADDR=127.0.0.1:9091','--entrypoint','/service',image]
-    return args+['-e','FIXTURE_STORY='+dsn,'-e','FIXTURE_BASELINE_STORIES='+('invalid' if mode=='invalid' else str(baseline)),
-        '-e','FIXTURE_BASELINE_UNRELATED='+str(unrelated),'--entrypoint','/tmp/voice-story-restored8-probe',image]+(['wrong'] if mode=='wrong' else [])
+    return args+['--interactive','--tmpfs',STORY_PROBE_TMPFS,
+        '-e','FIXTURE_STORY='+dsn,'-e','FIXTURE_BASELINE_STORIES='+('invalid' if mode=='invalid' else str(baseline)),
+        '-e','FIXTURE_BASELINE_UNRELATED='+str(unrelated),'--entrypoint','/bin/sh',image,'-c',STORY_PROBE_LOADER,'--']+(['wrong'] if mode=='wrong' else [])
 
 
 def _story_create_check(args,resource,targets,tools):
@@ -189,7 +195,7 @@ def _story_create_check(args,resource,targets,tools):
             raise ValueError()
         kind=resource['kind'];env={args[i+1].split('=',1)[0]:args[i+1].split('=',1)[1]
             for i,v in enumerate(args[:-1]) if v=='-e'}
-        image=args[-2] if args[-1]=='wrong' else args[-1]
+        image=args[args.index('--entrypoint')+2]
         allowed={tools['ids'][key] for key in tools['images'] if re.fullmatch('story[0-9]+',key)}
         if image not in allowed:raise ValueError()
         mode='wrong' if args[-1]=='wrong' else ('invalid' if env.get('FIXTURE_BASELINE_STORIES')=='invalid' else 'positive')
@@ -200,7 +206,7 @@ def _story_create_check(args,resource,targets,tools):
     except (IndexError,KeyError,TypeError,ValueError):raise Blocked('cohort_story_create_invalid') from None
 
 
-def _command(session,argv,body):
+def _command(session,argv,body,*,allow_probe_started=False):
     if not isinstance(argv,(list,tuple)) or any(not isinstance(a,str) or '\0' in a for a in argv):
         raise Blocked('cohort_restore_command_invalid')
     args=list(argv)
@@ -245,8 +251,17 @@ def _command(session,argv,body):
     elif len(args)==2 and args[0] in ('inspect','start','wait','logs') and args[1] in targets:
         resource=targets[args[1]];kind=args[0]
         if body or resource['status'] not in ('OBSERVED','ACTIVE','REMOVING'):raise Blocked('cohort_restore_command_invalid')
+        if kind=='start' and resource['kind']=='story-probe':raise Blocked('cohort_story_command_invalid')
         if kind in ('wait','logs') and (resource['kind']!='story-probe' or resource['status']!='ACTIVE'):
             raise Blocked('cohort_story_command_invalid')
+    elif len(args)==4 and args[:3]==['start','--attach','--interactive'] and args[3] in targets:
+        import story_fixture
+        resource=targets[args[3]];kind='probe-start'
+        if (resource['kind']!='story-probe' or resource['status']!='ACTIVE'
+            or resource.get('probe_started') and not allow_probe_started
+            or story_fixture.PRESERVED_CALLER_SHA256!=STORY_PROBE_SHA256
+            or not (2<<20)<len(body)<=32<<20 or hashlib.sha256(body).hexdigest()!=STORY_PROBE_SHA256):
+            raise Blocked('cohort_story_caller_changed')
     elif len(args)==4 and args[:3]==['stop','--time','5'] and args[3] in targets:
         resource=targets[args[3]]
         if body or resource['kind']!='story' or resource['status']!='ACTIVE':raise Blocked('cohort_story_command_invalid')
@@ -257,17 +272,7 @@ def _command(session,argv,body):
         if args[1]=='-':
             match=re.fullmatch(r'([a-f0-9]{64}):/tmp/',args[2]);cid=match.group(1) if match else None
             if cid not in targets or not body:raise Blocked('cohort_restore_copy_invalid')
-            if targets[cid]['kind']=='story-probe':
-                import story_fixture
-                try:
-                    with tarfile.open(fileobj=io.BytesIO(body),mode='r:') as archive:
-                        members=archive.getmembers()
-                        if (len(members)!=1 or members[0].name!='voice-story-restored8-probe' or not members[0].isfile()
-                            or members[0].mode!=0o555 or not 0<members[0].size<=32<<20
-                            or hashlib.sha256(archive.extractfile(members[0]).read()).hexdigest()!=story_fixture.PRESERVED_CALLER_SHA256):
-                            raise ValueError()
-                except (ValueError,tarfile.TarError):raise Blocked('cohort_story_caller_changed') from None
-            elif targets[cid]['kind']!='postgres':raise Blocked('cohort_restore_copy_invalid')
+            if targets[cid]['kind']!='postgres':raise Blocked('cohort_restore_copy_invalid')
         else:
             match=re.fullmatch(r'([a-f0-9]{64}):/usr/local/bin/migrate',args[1]);cid=match.group(1) if match else None
             if cid not in targets or targets[cid]['kind']!='migrate' or args[2]!='-' or body:raise Blocked('cohort_restore_copy_invalid')
@@ -294,7 +299,7 @@ def _command(session,argv,body):
 def revalidate_restore_large_input(session,permit,argv,body):
     """Recheck the exact owned clone and tooling immediately before launch."""
     import resource_claim
-    actual,_,state,resource,_=_command(session,argv,body)
+    actual,_,state,resource,_=_command(session,argv,body,allow_probe_started=True)
     tools=owner._read(owner._base(session)/'restore-tools.json')
     if (type(permit) is not resource_claim._CohortRestoreLargePermit or permit.session is not session
         or actual!=list(argv) or resource is None
@@ -327,7 +332,8 @@ def restore_command(session,argv,*,body=b'',timeout=120):
         tools=owner._read(owner._base(session)/'restore-tools.json')
         fixed_tool=(len(tail)==6 and tail[:2]==['exec','-i'] and tail[3:]==['sh','-ec',
             'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate'])
-        fixed_probe=(len(tail)==3 and tail[:2]==['cp','-'] and resource is not None and resource['kind']=='story-probe')
+        fixed_probe=(len(tail)==4 and tail[:3]==['start','--attach','--interactive']
+                     and resource is not None and resource['kind']=='story-probe')
         if (resource is None or resource.get('status')!='ACTIVE'
             or not fixed_probe and (not fixed_tool or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256'))):
             raise Blocked('cohort_restore_body_limit')
@@ -336,6 +342,10 @@ def restore_command(session,argv,*,body=b'',timeout=120):
         if (type(session) is not resource_claim.Session or row.get('phase')!='cohort-preservation'
             or not row.get('cohort_preservation_sha256') or session._cohort_restore_large_permit is not None):
             raise Blocked('cohort_restore_large_input_invalid')
+        if fixed_probe:
+            # Persist the one-shot intent before the external observation. A
+            # crash after launch can never make this CID eligible for replay.
+            resource['probe_started']=True;owner.save(path,state)
         session._cohort_restore_large_permit=resource_claim._CohortRestoreLargePermit(
             session,resource_claim.digest(session.binding()),row['cohort_preservation_sha256'],tuple(argv),
             hashlib.sha256(body).hexdigest(),len(body),timeout,80<<20,
@@ -358,7 +368,7 @@ def restore_command(session,argv,*,body=b'',timeout=120):
     elif kind=='create':
         cid=result.decode('ascii').strip()
         if not re.fullmatch('[a-f0-9]{64}',cid):raise Blocked('cohort_restore_create_unknown')
-        resource.update(cid=cid,status='OBSERVED',image=(argv[-2] if argv[-1]=='wrong' else argv[-1]));owner.save(path,state)
+        resource.update(cid=cid,status='OBSERVED',image=tail[tail.index('--entrypoint')+2] if resource['kind'] in ('story','story-probe') else argv[-1]);owner.save(path,state)
         if resource['kind'] in ('story','story-probe'):
             resource.update(network=tail[4],create_args=tail);owner.save(path,state)
     elif kind=='inspect':
@@ -373,6 +383,12 @@ def restore_command(session,argv,*,body=b'',timeout=120):
             host=rows[0].get('HostConfig',{});config=rows[0].get('Config',{})
             if (config.get('User')!='65532:65532' or host.get('ReadonlyRootfs') is not True
                 or host.get('CapDrop')!=['ALL'] or 'no-new-privileges' not in host.get('SecurityOpt',[])):
+                raise Blocked('cohort_story_isolation_changed')
+            if resource['kind']=='story-probe' and (host.get('Tmpfs')!={'/tmp':STORY_PROBE_TMPFS.split(':',1)[1]}
+                or config.get('OpenStdin') is not True or config.get('Entrypoint')!=['/bin/sh']
+                or config.get('Cmd')!=resource['create_args'][resource['create_args'].index('--entrypoint')+3:]):
+                raise Blocked('cohort_story_isolation_changed')
+            if resource['kind']=='story' and host.get('Tmpfs'):
                 raise Blocked('cohort_story_isolation_changed')
         if resource['kind']=='postgres' and (len(volumes)!=1 or volumes[0].get('Destination')!='/var/lib/postgresql/data') or resource['kind']!='postgres' and volumes:
             raise Blocked('cohort_restore_volume_changed')
