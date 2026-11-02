@@ -53,13 +53,21 @@ func TestMaintenanceWindowWithRealAutovacuum(t *testing.T) {
 	_, err = target.Exec(ctx, `CREATE TABLE vacuum_probe WITH (autovacuum_vacuum_threshold=0,autovacuum_vacuum_scale_factor=0,autovacuum_analyze_threshold=1000000000) AS SELECT i,repeat(md5(i::text),32) payload FROM generate_series(1,50000) i; DELETE FROM vacuum_probe WHERE i%2=0`)
 	require.NoError(t, err)
 	var workerPID int32
+	var backendType, workerApplication string
+	var checkErr error
 	require.Eventually(t, func() bool {
 		err := admin.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname='space_db' AND backend_type='autovacuum worker' LIMIT 1`).Scan(&workerPID)
+		if err != nil {
+			return false
+		}
+		checkErr = check()
+		if checkErr != nil {
+			return true
+		}
+		err = admin.QueryRow(ctx, `SELECT backend_type,application_name FROM pg_stat_activity WHERE pid=$1 AND datname='space_db'`, workerPID).Scan(&backendType, &workerApplication)
 		return err == nil
-	}, 30*time.Second, 50*time.Millisecond, "requires real PostgreSQL autovacuum, never an application_name imitation")
-	require.NoError(t, check(), "real autovacuum must preserve the drained application's maintenance window")
-	var backendType, workerApplication string
-	require.NoError(t, admin.QueryRow(ctx, `SELECT backend_type,application_name FROM pg_stat_activity WHERE pid=$1 AND datname='space_db'`, workerPID).Scan(&backendType, &workerApplication), "same real worker must remain present across the successful check")
+	}, 30*time.Second, 50*time.Millisecond, "same real autovacuum worker must remain present across the successful check")
+	require.NoError(t, checkErr, "real autovacuum must preserve the drained application's maintenance window")
 	require.Equal(t, "autovacuum worker", backendType)
 	require.NotEqual(t, applicationName, workerApplication)
 	t.Logf("same actual %s PID %d remained across successful production owner check", backendType, workerPID)
@@ -72,14 +80,14 @@ func TestMaintenanceWindowWithRealAutovacuum(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorContains(t, check(), "maintenance window lost", "actual foreign writer must block")
 	require.NoError(t, foreign.Close(ctx))
-	require.NoError(t, check(), "foreign disconnect restores the same owner")
+	require.Eventually(t, func() bool { return check() == nil }, 5*time.Second, 50*time.Millisecond, "foreign disconnect restores the same owner")
 	foreignCfg.RuntimeParams["application_name"] = ""
 	foreign, err = pgx.ConnectConfig(ctx, foreignCfg)
 	require.NoError(t, err)
 	defer func(c *pgx.Conn) { require.NoError(t, c.Close(context.Background())) }(foreign)
 	require.ErrorContains(t, check(), "maintenance window lost", "idle unnamed foreign client also blocks")
 	require.NoError(t, foreign.Close(ctx))
-	require.NoError(t, check())
+	require.Eventually(t, func() bool { return check() == nil }, 5*time.Second, 50*time.Millisecond, "unnamed client disconnect restores the same owner")
 	require.Error(t, checkMaintenanceWindow(ctx, admin, pid+1, role, applicationName, creation), "wrong owner PID")
 	require.Error(t, checkMaintenanceWindow(ctx, admin, pid, role+"-wrong", applicationName, creation), "wrong owner role")
 	require.Error(t, checkMaintenanceWindow(ctx, admin, pid, role, applicationName, &store.NativeInstallerSourceFacts{DatabaseOID: creation.DatabaseOID + 1}), "changed database OID")

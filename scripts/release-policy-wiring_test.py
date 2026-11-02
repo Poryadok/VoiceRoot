@@ -81,7 +81,9 @@ command bash scripts/prod/render-and-apply-prod.sh'''
     def test_snapshot_restart_assumption_is_bound_to_direct_image_entrypoints(self):
         for owner in OWNERS:
             dockerfile = (ROOT / 'src/backend' / owner / 'Dockerfile').read_text(encoding='utf-8-sig')
-            lines = [line for line in dockerfile.splitlines() if line.startswith('ENTRYPOINT ')]
+            stages = dockerfile.split('\nFROM ')
+            self.assertGreater(len(stages), 1)
+            lines = [line for line in stages[-1].splitlines() if line.startswith('ENTRYPOINT ')]
             expected = 'ENTRYPOINT ["java", "-jar", "/auth.jar"]' if owner == 'auth' else 'ENTRYPOINT ["/service"]'
             self.assertEqual(lines, [expected])
 

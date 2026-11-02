@@ -299,6 +299,11 @@ permission. Member и Guest не получают его по умолчанию
 | `MEMBER_MANAGE_NICKNAMES` | Менять ник в спейсе |
 | `MEMBER_ASSIGN_ROLES` | Назначать и снимать с участников роли **ниже своей** позиции в иерархии (без создания/удаления определений ролей — это `SPACE_MANAGE_ROLES`) |
 
+Space requests the exact global `MEMBER_BAN` decision over the protected Role
+listener with a request-bound `service:space` principal. Role checks current
+Space membership and the effective mask; the ordinary listener cannot grant this
+decision. Missing protected transport fails closed.
+
 ### Создание текстовых чатов в спейсе
 
 | Константа | Назначение |

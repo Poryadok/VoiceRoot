@@ -5,6 +5,7 @@ package identityassociation
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"github.com/google/uuid"
 	"math"
@@ -87,6 +88,39 @@ func (k *Keyset) Snapshot() KeysetSnapshot {
 		s.Versions[v] = f
 	}
 	return s
+}
+
+// CustodyDigest commits the complete public keyset description, never secrets.
+// Encoding: domain plus NUL, revision uint64, active version uint32, count
+// uint32, then ascending (version uint32, SHA-256 fingerprint); integers are
+// big endian. It binds a custody record to every retained selector key.
+func (k *Keyset) CustodyDigest() ([32]byte, error) {
+	if k == nil || k.snapshot.Revision == 0 || len(k.snapshot.Versions) == 0 {
+		return [32]byte{}, ErrKeysetIncomplete
+	}
+	h := sha256.New()
+	_, _ = h.Write([]byte("voice.user.identity-association.custody-keyset.v1\x00"))
+	var number [8]byte
+	binary.BigEndian.PutUint64(number[:], k.snapshot.Revision)
+	_, _ = h.Write(number[:])
+	binary.BigEndian.PutUint32(number[:4], k.snapshot.ActiveVersion)
+	_, _ = h.Write(number[:4])
+	binary.BigEndian.PutUint32(number[:4], uint32(len(k.snapshot.Versions)))
+	_, _ = h.Write(number[:4])
+	versions := make([]uint32, 0, len(k.snapshot.Versions))
+	for version := range k.snapshot.Versions {
+		versions = append(versions, version)
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	for _, version := range versions {
+		binary.BigEndian.PutUint32(number[:4], version)
+		_, _ = h.Write(number[:4])
+		fingerprint := k.snapshot.Versions[version]
+		_, _ = h.Write(fingerprint[:])
+	}
+	var result [32]byte
+	copy(result[:], h.Sum(nil))
+	return result, nil
 }
 
 func (p PreparedSelectors) valid() bool {

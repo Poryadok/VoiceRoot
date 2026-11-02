@@ -35,6 +35,7 @@ import (
 	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/r2avatar"
 	"voice/backend/user/internal/searchprojection"
+	"voice/backend/user/internal/sourcecustody"
 	"voice/backend/user/internal/store"
 	"voice/backend/user/internal/userevents"
 
@@ -81,10 +82,35 @@ func runUser(parent context.Context) error {
 	if err != nil {
 		return fmt.Errorf("user Space capture principal config: %w", err)
 	}
+	if !captureEnabled && hasOrphanCaptureRuntimeConfig() {
+		return errors.New("user Space capture principal config: capture listener required")
+	}
+	var captureRuntime *spaceCaptureRuntime
+	var capturePrincipalConfig socialprincipal.Config
 	if captureEnabled {
-		// Transport configuration cannot qualify canonical identity source
-		// currentness. Until its production opener exists, deny before serving.
-		return errors.New("qualified User capture source unavailable")
+		cfg, configErr := loadSpaceCaptureRuntimeConfig(os.LookupEnv)
+		if configErr != nil || sourcecustody.ValidateUserSourceURL(os.Getenv("DATABASE_URL")) != nil {
+			return errors.New("qualified User capture source unavailable")
+		}
+		capturePrincipalConfig, _, err = socialprincipal.LoadFromEnvWithAudience("user", "space-account-capture", "USER_SPACE_CAPTURE_PRINCIPAL_", strings.TrimSpace(os.Getenv("USER_SPACE_CAPTURE_PRINCIPAL_GRPC_LISTEN")))
+		if err != nil {
+			return fmt.Errorf("user Space capture principal config: %w", err)
+		}
+		captureRuntime, err = startSpaceCaptureRuntime(runCtx, cfg)
+		if err != nil {
+			return errors.New("qualified User capture source unavailable")
+		}
+		defer captureRuntime.Close()
+		go func() {
+			select {
+			case <-captureRuntime.jwks.Done():
+				startup.fail(errors.New("user capture JWKS stopped"))
+			case <-runCtx.Done():
+			}
+		}()
+		if captureRuntime.waitAdmission(runCtx) != nil {
+			return errors.New("qualified User capture source unavailable")
+		}
 	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_USER, ":9097")
 	if err != nil {
@@ -250,7 +276,12 @@ func runUser(parent context.Context) error {
 	var pool *pgxpool.Pool
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(runCtx, runtimeconfig.PostgresConnectTimeoutFromEnv())
-		p, err := postgres.NewPool(ctx, dbURL)
+		var p *pgxpool.Pool
+		if captureRuntime != nil {
+			p, err = sourcecustody.OpenUserSourcePool(ctx, dbURL)
+		} else {
+			p, err = postgres.NewPool(ctx, dbURL)
+		}
 		cancel()
 		if err != nil {
 			return fmt.Errorf("postgres: %v", err)
@@ -260,6 +291,21 @@ func runUser(parent context.Context) error {
 	}
 
 	if pool != nil {
+		// Every User endpoint and consumer shares the same profile writer.
+		// Capture startup can then install its guarded writer consistently.
+		profiles := store.NewProfileStore(pool)
+		var captureAuthority grpcsvc.SpaceAccountCaptureAuthority
+		if captureRuntime != nil {
+			guarded, capture, bindErr := captureRuntime.bind(runCtx, pool)
+			if bindErr != nil {
+				return errors.New("qualified User capture source unavailable")
+			}
+			profiles = guarded
+			captureAuthority, err = grpcsvc.NewCustodiedSpaceAccountCaptureAuthority(capture.CaptureProfiles)
+			if err != nil {
+				return errors.New("qualified User capture source unavailable")
+			}
+		}
 		var blocks grpcsvc.AccountBlockChecker
 		var socialGraph grpcsvc.SocialGraphChecker
 		var spaceCoMembership grpcsvc.SpaceCoMembershipChecker
@@ -377,7 +423,7 @@ func runUser(parent context.Context) error {
 		srv := grpc.NewServer(ordinaryOptions...)
 		userSvc := &grpcsvc.UserGRPC{
 			ReleasePolicy:       releaseRuntime.Policy(),
-			Profiles:            store.NewProfileStore(pool),
+			Profiles:            profiles,
 			ProfileMutations:    profileMutations,
 			Privacy:             store.NewPrivacyStore(pool),
 			Presence:            presence,
@@ -408,7 +454,7 @@ func runUser(parent context.Context) error {
 		defer func() { _ = lis.Close() }()
 
 		if sourceEnabled {
-			sourceServer, sourceRuntime, err := newUserAuthorityServer(runCtx, sharedOptions, sourceConfig, store.NewProfileStore(pool))
+			sourceServer, sourceRuntime, err := newUserAuthorityServer(runCtx, sharedOptions, sourceConfig, profiles)
 			if err != nil {
 				return fmt.Errorf("user authority source startup: %v", err)
 			}
@@ -423,7 +469,7 @@ func runUser(parent context.Context) error {
 			}
 		}
 		if accountDeletionConfig.Enabled {
-			accountDeletionConsumer, err := userevents.NewAccountDeletionConsumer(accountDeletionConfig.NATSURL, accountDeletionConfig.CredentialsFile, store.NewProfileStore(pool))
+			accountDeletionConsumer, err := userevents.NewAccountDeletionConsumer(accountDeletionConfig.NATSURL, accountDeletionConfig.CredentialsFile, profiles)
 			if err != nil {
 				return fmt.Errorf("account deletion consumer: %v", err)
 			}
@@ -446,7 +492,7 @@ func runUser(parent context.Context) error {
 			if hostErr != nil || strings.TrimSpace(owner) == "" {
 				return fmt.Errorf("search projection outbox owner: %v", hostErr)
 			}
-			dispatcher, projectionNATS, dispatchErr := searchprojection.NewOutboxDispatcher(store.NewProfileStore(pool), natsURL, owner)
+			dispatcher, projectionNATS, dispatchErr := searchprojection.NewOutboxDispatcher(profiles, natsURL, owner)
 			if dispatchErr != nil {
 				return fmt.Errorf("search projection outbox dispatcher: %v", dispatchErr)
 			}
@@ -457,6 +503,25 @@ func runUser(parent context.Context) error {
 		}
 		userv1.RegisterUserServiceServer(srv, userSvc)
 		defer srv.Stop()
+		if captureAuthority != nil {
+			capturePrincipal, principalErr := socialprincipal.New(runCtx, capturePrincipalConfig)
+			if principalErr != nil {
+				return fmt.Errorf("user Space capture principal: %v", principalErr)
+			}
+			defer func() { _ = capturePrincipal.Close() }()
+			listener, listenErr := net.Listen("tcp", capturePrincipalConfig.ListenAddr)
+			if listenErr != nil {
+				return fmt.Errorf("user Space capture listen: %v", listenErr)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, capturePrincipal.ServerOptions()...)
+			server := grpc.NewServer(options...)
+			grpcsvc.RegisterSpaceAccountCaptureServer(server, captureAuthority)
+			defer server.Stop()
+			if serveErr := startup.Serve(server, listener); serveErr != nil {
+				return fmt.Errorf("user Space capture serve: %v", serveErr)
+			}
+		}
 		if privacyRuntime != nil {
 			privacyListener, err := net.Listen("tcp", principalConfig.ListenAddr)
 			if err != nil {

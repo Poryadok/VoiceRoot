@@ -42,6 +42,9 @@ func (s *SpaceGRPC) requireSpacePermissionForProfile(ctx context.Context, spaceI
 }
 
 func (s *SpaceGRPC) checkSpacePermissionForProfile(ctx context.Context, spaceID, caller uuid.UUID, permission string) error {
+	if permission == permissions.MemberBan {
+		return s.requireBanPermission(ctx, spaceID, caller)
+	}
 	if s.Roles == nil {
 		return s.requireSpaceOwnerForProfile(ctx, spaceID, caller)
 	}

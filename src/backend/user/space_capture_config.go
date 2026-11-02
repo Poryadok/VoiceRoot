@@ -29,3 +29,16 @@ func validateSpaceCaptureConfig() (bool, error) {
 	_, _, err := socialprincipal.LoadFromEnvWithAudience("user", "space-account-capture", prefix, listen)
 	return true, err
 }
+
+// Capture-only dependency settings without the protected listener must not be
+// mistaken for the legacy, entirely unconfigured User startup path.
+func hasOrphanCaptureRuntimeConfig() bool {
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		name = strings.ToUpper(name)
+		if strings.HasPrefix(name, "USER_CUSTODY_") || strings.HasPrefix(name, "USER_IDENTITY_AUTH_") || name == "USER_IDENTITY_KEY_MANIFEST" || name == "USER_IDENTITY_KEYS_DIR" || name == "USER_PRINCIPAL_JWKS_LISTEN" || name == "USER_PRINCIPAL_JWKS_TLS_CERT_FILE" || name == "USER_PRINCIPAL_JWKS_TLS_KEY_FILE" {
+			return true
+		}
+	}
+	return false
+}

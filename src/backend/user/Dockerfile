@@ -9,6 +9,7 @@ COPY pkg/go.mod ./pkg/
 COPY user/go.mod ./user/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
+COPY user/pb/voice/identityerasure/go.mod ./user/pb/voice/identityerasure/
 COPY user/pb/voice/social/go.mod ./user/pb/voice/social/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
@@ -35,7 +36,18 @@ COPY user ./user
 WORKDIR /src/user
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildSourceSHA=${VOICE_SOURCE_SHA}" -o /out/service .
 
-FROM alpine:3.20
+FROM build AS custody-build
+RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked --mount=type=cache,target=/root/.cache/go-build,id=voice-gobuild,sharing=locked CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/sourcecustody ./cmd/sourcecustody
+
+FROM alpine:3.20 AS custody
+RUN adduser -D -H -u 65532 nonroot
+WORKDIR /
+COPY --from=custody-build /out/sourcecustody /sourcecustody
+COPY migrations/user_db /migrations/user_db
+USER nonroot:nonroot
+ENTRYPOINT ["/sourcecustody"]
+
+FROM alpine:3.20 AS runtime
 RUN adduser -D -H -u 65532 nonroot
 USER nonroot:nonroot
 WORKDIR /

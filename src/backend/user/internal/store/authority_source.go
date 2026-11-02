@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"voice/backend/pkg/authoritysource"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
+	"voice/backend/user/internal/userauthoritycatalog"
 )
 
 var _ authoritysource.SchemaReader = (*ProfileStore)(nil)
@@ -19,7 +20,7 @@ func (s *ProfileStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	tx, err := authoritysource.BeginRead(ctx, s.pool, userAuthorityCatalog)
+	tx, err := s.beginUserAuthorityRead(ctx)
 	if err != nil {
 		return err
 	}
@@ -33,7 +34,51 @@ func (s *ProfileStore) beginAuthorityRead(ctx context.Context, scope *authorityv
 	if s == nil {
 		return nil, errors.New("user source pool unavailable")
 	}
-	return authoritysource.BeginRead(ctx, s.pool, userAuthorityCatalog)
+	return s.beginUserAuthorityRead(ctx)
+}
+
+// The version query is only a selector. BeginRead checks the selected clean
+// version again while holding the source catalog locks for the entire cut.
+func (s *ProfileStore) beginUserAuthorityRead(ctx context.Context) (pgx.Tx, error) {
+	if s == nil || s.pool == nil {
+		return nil, errors.New("user source pool unavailable")
+	}
+	var version int64
+	if err := s.pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+		return nil, errors.New("user source schema unavailable")
+	}
+	catalog := userAuthorityCatalog
+	switch version {
+	case 21:
+	case 22:
+		catalog = userauthoritycatalog.Catalog()
+	default:
+		return nil, errors.New("user source schema version unavailable")
+	}
+	tx, err := authoritysource.BeginRead(ctx, s.pool, catalog)
+	if err != nil {
+		return nil, err
+	}
+	if version == 21 {
+		// A relabelled or partially installed identity migration must not gain
+		// authority through the older catalog. This is not an anti-rollback proof.
+		var present bool
+		err = tx.QueryRow(ctx, `SELECT EXISTS (
+ SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname='public' AND (c.relname LIKE 'identity\_%' ESCAPE '\' OR c.relname LIKE 'association\_%' ESCAPE '\')
+ UNION ALL SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+ WHERE n.nspname='public' AND (p.proname LIKE 'identity\_%' ESCAPE '\' OR p.proname='reject_user_profile_identity_rebind')
+ UNION ALL SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.profiles'::regclass AND NOT a.attisdropped
+ AND a.attname IN ('identity_association_id','identity_baseline_cut')
+ UNION ALL SELECT 1 FROM pg_trigger t WHERE NOT t.tgisinternal AND t.tgrelid IN ('public.profiles'::regclass,'public.user_account_lifecycle'::regclass,'public.sdk_author_tombstones'::regclass,'public.user_authority_revision'::regclass)
+ AND (t.tgname LIKE 'identity\_%' ESCAPE '\' OR t.tgname='user_profile_identity_immutable')
+)`).Scan(&present)
+		if err != nil || present {
+			authoritysource.RollbackRead(ctx, tx)
+			return nil, errors.New("user source identity schema unavailable")
+		}
+	}
+	return tx, nil
 }
 func userSourceRevision(ctx context.Context, tx pgx.Tx) (uint64, error) {
 	var revision uint64
