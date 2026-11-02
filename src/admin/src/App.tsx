@@ -23,6 +23,7 @@ import {
   setAccessToken,
   setPkceVerifier,
   setOAuthState,
+  subscribeSession,
 } from "./oauth/session";
 
 function LoginScreen() {
@@ -89,6 +90,7 @@ function AdminShell() {
 
   useEffect(() => {
     setLoggedIn(Boolean(getAccessToken()));
+    return subscribeSession(() => setLoggedIn(isLoggedIn()));
   }, []);
 
   if (!loggedIn) {

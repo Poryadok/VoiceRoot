@@ -4,7 +4,7 @@ import { OAuthCallback } from './OAuthCallback';
 import { apiBaseUrl, apiFetch, oauthClientId, oauthDisabled } from './oauth/api';
 import { callbackRedirectUri } from './oauth/callback';
 import { buildAuthorizeUrl, randomCodeVerifier, s256Challenge } from './oauth/pkce';
-import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier, setOAuthState } from './oauth/session';
+import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier, setOAuthState, subscribeSession } from './oauth/session';
 import { defaultManifest } from './manifestDefaults';
 import {
   catalogHasAutocomplete,
@@ -56,6 +56,8 @@ function Portal() {
   const selectionGenerationRef = useRef(0);
   const authSessionGenerationRef = useRef(0);
   const secretSessionRef = useRef<AuthenticatedRequest | null>(null);
+  const credentialMutationRef = useRef<AuthenticatedRequest | null>(null);
+  const [mutatingCredentials, setMutatingCredentials] = useState(false);
   const [detailLoadedBotId, setDetailLoadedBotId] = useState('');
   const [manifestLoadedBotId, setManifestLoadedBotId] = useState('');
   const [botToken, setBotToken] = useState('');
@@ -222,6 +224,7 @@ function Portal() {
     clearSecrets = true,
     clearStatus = true,
   ) => {
+    if (credentialMutationRef.current && credentialMutationRef.current !== request) return;
     const selectionGeneration = ++selectionGenerationRef.current;
     selectedBotIdRef.current = botId;
     setSelectedBotId(botId);
@@ -244,8 +247,8 @@ function Portal() {
     void loadBotCatalog(botId, request, selectionGeneration);
   }, [applyBotToEditForm, loadBotCatalog, loadBotDetail]);
 
-  const refreshBots = useCallback(async () => {
-    const request = beginAuthenticatedRequest();
+  const refreshBots = useCallback(async (selectionOwner?: AuthenticatedRequest) => {
+    const request = selectionOwner ?? beginAuthenticatedRequest();
     if (!request) {
       return;
     }
@@ -263,6 +266,7 @@ function Portal() {
     }
     const list = extractBots(body);
     setBots(list);
+    if (credentialMutationRef.current && credentialMutationRef.current !== request) return;
     if (list.length > 0 && list[0].id) {
       const current = selectedBotIdRef.current;
       const nextId = current && list.some((bot) => bot.id === current)
@@ -321,12 +325,13 @@ function Portal() {
     setStatus('Using pasted JWT');
   }
 
-  function logout() {
+  const resetAuthenticatedUi = useCallback((message: string) => {
     authSessionGenerationRef.current += 1;
     selectionGenerationRef.current += 1;
     selectedBotIdRef.current = '';
     secretSessionRef.current = null;
-    clearSession();
+    credentialMutationRef.current = null;
+    setMutatingCredentials(false);
     setLoggedIn(false);
     setBots([]);
     setSelectedBotId('');
@@ -344,7 +349,18 @@ function Portal() {
     setRegDescription('');
     setRegScopesJson('["TEXT_CHAT_SEND_MESSAGES"]');
     setManifest(defaultManifest);
-    setStatus('Signed out');
+    setStatus(message);
+  }, []);
+
+  useEffect(() => subscribeSession(() => {
+    if (!getAccessToken()) {
+      resetAuthenticatedUi('Session expired. Sign in again.');
+    }
+  }), [resetAuthenticatedUi]);
+
+  function logout() {
+    clearSession();
+    resetAuthenticatedUi('Signed out');
   }
 
   function clearOneShotSecrets() {
@@ -476,6 +492,7 @@ function Portal() {
   }
 
   async function registerBot() {
+    if (credentialMutationRef.current) return;
     const request = beginAuthenticatedRequest();
     if (!request) {
       return;
@@ -489,41 +506,53 @@ function Portal() {
     if (!scopesJson) {
       scopesJson = '["TEXT_CHAT_SEND_MESSAGES"]';
     }
-    setStatus('Registering…');
-    const res = await apiFetch('/api/v1/bots', {
-      method: 'POST',
-      body: JSON.stringify({
-        name,
-        description: regDescription.trim(),
-        scopes_json: scopesJson,
-      }),
-    });
-    if (!isCurrentAuthenticatedRequest(request)) {
-      return;
+    credentialMutationRef.current = request;
+    setMutatingCredentials(true);
+    try {
+      setStatus('Registering…');
+      const res = await apiFetch('/api/v1/bots', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description: regDescription.trim(),
+          scopes_json: scopesJson,
+        }),
+      });
+      if (!isCurrentAuthenticatedRequest(request)) {
+        return;
+      }
+      const body = await res.json();
+      if (!isCurrentAuthenticatedRequest(request)) {
+        return;
+      }
+      if (!res.ok) {
+        setStatus(JSON.stringify(body));
+        return;
+      }
+      const id = body.bot?.id ?? '';
+      selectBot(id, body.bot, request);
+      const token = body.token_response?.token ?? '';
+      const webhookSecretValue = body.webhook_secret_response?.webhook_secret ?? '';
+      secretSessionRef.current = token || webhookSecretValue ? request : null;
+      setBotToken(token);
+      setWebhookSecret(webhookSecretValue);
+      await refreshBots(request);
+      if (!isCurrentAuthenticatedRequest(request)) {
+        return;
+      }
+      setStatus(`Registered bot ${id}`);
+    } catch {
+      if (isCurrentAuthenticatedRequest(request)) setStatus('Bot registration failed');
+    } finally {
+      if (credentialMutationRef.current === request) {
+        credentialMutationRef.current = null;
+        setMutatingCredentials(false);
+      }
     }
-    const body = await res.json();
-    if (!isCurrentAuthenticatedRequest(request)) {
-      return;
-    }
-    if (!res.ok) {
-      setStatus(JSON.stringify(body));
-      return;
-    }
-    const id = body.bot?.id ?? '';
-    selectBot(id, body.bot, request);
-    const token = body.token_response?.token ?? '';
-    const webhookSecretValue = body.webhook_secret_response?.webhook_secret ?? '';
-    secretSessionRef.current = token || webhookSecretValue ? request : null;
-    setBotToken(token);
-    setWebhookSecret(webhookSecretValue);
-    await refreshBots();
-    if (!isCurrentAuthenticatedRequest(request)) {
-      return;
-    }
-    setStatus(`Registered bot ${id}`);
   }
 
-  async function revokeAndRegenerateBotToken() {
+  async function rotateCredential(credential: 'token' | 'webhook-secret') {
+    if (credentialMutationRef.current) return;
     const request = beginAuthenticatedRequest();
     const botId = selectedBotIdRef.current;
     const selectionGeneration = selectionGenerationRef.current;
@@ -531,54 +560,43 @@ function Portal() {
       setStatus('Select a bot first');
       return;
     }
-    const res = await apiFetch(`/api/v1/bots/${botId}/token/regenerate`, { method: 'POST' });
-    if (!isCurrentAuthenticatedRequest(request) ||
-      selectionGenerationRef.current !== selectionGeneration ||
-      selectedBotIdRef.current !== botId) {
-      return;
+    credentialMutationRef.current = request;
+    setMutatingCredentials(true);
+    try {
+      const res = await apiFetch(`/api/v1/bots/${botId}/${credential}/regenerate`, { method: 'POST' });
+      if (!isCurrentAuthenticatedRequest(request) ||
+        selectionGenerationRef.current !== selectionGeneration ||
+        selectedBotIdRef.current !== botId) {
+        return;
+      }
+      const body = await res.json();
+      if (!isCurrentAuthenticatedRequest(request) ||
+        selectionGenerationRef.current !== selectionGeneration ||
+        selectedBotIdRef.current !== botId) {
+        return;
+      }
+      if (!res.ok) {
+        setStatus('Credential rotation failed. Check the integration before rotating again.');
+        return;
+      }
+      secretSessionRef.current = request;
+      if (credential === 'token') {
+        setBotToken(body.token_response?.token ?? '');
+        setStatus('Bot token revoked and regenerated');
+      } else {
+        setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
+        setStatus('Webhook secret rotated');
+      }
+    } catch {
+      if (isCurrentAuthenticatedRequest(request)) {
+        setStatus('Credential rotation failed. Check the integration before rotating again.');
+      }
+    } finally {
+      if (credentialMutationRef.current === request) {
+        credentialMutationRef.current = null;
+        setMutatingCredentials(false);
+      }
     }
-    const body = await res.json();
-    if (!isCurrentAuthenticatedRequest(request) ||
-      selectionGenerationRef.current !== selectionGeneration ||
-      selectedBotIdRef.current !== botId) {
-      return;
-    }
-    if (!res.ok) {
-      setStatus(JSON.stringify(body));
-      return;
-    }
-    secretSessionRef.current = request;
-    setBotToken(body.token_response?.token ?? '');
-    setStatus('Bot token revoked and regenerated');
-  }
-
-  async function rotateWebhookSecret() {
-    const request = beginAuthenticatedRequest();
-    const botId = selectedBotIdRef.current;
-    const selectionGeneration = selectionGenerationRef.current;
-    if (!request || !botId) {
-      setStatus('Select a bot first');
-      return;
-    }
-    const res = await apiFetch(`/api/v1/bots/${botId}/webhook-secret/regenerate`, { method: 'POST' });
-    if (!isCurrentAuthenticatedRequest(request) ||
-      selectionGenerationRef.current !== selectionGeneration ||
-      selectedBotIdRef.current !== botId) {
-      return;
-    }
-    const body = await res.json();
-    if (!isCurrentAuthenticatedRequest(request) ||
-      selectionGenerationRef.current !== selectionGeneration ||
-      selectedBotIdRef.current !== botId) {
-      return;
-    }
-    if (!res.ok) {
-      setStatus(JSON.stringify(body));
-      return;
-    }
-    secretSessionRef.current = request;
-    setWebhookSecret(body.webhook_secret_response?.webhook_secret ?? '');
-    setStatus('Webhook secret rotated');
   }
 
   async function validateManifest() {
@@ -686,8 +704,9 @@ function Portal() {
                     <button
                       type="button"
                       className={bot.id === selectedBotId ? 'selected' : ''}
+                      disabled={mutatingCredentials}
                       onClick={() => {
-                        if (!bot.id) {
+                        if (!bot.id || credentialMutationRef.current) {
                           return;
                         }
                         const request = beginAuthenticatedRequest();
@@ -735,7 +754,7 @@ function Portal() {
                   ))}
                 </ul>
               )}
-              <button type="button" onClick={() => void registerBot()}>Register bot</button>
+              <button type="button" disabled={mutatingCredentials} onClick={() => void registerBot()}>Register bot</button>
             </section>
             {selectedBotId && (
               <p>Selected bot: <code>{selectedBotId}</code></p>
@@ -773,7 +792,7 @@ function Portal() {
                   </ul>
                 )}
                 <div className="actions">
-                  <button type="button" disabled={detailLoadedBotId !== selectedBotId} onClick={() => void saveBotChanges()}>
+                  <button type="button" disabled={mutatingCredentials || detailLoadedBotId !== selectedBotId} onClick={() => void saveBotChanges()}>
                     Save bot changes
                   </button>
                   <button type="button" className="danger" onClick={() => void removeSelectedBot()}>
@@ -785,10 +804,10 @@ function Portal() {
             {publicBot?.id === selectedBotId && detailLoadedBotId === selectedBotId && (
               <PublicBotPreview bot={publicBot} commands={catalog} commandStatus={catalogPreviewStatus} />
             )}
-            <button type="button" disabled={!selectedBotId} onClick={() => void revokeAndRegenerateBotToken()}>
+            <button type="button" disabled={!selectedBotId || mutatingCredentials} onClick={() => void rotateCredential('token')}>
               Revoke &amp; regenerate bot token
             </button>
-            <button type="button" disabled={!selectedBotId} onClick={() => void rotateWebhookSecret()}>
+            <button type="button" disabled={!selectedBotId || mutatingCredentials} onClick={() => void rotateCredential('webhook-secret')}>
               Rotate webhook secret
             </button>
           </section>
@@ -842,7 +861,7 @@ function Portal() {
 
           <section className="actions">
             <button type="button" onClick={() => void validateManifest()}>Validate</button>
-            <button type="button" disabled={!selectedBotId || manifestLoadedBotId !== selectedBotId} onClick={() => void applyManifest()}>Apply to bot</button>
+            <button type="button" disabled={mutatingCredentials || !selectedBotId || manifestLoadedBotId !== selectedBotId} onClick={() => void applyManifest()}>Apply to bot</button>
           </section>
         </>
       )}
