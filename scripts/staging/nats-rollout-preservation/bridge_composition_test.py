@@ -15,6 +15,8 @@ import github_custody
 import github_custody_test as http
 import native_store
 
+PUBLIC_FIXTURE_STORY_IMAGE='ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f'
+
 
 @contextmanager
 def captured_cohort_modules(code,dev_root):
@@ -121,7 +123,8 @@ def capture_public_baseline(stage,kube,live):
         if role in actor_root.ROLES:
             next(v for v in spec['volumes'] if v['name']=='nats-service-creds')['secret']['secretName']='voice-nats-service-credentials-'+stage.expected['generation']
         if role=='story':
-            next(c for c in spec['containers'] if c['name']=='story')['image']=next(iter(actor_root.STORY_IMAGES))
+            if PUBLIC_FIXTURE_STORY_IMAGE not in actor_root.STORY_IMAGES:raise ValueError('fixture_story_image_unreviewed')
+            next(c for c in spec['containers'] if c['name']=='story')['image']=PUBLIC_FIXTURE_STORY_IMAGE
         stage.snapshots[name]=copy.deepcopy(row)
         stage.expected['deployment_uids'][name]=row['metadata']['uid']
         live[('deployment',name)]=copy.deepcopy(row)
@@ -232,6 +235,12 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_public_fixture_story_image_is_preloaded_by_owned_workflow(self):
+        import actor_root
+        workflow=Path(__file__).resolve().parents[3]/'.github/workflows/nats-owned-enrollment-proof.yml'
+        self.assertIn(PUBLIC_FIXTURE_STORY_IMAGE,actor_root.STORY_IMAGES)
+        self.assertIn('docker pull '+PUBLIC_FIXTURE_STORY_IMAGE,workflow.read_text(encoding='utf-8'))
+
     def test_hosted_actor_pg_read_is_exact_and_fenced(self):
         import actor_root,cohort_hosted_pg,commands
         pg=object.__new__(cohort_hosted_pg.HostedPostgres);pg.cid='fixture-container'
