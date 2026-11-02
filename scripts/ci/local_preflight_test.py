@@ -344,13 +344,19 @@ class LocalPreflightTests(unittest.TestCase):
                                     'memory_bytes': 12 * 1024 * 1024 * 1024,
                                     'pids_limit': 2048}}
 
+    @staticmethod
+    def go_measured_host_capacity():
+        return {'nano_cpus': 8_000_000_000, 'memory_bytes': 12 * 1024 * 1024 * 1024}
+
     def test_full_go_inputs_reject_invalid_resource_limits_before_worker(self):
         plan = {'base': 'c' * 40, 'source': self.source,
                 'checks': {'backend-go-integration-pr': ['bot']},
                 'components': {'go_integration': ['bot']}}
         valid = self.full_go_inputs(['bot'])
-        with patch.object(local_preflight.local_chat_orchestration, '_verify_file'):
-            self.assertEqual(local_preflight._validate_full_go_inputs(plan, valid), ['bot'])
+        capacity = local_preflight.local_go_full_integration.heavy_slots
+        with patch.object(capacity, 'measured_host_capacity', return_value=self.go_measured_host_capacity()):
+            with patch.object(local_preflight.local_chat_orchestration, '_verify_file'):
+                self.assertEqual(local_preflight._validate_full_go_inputs(plan, valid), ['bot'])
         invalid = []
         for domain, key, value in (('client', 'nano_cpus', True), ('client', 'memory_bytes', 0),
                                    ('client', 'pids_limit', 3.5), ('daemon', 'nano_cpus', 999999999),
@@ -365,9 +371,17 @@ class LocalPreflightTests(unittest.TestCase):
         changed['bot']['resource_limits']['unexpected'] = 1
         invalid.append(changed)
         for inputs in invalid:
-            with self.subTest(limits=inputs['bot']['resource_limits']), patch.object(
-                    local_preflight.local_chat_orchestration, '_verify_file'), self.assertRaises(ValueError):
+            with self.subTest(limits=inputs['bot']['resource_limits']), \
+                 patch.object(capacity, 'measured_host_capacity', return_value=self.go_measured_host_capacity()), \
+                 patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+                 self.assertRaises(ValueError):
                 local_preflight._validate_full_go_inputs(plan, inputs)
+        over_capacity = json.loads(json.dumps(valid))
+        over_capacity['bot']['resource_limits']['capacity_budget']['memory_bytes'] += 1
+        with patch.object(capacity, 'measured_host_capacity', return_value=self.go_measured_host_capacity()), \
+             patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
+             self.assertRaisesRegex(ValueError, 'capacity budget exceeds measured host capacity'):
+            local_preflight._validate_full_go_inputs(plan, over_capacity)
 
     def test_full_go_preflight_rejects_mixed_selection_before_workers(self):
         plan = {'base': 'c' * 40, 'source': self.source, 'checks': {'backend-go-integration-pr': ['bot', 'file']},
@@ -405,6 +419,8 @@ class LocalPreflightTests(unittest.TestCase):
                   'unbound_inputs': ['external provenance']}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_go_full_integration.heavy_slots, 'measured_host_capacity',
+                          return_value=self.go_measured_host_capacity()), \
              patch.object(local_preflight.local_chat_orchestration, '_verify_file'), \
              patch.object(local_preflight.local_go_full_integration, 'run_supervised', return_value=result) as run:
             report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
