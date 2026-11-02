@@ -353,8 +353,8 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_complete_fixture_source_receipt_includes_realtime_before_admission(self):
         import os
         if not os.environ.get('VOICE_QUALIFIED_BINARIES'):self.skipTest('qualified fixture binaries required')
-        def ready(actions,request,approved,execution,workspace,*_):
-            import gis_first_install
+        def ready(actions,request,approved,execution,workspace,stage,live,transport,get,*_):
+            import gis_first_install,space_authority
             session=actions.tt_session
             receipt=json.loads((workspace.parents[1]/'source-authority'/(session.operation+'.json')).read_bytes())
             self.assertEqual(receipt['approved_sha256'],prereq.digest(approved))
@@ -366,6 +366,7 @@ class PrepareCompositionTests(unittest.TestCase):
             self.assertNotIn('nats-hub-config-renderer',required)
             self.assertEqual(approved['images']['gameintegration'],
                 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:'+'a'*64)
+            self.assertEqual(space_authority.identity(get('namespace','voice-staging'))['resourceVersion'],'1')
             self.assertEqual(set(session.context['images']),{'voice-gameintegration/gameintegration'})
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
             realtime_source=True,fixture_complete_candidate=True,fixture_story_candidate=True)
@@ -678,7 +679,7 @@ class PrepareCompositionTests(unittest.TestCase):
             writes=[];events=[];rv=[10];ready={}
             def get(kind,name):
                 commands.authority_guard(prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
-                if kind=='namespace':return {'apiVersion':'v1','kind':'Namespace','metadata':{'name':'voice-staging','uid':ns}}
+                if kind=='namespace':return {'apiVersion':'v1','kind':'Namespace','metadata':{'name':'voice-staging','uid':ns,'resourceVersion':'1'}}
                 if kind=='node':return {'metadata':{'name':'pmdebook','uid':'node'},'status':{'nodeInfo':{'operatingSystem':'linux','architecture':'amd64'},'conditions':[{'type':'Ready','status':'True'}]}}
                 if kind=='serviceaccount':return {'metadata':{'name':'default','namespace':'voice-staging','uid':'00000000-0000-0000-0000-000000000101','resourceVersion':'1'}}
                 return copy.deepcopy(live[(kind,name)])
