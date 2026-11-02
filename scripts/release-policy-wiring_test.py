@@ -48,7 +48,9 @@ command bash scripts/prod/render-and-apply-prod.sh'''
             descriptor = path / 'input.json'
             trace = path / 'trace'
             env = {**os.environ, 'TRACE': str(trace), 'VOICE_IMAGE_REGISTRY': 'fixture.invalid/voice',
-                   'VOICE_IMAGE_TAG': 'a' * 40, 'DEPLOY_MODE': 'full'}
+                   'VOICE_IMAGE_TAG': 'a' * 40, 'DEPLOY_MODE': 'full',
+                   'SPACE_NATIVE_INSTALLER_IMAGE': 'fixture.invalid/installer@sha256:' + 'b' * 64,
+                   'SPACE_NATIVE_INSTALLER_SOURCE_SHA': 'a' * 40}
             for state in ('missing', 'malformed', 'valid'):
                 with self.subTest(input=state):
                     if trace.exists(): trace.unlink()

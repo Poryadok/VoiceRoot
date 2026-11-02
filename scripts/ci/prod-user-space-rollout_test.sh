@@ -9,6 +9,7 @@ mkdir -p "${fixture}/scripts/"{ci,prod,staging,storage} "${fixture}/bin"
 mkdir -p "${fixture}/scripts/staging/nats-rollout-preservation" "${fixture}/deploy/prod"
 cp "${ROOT}/scripts/prod/render-and-apply-prod.sh" "${fixture}/scripts/prod/"
 cp "${ROOT}/scripts/prod/production_image_refs.py" "${fixture}/scripts/prod/"
+cp "${ROOT}/scripts/prod/validate-installer-input.py" "${fixture}/scripts/prod/"
 cp "${ROOT}/scripts/ci/staging-image-catalog.json" "${fixture}/scripts/ci/"
 cp "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring.py" "${fixture}/scripts/staging/nats-rollout-preservation/"
 cp "${ROOT}/deploy/prod/services.yaml" "${fixture}/deploy/prod/services.base.yaml"
@@ -37,6 +38,8 @@ export PATH="${fixture}/bin:${PATH}"
 export VOICE_IMAGE_REGISTRY=example.invalid/voice VOICE_IMAGE_TAG=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 export VOICE_K8S_NAMESPACE=voice-prod CHANGED_SERVICES=user,space
 export VOICE_APPLY_OBSERVABILITY=false
+export SPACE_NATIVE_INSTALLER_IMAGE="fixture.invalid/space-native-migrate@sha256:$(printf '%064d' 1)"
+export SPACE_NATIVE_INSTALLER_SOURCE_SHA="${VOICE_IMAGE_TAG}"
 export CALLS="${fixture}/calls"
 run() {
   : > "${CALLS}"
@@ -120,3 +123,4 @@ test ! -s "${CALLS}"
 echo 'PASS real image preflight rejects invalid tag before effects'
 echo 'Production User/Space rollout: 7 cases passed (isolated shell fixture).'
 python3 "${ROOT}/scripts/prod/policy-owner-images-only_test.py"
+python3 "${ROOT}/scripts/prod/release-inputs_test.py"

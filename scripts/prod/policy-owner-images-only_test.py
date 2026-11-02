@@ -83,6 +83,8 @@ command bash scripts/prod/render-and-apply-prod.sh'''
             env = {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
                 'VOICE_IMAGE_REGISTRY': 'fixture.invalid/voice', 'VOICE_IMAGE_TAG': S1,
                 'VOICE_K8S_NAMESPACE': 'voice-prod', 'VOICE_RELEASE_POLICY_INPUT': str(work / 'input.json'),
+                'SPACE_NATIVE_INSTALLER_IMAGE': 'fixture.invalid/installer@sha256:' + 'b' * 64,
+                'SPACE_NATIVE_INSTALLER_SOURCE_SHA': S1,
                 'DEPLOY_MODE': mode, 'CHANGED_SERVICES': selection,
                 'NEEDS_FULL_ROLLOUT': 'false', 'NEEDS_USER_SPACE_ROLLOUT': 'false',
                 'VOICE_APPLY_OBSERVABILITY': 'false', 'ADAPTER': str(work / 'adapter.py'),

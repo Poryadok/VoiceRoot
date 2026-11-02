@@ -694,6 +694,25 @@ release owner; supplying an arbitrary environment label is not image provenance.
 The rendered Job also tightens selection to the exact compiled source SHA from
 this deployment checkout; it cannot override any fixed SQL/catalog validation.
 
+For the protected GitHub `production` environment, the release owner sets
+`SPACE_NATIVE_INSTALLER_IMAGE` to that qualified platform digest and
+`SPACE_NATIVE_INSTALLER_SOURCE_SHA` to its exact 40-character source commit,
+matching the selected production candidate. Full and app-only production modes
+reject a malformed image repository, missing/malformed digest or mismatched
+source before dispatching any cluster helper. IPv6 registry literals remain
+unsupported by the native migration adapter and are rejected at preflight too.
+This input check preserves the release owner's build/provenance
+obligation and the installer's independent compiled-source checks.
+
+The same environment's `PROD_RELEASE_POLICY_INPUT` secret contains the bound
+release-policy descriptor JSON consumed by `release_policy_wiring.py`, including
+its immutable external ConfigMap descriptor, exact candidate source and production
+namespace. The workflow writes it privately under `RUNNER_TEMP`, passes the path
+as `VOICE_RELEASE_POLICY_INPUT`, and removes the file on step exit. Every deploy
+mode validates it before cluster effects; the external policy object must already
+exist. Images-only does not run the Space installer and does not require its
+selection. Operator input validation does not attest a deployed image or runtime.
+
 Administrative configuration accepts a TCP PostgreSQL URI in
 `SPACE_NATIVE_ADMIN_URL`, or the existing `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`
 environment. Keyword DSNs, service indirection, connection-selector query

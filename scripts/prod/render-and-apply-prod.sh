@@ -31,6 +31,15 @@ python3 "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring
   "${VOICE_RELEASE_POLICY_INPUT:-}" "${TAG}" "${NS}" \
   "${PROD_MANIFEST_DIR}/services.yaml" >/dev/null
 
+# Both modes reach the native Space installer after other cluster effects.
+# Require the release owner's protected source/digest selection before dispatch;
+# the installer still verifies its independently compiled source and inventory.
+if [ "${MODE}" = full ] || [ "${MODE}" = app-only ]; then
+  python3 "${ROOT}/scripts/prod/validate-installer-input.py" \
+    "${SPACE_NATIVE_INSTALLER_IMAGE:-}" "${SPACE_NATIVE_INSTALLER_SOURCE_SHA:-}" "${TAG}"
+  export SPACE_NATIVE_INSTALLER_IMAGE SPACE_NATIVE_INSTALLER_SOURCE_SHA
+fi
+
 echo "Applying Voice production: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
 case "${MODE}" in
