@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/voice_emoji_style.dart';
 import '../../theme/voice_layout.dart';
+import '../../theme/voice_colors.dart';
 import '../a11y/focus_trap.dart';
 import '../core/voice_bottom_sheet.dart';
 
@@ -83,18 +84,26 @@ Future<ComposerAttachAction?> showComposerAttachMenu(
   VoidCallback? onDismiss,
 }) async {
   final l10n = AppLocalizations.of(context)!;
+  final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
   Widget body(BuildContext routeContext) => ComposerAttachMenuBody(
     onSelected: (action) => Navigator.of(routeContext).pop(action),
     photoOrVideoLabel: l10n.composerAttachPhotoOrVideo,
     documentLabel: l10n.composerAttachDocument,
     musicLabel: l10n.chatPinnedTypeMusic,
+    title: narrow ? l10n.chatAttachFile : null,
   );
-  if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
-    return _showComposerOverlay<ComposerAttachAction>(
-      context: context,
-      onDismiss: onDismiss,
-      child: Builder(builder: body),
-    );
+  if (narrow) {
+    try {
+      return await showVoiceBottomSheet<ComposerAttachAction>(
+        context: context,
+        initialSize: 0.45,
+        minSize: 0.3,
+        maxSize: 0.7,
+        child: Builder(builder: body),
+      );
+    } finally {
+      onDismiss?.call();
+    }
   }
 
   final overlay =
@@ -174,35 +183,6 @@ class _AttachMenuLayout extends SingleChildLayoutDelegate {
       width != oldDelegate.width ||
       alignRight != oldDelegate.alignRight ||
       maxHeight != oldDelegate.maxHeight;
-}
-
-Future<T?> _showComposerOverlay<T>({
-  required BuildContext context,
-  required Widget child,
-  VoidCallback? onDismiss,
-}) {
-  void dismiss([T? result]) {
-    Navigator.of(context).pop(result);
-    onDismiss?.call();
-  }
-
-  final narrow = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width);
-  if (narrow) {
-    return showVoiceBottomSheet<T>(
-      context: context,
-      initialSize: 0.45,
-      minSize: 0.3,
-      maxSize: 0.7,
-      scrollable: false,
-      onDismiss: onDismiss,
-      child: child,
-    );
-  }
-
-  return showDialog<T>(
-    context: context,
-    builder: (ctx) => VoiceFocusTrap(onEscape: () => dismiss(), child: child),
-  );
 }
 
 class ComposerEmojiPanelBody extends StatelessWidget {
@@ -315,6 +295,7 @@ class ComposerAttachMenuBody extends StatelessWidget {
     required this.photoOrVideoLabel,
     required this.documentLabel,
     required this.musicLabel,
+    this.title,
   });
 
   static const menuKey = Key('composer_attach_menu');
@@ -323,6 +304,7 @@ class ComposerAttachMenuBody extends StatelessWidget {
   final String photoOrVideoLabel;
   final String documentLabel;
   final String musicLabel;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -338,7 +320,30 @@ class ComposerAttachMenuBody extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (title != null) ...[
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: VoiceColors.of(context).borderStrong,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title!,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                ),
+              ],
               ListTile(
                 key: const Key('composer_attach_photo_or_video'),
                 autofocus: true,
