@@ -804,6 +804,33 @@ run_probe_credential_transport_case() {
   }
 }
 
+run_probe_input_guard_cases() (
+  local kind output result
+  PROBE_RAW_DSN="${TEST_TMP}/raw-dsn"
+  migration_target_dsn() { cat "${PROBE_RAW_DSN}"; }
+  for kind in tab space nul; do
+    reset_mock || return 1
+    migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}"
+    : >"${JOB_EXISTS}"
+    printf 1 >"${JOB_SUCCEEDED}"
+    case "$kind" in
+      tab) printf 'postgres://voice:probe-pass@voi\tce-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      space) printf ' postgres://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      nul) printf 'postgres://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable\0' >"${PROBE_RAW_DSN}" ;;
+    esac
+    set +e
+    output="$(apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations 2>&1)"
+    result=$?
+    set -e
+    [[ $result != 0 ]] && grep -Fq 'HOLD:' <<< "$output" || {
+      echo "FAIL: raw ${kind} DSN was normalized into another connection"; return 1;
+    }
+    if grep -Eq '^(db.probe|configmap\.apply |configmap\.annotate$|kubectl\.(delete|apply\.job|wait\.job))' "${CALLS}"; then
+      echo "FAIL: raw ${kind} DSN reached a probe or resource mutation"; return 1
+    fi
+  done
+)
+
 run_secret_leak_case() {
   reset_mock || return 1
   readonly sentinel_password='R22_F_PASSWORD_MUST_NOT_APPEAR_7f4c'
@@ -853,6 +880,9 @@ case "${1:-all}" in
   transport)
     run_probe_credential_transport_case
     ;;
+  normalization)
+    run_probe_input_guard_cases
+    ;;
   rerun)
     run_changed_content_case
     run_unchanged_content_case
@@ -870,6 +900,7 @@ case "${1:-all}" in
     run_unchanged_content_case || failures=$((failures + 1))
     run_retained_database_hold_cases || failures=$((failures + 1))
     run_probe_credential_transport_case || failures=$((failures + 1))
+    run_probe_input_guard_cases || failures=$((failures + 1))
     run_gameintegration_caller_case fresh || failures=$((failures + 1))
     run_gameintegration_caller_case noop || failures=$((failures + 1))
     run_secret_leak_case || failures=$((failures + 1))
@@ -878,7 +909,7 @@ case "${1:-all}" in
     ((failures == 0)) || exit 1
     ;;
   *)
-    echo "usage: $0 [all|selftest|rerun|secret|encoding|sanitize|transport]" >&2
+    echo "usage: $0 [all|selftest|rerun|secret|encoding|sanitize|transport|normalization]" >&2
     exit 2
     ;;
 esac

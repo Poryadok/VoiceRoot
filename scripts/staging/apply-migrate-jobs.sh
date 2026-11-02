@@ -186,13 +186,17 @@ verify_retained_migration_target() {
   if ! target="$(find "$dir" -maxdepth 1 -type f -name '*.up.sql' -printf '%f\n' |
       sed -nE 's/^([0-9]+)_.+\.up\.sql$/\1/p' | sed 's/^0*//' | sort -n | tail -1)" ||
      [[ ! "$target" =~ ^[0-9]+$ ]] ||
-     ! dsn="$(migration_target_dsn "$db" "$template" 2>/dev/null && printf '\001')"; then
+     ! dsn="$(migration_target_dsn "$db" "$template" 2>/dev/null | python3 -c '
+import sys
+raw = sys.stdin.buffer.read()
+if any(byte <= 32 or byte == 127 for byte in raw):
+    sys.exit(1)
+sys.stdout.buffer.write(raw)' 2>/dev/null)"; then
     echo "HOLD: cannot resolve current migration target for ${db}; explicit reconciliation required" >&2
     return 1
   fi
-  # Preserve trailing newlines while capturing the URL, then reject them rather
-  # than silently probing a normalized connection different from the Job's.
-  dsn="${dsn%$'\001'}"
+  # Validate bytes before Bash capture (which strips NUL/trailing LF) and URL
+  # parsing (which strips tabs/leading whitespace). Never normalize the target.
   if [[ -z "$dsn" || "$dsn" == *$'\n'* || "$dsn" == *$'\r'* ]]; then
     echo "HOLD: cannot resolve current migration target for ${db}; explicit reconciliation required" >&2
     return 1
