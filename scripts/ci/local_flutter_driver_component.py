@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 
 import flutter_test_events
@@ -15,6 +16,14 @@ import local_source_snapshot as snapshot
 
 SUITE = 'src/frontend/integration_test/device_driver_smoke_test.dart'
 COMMANDS = ('pub-get', 'sqlite-prefetch', 'device-driver')
+LOCALIZATION_WARNING = re.compile(
+    rb'(?m)^(?:"[a-z]{2,3}(?:_[A-Za-z0-9]{2,8}){0,2}": [1-9][0-9]{0,4} untranslated message\(s\)\.\r?\n){1,10}'
+    rb'To see a detailed report, use the untranslated-messages-file \r?\n'
+    rb'option in the l10n.yaml file:\r?\n'
+    rb'untranslated-messages-file: desiredFileName.txt\r?\n'
+    rb'<other option>: <other selection> \r?\n\r?\n\r?\n'
+    rb'This will generate a JSON format file containing all messages that \r?\n'
+    rb'need to be translated\.\r?\n')
 
 
 def _windows():
@@ -22,6 +31,19 @@ def _windows():
 
 
 def test_summary(raw, suite):
+    if not isinstance(raw, bytes) or len(raw) > 16*1024*1024:
+        raise ValueError('invalid driver event bytes')
+    warnings = list(LOCALIZATION_WARNING.finditer(raw))
+    if len(warnings) > 1: raise ValueError('duplicate localization warning')
+    if warnings:
+        warning = warnings[0]
+        try:
+            preceding = json.loads(raw[:warning.start()].splitlines()[-1])
+        except (IndexError, ValueError, UnicodeError) as error:
+            raise ValueError('localization warning position differs') from error
+        if not isinstance(preceding, dict) or preceding.get('type') != 'allSuites':
+            raise ValueError('localization warning position differs')
+        raw = raw[:warning.start()] + raw[warning.end():]
     summary = flutter_test_events.summarize(flutter_test_events.read_events(raw), [suite], reject_skips=True)
     if summary['passed'] < 1 or summary['skipped']:
         raise ValueError('device-driver tests are empty or skipped')

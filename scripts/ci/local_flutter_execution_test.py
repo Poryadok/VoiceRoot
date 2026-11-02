@@ -56,6 +56,18 @@ class LocalFlutterExecutionTests(unittest.TestCase):
                   {'type':'done','success':True}]
         raw = ''.join(json.dumps(e)+'\n' for e in events).encode()
         self.assertEqual(driver.test_summary(raw, suite)['passed'], 1)
+        warning = (b'"ru": 16 untranslated message(s).\n'
+                   b'To see a detailed report, use the untranslated-messages-file \n'
+                   b'option in the l10n.yaml file:\n'
+                   b'untranslated-messages-file: desiredFileName.txt\n'
+                   b'<other option>: <other selection> \n\n\n'
+                   b'This will generate a JSON format file containing all messages that \n'
+                   b'need to be translated.\n')
+        lines = raw.splitlines(keepends=True); first, rest = b''.join(lines[:3]), b''.join(lines[3:])
+        self.assertEqual(driver.test_summary(first+warning+rest, suite)['passed'], 1)
+        with self.assertRaises(ValueError): driver.test_summary(first+warning.replace(b'16 untranslated',b'16 unexpected')+rest, suite)
+        with self.assertRaises(ValueError): driver.test_summary(first+warning+warning+rest, suite)
+        with self.assertRaises(ValueError): driver.test_summary(raw+warning, suite)
         events[-2]['skipped'] = True
         with self.assertRaises(ValueError): driver.test_summary(''.join(json.dumps(e)+'\n' for e in events).encode(), suite)
         with self.assertRaises(ValueError): driver.test_summary(raw, suite+'-other')
