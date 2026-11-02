@@ -255,9 +255,10 @@ exit 83
         self.assertEqual(log.count('guard-'), 2, log)
         for before, after in (('guard-1', 'create'), ('create', 'migrate'),
                               ('migrate', 'version-34-check'), ('version-34-check', 'seed'),
-                              ('seed', 'go test '),
-                               ('go test ', 'matrix-produce '), ('drop', 'inspect-absent'),
-                              ('inspect-absent', 'guard-2')):
+                               ('seed', 'go test '),
+                               ('go test ', 'matrix-produce '),
+                               ('drop', 'inspect-absent manifest=no'),
+                               ('inspect-absent manifest=no', 'guard-2')):
             self.assertLess(log.index(before), log.index(after), log)
         self.assertIn('-tags=spacebanintegration', log)
         self.assertIn('-run ^TestAccountBanFixtureLargeCohort34$', log)
