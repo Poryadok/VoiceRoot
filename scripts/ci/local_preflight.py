@@ -130,7 +130,8 @@ def _verify_overlay_evidence(output, source, image_id, report):
         os.close(descriptor)
 
 
-def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None, overlay_kubectl=None):
+def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
+                overlay_image_id=None, overlay_kubectl=None):
     """Execute and verify a supported current-diff or overlay local plan.
 
     Other selected checks have no accepted evidence producer and fail closed.
@@ -158,11 +159,21 @@ def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None, ov
     if source.get('head') != head or source.get('changed_paths') or source.get('raw_mismatch_paths'):
         raise ValueError('handoff requires clean committed source')
     output.mkdir(parents=True)
-    proof = local_current_diff.run_merge_candidate(root, source, base, output / 'current-diff')
-    contract = proof.get('contract', {})
-    if (proof.get('source') != source or contract.get('base') != base or
-            contract.get('event_base') != base or contract.get('pr_head') != head):
-        raise ValueError('merge-candidate proof differs from the plan')
+    if candidate_ref:
+        proof = local_current_diff.run_fetched_merge_candidate(
+            root, base, head, head_ref, candidate_ref, output / 'current-diff')
+        if (proof.get('status') != 'complete' or proof.get('check') != 'current-diff-contract' or
+                proof.get('aggregate_preflight') != 'incomplete' or proof.get('head') != head or
+                proof.get('base') != base):
+            raise ValueError('fetched merge-candidate proof differs from the plan')
+        current_check = {'status': 'complete', 'report': 'current-diff/current-diff-component.json'}
+    else:
+        proof = local_current_diff.run_merge_candidate(root, source, base, output / 'current-diff')
+        contract = proof.get('contract', {})
+        if (proof.get('source') != source or contract.get('base') != base or
+                contract.get('event_base') != base or contract.get('pr_head') != head):
+            raise ValueError('synthetic merge diagnostic differs from the plan')
+        current_check = {'status': 'diagnostic', 'report': 'current-diff/diagnostic.json'}
     if 'match-squad-overlay' in selected:
         overlay = local_overlay_execution.run_supervised(root, plan, output / 'overlay', overlay_image_id, overlay_kubectl,
                                                           base=base, head_ref=head_ref)
@@ -170,11 +181,11 @@ def run_handoff(root, base, head, head_ref, output, *, overlay_image_id=None, ov
     if affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
         raise ValueError('source or selected checks changed during handoff verification')
     _handoff_refs(root, base, head, head_ref)
-    report = {'schema': 'voice-local-handoff-v1', 'status': 'complete', 'base': base,
+    report = {'schema': 'voice-local-handoff-v1', 'status': 'incomplete', 'base': base,
               'head': head, 'head_ref': head_ref, 'source': source,
-              'checks': {'current-diff-contract': 'current-diff/diagnostic.json'},
-              'limitations': ['locally fetched refs are not a live remote observation',
-                              'GitHub merge-candidate checks remain mandatory']}
+              'checks': {'current-diff-contract': current_check},
+              'limitations': ['aggregate local preflight remains incomplete',
+                              'all other selected and GitHub checks remain mandatory']}
     if 'match-squad-overlay' in selected:
         report['checks']['match-squad-overlay'] = 'overlay/diagnostic.json'
         report['limitations'].extend(['Python image publisher provenance is not authenticated',
@@ -680,7 +691,8 @@ def main():
     parser.add_argument('--go', default='go', help='Go executable matching the pinned diagnostic image')
     parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
-    parser.add_argument('--handoff', action='store_true', help='run a supported complete current-diff or overlay handoff plan')
+    parser.add_argument('--handoff', action='store_true', help='run a current-diff or overlay component handoff')
+    parser.add_argument('--candidate-ref', help='fetch and validate refs/pull/<n>/merge for current-diff-contract')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-policy-assets', help='JSON mapping of pinned inputs for the policy component only')
     parser.add_argument('--protobuf-component', action='store_true', help='execute the selected protobuf component with candidate validation')
@@ -706,10 +718,11 @@ def main():
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     if args.handoff:
-        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'overlay_image_id', 'overlay_kubectl', 'protobuf_component', 'flutter_driver_component', 'golangci_component'}
+        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'candidate_ref', 'overlay_image_id', 'overlay_kubectl', 'protobuf_component', 'flutter_driver_component', 'golangci_component'}
         if args.protobuf_component or args.flutter_driver_component or args.golangci_component or any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
         report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output,
+                             candidate_ref=args.candidate_ref,
                              overlay_image_id=args.overlay_image_id, overlay_kubectl=args.overlay_kubectl)
         print(json.dumps(report, sort_keys=True))
         return 0

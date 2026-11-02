@@ -1,5 +1,6 @@
 """Disposable Git tests for the local current-diff diagnostic."""
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -137,6 +138,84 @@ class CurrentDiffDiagnosticTest(unittest.TestCase):
         source = local_source_snapshot.capture(self.root, head)
         with self.assertRaisesRegex(ValueError, 'base must be an ancestor'):
             local_current_diff.run_merge_candidate(self.root, source, advanced_base, self.output)
+
+    def test_fetched_candidate_runs_validator_from_candidate_and_rechecks_remote(self):
+        (self.root / 'new.txt').write_text('new\n')
+        validator_path = self.root / 'scripts/ci/current-diff-contract.py'
+        self.git('add', 'new.txt')
+        self.git('commit', '-qm', 'change')
+        head = self.git('rev-parse', 'HEAD').decode().strip()
+        self.git('checkout', '-qb', 'feature/docs')
+        merge = self.git('commit-tree', self.git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                         '-p', self.head, '-p', head, '-m', 'github merge candidate').decode().strip()
+        self.git('update-ref', 'refs/heads/master', self.head)
+        self.git('update-ref', 'refs/heads/feature/docs', head)
+        self.git('update-ref', 'refs/pull/1089/merge', merge)
+        remote = Path(self.tmp.name) / 'origin.git'
+        subprocess.check_call(['git', 'init', '--bare', '-q', str(remote)])
+        self.git('remote', 'add', 'origin', str(remote))
+        self.git('push', '-q', 'origin', f'{self.head}:refs/heads/master',
+                 f'{head}:refs/heads/feature/docs', f'{merge}:refs/pull/1089/merge')
+
+        report = local_current_diff.run_fetched_merge_candidate(
+            self.root, self.head, head, 'feature/docs', 'refs/pull/1089/merge', self.output)
+
+        self.assertEqual(report['status'], 'complete')
+        self.assertEqual(report['check'], 'current-diff-contract')
+        self.assertEqual(report['aggregate_preflight'], 'incomplete')
+        self.assertEqual(report['candidate'], merge)
+        self.assertEqual(report['contract']['pr_head'], head)
+        self.assertEqual(report['contract']['changed_paths'], ['new.txt'])
+        self.assertEqual(report['validator_sha256'], report['contract']['validator_sha256'])
+        self.assertEqual(report['validator_sha256'], hashlib.sha256(validator_path.read_bytes()).hexdigest())
+        self.assertEqual(self.git('rev-parse', 'HEAD').decode().strip(), head)
+        self.assertNotEqual(subprocess.run(['git', '-C', str(self.root), 'show-ref', '--verify', '--quiet',
+                                            f"refs/codex/current-diff/{merge}"]).returncode, 0)
+        changed_refs = dict(report['remote_refs_before'])
+        changed_refs['refs/pull/1089/merge'] = 'f' * 40
+        with mock.patch.object(local_current_diff, '_remote_refs',
+                               side_effect=[report['remote_refs_before'], changed_refs]):
+            with self.assertRaisesRegex(ValueError, 'changed during'):
+                local_current_diff.run_fetched_merge_candidate(
+                    self.root, self.head, head, 'feature/docs', 'refs/pull/1089/merge',
+                    Path(self.tmp.name) / 'moving-proof')
+        self.assertFalse((Path(self.tmp.name) / 'moving-proof' / 'current-diff-component.json').exists())
+
+    def test_fetched_candidate_rejects_stale_remote_head_before_running_validator(self):
+        remote = Path(self.tmp.name) / 'origin.git'
+        subprocess.check_call(['git', 'init', '--bare', '-q', str(remote)])
+        self.git('remote', 'add', 'origin', str(remote))
+        self.git('checkout', '-qb', 'feature/docs')
+        merge = self.git('commit-tree', self.git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                         '-p', self.head, '-p', self.head, '-m', 'merge').decode().strip()
+        self.git('update-ref', 'refs/heads/master', self.head)
+        self.git('push', '-q', 'origin', f'{self.head}:refs/heads/master',
+                 f'{self.head}:refs/heads/feature/docs', f'{merge}:refs/pull/1089/merge')
+        with self.assertRaisesRegex(ValueError, 'live remote refs'):
+            local_current_diff.run_fetched_merge_candidate(
+                self.root, self.head, '0' * 40, 'feature/docs', 'refs/pull/1089/merge', self.output)
+
+    def test_fetched_candidate_rejects_candidate_controlled_validator(self):
+        validator = self.root / 'scripts/ci/current-diff-contract.py'
+        validator.write_bytes(validator.read_bytes() + b'\n# unreviewed validator change\n')
+        self.git('add', str(validator.relative_to(self.root)))
+        self.git('commit', '-qm', 'change validator')
+        head = self.git('rev-parse', 'HEAD').decode().strip()
+        self.git('checkout', '-qb', 'feature/docs')
+        merge = self.git('commit-tree', self.git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                         '-p', self.head, '-p', head, '-m', 'merge').decode().strip()
+        self.git('update-ref', 'refs/heads/master', self.head)
+        self.git('update-ref', 'refs/heads/feature/docs', head)
+        self.git('update-ref', 'refs/pull/1089/merge', merge)
+        remote = Path(self.tmp.name) / 'origin.git'
+        subprocess.check_call(['git', 'init', '--bare', '-q', str(remote)])
+        self.git('remote', 'add', 'origin', str(remote))
+        self.git('push', '-q', 'origin', f'{self.head}:refs/heads/master',
+                 f'{head}:refs/heads/feature/docs', f'{merge}:refs/pull/1089/merge')
+        with self.assertRaisesRegex(ValueError, 'differs from the trusted event-base validator'):
+            local_current_diff.run_fetched_merge_candidate(
+                self.root, self.head, head, 'feature/docs', 'refs/pull/1089/merge', self.output)
+        self.assertFalse((self.output / 'current-diff-component.json').exists())
 
 
 if __name__ == '__main__':

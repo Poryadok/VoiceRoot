@@ -32,11 +32,30 @@ class HandoffGateTests(unittest.TestCase):
             result = local_preflight.run_handoff(self.root, self.base, self.head, 'feature/docs', self.output)
             return result, run
 
-    def test_exact_single_check_is_executed_before_acceptance(self):
+    def test_synthetic_candidate_is_diagnostic_only(self):
         result, run = self.run_gate()
-        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['checks']['current-diff-contract']['status'], 'diagnostic')
         run.assert_called_once()
         self.assertEqual(json.loads((self.output / 'handoff.json').read_text())['source'], self.source)
+
+    def test_fetched_candidate_marks_only_current_diff_complete(self):
+        proof = {'status': 'complete', 'check': 'current-diff-contract',
+                 'aggregate_preflight': 'incomplete', 'base': self.base, 'head': self.head}
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs'), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan',
+                          side_effect=[self.plan, self.plan]), \
+             patch.object(local_preflight.local_current_diff, 'run_fetched_merge_candidate',
+                          return_value=proof) as run:
+            report = local_preflight.run_handoff(
+                self.root, self.base, self.head, 'feature/docs', self.output,
+                candidate_ref='refs/pull/1089/merge')
+        run.assert_called_once()
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['current-diff-contract']['status'], 'complete')
+        self.assertEqual(report['checks']['current-diff-contract']['report'],
+                         'current-diff/current-diff-component.json')
 
     def test_extra_selected_check_fails_closed(self):
         plan = dict(self.plan, checks={'current-diff-contract': [], 'backend-auth': []})
@@ -68,7 +87,7 @@ class HandoffGateTests(unittest.TestCase):
         run.assert_called_once()
         verify.assert_called_once_with(self.output / 'overlay', self.source, image, {'diagnostic': 'value'})
         self.assertEqual(set(report['checks']), {'current-diff-contract', 'match-squad-overlay'})
-        self.assertEqual(report['status'], 'complete')
+        self.assertEqual(report['status'], 'incomplete')
 
     def test_overlay_plan_requires_exact_image_before_execution(self):
         plan = dict(self.plan, checks={'current-diff-contract': [], 'match-squad-overlay': []})
