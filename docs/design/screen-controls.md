@@ -49,7 +49,7 @@ Dedicated frame for the chat-list column (desktop middle column / mobile full li
 | 3 | Matchmaking tab | H+V | Always | Open MM catalog |
 | 4 | Folder filters | H — above chat list; V — **drawer only** (§1.6a) | Always | See §1.1b |
 | 5 | Quick Access zone | H — rail; V — **drawer only** (§1.6a) | Always | See §1.1c |
-| 6 | Profile avatar | H — rail (ProfileStack); V — tab bar or header | Always | Open profile switcher menu (§1.1a); V: also swipe on avatar to switch profiles per multi-profile.md |
+| 6 | Profile avatar | H — rail (ProfileStack); V — drawer ProfileStack, below Quick Access and above Settings (navigation.md) | Always | Open profile switcher menu (§1.1a), including Archive; V: tap / long-press. Header avatar may additionally support swipe to switch profiles per multi-profile.md |
 | 7 | Stories ring | H+V | User has active story (overlay on profile avatar) | Open story viewer |
 | 8 | ☰ Settings | H — rail bottom; V — drawer only (below ProfileStack) | Always | Open `Panel / Settings / Sheet` (§5.0) |
 

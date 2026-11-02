@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/chats_client.dart';
+import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../state/social_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../state/chat_navigation_providers.dart';
 import '../../state/message_requests_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../core/voice_avatar.dart';
+import '../profile/profile_avatar_menu.dart';
 import 'chat_rail_sections.dart';
 import 'manage_folders_sheet.dart';
 import 'message_requests_folder.dart';
 
-/// Mobile drawer stub (R2-A04 incremental): folders, Quick Access, settings entry.
+/// Mobile navigation: folders, Quick Access, profile menus, then Settings.
 class MobileShellDrawer extends ConsumerWidget {
   const MobileShellDrawer({super.key, required this.onOpenSettings});
 
@@ -31,122 +36,139 @@ class MobileShellDrawer extends ConsumerWidget {
     return Drawer(
       key: drawerKey,
       child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(
-                l10n.chatFoldersTitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: voice.textSecondary),
-              ),
-            ),
-            foldersAsync.when(
-              data: (data) => Column(
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  for (final folder in data.folders)
-                    ListTile(
-                      key: ChatRailFoldersSection.folderKey(folder.id),
-                      leading: const Icon(Icons.folder_outlined),
-                      title: Text(folder.name),
-                      selected: selectedFolderId == folder.id,
-                      onTap: () {
-                        final current = ref.read(selectedChatFolderIdProvider);
-                        selectChatFolder(
-                          ref,
-                          current == folder.id ? null : folder.id,
-                        );
-                        Navigator.of(context).pop();
-                      },
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(
+                      l10n.chatFoldersTitle,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: voice.textSecondary,
+                      ),
                     ),
-                  MessageRequestsFolderDrawerTile(
-                    selected: isMessageRequestsFolderSelected(selectedFolderId),
-                    onTap: () {
-                      final current = ref.read(selectedChatFolderIdProvider);
-                      selectChatFolder(
-                        ref,
-                        isMessageRequestsFolderSelected(current)
-                            ? null
-                            : kVirtualMessageRequestsFolderId,
-                      );
-                      Navigator.of(context).pop();
-                    },
                   ),
-                  ListTile(
-                    key: const Key('mobile_drawer_manage_folders'),
-                    leading: const Icon(Icons.create_new_folder_outlined),
-                    title: Text(l10n.chatFoldersManageAction),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      ManageFoldersSheet.show(context);
+                  foldersAsync.when(
+                    data: (data) => Column(
+                      children: [
+                        for (final folder in data.folders)
+                          ListTile(
+                            key: ChatRailFoldersSection.folderKey(folder.id),
+                            leading: const Icon(Icons.folder_outlined),
+                            title: Text(folder.name),
+                            selected: selectedFolderId == folder.id,
+                            onTap: () {
+                              final current = ref.read(
+                                selectedChatFolderIdProvider,
+                              );
+                              selectChatFolder(
+                                ref,
+                                current == folder.id ? null : folder.id,
+                              );
+                              Navigator.of(context).pop();
+                            },
+                          ),
+                        MessageRequestsFolderDrawerTile(
+                          selected: isMessageRequestsFolderSelected(
+                            selectedFolderId,
+                          ),
+                          onTap: () {
+                            final current = ref.read(
+                              selectedChatFolderIdProvider,
+                            );
+                            selectChatFolder(
+                              ref,
+                              isMessageRequestsFolderSelected(current)
+                                  ? null
+                                  : kVirtualMessageRequestsFolderId,
+                            );
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                        ListTile(
+                          key: const Key('mobile_drawer_manage_folders'),
+                          leading: const Icon(Icons.create_new_folder_outlined),
+                          title: Text(l10n.chatFoldersManageAction),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            ManageFoldersSheet.show(context);
+                          },
+                        ),
+                      ],
+                    ),
+                    loading: () => const LinearProgressIndicator(minHeight: 2),
+                    error: (_, _) =>
+                        ListTile(title: Text(l10n.backendUnavailable)),
+                  ),
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(
+                      l10n.chatQuickAccessTitle,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: voice.textSecondary,
+                      ),
+                    ),
+                  ),
+                  qaAsync.when(
+                    data: (data) {
+                      if (data.items.isEmpty) {
+                        return ListTile(
+                          title: Text(
+                            l10n.chatQuickAccessEmpty,
+                            style: TextStyle(color: voice.textSecondary),
+                          ),
+                        );
+                      }
+                      return ReorderableListView.builder(
+                        key: const Key('mobile_drawer_quick_access_reorder'),
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        buildDefaultDragHandles: data.items.length > 1,
+                        itemCount: data.items.length,
+                        onReorder: (oldIndex, newIndex) => _reorderQuickAccess(
+                          context,
+                          ref,
+                          data.items,
+                          oldIndex,
+                          newIndex,
+                        ),
+                        itemBuilder: (context, index) {
+                          final item = data.items[index];
+                          return ListTile(
+                            key: ChatRailQuickAccessSection.itemKey(
+                              item.chatId,
+                            ),
+                            leading: const Icon(Icons.star_outline),
+                            title: Text(item.chat?.name ?? item.chatId),
+                            onTap: () {
+                              shellNav.selectChatFromHome(item.chatId);
+                              Navigator.of(context).pop();
+                            },
+                          );
+                        },
+                      );
                     },
+                    loading: () => const LinearProgressIndicator(minHeight: 2),
+                    error: (_, _) => ListTile(
+                      title: Text(l10n.chatListLoadError),
+                      trailing: IconButton(
+                        key: const Key('mobile_drawer_quick_access_retry'),
+                        tooltip: l10n.commonRetry,
+                        onPressed: () =>
+                            ref.invalidate(quickAccessListProvider),
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, _) => ListTile(title: Text(l10n.backendUnavailable)),
             ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(
-                l10n.chatQuickAccessTitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: voice.textSecondary),
-              ),
-            ),
-            qaAsync.when(
-              data: (data) {
-                if (data.items.isEmpty) {
-                  return ListTile(
-                    title: Text(
-                      l10n.chatQuickAccessEmpty,
-                      style: TextStyle(color: voice.textSecondary),
-                    ),
-                  );
-                }
-                return ReorderableListView.builder(
-                  key: const Key('mobile_drawer_quick_access_reorder'),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  buildDefaultDragHandles: data.items.length > 1,
-                  itemCount: data.items.length,
-                  onReorder: (oldIndex, newIndex) => _reorderQuickAccess(
-                    context,
-                    ref,
-                    data.items,
-                    oldIndex,
-                    newIndex,
-                  ),
-                  itemBuilder: (context, index) {
-                    final item = data.items[index];
-                    return ListTile(
-                      key: ChatRailQuickAccessSection.itemKey(item.chatId),
-                      leading: const Icon(Icons.star_outline),
-                      title: Text(item.chat?.name ?? item.chatId),
-                      onTap: () {
-                        shellNav.selectChatFromHome(item.chatId);
-                        Navigator.of(context).pop();
-                      },
-                    );
-                  },
-                );
-              },
-              loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, _) => ListTile(
-                title: Text(l10n.chatListLoadError),
-                trailing: IconButton(
-                  key: const Key('mobile_drawer_quick_access_retry'),
-                  tooltip: l10n.commonRetry,
-                  onPressed: () => ref.invalidate(quickAccessListProvider),
-                  icon: const Icon(Icons.refresh),
-                ),
-              ),
-            ),
-            const Divider(),
+            const Divider(height: 1),
+            const _DrawerProfileStack(),
             ListTile(
               key: const Key('mobile_drawer_settings'),
               leading: const Icon(Icons.settings_outlined),
@@ -179,5 +201,69 @@ class MobileShellDrawer extends ConsumerWidget {
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+}
+
+class _DrawerProfileStack extends ConsumerWidget {
+  const _DrawerProfileStack();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profiles =
+        ref.watch(myProfilesProvider).valueOrNull ?? const <VoiceProfile>[];
+    final active = ref.watch(activeProfileProvider).valueOrNull;
+    // Keep the active profile visible even when it is outside the first three.
+    final visible = [
+      ?active,
+      ...profiles.where((profile) => profile.id != active?.id),
+    ].take(3).toList();
+    final entries = visible.isEmpty ? <VoiceProfile?>[active] : visible;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          for (final profile in entries)
+            Builder(
+              builder: (anchorContext) => InkWell(
+                customBorder: const CircleBorder(),
+                focusColor: VoiceColors.of(
+                  context,
+                ).focusRing.withValues(alpha: 0.25),
+                onTap: () => showProfileAvatarMenu(
+                  context: context,
+                  ref: ref,
+                  anchorContext: anchorContext,
+                ),
+                onLongPress: () => showProfileAvatarMenu(
+                  context: context,
+                  ref: ref,
+                  anchorContext: anchorContext,
+                ),
+                child: Semantics(
+                  button: true,
+                  label:
+                      profile?.displayName ??
+                      AppLocalizations.of(context)!.profileEditTooltip,
+                  selected: profile != null && profile.id == active?.id,
+                  child: SizedBox(
+                    key: ValueKey(
+                      'mobile_drawer_profile_${profile?.id ?? 'active'}',
+                    ),
+                    width: 48,
+                    height: 48,
+                    child: ExcludeSemantics(
+                      child: VoiceAvatar(
+                        imageUrl: profile?.avatarUrl,
+                        label: profile?.displayName ?? '?',
+                        radius: 24,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
