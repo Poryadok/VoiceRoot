@@ -7,6 +7,9 @@ import tempfile
 import unittest
 
 CHECKER = Path(__file__).with_name('current-diff-contract.py')
+CHAT21_PATH = 'src/backend/migrations/chat_db/000021_chat_deleted_event_outbox.down.sql'
+CHAT21_BEFORE = '37d5d9d0b0dd93f708f81b03e7e2484c8be31749'
+CHAT21_AFTER = 'f552270c91ce84925144712f09bf0c4a3b22fe36'
 
 
 REVIEWED_FIXTURES = [('src/backend/voice/logger.go', None, '44ff46d26c9e4f9d7b067e84d4e7771a797290f3'),
@@ -203,6 +206,62 @@ class CurrentDiffTests(unittest.TestCase):
                 self.assertIn('source_disabled', result.stderr)
 
 
+
+    def chat21_blob(self, blob, path=CHAT21_PATH):
+        target = self.repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(subprocess.check_output(
+            ['git', '-C', str(CHECKER.parents[2]), 'cat-file', 'blob', blob]))
+
+    def chat21_fixture(self):
+        self.chat21_blob(CHAT21_BEFORE)
+        self.base = self.commit('original Chat21')
+        self.chat21_blob(CHAT21_AFTER)
+
+    def test_exact_chat21_transition_passes_without_e409_package(self):
+        self.chat21_fixture()
+        head = self.commit('reviewed Chat21 correction')
+        result = self.check(self.merge_commit(), head)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_chat21_rejects_content_mode_path_deletion_and_extra_sql_edits(self):
+        self.chat21_fixture()
+        good = self.commit('reviewed Chat21 correction')
+        for mutation in ('content', 'mode', 'rename', 'delete', 'extra_sql'):
+            with self.subTest(mutation=mutation):
+                self.git('checkout', '-q', good)
+                if mutation == 'content':
+                    self.write(CHAT21_PATH, (self.repo / CHAT21_PATH).read_text() + '\n-- drift\n')
+                elif mutation == 'mode':
+                    self.git('update-index', '--chmod=+x', CHAT21_PATH)
+                    (self.repo / CHAT21_PATH).chmod(0o755)
+                elif mutation == 'rename':
+                    self.git('mv', CHAT21_PATH, CHAT21_PATH.replace('000021_', '000022_'))
+                elif mutation == 'delete':
+                    self.git('rm', CHAT21_PATH)
+                else:
+                    self.write('src/backend/migrations/voice_db/000001_base.up.sql', 'SELECT 999;\n')
+                if mutation != 'mode':
+                    self.git('add', '.')
+                self.git('commit', '-qm', mutation)
+                result = self.check(self.merge_commit(), self.git('rev-parse', 'HEAD'))
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn('immutable_migration:', result.stderr)
+
+    def test_chat21_rejects_wrong_before_and_same_bytes_at_other_path(self):
+        self.chat21_blob(CHAT21_BEFORE)
+        self.write(CHAT21_PATH, (self.repo / CHAT21_PATH).read_text() + '\n-- other input\n')
+        self.base = self.commit('wrong Chat21 baseline')
+        self.chat21_blob(CHAT21_AFTER)
+        self.commit('same reviewed output')
+        self.assertIn('immutable_migration:', self.check().stderr)
+        self.git('checkout', '-q', self.base)
+        other = CHAT21_PATH.replace('chat_db/', 'other_db/')
+        self.chat21_blob(CHAT21_BEFORE, other)
+        self.base = self.commit('other path baseline')
+        self.chat21_blob(CHAT21_AFTER, other)
+        self.commit('reviewed bytes at other path')
+        self.assertIn('immutable_migration:', self.check().stderr)
 
     def reviewed_fixture(self):
         # Actual immutable reviewed blobs, copied into a disposable Git history.
