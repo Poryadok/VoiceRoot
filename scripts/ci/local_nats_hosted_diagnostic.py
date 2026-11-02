@@ -25,7 +25,7 @@ MAX_LOG_BYTES = 16 * 1024 * 1024
 REQUEST_KEYS = frozenset({'root', 'source', 'source_copy', 'deps', 'deps_archive', 'output',
                           'helper', 'helper_hash', 'jq', 'jq_hash', 'images'})
 PROJECT_MODULES = frozenset({'affected_check_plan', 'go_integration_receipts', 'local_chat_orchestration',
-    'local_chat_private', 'local_docker_owned', 'local_docker_scheduled', 'local_go_dependencies',
+    'local_chat_private', 'local_ci_proofs_scheduler', 'local_docker_owned', 'local_docker_scheduled', 'local_go_dependencies',
     'local_go_execution', 'local_go_plan', 'local_go_verify', 'local_heavy_slots', 'local_image_archive',
     'local_process_supervision', 'local_rootless_profile', 'local_source_snapshot'})
 from local_docker_owned import DockerCLI
