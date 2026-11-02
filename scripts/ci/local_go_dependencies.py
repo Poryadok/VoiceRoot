@@ -8,10 +8,180 @@ import shutil
 import stat
 import subprocess
 import tarfile
+import time
 
+import local_bounded_source
 import local_go_execution
 import local_go_verify
 import local_source_snapshot as snapshot
+
+MAX_CACHE_ARCHIVE = 2 * 1024 * 1024 * 1024
+MAX_CACHE_TOTAL = 1024 * 1024 * 1024
+MAX_CACHE_MEMBER = 256 * 1024 * 1024
+MAX_CACHE_ENTRIES = 100000
+MAX_CACHE_SECONDS = 1800
+
+
+def _signature(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _cross_signature(info):
+    # Windows path and handle stats can report different creation timestamps.
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns)
+
+
+def _archive_download_cache(entries, output, download_root):
+    """Bound and verify cache archive writes; acquisition itself is unbounded."""
+    deadline = time.monotonic() + MAX_CACHE_SECONDS
+    download_root = Path(download_root).resolve(strict=bool(entries))
+    inventory, total = [], 0
+    for relative, value in sorted(entries.items()):
+        parts = relative.split('/')
+        if (not relative or any(part in ('', '.', '..') or '\\' in part or ':' in part for part in parts)):
+            raise ValueError('invalid Go cache archive path')
+        path = Path(value)
+        if local_bounded_source._path(download_root, parts) != path:
+            raise ValueError('Go cache source path escapes download root')
+        info = path.lstat()
+        if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_size > MAX_CACHE_MEMBER:
+            raise ValueError('Go cache archive member exceeds limit or is not regular')
+        total += info.st_size
+        inventory.append((relative, path, info))
+        if len(inventory) > MAX_CACHE_ENTRIES or total > MAX_CACHE_TOTAL:
+            raise ValueError('Go cache archive inventory exceeds limit')
+    hashes = {}
+    with Path(output).open('x+b') as raw:
+        writer = local_bounded_source._CappedWriter(raw, MAX_CACHE_ARCHIVE, deadline)
+        with tarfile.open(fileobj=writer, mode='w|') as tar:
+            for relative, path, before in inventory:
+                local_bounded_source._deadline(deadline)
+                if local_bounded_source._path(download_root, relative.split('/')) != path:
+                    raise ValueError('Go cache source path changed before archival')
+                with path.open('rb') as source:
+                    opened = os.fstat(source.fileno())
+                    if _cross_signature(opened) != _cross_signature(before):
+                        raise ValueError('Go cache source changed before archival')
+                    digest = hashlib.sha256()
+                    class Reader:
+                        name = source.name
+                        remaining = before.st_size
+                        def read(self, size=-1):
+                            local_bounded_source._deadline(deadline)
+                            amount = min(self.remaining, 1024 * 1024) if size < 0 else min(size, self.remaining)
+                            data = source.read(amount)
+                            if amount and not data:
+                                raise ValueError('Go cache source truncated')
+                            self.remaining -= len(data)
+                            digest.update(data)
+                            return data
+                    member = tarfile.TarInfo('cache/download/' + relative)
+                    member.size, member.mode = before.st_size, stat.S_IMODE(before.st_mode)
+                    reader = Reader()
+                    tar.addfile(member, reader)
+                    if reader.remaining or source.read(1):
+                        raise ValueError('Go cache source size changed')
+                    after = os.fstat(source.fileno())
+                current = path.lstat()
+                if (path.is_symlink() or _signature(before) != _signature(current) or
+                        _signature(opened) != _signature(after) or _cross_signature(after) != _cross_signature(current) or
+                        local_bounded_source._path(download_root, relative.split('/')) != path):
+                    raise ValueError('Go cache source changed during archival')
+                hashes[relative] = digest.hexdigest()
+        writer.flush()
+        os.fsync(raw.fileno())
+        before = os.fstat(raw.fileno())
+        if before.st_size != writer.count or before.st_size > MAX_CACHE_ARCHIVE:
+            raise ValueError('Go cache archive exceeds limit')
+        raw.seek(0)
+        archive_digest = hashlib.sha256()
+        remaining = before.st_size
+        while remaining:
+            local_bounded_source._deadline(deadline)
+            block = raw.read(min(1024 * 1024, remaining))
+            if not block:
+                raise ValueError('Go cache archive truncated')
+            remaining -= len(block)
+            archive_digest.update(block)
+        if raw.read(1) or archive_digest.hexdigest() != writer.digest.hexdigest():
+            raise ValueError('Go cache archive bytes changed')
+        raw.seek(0)
+        with tarfile.open(fileobj=raw, mode='r|') as archive:
+            for relative, _path, info in inventory:
+                local_bounded_source._deadline(deadline)
+                member = archive.next()
+                if (member is None or not member.isfile() or member.issparse() or
+                        member.name != 'cache/download/' + relative or member.size != info.st_size):
+                    raise ValueError('Go cache archive entries changed')
+                digest = hashlib.sha256()
+                with archive.extractfile(member) as source:
+                    while True:
+                        local_bounded_source._deadline(deadline)
+                        block = source.read(1024 * 1024)
+                        if not block:
+                            break
+                        digest.update(block)
+                if digest.hexdigest() != hashes[relative]:
+                    raise ValueError('Go cache archive bytes changed')
+            if archive.next() is not None:
+                raise ValueError('Go cache archive entries changed')
+        current = Path(output).lstat()
+        if (not stat.S_ISREG(current.st_mode) or _signature(before) != _signature(os.fstat(raw.fileno())) or
+                (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino)):
+            raise ValueError('Go cache archive changed during verification')
+        return {'size': before.st_size, 'digest': archive_digest.hexdigest(), 'path_stat': _signature(current),
+                'entries': [(relative, _signature(info), hashes[relative]) for relative, _path, info in inventory]}
+
+
+def _verify_cache_inputs(download_root, receipt, deadline):
+    root = Path(download_root).resolve(strict=bool(receipt['entries']))
+    for relative, expected, expected_hash in receipt['entries']:
+        local_bounded_source._deadline(deadline)
+        path = local_bounded_source._path(root, relative.split('/'))
+        before = path.lstat()
+        if not stat.S_ISREG(before.st_mode) or _signature(before) != expected:
+            raise ValueError('Go cache source changed after archival')
+        with path.open('rb') as raw:
+            opened = os.fstat(raw.fileno())
+            if _cross_signature(opened) != _cross_signature(before):
+                raise ValueError('Go cache source changed before verification')
+            remaining, digest = before.st_size, hashlib.sha256()
+            while remaining:
+                local_bounded_source._deadline(deadline)
+                block = raw.read(min(1024 * 1024, remaining))
+                if not block:
+                    raise ValueError('Go cache source truncated')
+                remaining -= len(block)
+                digest.update(block)
+            if raw.read(1) or digest.hexdigest() != expected_hash or _signature(os.fstat(raw.fileno())) != _signature(opened):
+                raise ValueError('Go cache source bytes changed after archival')
+        if (_signature(path.lstat()) != expected or
+                local_bounded_source._path(root, relative.split('/')) != path):
+            raise ValueError('Go cache source path changed after archival')
+
+
+def _verify_cache_archive(path, receipt, deadline):
+    path = Path(path)
+    with path.open('rb') as raw:
+        opened, current = os.fstat(raw.fileno()), path.lstat()
+        if (not stat.S_ISREG(current.st_mode) or _signature(current) != receipt['path_stat'] or
+                _cross_signature(opened) != _cross_signature(current) or
+                opened.st_size != receipt['size'] or opened.st_size > MAX_CACHE_ARCHIVE):
+            raise ValueError('Go cache archive changed before verification')
+        digest, remaining = hashlib.sha256(), receipt['size']
+        while remaining:
+            local_bounded_source._deadline(deadline)
+            block = raw.read(min(1024 * 1024, remaining))
+            if not block:
+                raise ValueError('Go cache archive truncated')
+            remaining -= len(block)
+            digest.update(block)
+        if raw.read(1) or digest.hexdigest() != receipt['digest']:
+            raise ValueError('Go cache archive bytes changed')
+        if (_signature(os.fstat(raw.fileno())) != _signature(opened) or
+                _signature(path.lstat()) != receipt['path_stat']):
+            raise ValueError('Go cache archive changed during verification')
+    return receipt['digest']
 
 
 def _sha256(path):
@@ -25,6 +195,36 @@ def _sha256(path):
 def _gomod_sum(path):
     # Go's h1 hash for a module's go.mod is the hash of a single-file tree.
     line = (_sha256(path) + '  go.mod\n').encode('ascii')
+    return 'h1:' + base64.b64encode(hashlib.sha256(line).digest()).decode('ascii')
+
+
+def _read_cache_bounded(path, limit, deadline, *, collect=False):
+    before = Path(path).lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+        raise ValueError('Go cache member exceeds limit or is not regular')
+    digest, chunks, remaining = hashlib.sha256(), [], before.st_size
+    with Path(path).open('rb') as stream:
+        opened = os.fstat(stream.fileno())
+        if _cross_signature(opened) != _cross_signature(before):
+            raise ValueError('Go cache member changed before read')
+        while remaining:
+            local_bounded_source._deadline(deadline)
+            block = stream.read(min(1024 * 1024, remaining))
+            if not block:
+                raise ValueError('Go cache member truncated')
+            remaining -= len(block)
+            digest.update(block)
+            if collect:
+                chunks.append(block)
+        if stream.read(1) or _signature(os.fstat(stream.fileno())) != _signature(opened):
+            raise ValueError('Go cache member changed during read')
+    if _signature(Path(path).lstat()) != _signature(before):
+        raise ValueError('Go cache member path changed during read')
+    return b''.join(chunks) if collect else digest.hexdigest()
+
+
+def _bounded_gomod_sum(path, deadline):
+    line = (_read_cache_bounded(path, MAX_CACHE_MEMBER, deadline) + '  go.mod\n').encode('ascii')
     return 'h1:' + base64.b64encode(hashlib.sha256(line).digest()).decode('ascii')
 
 
@@ -182,8 +382,12 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed during dependency acquisition')
     entries, versions, mod_sums, zip_sums = {}, set(), {}, {}
-    download_root = (cache / 'cache' / 'download').resolve()
+    download_root = cache / 'cache' / 'download'
+    if download_root.exists():
+        download_root = local_bounded_source._path(output, ['modcache', 'cache', 'download'])
+    inventory_deadline = time.monotonic() + MAX_CACHE_SECONDS
     for item in _json_stream((output / 'download.json').read_bytes()):
+        local_bounded_source._deadline(inventory_deadline)
         if not isinstance(item, dict) or item.get('Error'):
             raise ValueError('invalid Go module download result')
         module_name, version_name = item.get('Path'), item.get('Version')
@@ -197,35 +401,44 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
         versions.add((module_name, version_name))
         paths = [Path(item[key]) for key in ('Info', 'GoMod', 'Zip')]
         paths.append(Path(str(paths[-1]) + 'hash'))
-        if paths[-1].read_text(encoding='utf-8').strip() != item['Sum'] or _gomod_sum(paths[1]) != item['GoModSum']:
-            raise ValueError('downloaded Go module hash differs from go.sum')
-        mod_sums[paths[1]] = item['GoModSum']
-        zip_sums[paths[-1]] = item['Sum']
         for path in paths:
             info = path.lstat()
-            if (not stat.S_ISREG(info.st_mode) or download_root not in path.resolve().parents or
-                    path.is_symlink()):
+            if (not stat.S_ISREG(info.st_mode) or info.st_size > MAX_CACHE_MEMBER or
+                    download_root not in path.resolve().parents or path.is_symlink() or
+                    local_bounded_source._path(download_root, list(path.relative_to(download_root).parts)) != path):
                 raise ValueError('invalid Go module cache artifact')
             relative = path.relative_to(download_root).as_posix()
             if relative in entries:
                 raise ValueError('duplicate Go module cache artifact')
             entries[relative] = path
+        if (_read_cache_bounded(paths[-1], 4096, inventory_deadline, collect=True).decode('utf-8').strip() != item['Sum'] or
+                _bounded_gomod_sum(paths[1], inventory_deadline) != item['GoModSum']):
+            raise ValueError('downloaded Go module hash differs from go.sum')
+        mod_sums[paths[1]] = item['GoModSum']
+        zip_sums[paths[-1]] = item['Sum']
     if versions != set(required):
         raise ValueError('Go dependency download inventory is incomplete')
     # Go's pruned module graph may still require go.mod files for modules whose
     # packages are not selected. Preserve only graph metadata authenticated by
     # this module's captured go.sum; never copy arbitrary host cache entries.
     if download_root.exists():
-        for path in sorted(download_root.rglob('*.mod')):
+        scanned = 0
+        for path in download_root.rglob('*.mod'):
+            local_bounded_source._deadline(inventory_deadline)
+            scanned += 1
+            if scanned > MAX_CACHE_ENTRIES:
+                raise ValueError('Go cache metadata inventory exceeds limit')
             relative_path = path.relative_to(download_root)
             parts = relative_path.parts
             if len(parts) < 3 or parts[-2] != '@v':
                 continue
-            if not stat.S_ISREG(path.lstat().st_mode) or download_root not in path.resolve().parents:
+            if (not stat.S_ISREG(path.lstat().st_mode) or path.lstat().st_size > MAX_CACHE_MEMBER or
+                    download_root not in path.resolve().parents or
+                    local_bounded_source._path(download_root, list(relative_path.parts)) != path):
                 raise ValueError('invalid Go module graph metadata')
             module_name = _unescape_go_cache('/'.join(parts[:-2]))
             version_name = _unescape_go_cache(parts[-1][:-4])
-            value = _gomod_sum(path)
+            value = _bounded_gomod_sum(path, inventory_deadline)
             if (module_name, version_name + '/go.mod', value) not in sums:
                 continue
             relative = relative_path.as_posix()
@@ -239,31 +452,31 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
                     raise ValueError('invalid Go module graph information')
                 entries[info.relative_to(download_root).as_posix()] = info
     archive_path = output / 'download-cache.tar'
-    with archive_path.open('xb') as raw, tarfile.open(fileobj=raw, mode='w') as tar:
-        for relative, path in sorted(entries.items()):
-            tar.add(path, arcname='cache/download/' + relative, recursive=False)
+    if entries:
+        download_root = local_bounded_source._path(output, ['modcache', 'cache', 'download'])
+    archive_receipt = _archive_download_cache(entries, archive_path, download_root)
     verify_cache('after-archive')
-    if (any(_gomod_sum(path) != value for path, value in mod_sums.items()) or
-            any(path.read_text(encoding='utf-8').strip() != value for path, value in zip_sums.items())):
-        raise ValueError('downloaded Go module hashes changed during archival')
-    with tarfile.open(archive_path, mode='r:') as archive:
-        members = archive.getmembers()
-        expected = sorted(entries.items())
-        if len(members) != len(expected):
-            raise ValueError('Go cache archive entries changed')
-        for member, (relative, path) in zip(members, expected):
-            if not member.isfile() or member.name != 'cache/download/' + relative:
-                raise ValueError('Go cache archive entries changed')
-            digest = hashlib.sha256()
-            with archive.extractfile(member) as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b''):
-                    digest.update(block)
-            if not stat.S_ISREG(path.lstat().st_mode) or digest.hexdigest() != _sha256(path):
-                raise ValueError('Go cache archive bytes changed')
+    _verify_cache_inputs(download_root, archive_receipt, time.monotonic() + MAX_CACHE_SECONDS)
+    archived_hashes = {relative: digest for relative, _info, digest in archive_receipt['entries']}
+    for relative, path in entries.items():
+        if path in mod_sums:
+            line = (archived_hashes[relative] + '  go.mod\n').encode('ascii')
+            value = 'h1:' + base64.b64encode(hashlib.sha256(line).digest()).decode('ascii')
+            if value != mod_sums[path]:
+                raise ValueError('downloaded Go module hashes changed during archival')
+        if path in zip_sums:
+            if local_bounded_source._path(download_root, relative.split('/')) != path:
+                raise ValueError('Go cache source path changed after archival')
+            with path.open('rb') as stream:
+                value = stream.read(4097)
+            if (len(value) > 4096 or value.decode('utf-8').strip() != zip_sums[path] or
+                    local_bounded_source._path(download_root, relative.split('/')) != path):
+                raise ValueError('downloaded Go module hashes changed during archival')
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source or _sha256(executable) != toolchain_digest:
         raise ValueError('source or Go toolchain changed during cache archival')
+    archive_digest = _verify_cache_archive(archive_path, archive_receipt, time.monotonic() + MAX_CACHE_SECONDS)
     return {'status': 'incomplete', 'commands': commands, 'toolchain_version': version,
-            'toolchain_sha256': toolchain_digest, 'archive_sha256': _sha256(archive_path),
+            'toolchain_sha256': toolchain_digest, 'archive_sha256': archive_digest,
             'module_count': len(versions), 'module_dir': module_dir,
             'target': {'goos': 'linux', 'goarch': 'amd64', 'cgo_enabled': False}, 'source': source}

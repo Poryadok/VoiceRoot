@@ -98,20 +98,74 @@ class GoAcquisitionTests(unittest.TestCase):
         self.assertEqual(self.verify_calls, 2)
 
     def test_rejects_transient_cache_change_during_archival(self):
-        original_add = tarfile.TarFile.add
-        def mutate_then_restore(archive, name, *args, **kwargs):
-            path = Path(name)
+        original_add = tarfile.TarFile.addfile
+        def mutate_then_restore(archive, info, stream=None):
+            path = Path(stream.name)
             if path.name != 'v1.0.0.mod':
-                return original_add(archive, name, *args, **kwargs)
+                return original_add(archive, info, stream)
             original = path.read_bytes()
             path.write_bytes(b'tampered')
             try:
-                return original_add(archive, name, *args, **kwargs)
+                return original_add(archive, info, stream)
             finally:
                 path.write_bytes(original)
-        with patch.object(tarfile.TarFile, 'add', mutate_then_restore):
-            with self.assertRaisesRegex(ValueError, 'archive bytes changed'):
+        with patch.object(tarfile.TarFile, 'addfile', mutate_then_restore):
+            with self.assertRaisesRegex(ValueError, 'changed|truncated'):
                 self.acquire()
+
+    def test_cache_archive_rejects_inventory_limit_before_output(self):
+        source = self.base / 'entry'
+        source.write_bytes(b'12345')
+        output = self.base / 'bounded.tar'
+        with patch.object(dependencies, 'MAX_CACHE_MEMBER', 4):
+            with self.assertRaisesRegex(ValueError, 'limit'):
+                dependencies._archive_download_cache({'entry': source}, output, self.base)
+        self.assertFalse(output.exists())
+
+    def test_cache_archive_write_cap_preserves_partial_file(self):
+        source = self.base / 'entry'
+        source.write_bytes(b'abc')
+        output = self.base / 'bounded.tar'
+        with patch.object(dependencies, 'MAX_CACHE_ARCHIVE', 512):
+            with self.assertRaisesRegex(ValueError, 'limit'):
+                dependencies._archive_download_cache({'entry': source}, output, self.base)
+        self.assertTrue(output.exists())
+        self.assertLessEqual(output.stat().st_size, 512)
+
+    def test_cache_archive_total_and_entry_limits_refuse_before_output(self):
+        first, second = self.base / 'first', self.base / 'second'
+        first.write_bytes(b'123'); second.write_bytes(b'456')
+        entries = {'first': first, 'second': second}
+        for limit, value in (('MAX_CACHE_TOTAL', 5), ('MAX_CACHE_ENTRIES', 1)):
+            output = self.base / (limit + '.tar')
+            with self.subTest(limit=limit), patch.object(dependencies, limit, value):
+                with self.assertRaisesRegex(ValueError, 'limit'):
+                    dependencies._archive_download_cache(entries, output, self.base)
+                self.assertFalse(output.exists())
+
+    def test_empty_dependency_archive_does_not_require_a_cache_directory(self):
+        output = self.base / 'empty.tar'
+        receipt = dependencies._archive_download_cache({}, output, self.base / 'missing-cache')
+        self.assertEqual(receipt['entries'], [])
+        dependencies._verify_cache_inputs(self.base / 'missing-cache', receipt, dependencies.time.monotonic() + 30)
+        self.assertEqual(dependencies._verify_cache_archive(output, receipt, dependencies.time.monotonic() + 30),
+                         receipt['digest'])
+        with tarfile.open(output) as archive:
+            self.assertEqual(archive.getmembers(), [])
+
+    def test_cache_source_mutation_after_archive_is_rejected(self):
+        source = self.base / 'entry'
+        source.write_bytes(b'original')
+        receipt = dependencies._archive_download_cache({'entry': source}, self.base / 'source.tar', self.base)
+        source.write_bytes(b'modified')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            dependencies._verify_cache_inputs(self.base, receipt, dependencies.time.monotonic() + 30)
+
+    def test_small_metadata_read_rejects_oversized_file(self):
+        source = self.base / 'ziphash'
+        source.write_bytes(b'x' * 4097)
+        with self.assertRaisesRegex(ValueError, 'limit'):
+            dependencies._read_cache_bounded(source, 4096, dependencies.time.monotonic() + 30, collect=True)
 
     def test_rejects_workspace_input(self):
         (self.copy / 'go.work').write_text('go 1.26\n', encoding='utf-8')

@@ -62,6 +62,15 @@ class MatrixInventoryTest(unittest.TestCase):
         for dependency in bounded_dependencies:
             self.assertEqual(policy[79]['source_sha256'][dependency],
                              hashlib.sha256((root / dependency).read_bytes()).hexdigest())
+        for test_name, extra in (('local_go_dependencies_test.py', set()),
+                                 ('local_go_multi_dependencies_test.py', {'scripts/ci/local_go_multi_dependencies.py'})):
+            rows = [row for row in policy if test_name in row['recipe']]
+            self.assertEqual(len(rows), 1)
+            expected = {f'scripts/ci/{test_name}', *inventory.GO_CACHE_TEST_SOURCES, *extra}
+            self.assertEqual(set(rows[0]['source_sha256']), expected)
+            for dependency in expected:
+                self.assertEqual(rows[0]['source_sha256'][dependency],
+                                 hashlib.sha256((root / dependency).read_bytes()).hexdigest())
         self.assertTrue(any('local_ci_staging_execution_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_staging_owned_tmp_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))

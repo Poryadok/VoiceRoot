@@ -10,7 +10,9 @@ from pathlib import Path
 import re
 import stat
 import tarfile
+import time
 
+import local_bounded_source
 import local_go_dependencies
 import local_go_execution
 import local_source_snapshot as snapshot
@@ -23,11 +25,19 @@ MAX_MEMBER = 256 * 1024 * 1024
 MAX_ENTRIES = 100000
 
 
-def _hash(stream):
+def _hash(stream, size, deadline):
     stream.seek(0)
     digest = hashlib.sha256()
-    for block in iter(lambda: stream.read(1024 * 1024), b''):
+    remaining = size
+    while remaining:
+        local_bounded_source._deadline(deadline)
+        block = stream.read(min(1024 * 1024, remaining))
+        if not block:
+            raise ValueError('Go cache archive truncated')
+        remaining -= len(block)
         digest.update(block)
+    if stream.read(1):
+        raise ValueError('Go cache archive grew during verification')
     return digest.hexdigest()
 
 
@@ -59,6 +69,7 @@ def merge(rows, source, output):
                 not re.fullmatch(r'[0-9a-f]{64}', receipt['archive_sha256'])):
             raise ValueError('Go acquisition identity differs')
     output = Path(output)
+    deadline = time.monotonic() + 1800
     entries, identifiers, total, count = {}, set(), 0, 0
     with ExitStack() as stack:
         sources = []
@@ -71,7 +82,7 @@ def merge(rows, source, output):
             identity = (info.st_dev, info.st_ino)
             if (not stat.S_ISREG(info.st_mode) or not stat.S_ISREG(path_info.st_mode) or
                     identity != (path_info.st_dev, path_info.st_ino) or identity in identifiers or
-                    info.st_size > MAX_ARCHIVE or _hash(stream) != receipt['archive_sha256']):
+                    info.st_size > MAX_ARCHIVE or _hash(stream, info.st_size, deadline) != receipt['archive_sha256']):
                 raise ValueError('Go cache archive identity changed')
             identifiers.add(identity)
             stream.seek(0)
@@ -87,41 +98,71 @@ def merge(rows, source, output):
                 seen.add(name)
                 digest = hashlib.sha256()
                 with tar.extractfile(member) as item:
-                    for block in iter(lambda: item.read(1024 * 1024), b''):
+                    remaining = member.size
+                    while remaining:
+                        local_bounded_source._deadline(deadline)
+                        block = item.read(min(1024 * 1024, remaining))
+                        if not block:
+                            raise ValueError('Go cache member truncated')
+                        remaining -= len(block)
                         digest.update(block)
                 identity = (member.size, digest.hexdigest())
                 if name in entries and entries[name][0] != identity:
                     raise ValueError('Go cache archive conflict')
                 entries.setdefault(name, (identity, tar, member))
-        with output.open('xb') as raw, tarfile.open(fileobj=raw, mode='w') as merged:
+        raw = stack.enter_context(output.open('x+b'))
+        writer = local_bounded_source._CappedWriter(raw, MAX_ARCHIVE, deadline)
+        with tarfile.open(fileobj=writer, mode='w|') as merged:
             for name, (identity, tar, member) in sorted(entries.items()):
                 normalized = tarfile.TarInfo(name)
                 normalized.size, normalized.mode = identity[0], 0o600
                 with tar.extractfile(member) as item:
                     merged.addfile(normalized, item)
-        with tarfile.open(output, mode='r:') as merged:
-            members = merged.getmembers()
-            if [item.name for item in members] != sorted(entries):
-                raise ValueError('merged Go cache archive inventory differs')
-            for member in members:
-                name = _member_name(member)
+        raw.flush()
+        os.fsync(raw.fileno())
+        output_before, output_path = os.fstat(raw.fileno()), output.lstat()
+        if (not stat.S_ISREG(output_path.st_mode) or output_before.st_size != writer.count or
+                output_before.st_size > MAX_ARCHIVE or
+                local_go_dependencies._cross_signature(output_before) != local_go_dependencies._cross_signature(output_path) or
+                _hash(raw, output_before.st_size, deadline) != writer.digest.hexdigest()):
+            raise ValueError('merged Go cache archive changed')
+        raw.seek(0)
+        with tarfile.open(fileobj=raw, mode='r|') as merged:
+            for name in sorted(entries):
+                local_bounded_source._deadline(deadline)
+                member = merged.next()
+                if member is None or _member_name(member) != name:
+                    raise ValueError('merged Go cache archive inventory differs')
                 digest = hashlib.sha256()
                 with merged.extractfile(member) as item:
-                    for block in iter(lambda: item.read(1024 * 1024), b''):
+                    remaining = member.size
+                    while remaining:
+                        local_bounded_source._deadline(deadline)
+                        block = item.read(min(1024 * 1024, remaining))
+                        if not block:
+                            raise ValueError('merged Go cache member truncated')
+                        remaining -= len(block)
                         digest.update(block)
                 if (member.size, digest.hexdigest()) != entries[name][0]:
                     raise ValueError('merged Go cache archive bytes differ')
+            if merged.next() is not None:
+                raise ValueError('merged Go cache archive inventory differs')
         for path, stream, before, receipt, _ in sources:
             after, current = os.fstat(stream.fileno()), path.lstat()
             if (path.is_symlink() or not stat.S_ISREG(current.st_mode) or
                     (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) !=
                     (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) or
                     (current.st_dev, current.st_ino) != (after.st_dev, after.st_ino) or
-                    _hash(stream) != receipt['archive_sha256']):
+                    _hash(stream, before.st_size, deadline) != receipt['archive_sha256']):
                 raise ValueError('Go cache archive changed during merge')
+        if (_hash(raw, output_before.st_size, deadline) != writer.digest.hexdigest() or
+                local_go_dependencies._signature(os.fstat(raw.fileno())) != local_go_dependencies._signature(output_before) or
+                local_go_dependencies._signature(output.lstat()) != local_go_dependencies._signature(output_path)):
+            raise ValueError('merged Go cache archive changed during verification')
+        archive_digest = writer.digest.hexdigest()
     return {'status': 'incomplete', 'source': source, 'module_dir': MODULES[0], 'module_dirs': list(MODULES),
             'target': TARGET, 'toolchain_sha256': common['toolchain_sha256'],
-            'toolchain_version': common['toolchain_version'], 'archive_sha256': local_go_dependencies._sha256(output),
+            'toolchain_version': common['toolchain_version'], 'archive_sha256': archive_digest,
             'input_archive_sha256': [receipt['archive_sha256'] for receipt, _ in rows]}
 
 

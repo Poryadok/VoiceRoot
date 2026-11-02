@@ -14,7 +14,18 @@ MAKEFILE_SHA256 = '87c85732b31278dff0d34afbc725a77c61b1588c877acaf020875e7bbc8ee
 WORKFLOW_SHA256 = '3556b9130522770c6863d3c0bb92bb8c3105c89240e5693a308f383dddd710e2'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
 SHARD_RECIPE_COUNTS = {'policy': 80, 'runtime': 23, 'staging': 34, 'proofs': 15}
+GO_CACHE_TEST_SOURCES = (
+    'scripts/ci/local_go_dependencies.py', 'scripts/ci/local_go_execution.py',
+    'scripts/ci/local_go_verify.py', 'scripts/ci/go_integration_receipts.py',
+    'scripts/ci/local_bounded_source.py', 'scripts/ci/local_current_diff.py',
+    'scripts/ci/local_golangci_capture.py', 'scripts/ci/local_process_supervision.py',
+    'scripts/ci/local_private_git.py', 'scripts/ci/local_source_snapshot.py',
+    'scripts/ci/affected_check_plan.py',
+)
 TRANSITIVE_SOURCE_DEPENDENCIES = {
+    'scripts/ci/local_go_dependencies_test.py': GO_CACHE_TEST_SOURCES,
+    'scripts/ci/local_go_multi_dependencies_test.py':
+        ('scripts/ci/local_go_multi_dependencies.py', *GO_CACHE_TEST_SOURCES),
     'scripts/ci/local_bounded_source_test.py': (
         'scripts/ci/local_bounded_source.py', 'scripts/ci/local_current_diff.py',
         'scripts/ci/local_golangci_capture.py', 'scripts/ci/local_process_supervision.py',
