@@ -127,6 +127,22 @@ class ProofComponentTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'not recognized'):
                     proofs._tool_version(self.repo / 'make.exe', 'GNU Make', {})
 
+    def test_private_git_config_pins_newline_behavior_and_rejects_deep_windows_paths(self):
+        proofs.configure_private_git('git', self.repo)
+        self.assertEqual(self.git('config', '--get', 'core.autocrlf'), 'false')
+        self.assertEqual(self.git('config', '--get', 'core.longpaths'), 'false')
+        with patch.object(proofs, '_windows', return_value=True):
+            proofs.validate_windows_checkout_paths(self.repo, ['short/file.txt'])
+            long_name = 'nested/' + ('x' * proofs.WINDOWS_PATH_LIMIT)
+            with self.assertRaisesRegex(ValueError, 'shorter output path'):
+                proofs.validate_windows_checkout_paths(self.repo, [long_name])
+            astral_name = 'nested/' + ('😀' * 130)
+            with self.assertRaisesRegex(ValueError, 'shorter output path'):
+                proofs.validate_windows_checkout_paths(self.repo, [astral_name])
+            long_root = self.repo / ('x' * proofs.WINDOWS_PATH_LIMIT)
+            with self.assertRaisesRegex(ValueError, 'shorter output path'):
+                proofs.validate_windows_checkout_paths(long_root, [])
+
     def test_recipe_expansion_is_exact_and_unknown_make_syntax_refuses(self):
         bash = self.repo / 'bash.exe'
         rows = [{'recipe': '$(BASH) "$(ROOT)/scripts/ci/a.sh"'},

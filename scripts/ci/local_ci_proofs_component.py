@@ -23,6 +23,7 @@ SHARD = 'proofs'
 RECIPE_COUNT = 15
 OUTPUT_LIMIT = 16 * 1024 * 1024
 TIMEOUT_SECONDS = 1800
+WINDOWS_PATH_LIMIT = 240
 SHA = re.compile(r'[0-9a-f]{40}')
 PR_MERGE_REF = re.compile(r'refs/pull/[1-9][0-9]*/merge')
 LIMITATIONS = [
@@ -165,6 +166,27 @@ def _read(path, limit=OUTPUT_LIMIT):
     return data
 
 
+def validate_windows_checkout_paths(candidate_repo, relative_paths):
+    """Reject evidence roots whose private Windows checkout would hit MAX_PATH."""
+    if not _windows():
+        return
+    root = Path(candidate_repo).resolve()
+    def units(path):
+        return len(str(path).encode('utf-16-le', errors='surrogatepass')) // 2
+    longest = max((units(root / name) for name in relative_paths), default=units(root))
+    if longest > WINDOWS_PATH_LIMIT:
+        raise ValueError('proof output path is too deep for Windows checkout; choose a shorter output path')
+
+
+def configure_private_git(git_path, candidate_repo):
+    """Pin checkout bytes independently of the invoking user's Git defaults."""
+    for key, value in (('core.autocrlf', 'false'), ('core.longpaths', 'false')):
+        result = local_current_diff._execute(
+            [str(git_path), '-C', str(candidate_repo), 'config', key, value], timeout=30)
+        if result.returncode:
+            raise ValueError('private candidate Git checkout configuration failed')
+
+
 def verify_component(root, output, report, *, candidate_repo=None):
     """Recheck exact candidate, source manifest, bounded logs and incomplete scope."""
     root, output = Path(root).resolve(), Path(output).resolve()
@@ -239,6 +261,8 @@ def run(root, event_base, head, head_ref, candidate_ref, output, *,
         raise ValueError('invalid fetched proofs component request')
     if not _windows():
         raise ValueError('proof shard requires Windows descendant supervision')
+    candidate_repo = output / 'candidate-repo'
+    validate_windows_checkout_paths(candidate_repo, ())
     _git(root, 'check-ref-format', 'refs/heads/' + head_ref)
     source = local_source_snapshot.capture(root, head)
     if source.get('changed_paths') or source.get('raw_mismatch_paths'):
@@ -249,7 +273,6 @@ def run(root, event_base, head, head_ref, candidate_ref, output, *,
     if before['refs/heads/' + head_ref] != head:
         raise ValueError('live PR head ref differs from requested head')
     output.mkdir(parents=True, exist_ok=False)
-    candidate_repo = output / 'candidate-repo'
     git_path, git_sha = _tool('git', 'Git')
     bash_path, bash_sha = _tool(bash_binary or os.environ.get('VOICE_TEST_BASH') or 'bash', 'Bash')
     make_path, make_sha = _tool(make_binary, 'Make')
@@ -268,11 +291,23 @@ def run(root, event_base, head, head_ref, candidate_ref, output, *,
 
     try:
         local_current_diff._execute([str(git_path), 'init', '-q', str(candidate_repo)], timeout=30).check_returncode()
+        configure_private_git(git_path, candidate_repo)
         git_private('remote', 'add', remote, url)
         git_private('fetch', '--no-tags', remote,
                     '+' + candidate_ref + ':refs/heads/voice-pr-candidate')
         if git_private('rev-parse', '--verify', 'refs/heads/voice-pr-candidate^{commit}') != candidate:
             raise ValueError('private candidate fetch differs from live merge ref')
+        path_result = local_current_diff._execute(
+            [str(git_path), '-C', str(candidate_repo), 'ls-tree', '-r', '--name-only', '-z', candidate],
+            timeout=120)
+        if path_result.returncode or len(path_result.stdout) > OUTPUT_LIMIT:
+            raise ValueError('private candidate path inventory failed or exceeded its bound')
+        try:
+            relative_paths = [row.decode('utf-8', errors='strict')
+                              for row in path_result.stdout.split(b'\0') if row]
+        except UnicodeError as error:
+            raise ValueError('private candidate path inventory is not UTF-8') from error
+        validate_windows_checkout_paths(candidate_repo, relative_paths)
         identity = validate_candidate(candidate_repo, event_base, base, head, candidate)
         git_private('checkout', '--detach', candidate)
         if (git_private('rev-parse', 'HEAD') != candidate or
