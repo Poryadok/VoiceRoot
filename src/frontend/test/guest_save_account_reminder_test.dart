@@ -54,7 +54,8 @@ void main() {
             200,
           );
         }
-        if (request.url.path == '/api/v1/users/me') {
+        if (request.url.path == '/api/v1/users/me' ||
+            request.url.path == '/api/v1/users/profiles/guest-prof') {
           return http.Response(
             jsonEncode({
               'profile': {
