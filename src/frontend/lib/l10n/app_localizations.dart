@@ -5117,7 +5117,7 @@ abstract class AppLocalizations {
   /// No description provided for @notificationGlobalEnabled.
   ///
   /// In en, this message translates to:
-  /// **'Notifications enabled'**
+  /// **'Chat message notifications'**
   String get notificationGlobalEnabled;
 
   /// No description provided for @notificationChatEnabled.
@@ -5135,7 +5135,7 @@ abstract class AppLocalizations {
   /// No description provided for @notificationTypeNewMessage.
   ///
   /// In en, this message translates to:
-  /// **'Direct messages'**
+  /// **'Chat messages'**
   String get notificationTypeNewMessage;
 
   /// No description provided for @notificationTypeMessageRequest.
@@ -5177,8 +5177,14 @@ abstract class AppLocalizations {
   /// No description provided for @notificationTypeSystem.
   ///
   /// In en, this message translates to:
-  /// **'System'**
+  /// **'System / security'**
   String get notificationTypeSystem;
+
+  /// No description provided for @notificationTypeVoiceMemberJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'Someone joins a voice room'**
+  String get notificationTypeVoiceMemberJoined;
 
   /// No description provided for @notificationQuietHoursTitle.
   ///
@@ -5203,6 +5209,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'End'**
   String get notificationQuietHoursEnd;
+
+  /// No description provided for @notificationQuietHoursTimezone.
+  ///
+  /// In en, this message translates to:
+  /// **'Time zone'**
+  String get notificationQuietHoursTimezone;
 
   /// No description provided for @notificationQuietHoursOverrideMentions.
   ///

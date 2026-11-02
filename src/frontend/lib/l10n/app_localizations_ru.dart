@@ -2861,7 +2861,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Настройки сохранены, но тихие часы не синхронизированы';
 
   @override
-  String get notificationGlobalEnabled => 'Уведомления включены';
+  String get notificationGlobalEnabled => 'Уведомления о сообщениях в чатах';
 
   @override
   String get notificationChatEnabled => 'Уведомления для этого чата';
@@ -2870,7 +2870,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get notificationEventTypesTitle => 'Типы событий';
 
   @override
-  String get notificationTypeNewMessage => 'Личные сообщения';
+  String get notificationTypeNewMessage => 'Сообщения в чатах';
 
   @override
   String get notificationTypeMessageRequest => 'Запросы сообщений';
@@ -2891,7 +2891,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get notificationTypeMatchFound => 'Матч найден';
 
   @override
-  String get notificationTypeSystem => 'Системные';
+  String get notificationTypeSystem => 'Системные / безопасность';
+
+  @override
+  String get notificationTypeVoiceMemberJoined =>
+      'Кто-то вошёл в голосовую комнату';
 
   @override
   String get notificationQuietHoursTitle => 'Тихие часы';
@@ -2904,6 +2908,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get notificationQuietHoursEnd => 'Конец';
+
+  @override
+  String get notificationQuietHoursTimezone => 'Часовой пояс';
 
   @override
   String get notificationQuietHoursOverrideMentions =>

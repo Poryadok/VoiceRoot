@@ -723,19 +723,26 @@ Entry: ☰ Settings (§1.1 #8 / §1.8 #7). H: sidebar + detail; V: drawer → pu
 
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
-| 1 | Push notifications | H+V | Always | Toggle on/off |
-| 2 | Mentions only | H+V | Always | Toggle on/off |
-| 3 | Sounds | H+V | Always | Toggle on/off |
-| 4 | Quiet hours / DND schedule | H+V | Always | Set time range |
-| 5 | Per-chat / per-space overrides | H+V | Always | Open override list |
-| 6 | @mention breaks mute | H+V | Always | Toggle on/off |
+| 1 | Device push permission | H+V | Global settings; device supports push | Request permission after explanation; show granted/denied/unsupported state |
+| 2 | Mentions only | H+V | — | Not exposed: no canonical setting field or event mask |
+| 3 | Sounds | H+V | — | Not exposed: no saved sound preference; `send_silent` is a per-message composer option |
+| 4 | Quiet hours / DND schedule | H+V | Global settings | Enable schedule; set start/end; display stored timezone; allow mention push override during quiet hours |
+| 5 | Per-chat / per-space overrides | H+V | Opened for an exact chat scope | Edit that scope; an override-list route/API is not available, and effective Space scope is not loaded by delivery |
+| 6 | @mention breaks mute | H+V | — | Not exposed: mute mention behavior is not a stored preference; quiet-hours mention override is separate |
 | 7 | Friend request notifications | H+V | Always | Toggle on/off |
 | 8 | MM match notifications | H+V | Always | Toggle on/off |
 | 9 | Reaction notifications | H+V | Always | Toggle on/off |
 | 10 | Reply notifications | H+V | Always | Toggle on/off |
-| 11 | DM message notifications | H+V | Always | Toggle on/off (new message in DM) |
+| 11 | Chat message notifications | H+V | Always | Toggle `new_message` (DM after accept, group, and channel traffic) |
 | 12 | System / security notifications | H+V | Always | Toggle on/off (security alerts, app updates) |
 | 13 | Message request notifications | H+V | Always | Toggle on/off (stranger DM → wire `message_request`; independent of #11 — see [notifications.md](../features/notifications.md) § `message_request`) |
+
+The current settings API also supports `voice_member_joined`; show it as its own
+event switch. `subscription_grace_reminder` remains a target and is not exposed
+until its consumer is available. The global `enabled` field controls the
+service's existing notification setting semantics; do not present it as a
+universal push kill switch. H and V use the same ordered, scrollable controls;
+interactive controls must remain keyboard-focusable and expose their state.
 
 ### 5.4 Subscription
 

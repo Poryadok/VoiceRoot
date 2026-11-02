@@ -2833,7 +2833,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Settings saved, but quiet hours could not sync';
 
   @override
-  String get notificationGlobalEnabled => 'Notifications enabled';
+  String get notificationGlobalEnabled => 'Chat message notifications';
 
   @override
   String get notificationChatEnabled => 'Notifications for this chat';
@@ -2842,7 +2842,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationEventTypesTitle => 'Event types';
 
   @override
-  String get notificationTypeNewMessage => 'Direct messages';
+  String get notificationTypeNewMessage => 'Chat messages';
 
   @override
   String get notificationTypeMessageRequest => 'Message requests';
@@ -2863,7 +2863,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationTypeMatchFound => 'Match found';
 
   @override
-  String get notificationTypeSystem => 'System';
+  String get notificationTypeSystem => 'System / security';
+
+  @override
+  String get notificationTypeVoiceMemberJoined => 'Someone joins a voice room';
 
   @override
   String get notificationQuietHoursTitle => 'Quiet hours';
@@ -2876,6 +2879,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationQuietHoursEnd => 'End';
+
+  @override
+  String get notificationQuietHoursTimezone => 'Time zone';
 
   @override
   String get notificationQuietHoursOverrideMentions =>
