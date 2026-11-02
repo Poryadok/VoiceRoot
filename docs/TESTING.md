@@ -710,6 +710,13 @@ overall preflight; the other three shards and all other selected checks remain
 required. Fetched refs, external tool and dependency provenance, and exclusive
 Docker daemon/socket custody remain limitations.
 
+The optional `--flutter-driver-component` executes the selected host
+`integration_test/device_driver_smoke_test.dart` with `flutter-tester`, checks
+its exact suite and no-skip event stream, and records a component result. This
+Windows host execution does not establish the hosted Linux job, on-device
+acceptance or the remaining selected checks; Flutter SDK and package publisher
+provenance remain unbound.
+
 For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
 `--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and
 `--golangci-lint-sha256 <digest>`. On Windows, the diagnostic materializes the

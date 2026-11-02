@@ -1,16 +1,64 @@
 """A Flutter execution must account for its command results and source drift."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 import local_flutter_execution as execution
+import local_flutter_driver_component as driver
 
 
 class LocalFlutterExecutionTests(unittest.TestCase):
+    def test_driver_unselected_plan_fails_before_materialization(self):
+        import affected_check_plan
+        import local_preflight
+        plan = {'source':{'head':self.head,'changed_paths':[],'raw_mismatch_paths':[]}, 'checks':{}}
+        with mock.patch.object(driver,'_windows',return_value=True), \
+             mock.patch.object(local_preflight,'_handoff_refs'), \
+             mock.patch.object(affected_check_plan,'build_local_plan',return_value=plan), \
+             mock.patch.object(driver.snapshot,'materialize') as materialize:
+            with self.assertRaisesRegex(ValueError,'selected clean'):
+                driver.run(self.root,'a'*40,self.head,'codex/test',self.output,sys.executable)
+        materialize.assert_not_called()
+
+    def test_driver_component_rejects_rehashed_skipped_event(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out=Path(temp); suite=str(out/'source'/driver.SUITE); source={'head':'a'*40}; base='b'*40
+            events=[{'type':'start'},{'type':'suite','suite':{'id':1,'path':suite}}, {'type':'allSuites','count':1},
+                    {'type':'testStart','test':{'id':2,'suiteID':1,'name':'driver','metadata':{'skip':False}}},
+                    {'type':'testDone','testID':2,'result':'success','skipped':False,'hidden':False}, {'type':'done','success':True}]
+            raw=''.join(json.dumps(e)+'\n' for e in events).encode(); rows=[]
+            for name in driver.COMMANDS:
+                row={'name':name,'exit_code':0}
+                for suffix in ('stdout','stderr'):
+                    data=raw if (name,suffix)==('device-driver','stdout') else b''
+                    (out/(name+'.'+suffix)).write_bytes(data); row[suffix+'_sha256']=hashlib.sha256(data).hexdigest()
+                rows.append(row)
+            report={'schema':'voice-local-flutter-driver-component-v1','status':'complete','scope':'flutter-device-driver',
+                    'source':source,'base':base,'platform':'windows','flutter_version':'3.41.7',
+                    'commands':rows,'tests':driver.test_summary(raw,suite)}
+            driver.verify_component(out,source,base,report)
+            events[-2]['skipped']=True; changed=''.join(json.dumps(e)+'\n' for e in events).encode()
+            (out/'device-driver.stdout').write_bytes(changed); rows[-1]['stdout_sha256']=hashlib.sha256(changed).hexdigest()
+            with self.assertRaises(ValueError): driver.verify_component(out,source,base,report)
+
+    def test_driver_evidence_requires_exact_suite_and_no_skips(self):
+        suite = str((Path(tempfile.gettempdir())/'device_driver_smoke_test.dart').resolve())
+        events = [{'type':'start'}, {'type':'suite','suite':{'id':1,'path':suite}},
+                  {'type':'allSuites','count':1},
+                  {'type':'testStart','test':{'id':2,'suiteID':1,'name':'driver smoke','metadata':{'skip':False}}},
+                  {'type':'testDone','testID':2,'result':'success','skipped':False,'hidden':False},
+                  {'type':'done','success':True}]
+        raw = ''.join(json.dumps(e)+'\n' for e in events).encode()
+        self.assertEqual(driver.test_summary(raw, suite)['passed'], 1)
+        events[-2]['skipped'] = True
+        with self.assertRaises(ValueError): driver.test_summary(''.join(json.dumps(e)+'\n' for e in events).encode(), suite)
+        with self.assertRaises(ValueError): driver.test_summary(raw, suite+'-other')
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
