@@ -47,7 +47,7 @@ cleanup() {
     docker rm -f "${bootstrap}" >/dev/null
   fi
   if [[ "${compose_started}" == true ]] && volume_is_owned && project_containers_are_owned; then
-    compose down -v --remove-orphans >/dev/null
+    compose --profile app down -v --remove-orphans >/dev/null
     volume_created=false
   fi
   if [[ "${volume_created}" == true ]] && volume_is_owned; then
