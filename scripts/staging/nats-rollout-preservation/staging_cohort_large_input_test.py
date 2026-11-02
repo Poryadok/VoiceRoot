@@ -119,6 +119,11 @@ class LargeInputTests(unittest.TestCase):
             self.assertEqual(result.strip(),hashlib.sha256(body).hexdigest().encode())
             with self.assertRaisesRegex(runtime.Blocked,'cohort_restore_body_limit'):
                 runtime.restore_command(self.session,argv,body=b'n'*len(body))
+            for status in ('OBSERVED','REMOVING'):
+                state['resources']['clone']['status']=status
+                with self.subTest(status=status),self.assertRaisesRegex(runtime.Blocked,'cohort_restore_exec_invalid'):
+                    runtime.restore_command(self.session,argv,body=body)
+                state['resources']['clone']['status']='ACTIVE'
             for fault in ('resource','tools'):
                 def observer(action,status):
                     if fault=='resource':state['resources']['clone']['status']='REMOVING'
@@ -151,6 +156,10 @@ class LargeInputTests(unittest.TestCase):
             self.assertEqual(runtime.restore_command(self.session,argv,body=body),b'ok')
             with patch.object(story_fixture,'PRESERVED_CALLER_SHA256','0'*64):
                 with self.assertRaisesRegex(runtime.Blocked,'cohort_story_caller_changed'):
+                    runtime.restore_command(self.session,argv,body=body)
+            for status in ('OBSERVED','REMOVING'):
+                state['resources']['probe']['status']=status
+                with self.subTest(status=status),self.assertRaisesRegex(runtime.Blocked,'cohort_restore_body_limit'):
                     runtime.restore_command(self.session,argv,body=body)
             self.assertIsNone(self.session._cohort_restore_large_permit)
 
