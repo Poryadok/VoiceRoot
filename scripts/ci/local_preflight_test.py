@@ -1100,6 +1100,52 @@ class LocalPreflightTests(unittest.TestCase):
 
 
 class PolicyWindowsEvidenceTests(unittest.TestCase):
+    def _linux_policy_receipt(self, recipe_count):
+        component = local_preflight.local_ci_policy_component
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / 'linux'
+            output.mkdir()
+            slot_directory = root / 'slots'
+            slot_directory.mkdir()
+            (slot_directory / 'heavy-0.lock').write_bytes(b'placeholder')
+            source = {'head': 'a' * 40}
+            base = 'b' * 40
+            journal = root / 'owner' / 'ownership.json'
+            names = ['local_policy_test.TestCase.test_' + str(index) for index in range(40)]
+            report = {'schema': 'voice-local-ci-staging-v1', 'status': 'incomplete',
+                      'source': source['head'], 'base': base, 'shard': 'policy',
+                      'recipes': recipe_count, 'hosted_policy_tests': 1,
+                      'journal': str(journal), 'slot': 0}
+
+            def read(path, _limit):
+                if path.name == 'identity.json':
+                    return json.dumps({'source': source['head'], 'journal': str(journal), 'slot': 0}).encode()
+                if path.name == 'hosted-policy.stdout':
+                    return b'Ran 1 test in 0.1s\n'
+                return b''
+
+            owner = unittest.mock.Mock()
+            with unittest.mock.patch.object(component.matrix, 'build',
+                    return_value={'shards': {'policy': [None] * 80}}), \
+                 unittest.mock.patch.object(component.dispatch, 'inventory', return_value=[None] * 80), \
+                 unittest.mock.patch.object(component.dispatch, 'policy_expected_skips', return_value={}), \
+                 unittest.mock.patch.object(component.dispatch, 'parse_policy_skip_events', return_value={}), \
+                 unittest.mock.patch.object(component.dispatch, 'validate_events'), \
+                 unittest.mock.patch.object(component.dispatch, 'validate_make_log'), \
+                 unittest.mock.patch.object(component.dispatch, 'validate_policy_recipe'), \
+                 unittest.mock.patch.object(component, '_read', side_effect=read), \
+                 unittest.mock.patch.object(component.staging, '_validate_journal'), \
+                 unittest.mock.patch.object(component.OwnedRun, 'load', return_value=owner), \
+                 unittest.mock.patch.object(component, 'DockerCLI'), \
+                 unittest.mock.patch.object(component, 'verify_owned_absence'), \
+                 unittest.mock.patch.object(component.local_heavy_slots, 'host_slot_directory',
+                                            return_value=slot_directory), \
+                 unittest.mock.patch.object(component.local_heavy_slots, '_try_lock', return_value=True), \
+                 unittest.mock.patch.object(component.local_heavy_slots, '_marker', return_value=b'idle\n'), \
+                 unittest.mock.patch.object(component, 'windows_test_names', return_value=names):
+                return component.verify_linux_evidence(root, output, source, base, report)
+
     def test_owned_absence_rechecks_daemon_after_observation(self):
         owner = unittest.mock.Mock()
         owner.state = {'resources':[{'kind':'container','id':'c'*64}]}
@@ -1120,19 +1166,34 @@ class PolicyWindowsEvidenceTests(unittest.TestCase):
                              ['local_process_supervision_test.Job.test_cleanup',
                               'local_source_snapshot_test.Snapshot.test_timeout'])
 
+    def test_linux_receipt_accepts_current_80_recipes_and_rejects_stale_78(self):
+        component = local_preflight.local_ci_policy_component
+        self.assertEqual(component.matrix.SHARD_RECIPE_COUNTS['policy'], 80)
+        self.assertEqual(len(self._linux_policy_receipt(80)), 40)
+        with self.assertRaisesRegex(ValueError, 'policy worker recipe inventory differs'):
+            self._linux_policy_receipt(78)
+
     def test_windows_summary_rejects_skip_failure_or_incomplete_count(self):
-        self.assertEqual(local_preflight.local_ci_policy_component.windows_test_count(b'Ran 39 tests in 1.2s\n\nOK\n', 0, 39), 39)
-        for text, code in ((b'Ran 38 tests in 1s\nOK\n', 0),
-                           (b'Ran 39 tests in 1s\nOK (skipped=1)\n', 0),
-                           (b'Ran 39 tests in 1s\nOK\n', 1)):
-            with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.windows_test_count(text, code, 39)
+        self.assertEqual(local_preflight.local_ci_policy_component.windows_test_count(b'Ran 40 tests in 1.2s\n\nOK\n', 0, 40), 40)
+        for text, code in ((b'Ran 39 tests in 1s\nOK\n', 0),
+                           (b'Ran 40 tests in 1s\nOK (skipped=1)\n', 0),
+                           (b'Ran 40 tests in 1s\nOK\n', 1)):
+            with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.windows_test_count(text, code, 40)
+
+    def test_repository_policy_inventory_has_80_recipes_and_40_windows_tests(self):
+        root = Path(__file__).resolve().parents[2]
+        component = local_preflight.local_ci_policy_component
+        rows = component.matrix.build(root)['shards']['policy']
+        self.assertEqual(len(component.dispatch.inventory(rows, shard='policy')),
+                         component.matrix.SHARD_RECIPE_COUNTS['policy'])
+        self.assertEqual(len(component.windows_test_names(root, rows)), 40)
 
     def test_component_rejects_tampered_windows_log_and_missing_shards(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp); (out/'linux').mkdir(); (out/'linux/diagnostic.json').write_text('{}')
-            stdout, stderr = b'', b'Ran 39 tests in 1s\n\nOK\n'
+            stdout, stderr = b'', b'Ran 40 tests in 1s\n\nOK\n'
             (out/'windows.stdout').write_bytes(stdout); (out/'windows.stderr').write_bytes(stderr)
-            names = ['test.Module.test_'+str(i) for i in range(39)]
+            names = ['test.Module.test_'+str(i) for i in range(40)]
             source = {'head':'a'*40}; base = 'b'*40
             report = {'schema':'voice-local-policy-component-v1', 'status':'diagnostic',
                       'scope':'ci-script-tests/policy', 'source':source, 'base':base,
@@ -1141,7 +1202,15 @@ class PolicyWindowsEvidenceTests(unittest.TestCase):
                       'windows_stderr_sha256':hashlib.sha256(stderr).hexdigest()}
             with unittest.mock.patch.object(local_preflight.local_ci_policy_component, 'verify_linux_evidence', return_value=names):
                 local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
-                (out/'windows.stderr').write_bytes(b'Ran 39 tests in 1s\nOK (skipped=1)\n')
+                stale = dict(report, windows_tests=names[:-1])
+                with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, stale)
+                extra = dict(report, windows_tests=names + ['test.Module.test_extra'])
+                with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, extra)
+                (out/'windows.stderr').write_bytes(b'Ran 39 tests in 1s\nOK\n')
+                report['windows_stderr_sha256'] = hashlib.sha256((out/'windows.stderr').read_bytes()).hexdigest()
+                with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
+                (out/'windows.stderr').write_bytes(b'Ran 40 tests in 1s\nOK (skipped=1)\n')
+                report['windows_stderr_sha256'] = hashlib.sha256((out/'windows.stderr').read_bytes()).hexdigest()
                 with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
                 with self.assertRaises(ValueError):
                     local_preflight.local_ci_policy_component.verify_component('root', out, source, base, dict(report, remaining_shards=[]))

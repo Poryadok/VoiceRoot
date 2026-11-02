@@ -68,11 +68,14 @@ def verify_linux_evidence(root, output, source, base, report):
     if (not isinstance(report, dict) or report.get('schema') != 'voice-local-ci-staging-v1' or
             report.get('status') != 'incomplete' or report.get('source') != source['head'] or
             report.get('base') != base or report.get('shard') != 'policy' or
-            type(report.get('recipes')) is not int or report['recipes'] != 78 or
+            type(report.get('recipes')) is not int or report['recipes'] < 1 or
             type(report.get('hosted_policy_tests')) is not int or report['hosted_policy_tests'] < 1):
         raise ValueError('policy worker identity differs')
     rows = matrix.build(root)['shards']['policy']
     recipes = dispatch.inventory(rows, shard='policy')
+    expected_recipe_count = matrix.SHARD_RECIPE_COUNTS['policy']
+    if report['recipes'] != expected_recipe_count or len(recipes) != expected_recipe_count:
+        raise ValueError('policy worker recipe inventory differs')
     expected = dispatch.policy_expected_skips(root, rows)
     events = dispatch.parse_policy_skip_events(_read(output/'policy-skips.stdout', 1024*1024))
     if set(events) != set(expected) or any(events[index] != expected[index] for index in expected):
@@ -116,7 +119,7 @@ def verify_component(root, output, source, base, report):
         raise ValueError('policy component identity differs')
     linux = json.loads(_read(output/'linux/diagnostic.json', 1024*1024))
     names = verify_linux_evidence(root, output/'linux', source, base, linux)
-    if len(names) != 39 or names != report.get('windows_tests'):
+    if names != report.get('windows_tests'):
         raise ValueError('policy Windows inventory differs')
     for suffix in ('stdout', 'stderr'):
         raw = _read(output/('windows.'+suffix), 16*1024*1024)
@@ -149,8 +152,6 @@ def run(root, base, head, head_ref, output, assets):
                'tree':source['tree'], 'base':base, 'shard':'policy', 'assets':assets}
     linux = staging.run(request)
     names = verify_linux_evidence(root, output/'linux', source, base, linux)
-    if len(names) != 39:
-        raise ValueError('Windows policy inventory count differs')
     materialized = snapshot.materialize(root, source, output/'windows-source')
     env = {key:value for key,value in os.environ.items() if not key.upper().startswith(('GIT_', 'VOICE_', 'PYTHON'))}
     env.update(PYTHONDONTWRITEBYTECODE='1', PYTHONNOUSERSITE='1')
