@@ -11,6 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/ci/e2e-manifest.sh'
+BASH = os.environ.get('VOICE_TEST_BASH', 'bash')
 
 
 class ManifestTest(unittest.TestCase):
@@ -51,7 +52,7 @@ class ManifestTest(unittest.TestCase):
                 (json.dumps(['src/frontend/test/search_timeout_e2e_live_test.dart']), 1, ''),
             ]:
                 env = dict(os.environ, VOICE_AFFECTED_PATHS_JSON=value)
-                result = subprocess.run(['bash', str(SCRIPT), str(manifest), 'affected_flutter'],
+                result = subprocess.run([BASH, str(SCRIPT), str(manifest), 'affected_flutter'],
                                         env=env, text=True, capture_output=True, check=False)
                 with self.subTest(value=value):
                     self.assertEqual(result.returncode, expected, result.stderr)
@@ -61,7 +62,7 @@ class ManifestTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'features.yml'
             path.write_text(text, encoding='utf-8')
-            return subprocess.run(['bash', str(SCRIPT), str(path), section],
+            return subprocess.run([BASH, str(SCRIPT), str(path), section],
                                   text=True, capture_output=True, check=False)
 
     def test_quoted_yaml_and_comments_decode_to_exact_names(self):

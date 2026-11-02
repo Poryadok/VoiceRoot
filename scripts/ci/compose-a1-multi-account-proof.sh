@@ -23,6 +23,10 @@ manifest_entries="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST_PATH}"
   echo "failed to read a1_multi_account_gateway from ${MANIFEST_PATH}" >&2
   exit 2
 }
+# Native Windows Bash may translate each LF written by the parser into CRLF.
+# The manifest schema forbids carriage returns in test names, so remove only
+# that transport byte before the unchanged exact-count/order/name checks.
+manifest_entries="${manifest_entries//$'\r'/}"
 if [[ -z "${manifest_entries}" ]]; then
   echo "a1_multi_account_gateway is empty in ${MANIFEST_PATH}" >&2
   exit 2

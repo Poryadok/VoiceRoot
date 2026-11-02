@@ -40,6 +40,7 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertTrue(any('local_staging_owned_tmp_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_nats_hosted_diagnostic_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_ci_matrix_inventory_test.py' in row['recipe'] for row in result['shards']['policy']))
+        self.assertTrue(any('local_ci_proofs_component_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_private_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_full_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_auth_full_orchestration_test.py' in row['recipe'] for row in result['shards']['policy']))

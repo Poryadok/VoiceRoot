@@ -695,6 +695,49 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(report['ci_policy_component'], 'ci-policy-component/policy-component.json')
         self.assertEqual(report['ci_routing_report'], 'ci-routing/diagnostic.json')
 
+    def test_fetched_proofs_component_keeps_ci_matrix_and_other_checks_not_run(self):
+        plan = {'source': self.source,
+                'checks': {'current-diff-contract': ['every pull request'],
+                           'ci-script-tests': ['CI change'],
+                           'backend-go-pkg': ['shared package']}}
+        current = {'status': 'complete', 'check': 'current-diff-contract',
+                   'aggregate_preflight': 'incomplete', 'head': self.source['head'],
+                   'base': 'c' * 40}
+        component = {'schema': 'voice-local-ci-proofs-component-v1', 'status': 'complete',
+                     'scope': 'ci-script-tests/proofs', 'aggregate_preflight': 'incomplete'}
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs'), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_current_diff, 'run_fetched_merge_candidate',
+                          return_value=current) as current_run, \
+             patch.object(local_preflight.local_ci_proofs_component, 'run', return_value=component) as run, \
+             patch.object(local_preflight.local_ci_proofs_component, 'verify_component') as verify:
+            report = local_preflight.run_handoff(
+                self.root, 'c' * 40, self.source['head'], 'codex/test', self.output,
+                candidate_ref='refs/pull/1089/merge', proofs_shard=True,
+                proofs_bash='C:/Git/bash.exe', proofs_make='C:/Git/make.exe')
+        current_run.assert_called_once()
+        run.assert_called_once_with(self.root, 'c' * 40, self.source['head'], 'codex/test',
+                                    'refs/pull/1089/merge', self.output / 'ci-script-tests-proofs',
+                                    bash_binary='C:/Git/bash.exe', make_binary='C:/Git/make.exe')
+        verify.assert_called_once_with(self.root, self.output / 'ci-script-tests-proofs', component)
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['current-diff-contract']['status'], 'complete')
+        self.assertEqual(report['checks']['ci-script-tests']['status'], 'not_run')
+        self.assertEqual(report['checks']['backend-go-pkg']['status'], 'not_run')
+        self.assertEqual(report['ci_proofs_component'],
+                         'ci-script-tests-proofs/proofs-component.json')
+
+    def test_fetched_proofs_component_requires_selected_check_and_merge_ref(self):
+        plan = {'source': self.source, 'checks': {'current-diff-contract': ['every pull request']}}
+        with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
+             patch.object(local_preflight, '_handoff_refs'), \
+             patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan):
+            with self.assertRaisesRegex(ValueError, 'selected CI script check'):
+                local_preflight.run_handoff(self.root, 'c' * 40, self.source['head'], 'codex/test',
+                                            self.output, candidate_ref='refs/pull/1089/merge',
+                                            proofs_shard=True)
+
     def test_ci_routing_supervision_refusal_fails_closed(self):
         plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
