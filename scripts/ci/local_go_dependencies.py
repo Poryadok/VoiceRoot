@@ -11,6 +11,7 @@ import tarfile
 import time
 
 import local_bounded_source
+import local_current_diff
 import local_go_execution
 import local_go_verify
 import local_source_snapshot as snapshot
@@ -20,6 +21,39 @@ MAX_CACHE_TOTAL = 1024 * 1024 * 1024
 MAX_CACHE_MEMBER = 256 * 1024 * 1024
 MAX_CACHE_ENTRIES = 100000
 MAX_CACHE_SECONDS = 1800
+MAX_COMMAND_STREAM = 16 * 1024 * 1024
+MAX_ACQUISITION_OUTPUT = 64 * 1024 * 1024
+
+
+class _BoundedGoOutput:
+    """Bound child pipes and persisted output; 124-126 are fail-closed sentinels.
+
+    A child returning one of those codes is indistinguishable from a wrapper
+    failure and is rejected as such.
+    """
+    def __init__(self):
+        self.written = 0
+
+    def capture(self, command, *, cwd, env, timeout):
+        result = local_current_diff._execute(command, cwd=cwd, env=env, timeout=timeout,
+                                             output_limit=MAX_COMMAND_STREAM)
+        if (not isinstance(result.stdout, bytes) or not isinstance(result.stderr, bytes) or
+                len(result.stdout) > MAX_COMMAND_STREAM or len(result.stderr) > MAX_COMMAND_STREAM or
+                result.returncode in (124, 125, 126)):
+            raise ValueError('bounded Go command output or supervision failed')
+        return result
+
+    def check(self, stdout, stderr):
+        if self.written + len(stdout) + len(stderr) > MAX_ACQUISITION_OUTPUT:
+            raise ValueError('Go acquisition output exceeds cumulative limit')
+
+    def persist(self, stdout, stderr, stdout_file, stderr_file):
+        self.check(stdout, stderr)
+        self.written += len(stdout) + len(stderr)
+        if stdout_file is not None and stdout_file.write(stdout) != len(stdout):
+            raise OSError('short Go acquisition output write')
+        if stderr_file is not None and stderr_file.write(stderr) != len(stderr):
+            raise OSError('short Go acquisition error write')
 
 
 def _signature(info):
@@ -294,12 +328,19 @@ def _required_modules(raw, source_copy, sums):
     return required
 
 
-def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
+def acquire(root, source, source_copy, module_dir, output, go_binary='go', *, bounded_output=False):
     """Download exact go.sum-backed modules to a new private diagnostic cache.
 
     This does not transfer the cache, bind the host toolchain to an approved
     image, supervise an entire preflight, or issue a successful receipt.
+    On Windows, bounded_output caps each captured stream at 16 MiB and all
+    persisted command output for this module at 64 MiB. Go cache writes are
+    not bounded by this mode.
     """
+    if type(bounded_output) is not bool:
+        raise ValueError('invalid Go acquisition output mode')
+    if bounded_output and not local_current_diff._windows():
+        raise ValueError('bounded Go output requires Windows Job supervision')
     local_go_execution._module_path(module_dir)
     root, source_copy, output = Path(root).resolve(), Path(source_copy).resolve(), Path(output).resolve()
     if (output.exists() or output == root or root in output.parents or
@@ -329,12 +370,25 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
                        GONOSUMDB='', GONOPROXY='', GOMODCACHE=str(cache), GOPATH=str(output / 'gopath'),
                        GOCACHE=str(output / 'build-cache'), GOOS='linux', GOARCH='amd64', CGO_ENABLED='0',
                        GOMAXPROCS='2')
-    version = subprocess.run([str(executable), 'version'], env=environment, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, timeout=30, check=True).stdout.decode('utf-8').strip()
+    budget = _BoundedGoOutput() if bounded_output else None
+    if budget is None:
+        version_result = subprocess.run([str(executable), 'version'], env=environment, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, timeout=30, check=True)
+    else:
+        version_result = budget.capture([str(executable), 'version'], cwd=None, env=environment, timeout=30)
+        if version_result.returncode:
+            raise ValueError('Go toolchain version failed')
+    version = version_result.stdout.decode('utf-8').strip()
     command = [str(executable), 'list', '-deps', '-test', '-json', './...']
-    with (output / 'dependencies.json').open('xb') as stdout, (output / 'dependencies.stderr').open('xb') as stderr:
-        result = subprocess.run(command, cwd=module, env=environment, stdout=stdout, stderr=stderr,
-                                timeout=1800, check=False)
+    if budget is None:
+        with (output / 'dependencies.json').open('xb') as stdout, (output / 'dependencies.stderr').open('xb') as stderr:
+            result = subprocess.run(command, cwd=module, env=environment, stdout=stdout, stderr=stderr,
+                                    timeout=1800, check=False)
+    else:
+        result = budget.capture(command, cwd=module, env=environment, timeout=1800)
+        budget.check(result.stdout, result.stderr)
+        with (output / 'dependencies.json').open('xb') as stdout, (output / 'dependencies.stderr').open('xb') as stderr:
+            budget.persist(result.stdout, result.stderr, stdout, stderr)
     if result.returncode != 0:
         raise ValueError('Go dependency package discovery failed')
     snapshot.verify_materialized(root, source, source_copy)
@@ -351,28 +405,53 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     required = _required_modules((output / 'dependencies.json').read_bytes(), source_copy, sums)
     module_arguments = [name + '@' + version for name, version in sorted(required)]
     commands = [command]
+    first_download = None
+    if budget is not None and module_arguments:
+        first = [str(executable), 'mod', 'download', '-json', *module_arguments[:50]]
+        first_download = budget.capture(first, cwd=module, env=environment, timeout=1800)
+        budget.check(first_download.stdout, first_download.stderr)
     with (output / 'download.json').open('xb') as stdout, (output / 'download.stderr').open('xb') as stderr:
         for offset in range(0, len(module_arguments), 50):
             download = [str(executable), 'mod', 'download', '-json', *module_arguments[offset:offset + 50]]
             commands.append(download)
-            result = subprocess.run(download, cwd=module, env=environment, stdout=stdout, stderr=stderr,
-                                    timeout=1800, check=False)
+            if budget is None:
+                result = subprocess.run(download, cwd=module, env=environment, stdout=stdout, stderr=stderr,
+                                        timeout=1800, check=False)
+            else:
+                result = first_download if offset == 0 else budget.capture(download, cwd=module, env=environment, timeout=1800)
+                budget.persist(result.stdout, result.stderr, stdout, stderr)
             if result.returncode != 0:
                 raise ValueError('Go dependency acquisition failed')
     def verify_cache(stage):
-        verify = subprocess.run([str(executable), 'mod', 'verify'], cwd=module, env=environment,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800, check=False)
-        (output / ('verify-' + stage + '.stdout')).write_bytes(verify.stdout)
-        (output / ('verify-' + stage + '.stderr')).write_bytes(verify.stderr)
+        command = [str(executable), 'mod', 'verify']
+        if budget is None:
+            verify = subprocess.run(command, cwd=module, env=environment,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800, check=False)
+            (output / ('verify-' + stage + '.stdout')).write_bytes(verify.stdout)
+            (output / ('verify-' + stage + '.stderr')).write_bytes(verify.stderr)
+        else:
+            verify = budget.capture(command, cwd=module, env=environment, timeout=1800)
+            budget.check(verify.stdout, verify.stderr)
+            with (output / ('verify-' + stage + '.stdout')).open('xb') as stdout, \
+                 (output / ('verify-' + stage + '.stderr')).open('xb') as stderr:
+                budget.persist(verify.stdout, verify.stderr, stdout, stderr)
         local_module = b''
         if local_go_verify.is_local_failure(verify.returncode, verify.stdout, verify.stderr, windows=os.name == 'nt'):
-            local = subprocess.run([str(executable), 'list', '-m', '-json', 'voice/backend/pkg'],
-                                   cwd=module, env=environment, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, timeout=300, check=False)
+            command = [str(executable), 'list', '-m', '-json', 'voice/backend/pkg']
+            if budget is None:
+                local = subprocess.run(command, cwd=module, env=environment, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, timeout=300, check=False)
+            else:
+                local = budget.capture(command, cwd=module, env=environment, timeout=300)
             if local.returncode:
                 raise ValueError('Go local replacement inspection failed')
             local_module = local.stdout
-            (output / ('local-module-' + stage + '.json')).write_bytes(local_module)
+            if budget is None:
+                (output / ('local-module-' + stage + '.json')).write_bytes(local_module)
+            else:
+                budget.check(local_module, b'')
+                with (output / ('local-module-' + stage + '.json')).open('xb') as stdout:
+                    budget.persist(local_module, b'', stdout, None)
         local_go_verify.verify_result(verify.returncode, verify.stdout, verify.stderr, local_module,
                                       source_copy / 'src/backend/pkg', windows=os.name == 'nt')
     verify_cache('before-archive')

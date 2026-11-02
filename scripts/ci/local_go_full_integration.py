@@ -219,7 +219,7 @@ def _unbound_inputs(service, bounded):
     if bounded:
         items.extend(['host PID limit is caller supplied and not measured as a physical capacity ceiling',
             'nested Testcontainers and Ryuk cgroup/custody behavior',
-            'source snapshot Git object writes, materialization, dependency caches and logs lack storage bounds',
+            'source snapshot Git object writes, materialization, dependency caches and non-acquisition logs lack storage bounds',
             'foreign and non-cooperating host workloads are outside shared capacity accounting'])
     else:
         items.extend(['Go client container CPU and memory limits are not enforced',
@@ -281,7 +281,7 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
                 raise ValueError('bounded archive source differs from requested head')
             source_copy = snapshot.materialize(root, source, output / 'source')
             acquisition = local_go_dependencies.acquire(root, source, source_copy, selected['module'],
-                                                         output / 'dependencies', go_binary)
+                                                         output / 'dependencies', go_binary, bounded_output=True)
             engine = chat.DockerCLI()
             scheduled = chat.ScheduledRun.attach_worker(journal.parent, engine, slot, owner_id, limits)
             result = chat.run_owned(scheduled, engine, source, root, source_copy, output, helper,
@@ -316,12 +316,13 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
     if limits is None:
         output.mkdir(parents=True, exist_ok=False)
     source_copy = snapshot.materialize(root, source, output / 'source')
+    acquisition_options = {'bounded_output': True} if limits is not None else {}
     if service == 'notification':
         acquisition = local_go_multi_dependencies.acquire(root, source, source_copy,
-                                                            output / 'dependencies', go_binary)
+                                                            output / 'dependencies', go_binary, **acquisition_options)
     else:
         acquisition = local_go_dependencies.acquire(root, source, source_copy, selected['module'],
-                                                     output / 'dependencies', go_binary)
+                                                     output / 'dependencies', go_binary, **acquisition_options)
     checkout = output / 'run'
     if limits is not None:
         if checkout.is_symlink() or not checkout.is_dir() or checkout.resolve(strict=True) != checkout:

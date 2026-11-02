@@ -92,7 +92,7 @@ class DispatchTests(unittest.TestCase):
                           69: 'scripts/ci/minio-compose-image-override-contract_test.sh',
                           70: 'scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh'})
         self.assertIn(b'export VOICE_CI_RECIPE_INDEX="$idx"', m.wrappers(recipes, shard='policy')['python'])
-        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 35, 33: 1, 43: 2})
+        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 35, 29: 1, 33: 1, 43: 2})
         m.validate_policy_recipe(78, b'Ran 1 test in 0s\nOK\n', set(), expected)
         with self.assertRaises(ValueError):
             m.validate_policy_recipe(80, b'Ran 1 test in 0s\nOK\n', set(), expected)

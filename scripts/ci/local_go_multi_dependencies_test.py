@@ -1,7 +1,9 @@
 """Two captured module caches merge only with exact matching entries."""
 import hashlib
 import io
+import json
 from pathlib import Path
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -261,6 +263,116 @@ class MultiDependenciesTests(unittest.TestCase):
         with mock.patch.object(subject.local_go_execution, 'transfer_dependencies') as transfer, self.assertRaises(ValueError):
             subject.transfer(owner, 'client', self.root, self.source, self.root, 'digest', {'module_dirs': [subject.MODULES[0]]}, self.root / 'cache.tar')
         transfer.assert_not_called()
+
+    def test_notification_acquire_forwards_bounded_output_to_each_module_separately(self):
+        calls = []
+
+        def acquire(root, source, source_copy, module, output, go_binary, *, bounded_output=False):
+            calls.append((module, Path(output), go_binary, bounded_output))
+            output = Path(output)
+            output.mkdir(parents=True)
+            archive = output / 'download-cache.tar'
+            with tarfile.open(archive, 'w') as tar:
+                data = module.encode()
+                info = tarfile.TarInfo('cache/download/' + module.rsplit('/', 1)[-1] + '/@v/v1.mod')
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            return self.receipt(module, archive)
+
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        output = Path(outside.name) / 'notification-output'
+        with mock.patch.object(subject.snapshot, 'verify_materialized'), \
+             mock.patch.object(subject.snapshot, 'capture', return_value=self.source), \
+             mock.patch.object(subject.local_go_dependencies, 'acquire', side_effect=acquire):
+            result = subject.acquire(self.root, self.source, self.root, output, bounded_output=True)
+
+        self.assertEqual([row[0] for row in calls], list(subject.MODULES))
+        self.assertTrue(all(row[3] is True for row in calls))
+        self.assertEqual(len({row[1] for row in calls}), 2)
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['module_dirs'], list(subject.MODULES))
+
+    def test_notification_bounded_mode_has_an_independent_budget_per_module(self):
+        source_temp = tempfile.TemporaryDirectory()
+        output_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(source_temp.cleanup)
+        self.addCleanup(output_temp.cleanup)
+        source_copy = Path(source_temp.name)
+        output = Path(output_temp.name) / 'notification-output'
+        module_names = {}
+        module_mod_sums = {}
+        module_gomod_bytes = {}
+        for module in subject.MODULES:
+            short = module.rsplit('/', 1)[-1]
+            name = 'example.test/' + short
+            module_names[module] = name
+            directory = source_copy.joinpath(*module.split('/'))
+            directory.mkdir(parents=True)
+            gomod = directory / 'go.mod'
+            gomod.write_text('module ' + name + '\ngo 1.26.0\n', encoding='utf-8')
+            module_gomod_bytes[name] = gomod.read_bytes()
+            module_mod_sums[name] = subject.local_go_dependencies._gomod_sum(gomod)
+            (directory / 'go.sum').write_text(
+                name + ' v1.0.0 h1:zip\n' + name + ' v1.0.0/go.mod ' + module_mod_sums[name] + '\n',
+                encoding='utf-8')
+
+        commands = []
+
+        def execute(command, *, cwd=None, env=None, input=None, timeout, output_limit=None):
+            commands.append((list(command), cwd, output_limit))
+            if command[-1] == 'version':
+                stdout, stderr = b'go version go1.26.10 windows/amd64\n', b''
+            elif command[-5:] == ['list', '-deps', '-test', '-json', './...']:
+                name = module_names[next(module for module in subject.MODULES if Path(cwd).name == module.rsplit('/', 1)[-1])]
+                module = {'Path': name, 'Version': 'v1.0.0', 'Sum': 'h1:zip',
+                          'GoModSum': module_mod_sums[name]}
+                stdout = (json.dumps({'ImportPath': name, 'Module': module}) + '\n').encode()
+                stderr = b''
+            elif command[1:3] == ['mod', 'download']:
+                records = []
+                for argument in command[4:]:
+                    name, version = argument.rsplit('@', 1)
+                    cache = Path(env['GOMODCACHE']) / 'cache' / 'download' / name / '@v'
+                    cache.mkdir(parents=True, exist_ok=True)
+                    info, mod, archive = cache / (version + '.info'), cache / (version + '.mod'), cache / (version + '.zip')
+                    info.write_bytes(b'info')
+                    mod.write_bytes(module_gomod_bytes[name])
+                    self.assertEqual(subject.local_go_dependencies._gomod_sum(mod), module_mod_sums[name])
+                    archive.write_bytes(b'zip fixture')
+                    Path(str(archive) + 'hash').write_text('h1:zip\n', encoding='utf-8')
+                    records.append({'Path': name, 'Version': version, 'Sum': 'h1:zip',
+                                    'GoModSum': module_mod_sums[name],
+                                    'Info': str(info), 'GoMod': str(mod), 'Zip': str(archive)})
+                stdout = b''.join((json.dumps(row, separators=(',', ':')) + '\n').encode() for row in records)
+                stdout += b' ' * (3000 - len(stdout))
+                stderr = b''
+            elif command[1:3] == ['mod', 'verify']:
+                stdout, stderr = b'all modules verified', b''
+            else:
+                raise AssertionError('unexpected Go command: ' + repr(command))
+            return mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
+
+        with mock.patch.object(subject.snapshot, 'verify_materialized'), \
+             mock.patch.object(subject.snapshot, 'capture', return_value=self.source), \
+             mock.patch.object(subject.local_go_dependencies.snapshot, 'verify_materialized'), \
+             mock.patch.object(subject.local_go_dependencies.snapshot, 'capture', return_value=self.source), \
+             mock.patch.object(subject.local_go_dependencies.local_current_diff, '_windows', return_value=True), \
+             mock.patch.object(subject.local_go_dependencies.local_current_diff, '_execute', side_effect=execute), \
+             mock.patch.object(subject.local_go_dependencies, 'MAX_COMMAND_STREAM', 4096), \
+             mock.patch.object(subject.local_go_dependencies, 'MAX_ACQUISITION_OUTPUT', 4096):
+            result = subject.acquire(self.root, self.source, source_copy, output, sys.executable,
+                                     bounded_output=True)
+
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertTrue(all(output_limit == 4096 for _, _, output_limit in commands))
+        persisted_names = ('dependencies.json', 'dependencies.stderr', 'download.json', 'download.stderr',
+                           'verify-before-archive.stdout', 'verify-before-archive.stderr',
+                           'verify-after-archive.stdout', 'verify-after-archive.stderr')
+        per_module_sizes = [sum((output / module.rsplit('/', 1)[-1] / name).stat().st_size
+                                for name in persisted_names) for module in subject.MODULES]
+        self.assertTrue(all(size <= 4096 for size in per_module_sizes), per_module_sizes)
+        self.assertGreater(sum(per_module_sizes), 4096)
 
 
 if __name__ == '__main__':

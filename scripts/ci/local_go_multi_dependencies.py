@@ -166,8 +166,16 @@ def merge(rows, source, output):
             'input_archive_sha256': [receipt['archive_sha256'] for receipt, _ in rows]}
 
 
-def acquire(root, source, source_copy, output, go_binary='go'):
-    """Acquire both exact module closures separately, then merge them."""
+def acquire(root, source, source_copy, output, go_binary='go', *, bounded_output=False):
+    """Acquire both closures; bounded command output is 64 MiB per module.
+
+    Notification can therefore persist up to 128 MiB of command output.
+    Cache, build and temporary writes remain unbounded.
+    """
+    if type(bounded_output) is not bool:
+        raise ValueError('invalid Go acquisition output mode')
+    if bounded_output and not local_go_dependencies.local_current_diff._windows():
+        raise ValueError('bounded Go output requires Windows Job supervision')
     root, source_copy, output = Path(root).resolve(), Path(source_copy).resolve(), Path(output).resolve()
     if output.exists() or output == root or root in output.parents or output == source_copy or source_copy in output.parents:
         raise ValueError('multi-module output must be new and outside source trees')
@@ -175,7 +183,8 @@ def acquire(root, source, source_copy, output, go_binary='go'):
     rows = []
     for module in MODULES:
         directory = output / module.rsplit('/', 1)[-1]
-        receipt = local_go_dependencies.acquire(root, source, source_copy, module, directory, go_binary)
+        options = {'bounded_output': True} if bounded_output else {}
+        receipt = local_go_dependencies.acquire(root, source, source_copy, module, directory, go_binary, **options)
         rows.append((receipt, directory / 'download-cache.tar'))
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source:

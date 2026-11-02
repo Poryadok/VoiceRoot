@@ -885,6 +885,7 @@ class FullGoTests(unittest.TestCase):
                 report = subject.run('chat', root, source['head'], output, 'helper', 'b' * 64, archives, 'go',
                     resource_limits=limits, owner_id=owner_id,
                     ownership_journal=str(journal), slot=1)
+                self.assertIs(acquire.call_args.kwargs['bounded_output'], True)
                 archive.return_value = {'source': {'head': 'f' * 40}}
                 acquire.reset_mock()
                 with self.assertRaisesRegex(ValueError, 'archive source differs'):
