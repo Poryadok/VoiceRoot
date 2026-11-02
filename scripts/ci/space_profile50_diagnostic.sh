@@ -99,9 +99,31 @@ go tool test2json -t -p voice/backend/space/internal/store "$RUNNER_TEMP/space-p
   -test.v -test.count=1 -test.timeout=5m -test.run '^TestNative50Over100ProfileCatalog$' > "$RUNNER_TEMP/space-profile50-diagnostic-events.jsonl"
 result=$?
 set -e
-[[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" && -z "$(git status --porcelain --untracked-files=all)" ]]
-[[ "$(sha256sum "$RUNNER_TEMP/native-migrate-driver" | cut -d' ' -f1)" == "$driver_before" ]]
-[[ "$(sha256sum "$RUNNER_TEMP/space-profile50.test" | cut -d' ' -f1)" == "$binary_before" ]]
-printf 'post_run_source_and_binaries=verified\nbackend_inventory=endpoint_only\n' >> "$RUNNER_TEMP/space-profile50-identities.txt"
-python3 ../../../scripts/ci/space_profile50_validate.py "$RUNNER_TEMP/space-profile50-diagnostic-events.jsonl" "$result"
-exit "$result"
+source_status=unavailable
+driver_status=unavailable
+binary_status=unavailable
+if post_head="$(git rev-parse HEAD)" && post_tree="$(git status --porcelain --untracked-files=all)"; then
+  source_status=mismatch
+  if [[ "$post_head" == "$CANDIDATE_SHA" && -z "$post_tree" ]]; then source_status=verified; fi
+fi
+if post_driver="$(sha256sum "$RUNNER_TEMP/native-migrate-driver" | cut -d' ' -f1)" && [[ "$post_driver" =~ ^[0-9a-f]{64}$ ]]; then
+  driver_status=mismatch
+  if [[ "$post_driver" == "$driver_before" ]]; then driver_status=verified; fi
+fi
+if post_binary="$(sha256sum "$RUNNER_TEMP/space-profile50.test" | cut -d' ' -f1)" && [[ "$post_binary" =~ ^[0-9a-f]{64}$ ]]; then
+  binary_status=mismatch
+  if [[ "$post_binary" == "$binary_before" ]]; then binary_status=verified; fi
+fi
+printf 'profile_exit_code=%s\npost_run_source=%s\npost_run_driver=%s\npost_run_binary=%s\nbackend_inventory=endpoint_only\n' \
+  "$result" "$source_status" "$driver_status" "$binary_status" >> "$RUNNER_TEMP/space-profile50-identities.txt"
+identity_result=1
+if [[ "$source_status" == verified && "$driver_status" == verified && "$binary_status" == verified ]]; then
+  identity_result=0
+  printf 'post_run_source_and_binaries=verified\n' >> "$RUNNER_TEMP/space-profile50-identities.txt"
+fi
+validation_result=0
+python3 ../../../scripts/ci/space_profile50_validate.py "$RUNNER_TEMP/space-profile50-diagnostic-events.jsonl" "$result" || validation_result=$?
+printf 'profile_validation_exit_code=%s\n' "$validation_result" >> "$RUNNER_TEMP/space-profile50-identities.txt"
+if [[ "$result" != 0 ]]; then exit "$result"; fi
+if [[ "$identity_result" != 0 ]]; then exit "$identity_result"; fi
+exit "$validation_result"
