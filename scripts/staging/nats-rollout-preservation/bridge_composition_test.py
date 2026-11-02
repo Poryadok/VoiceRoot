@@ -55,6 +55,12 @@ def canonical_stores():
     return kube,params,policy
 
 
+def populate_public_fixture_inventory(kube,live):
+    """Share the synthetic canonical inventory with compiler transport."""
+    for (kind,name),row in kube.objects.items():
+        live.setdefault((kind.lower(),name),copy.deepcopy(row))
+
+
 def align_public_fixture_app_secret(kube,live):
     """Use one synthetic pre-C1 Secret for store and prerequisite reads."""
     key=('secret','voice-app-secrets')
@@ -182,6 +188,23 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_public_fixture_compiler_uses_complete_canonical_inventory(self):
+        import base64,compiler,source_plan,source_plan_test,staging_prerequisites_test
+        def ready(actions,request,approved,execution,workspace,stage,live,*_):
+            kube,params,_=canonical_stores()
+            populate_public_fixture_inventory(kube,live)
+            align_public_fixture_app_secret(kube,live)
+            for key in ('GAME_INTEGRATION_DATABASE_URL','GAME_INTEGRATION_DB_PASSWORD','REALTIME_DATABASE_URL'):
+                live[('secret','voice-app-secrets')]['data'][key]=base64.b64encode(b'synthetic-fixture').decode()
+            minio=live.pop(('secret','voice-minio-credentials'))
+            with self.assertRaisesRegex(source_plan.PlanError,'canonical_live_resource_missing_secret_voice-minio-credentials'):
+                source_plan.compile_plan(workspace,params,source_plan_test.decoder,compiler.ProducerKube())
+            live[('secret','voice-minio-credentials')]=minio
+            plan=source_plan.compile_plan(workspace,params,source_plan_test.decoder,compiler.ProducerKube())
+            self.assertEqual(plan['mode'],'app-only')
+            self.assertTrue(plan['checks'])
+        staging_prerequisites_test.PrepareCompositionTests()._cold_prepare(on_ready=ready,full_source=True)
+
     def test_real_c1_effect_uses_its_own_pending_checkpoint_for_fixture_cas(self):
         import commands,realtime_bootstrap
         from types import SimpleNamespace
@@ -604,6 +627,7 @@ class CompositionTests(unittest.TestCase):
             kube,params,policy=canonical_stores()
             if qualify:
                 import base64,cohort_hosted_pg
+                populate_public_fixture_inventory(kube,live)
                 live[('secret','voice-app-secrets')]['data']['POSTGRES_PASSWORD']=base64.b64encode(
                     cohort_hosted_pg.ADMIN_PASSWORD.encode()).decode()
                 align_public_fixture_app_secret(kube,live)
