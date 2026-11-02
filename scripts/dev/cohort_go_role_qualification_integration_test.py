@@ -19,6 +19,7 @@ from story_media_backup_restore_integration_test import Journal, MIGRATE
 class GoRoleIntegrationTest(unittest.TestCase):
     def test_story_reference_is_independent_and_matches_real_migration(self):
         import story_fixture
+        import cohort_hosted_pg
         fixture = fixtures.PopulatedRestoreTest()
         self.addCleanup(cleanup_fixture, fixture)
         fixture.setUp()
@@ -30,9 +31,10 @@ class GoRoleIntegrationTest(unittest.TestCase):
                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10)
             if ready.returncode==0 and ready.stdout.strip()==b'1':break
             if time.monotonic()>=deadline:self.fail('target readiness failed')
-        fixture.sql(pg,admin,'postgres','CREATE ROLE story_owner LOGIN')
-        fixture.sql(pg,admin,'postgres','CREATE DATABASE story_db OWNER story_owner TEMPLATE template0')
-        fixture.sql(pg,admin,'story_db','ALTER SCHEMA public OWNER TO story_owner')
+        hosted=object.__new__(cohort_hosted_pg.HostedPostgres);hosted.cid=pg
+        with patch.object(cohort_hosted_pg,'ADMIN_USER',admin), \
+             patch.object(hosted,'_docker',side_effect=lambda *args,body=None:fixture.docker(*args,input=body)):
+            hosted._seed_story()
         journal=Journal(); resources=[]
         try:
             tool_container=media._create(journal,resources,'migrate',MIGRATE,['--entrypoint','/bin/true'])
@@ -43,8 +45,6 @@ class GoRoleIntegrationTest(unittest.TestCase):
             media._docker('exec','-i',pg,'sh','-ec',
                 'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate',input=tool)
             files={p.name:p.read_bytes() for p in Path('/repo/src/backend/migrations/story_db').glob('*.sql')}
-            restore._install_go(pg,{'story_db':files},{'story_db':{'from':1,'to':4}},['story_db'])
-            restore._run_go_as_role(pg,admin,'story_db',role)
             sql=lambda query:media._psql(pg,admin,'story_db',query)
             before=story_fixture.preserved_snapshot(sql)
             restore._install_go(pg,{'story_db':files},{'story_db':{'from':4,'to':8}},['story_db'],story_reference=True)

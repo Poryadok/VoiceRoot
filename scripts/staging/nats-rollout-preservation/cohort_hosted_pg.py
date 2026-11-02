@@ -133,7 +133,7 @@ class HostedPostgres:
             if actor_root.hash_bytes(raw)!=expected:raise RuntimeError('isolated_story_source_changed')
             self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','story_owner','-d','story_db',body=raw)
         self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','story_owner','-d','story_db',
-            body=b'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (4, false);')
+            body=b'CREATE TABLE schema_migrations(version bigint NOT NULL PRIMARY KEY, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (4, false);')
 
     def __exit__(self,*_args):
         try:self._cleanup()
