@@ -2,6 +2,7 @@ name: Space M50 diagnostic profile
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

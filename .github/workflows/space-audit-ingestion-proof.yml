@@ -16,16 +16,22 @@ on:
         description: Exact commit SHA to prove
         required: true
         type: string
+      m50_profile:
+        description: Run the separate M50 diagnostic instead of the audit proof
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: space-audit-ingestion-${{ github.ref }}
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.m50_profile && format('space-m50-profile-{0}-{1}', github.run_id, github.run_attempt) || format('space-audit-ingestion-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
   ingestion-proof:
+    if: github.event_name != 'workflow_dispatch' || !inputs.m50_profile
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -93,3 +99,24 @@ jobs:
           path: ${{ runner.temp }}/space-audit-ingestion.log
           if-no-files-found: warn
           retention-days: 14
+
+  m50-source:
+    if: github.event_name == 'workflow_dispatch' && inputs.m50_profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Bind diagnostic source to the dispatched workflow
+        env:
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          CALLER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_SHA" = "$CALLER_SHA"
+
+  m50-profile:
+    needs: m50-source
+    if: github.event_name == 'workflow_dispatch' && inputs.m50_profile
+    uses: ./.github/workflows/space-m50-profile.yml
+    permissions:
+      contents: read
