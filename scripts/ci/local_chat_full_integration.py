@@ -199,7 +199,7 @@ def _verified_resource_limit_readback(owner, client_name, daemon_name, limits):
 
 
 def run_owned(scheduled, engine, source, root, source_copy, output, helper, helper_digest, archives, acquisition,
-              *, service='chat', resource_limits=None):
+              *, service='chat', resource_limits=None, bounded_archive=None):
     from local_auth_full_orchestration import _require_worker_job
     _require_worker_job()
     owner, failure, result = scheduled.run, None, None
@@ -251,7 +251,9 @@ def run_owned(scheduled, engine, source, root, source_copy, output, helper, help
                  (output / ('image-' + str(index) + '.stderr')).open('xb') as err:
                 owner.load_canonical_rootless_image(daemon, copied, item['archive_sha256'], item['image_id'],
                                                     tag, out, err, 300)
-        source_digest = local_go_execution.transfer_source(owner, client, root, source, source_copy, output / 'source.tar')
+        transfer_options = {} if bounded_archive is None else {'bounded_archive': bounded_archive}
+        source_digest = local_go_execution.transfer_source(owner, client, root, source, source_copy,
+                                                           output / 'source.tar', **transfer_options)
         if service == 'notification':
             import local_go_multi_dependencies
             local_go_multi_dependencies.transfer(owner, client, root, source, source_copy, source_digest,

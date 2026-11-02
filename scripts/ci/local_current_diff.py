@@ -21,10 +21,15 @@ def _windows():
     return os.name == 'nt'
 
 
-def _execute(command, *, cwd=None, env=None, input=None, timeout):
+def _execute(command, *, cwd=None, env=None, input=None, timeout, output_limit=None):
     """Bound output before capture; Windows broker owns the command tree."""
     wrapper = Path(__file__).with_name('local_golangci_capture.py')
-    bounded = [sys.executable, '-B', str(wrapper), *command]
+    bounded = [sys.executable, '-B', str(wrapper)]
+    if output_limit is not None:
+        if type(output_limit) is not int or not 0 < output_limit <= 16 * 1024 * 1024:
+            raise ValueError('invalid command output limit')
+        bounded.append('--limit=' + str(output_limit))
+    bounded.extend(command)
     if _windows():
         return supervision.run_diagnostic(bounded, cwd=cwd, env=env, input=input,
                                           timeout=timeout, capture_output=True, check=False)

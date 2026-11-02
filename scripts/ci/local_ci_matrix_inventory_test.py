@@ -38,7 +38,7 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertEqual({key: len(rows) for key, rows in result['shards'].items()},
                          inventory.SHARD_RECIPE_COUNTS)
         policy = result['shards']['policy']
-        self.assertEqual(len(policy), 79)
+        self.assertEqual(len(policy), 80)
         self.assertIn('space_large34_proof_test.py', policy[78]['recipe'])
         dependencies = {
             'scripts/ci/space_large34_proof_test.py', 'scripts/ci/space_large34_proof.sh',
@@ -50,6 +50,17 @@ class MatrixInventoryTest(unittest.TestCase):
         self.assertEqual(set(policy[78]['source_sha256']), dependencies)
         for dependency in dependencies:
             self.assertEqual(policy[78]['source_sha256'][dependency],
+                             hashlib.sha256((root / dependency).read_bytes()).hexdigest())
+        bounded_dependencies = {
+            'scripts/ci/local_bounded_source_test.py', 'scripts/ci/local_bounded_source.py',
+            'scripts/ci/local_current_diff.py', 'scripts/ci/local_golangci_capture.py',
+            'scripts/ci/local_process_supervision.py', 'scripts/ci/local_private_git.py',
+            'scripts/ci/local_source_snapshot.py', 'scripts/ci/affected_check_plan.py',
+        }
+        self.assertIn('local_bounded_source_test.py', policy[79]['recipe'])
+        self.assertEqual(set(policy[79]['source_sha256']), bounded_dependencies)
+        for dependency in bounded_dependencies:
+            self.assertEqual(policy[79]['source_sha256'][dependency],
                              hashlib.sha256((root / dependency).read_bytes()).hexdigest())
         self.assertTrue(any('local_ci_staging_execution_test.py' in row['recipe'] for row in result['shards']['policy']))
         self.assertTrue(any('local_staging_owned_tmp_test.py' in row['recipe'] for row in result['shards']['policy']))

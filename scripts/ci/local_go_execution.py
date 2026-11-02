@@ -21,13 +21,18 @@ def _digest(stream):
     return value.hexdigest()
 
 
-def transfer_source(owner, name, root, source, source_copy, archive_path):
+def transfer_source(owner, name, root, source, source_copy, archive_path, *, bounded_archive=None):
     """Transfer only an archive built from the captured source into an owned volume."""
     containers = [item for item in owner.state['resources'] if item.get('kind') == 'container'
                   and item.get('name') == name and item.get('state') == 'ready']
     if len(containers) != 1 or '/workspace' not in containers[0].get('mounts', {}):
         raise ValueError('owned workspace container is required')
-    digest = snapshot.archive(root, source, source_copy, archive_path)
+    if bounded_archive is None:
+        digest = snapshot.archive(root, source, source_copy, archive_path)
+    else:
+        import local_bounded_source
+        snapshot.verify_materialized(root, source, source_copy)
+        digest = local_bounded_source.verify_archive(root, source, archive_path, bounded_archive)
     expected_remote = (digest + '  /workspace/candidate.tar\n').encode('ascii')
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         def run(command, stdin=None):

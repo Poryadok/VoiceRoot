@@ -45,6 +45,8 @@ ci_global:
   # Local planning stays narrow; the Flutter event parser selects frontend below.
   - '!scripts/ci/local_source_snapshot.py'
   - '!scripts/ci/local_source_snapshot_test.py'
+  - '!scripts/ci/local_bounded_source.py'
+  - '!scripts/ci/local_bounded_source_test.py'
   - '!scripts/ci/local_current_diff.py'
   - '!scripts/ci/local_current_diff_test.py'
   - '!scripts/ci/local_ci_routing.py'
@@ -152,6 +154,8 @@ local_docker_isolation:
   - scripts/ci/local_rootless_profile.py
   - scripts/ci/local_rootless_profile_test.py
   - scripts/ci/local_source_snapshot.py
+  - scripts/ci/local_bounded_source.py
+  - scripts/ci/local_bounded_source_test.py
   - scripts/ci/local_go_execution.py
   - scripts/ci/local_chat_private.py
   - scripts/ci/local_chat_private_test.py

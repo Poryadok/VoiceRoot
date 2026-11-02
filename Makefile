@@ -395,6 +395,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/local_go_multi_dependencies_test.py"
 	python3 "$(ROOT)/scripts/ci/local_overlay_execution_test.py"
 	python3 "$(ROOT)/scripts/ci/space_large34_proof_test.py"
+	python3 "$(ROOT)/scripts/ci/local_bounded_source_test.py"
 
 ci-script-tests-runtime: voice-db-runtime-provisioning-fast-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
 	$(BASH) "$(ROOT)/scripts/ci/story-media-cohort-chain.sh"

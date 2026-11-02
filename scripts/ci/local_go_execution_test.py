@@ -34,6 +34,18 @@ class FakeOwner:
 
 
 class TransferTests(unittest.TestCase):
+    def test_bounded_source_refusal_precedes_container_commands(self):
+        owner = FakeOwner()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            with patch.object(runner.snapshot, 'verify_materialized'), \
+                 patch('local_bounded_source.verify_archive', side_effect=ValueError('archive differs')) as verify, \
+                 self.assertRaisesRegex(ValueError, 'archive differs'):
+                runner.transfer_source(owner, 'owned', root, {'head': 'a' * 40}, root / 'copy',
+                                       Path(directory) / 'source.tar', bounded_archive={'invalid': True})
+            verify.assert_called_once()
+            self.assertEqual(owner.commands, [])
+
     def test_dependency_transfer_checks_versions_and_archive_before_extraction(self):
         source = {'head': 'a' * 40}
         class DependencyOwner:

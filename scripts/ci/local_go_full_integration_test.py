@@ -854,6 +854,7 @@ class FullGoTests(unittest.TestCase):
 
     def test_bounded_chat_dispatch_reuses_parent_owner_and_resource_envelope(self):
         source = {'head': 'a' * 40}
+        receipt = {'source': source}
         limits = self.resource_limits()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'root'; root.mkdir()
@@ -874,20 +875,29 @@ class FullGoTests(unittest.TestCase):
                  mock.patch.object(subject.chat, 'validate_archives'), \
                  mock.patch.object(subject.orchestration, '_verify_file'), \
                  mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                 mock.patch('local_bounded_source.capture_archive', return_value=receipt) as archive, \
                  mock.patch.object(subject.snapshot, 'capture', return_value=source), \
                  mock.patch.object(subject.snapshot, 'materialize', return_value=source_copy), \
-                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={'cache': 'ok'}), \
+                 mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={'cache': 'ok'}) as acquire, \
                  mock.patch.object(subject.chat, 'DockerCLI', return_value=FakeEngine()), \
                  mock.patch.object(subject.chat.ScheduledRun, 'attach_worker', return_value=attached) as attach, \
                  mock.patch.object(subject.chat, 'run_owned', return_value=result) as run_owned:
                 report = subject.run('chat', root, source['head'], output, 'helper', 'b' * 64, archives, 'go',
                     resource_limits=limits, owner_id=owner_id,
                     ownership_journal=str(journal), slot=1)
+                archive.return_value = {'source': {'head': 'f' * 40}}
+                acquire.reset_mock()
+                with self.assertRaisesRegex(ValueError, 'archive source differs'):
+                    subject.run('chat', root, source['head'], output, 'helper', 'b' * 64, archives, 'go',
+                        resource_limits=limits, owner_id=owner_id, ownership_journal=str(journal), slot=1)
+                acquire.assert_not_called()
             attach.assert_called_once()
             self.assertEqual(attach.call_args.args[2:], (1, owner_id, limits))
             run_owned.assert_called_once()
             self.assertIs(run_owned.call_args.args[0], attached)
             self.assertEqual(run_owned.call_args.kwargs['resource_limits'], limits)
+            self.assertIs(run_owned.call_args.kwargs['bounded_archive'], receipt)
+            self.assertEqual(archive.call_args.args[:3], (root, source['head'], output / 'source.tar'))
             self.assertEqual(report['status'], 'incomplete')
             self.assertTrue(any('nested Testcontainers' in item for item in report['unbound_inputs']))
 

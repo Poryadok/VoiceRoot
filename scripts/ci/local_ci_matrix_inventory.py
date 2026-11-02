@@ -10,11 +10,17 @@ import re
 import sys
 
 
-MAKEFILE_SHA256 = 'e3f943b681d2299190f37e6c69f86b9119138aa3c35469efb2c4bd8dc73f2beb'
+MAKEFILE_SHA256 = '87c85732b31278dff0d34afbc725a77c61b1588c877acaf020875e7bbc8eeed6'
 WORKFLOW_SHA256 = '3556b9130522770c6863d3c0bb92bb8c3105c89240e5693a308f383dddd710e2'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
-SHARD_RECIPE_COUNTS = {'policy': 79, 'runtime': 23, 'staging': 34, 'proofs': 15}
+SHARD_RECIPE_COUNTS = {'policy': 80, 'runtime': 23, 'staging': 34, 'proofs': 15}
 TRANSITIVE_SOURCE_DEPENDENCIES = {
+    'scripts/ci/local_bounded_source_test.py': (
+        'scripts/ci/local_bounded_source.py', 'scripts/ci/local_current_diff.py',
+        'scripts/ci/local_golangci_capture.py', 'scripts/ci/local_process_supervision.py',
+        'scripts/ci/local_private_git.py', 'scripts/ci/local_source_snapshot.py',
+        'scripts/ci/affected_check_plan.py',
+    ),
     'scripts/ci/space_large34_proof_test.py': (
         'scripts/ci/space_large34_proof.sh', 'scripts/ci/space_large34_source.py',
         'scripts/ci/space_large34_manifest.py', 'scripts/ci/space_large34_required.json',

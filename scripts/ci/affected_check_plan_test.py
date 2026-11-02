@@ -527,6 +527,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
         for name in ('local_go_dependencies.py', 'local_go_dependencies_test.py',
                      'local_go_execution.py', 'local_go_execution_test.py',
                      'local_go_plan.py', 'local_go_plan_test.py', 'local_source_snapshot.py',
+                     'local_bounded_source.py', 'local_bounded_source_test.py',
                      'local_current_diff.py', 'local_current_diff_test.py',
                      'local_ci_routing.py', 'local_ci_routing_test.py',
                      'local_ci_matrix_inventory.py', 'local_ci_matrix_inventory_test.py',
@@ -542,6 +543,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
                 self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
         for name in ('local_go_execution.py', 'local_go_dependencies.py', 'local_go_plan.py', 'local_source_snapshot.py',
+                     'local_bounded_source.py', 'local_bounded_source_test.py',
                      'local_rootless_profile.py', 'local_rootless_profile_test.py'):
             with self.subTest(docker_consumer=name):
                 self.assertIn('local-docker-isolation', checks('scripts/ci/' + name))

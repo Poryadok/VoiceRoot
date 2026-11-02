@@ -219,6 +219,7 @@ def _unbound_inputs(service, bounded):
     if bounded:
         items.extend(['host PID limit is caller supplied and not measured as a physical capacity ceiling',
             'nested Testcontainers and Ryuk cgroup/custody behavior',
+            'source snapshot Git object writes, materialization, dependency caches and logs lack storage bounds',
             'foreign and non-cooperating host workloads are outside shared capacity accounting'])
     else:
         items.extend(['Go client container CPU and memory limits are not enforced',
@@ -240,7 +241,14 @@ def _unbound_inputs(service, bounded):
 
 def run(service, root, head, output, helper, helper_digest, archives, go_binary='go', *,
         resource_limits=None, owner_id=None, ownership_journal=None, slot=None):
-    """Run one allowlisted service under caller-enforced custody, status incomplete."""
+    """Run one allowlisted service under caller-enforced custody, status incomplete.
+
+    Resource-limited runs require a clean committed checkout whose file bytes
+    match the Git blobs (including line endings) for the capped source archive;
+    on Windows this generally requires ``core.autocrlf=false`` at checkout.
+    Other snapshot, materialization and acquisition writes are not
+    storage-bounded; the archive limit does not bound the full run.
+    """
     selected = profile(service)
     auth_broker._require_worker_job()
     limits = _validate_resource_limits(resource_limits) if resource_limits is not None else None
@@ -263,7 +271,14 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
             for item in archives.values():
                 orchestration._verify_file(item['archive'], item['archive_sha256'])
             go_binary = local_go_plan._check_go_toolchain(go_binary)
-            source = snapshot.capture(root, head)
+            import local_bounded_source
+            bounded_archive = local_bounded_source.capture_archive(
+                root, head, output / 'source.tar', max_files=local_bounded_source.MAX_FILES,
+                max_source_bytes=local_bounded_source.MAX_SOURCE_BYTES,
+                max_archive_bytes=local_bounded_source.MAX_ARCHIVE_BYTES, timeout=local_bounded_source.MAX_SECONDS)
+            source = bounded_archive['source']
+            if not isinstance(source, dict) or source.get('head') != head:
+                raise ValueError('bounded archive source differs from requested head')
             source_copy = snapshot.materialize(root, source, output / 'source')
             acquisition = local_go_dependencies.acquire(root, source, source_copy, selected['module'],
                                                          output / 'dependencies', go_binary)
@@ -271,7 +286,7 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
             scheduled = chat.ScheduledRun.attach_worker(journal.parent, engine, slot, owner_id, limits)
             result = chat.run_owned(scheduled, engine, source, root, source_copy, output, helper,
                                     helper_digest, archives, acquisition, service='chat',
-                                    resource_limits=limits)
+                                    resource_limits=limits, bounded_archive=bounded_archive)
             if snapshot.capture(root, head) != source:
                 raise ValueError('source changed during bounded Chat integration')
             result['unbound_inputs'] = _unbound_inputs(service, bounded=True)
@@ -288,7 +303,16 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
     for item in archives.values():
         orchestration._verify_file(item['archive'], item['archive_sha256'])
     go_binary = local_go_plan._check_go_toolchain(go_binary)
-    source = snapshot.capture(root, head)
+    bounded_archive = None
+    if limits is not None:
+        import local_bounded_source
+        bounded_archive = local_bounded_source.capture_archive(
+            root, head, output / 'source.tar', max_files=local_bounded_source.MAX_FILES,
+            max_source_bytes=local_bounded_source.MAX_SOURCE_BYTES,
+            max_archive_bytes=local_bounded_source.MAX_ARCHIVE_BYTES, timeout=local_bounded_source.MAX_SECONDS)
+    source = snapshot.capture(root, head) if bounded_archive is None else bounded_archive['source']
+    if not isinstance(source, dict) or source.get('head') != head:
+        raise ValueError('bounded archive source differs from requested head')
     if limits is None:
         output.mkdir(parents=True, exist_ok=False)
     source_copy = snapshot.materialize(root, source, output / 'source')
@@ -313,8 +337,11 @@ def run(service, root, head, output, helper, helper_digest, archives, go_binary=
             chat.publish_owner(scheduled, output)
         except BaseException as error:
             orchestration._finish(scheduled, error)
+    run_options = {'service': service, 'resource_limits': limits}
+    if bounded_archive is not None:
+        run_options['bounded_archive'] = bounded_archive
     result = chat.run_owned(scheduled, engine, source, root, source_copy, output, helper, helper_digest,
-                            archives, acquisition, service=service, resource_limits=limits)
+                            archives, acquisition, **run_options)
     if snapshot.capture(root, head) != source:
         raise ValueError('source changed during cleanup')
     result['unbound_inputs'] = _unbound_inputs(service, bounded=limits is not None)
@@ -327,7 +354,7 @@ def _worker_command():
     original = repr(sorted(bootstrap.PROJECT_MODULES))
     modules = bootstrap.PROJECT_MODULES | {'local_go_full_integration', 'local_chat_full_integration',
         'local_auth_full_orchestration', 'local_auth_full', 'local_auth_private', 'local_nats_hosted_diagnostic',
-        'local_go_multi_dependencies'}
+        'local_go_multi_dependencies', 'local_bounded_source', 'local_current_diff'}
     if command[5].count(original) != 1:
         raise ValueError('Go worker import allowlist changed')
     command[5] = command[5].replace(original, repr(sorted(modules)), 1)
