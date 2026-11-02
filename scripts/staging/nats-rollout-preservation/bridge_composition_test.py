@@ -189,6 +189,34 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_early_canonical_inventory_is_rejected_by_actual_p3_preflight(self):
+        import linecache,staging_prerequisites as prereq,staging_prerequisites_test,staging_cohort_preservation as cohort
+        import staging_p3_prerequisites as p3
+        def ready(actions,request,approved,execution,workspace,stage,live,*_,early):
+            session=actions.tt_session
+            prepared=prereq.prepare_inputs(actions,request,approved,execution,workspace)
+            qualified={'prerequisite_inputs_sha256':prepared['inputs_sha256']}
+            p2_plan={'actual_before':stage.old_images,'candidate':{'commit':session.context['commit'],'images':session.context['images']}}
+            with patch.object(cohort,'validate_plan'):
+                session.bind_cohort_preservation(p2_plan,stage.old_images)
+            kube,_,_=canonical_stores()
+            if early:populate_public_fixture_inventory(kube,live)
+            with patch.object(cohort,'load_qualified',return_value=qualified),patch.object(cohort,'capture_stage',return_value=stage),\
+                 patch.object(cohort,'capture_final_stage',return_value=stage),patch.object(cohort,'load_auxiliary_successor',return_value=None),\
+                 patch.object(cohort,'revalidate_paused'):
+                if not early:
+                    self.assertIsInstance(prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified),dict)
+                    return
+                with self.assertRaisesRegex(p3.PrerequisiteError,'staging P3 preflight not qualified') as error:
+                    prereq.run_prepare(actions,request,approved,execution,workspace,preservation_ref=qualified)
+                self.assertIsInstance(error.exception.__context__,ValueError)
+                tb=error.exception.__context__.__traceback__
+                self.assertEqual(tb.tb_frame.f_code.co_name,'preflight_payloads')
+                self.assertEqual(linecache.getline(tb.tb_frame.f_code.co_filename,tb.tb_lineno).strip(),'if matches: raise ValueError()')
+        for early in (True,False):
+            with self.subTest(early=early):
+                staging_prerequisites_test.PrepareCompositionTests()._cold_prepare(on_ready=lambda *args:ready(*args,early=early))
+
     def test_public_inventory_is_added_after_first_install_prepare(self):
         import staging_prerequisites,staging_prerequisites_test
         def ready(actions,request,approved,execution,workspace,stage,live,*_):
@@ -949,9 +977,13 @@ class CompositionTests(unittest.TestCase):
                             successor=nats_patches.enter_context(patch.object(captured,'successor_nats_authority',side_effect=synthetic_successor))
                             nats_patches.enter_context(patch.object(auxiliary,'resume',return_value=None))
                             nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
+                            original_compile=compiler.main
+                            def compile_public(*args,**kwargs):
+                                populate_public_fixture_inventory(kube,live)
+                                return original_compile(*args,**kwargs)
+                            nats_patches.enter_context(patch.object(compiler,'main',side_effect=compile_public))
                             prepared=actions.execute(request)
                             self.assertIsInstance(prepared,dict)
-                            populate_public_fixture_inventory(kube,live)
                             source_receipt=captured._read(installed/'source-authority'/(actions.tt_session.operation+'.json'))
                             self.assertEqual(source_receipt['approved_sha256'],captured.digest(approved))
                             authorize={'action':'authorize','operation':actions.tt_session.operation,'token':'fixture',
