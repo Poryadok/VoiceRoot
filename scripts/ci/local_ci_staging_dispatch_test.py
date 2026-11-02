@@ -72,9 +72,22 @@ class DispatchTests(unittest.TestCase):
         rows = matrix.build(root)['shards']['policy']
         expected = m.policy_expected_skips(root, rows)
         recipes = m.inventory(rows, shard='policy')
-        self.assertEqual(len(recipes), 76)
+        self.assertEqual(len(recipes), 77)
+        self.assertEqual({index: recipes[index][1] for index in m.POLICY_SHELL_MARKERS},
+                         {1: 'scripts/ci/resolve-staging-matrix_test.sh',
+                          2: 'scripts/ci/resolve-go-matrix_test.sh',
+                          3: '.github/ci/verify-required-jobs_test.sh',
+                          5: 'scripts/ci/buf-generate-ci-local-template_test.sh',
+                          6: 'scripts/ci/check-image-catalog-drift.sh',
+                          56: 'scripts/ci/testcontainers-prune_test.sh',
+                          64: 'scripts/ci/ci-script-tests-reachability_test.sh',
+                          65: 'scripts/ci/check-auth-testcontainers-reports_test.sh',
+                          66: 'scripts/ci/check-auth-proto-sync_test.sh',
+                          67: 'scripts/ci/minio-mc-image-ci-contract_test.sh',
+                          68: 'scripts/ci/minio-compose-image-override-contract_test.sh',
+                          69: 'scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh'})
         self.assertIn(b'export VOICE_CI_RECIPE_INDEX="$idx"', m.wrappers(recipes, shard='policy')['python'])
-        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 33, 33: 1, 41: 2})
+        self.assertEqual({index: len(items) for index, items in expected.items()}, {21: 1, 24: 33, 33: 1, 42: 2})
         event = next(iter(expected[21]))
         summary = b'Ran 3 tests in 0.1s\nOK (skipped=1)\n'
         m.validate_policy_recipe(21, summary, {event}, expected)

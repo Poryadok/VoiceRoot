@@ -574,7 +574,7 @@ exec /run/user/1000/tools/docker-cli -H unix:///run/user/1000/docker.sock "$@"
         if 'go version go1.26.10 ' not in tool_output or not any(line.startswith('v24.') for line in tool_output.splitlines()) or any(digest + '  ' + path not in tool_output.splitlines() for digest,path in expected_tools): raise RuntimeError('unprivileged tools differ')
         hosted_policy_tests = 0
         if SHARD == 'policy':
-            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=76','bash','-ec',hosted_policy_script()], timeout=600)
+            execute('hosted-policy', client, common + ['env','VOICE_CI_RECIPE_INDEX=77','bash','-ec',hosted_policy_script()], timeout=600)
             if any((BASE/('hosted-policy.' + suffix)).stat().st_size > 16 * 1024 * 1024 for suffix in ('stdout', 'stderr')):
                 raise RuntimeError('hosted policy output exceeded limit')
             hosted_output = (BASE/'hosted-policy.stdout').read_bytes() + (BASE/'hosted-policy.stderr').read_bytes()
