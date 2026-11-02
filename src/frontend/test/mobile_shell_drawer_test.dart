@@ -3,15 +3,96 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_navigation_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
+import 'package:voice_frontend/state/subscription_providers.dart';
 import 'package:voice_frontend/ui/shell/mobile_shell_drawer.dart';
+import 'package:voice_frontend/ui/core/voice_avatar.dart';
 
+import 'support/auth_test_overrides.dart';
 import 'support/fake_voice_api_clients.dart';
+import 'support/voice_test_theme.dart';
 
 void main() {
+  for (final profileCount in [1, 4]) {
+    testWidgets(
+      'drawer exposes profile menu and archive with $profileCount profiles',
+      (tester) async {
+        final profiles = List.generate(
+          profileCount,
+          (index) => VoiceProfile(
+            id: 'profile-$index',
+            accountId: 'account-1',
+            username: 'user$index',
+            discriminator: '0001',
+            displayName: 'Profile $index',
+          ),
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              authSessionStorageProvider.overrideWithValue(
+                InMemoryAuthSessionStorage(),
+              ),
+              authControllerProvider.overrideWith(authenticatedAuthController),
+              subscriptionTierProvider.overrideWithValue('free'),
+              myProfilesProvider.overrideWith((_) async => profiles),
+              activeProfileProvider.overrideWith((_) async => profiles.first),
+              chatFoldersProvider.overrideWith(
+                (_) async => const FolderListData(folders: []),
+              ),
+              quickAccessListProvider.overrideWith(
+                (_) async => const QuickAccessListData(items: []),
+              ),
+            ],
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                drawer: const MobileShellDrawer(onOpenSettings: _ignore),
+                body: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(VoiceAvatar),
+          findsNWidgets(profileCount.clamp(1, 3)),
+        );
+        final profileMenu = find.byType(VoiceAvatar).first;
+        expect(
+          tester.getTopLeft(profileMenu).dy,
+          lessThan(
+            tester
+                .getTopLeft(find.byKey(const Key('mobile_drawer_settings')))
+                .dy,
+          ),
+        );
+        if (profileCount == 1) {
+          await tester.longPress(profileMenu);
+        } else {
+          await tester.tap(profileMenu);
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Archive'), findsOneWidget);
+        if (profileCount > 1) expect(find.text('Profile 3'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('MobileShellDrawer lists folders and quick access', (
     tester,
   ) async {
