@@ -15,6 +15,320 @@ import local_process_supervision as supervision
 
 
 class SupervisionTest(unittest.TestCase):
+    def test_job_limits_are_explicit_positive_and_within_windows_ranges(self):
+        limits = supervision.JobLimits(cpu_rate=2500, job_memory_bytes=1024 * 1024,
+                                       active_process_limit=4)
+        self.assertEqual((limits.cpu_rate, limits.job_memory_bytes,
+                          limits.active_process_limit), (2500, 1024 * 1024, 4))
+        for values in (
+                {'cpu_rate': 0, 'job_memory_bytes': 1024, 'active_process_limit': 1},
+                {'cpu_rate': 10001, 'job_memory_bytes': 1024, 'active_process_limit': 1},
+                {'cpu_rate': True, 'job_memory_bytes': 1024, 'active_process_limit': 1},
+                {'cpu_rate': 1000, 'job_memory_bytes': 0, 'active_process_limit': 1},
+                {'cpu_rate': 1000, 'job_memory_bytes': 1024, 'active_process_limit': 0},
+                {'cpu_rate': 1000, 'job_memory_bytes': 1024, 'active_process_limit': True}):
+            with self.subTest(values=values), self.assertRaises((TypeError, ValueError)):
+                supervision.JobLimits(**values)
+
+    def test_windows_job_applies_cpu_memory_and_process_limits(self):
+        limits = supervision.JobLimits(cpu_rate=2500, job_memory_bytes=8 * 1024 * 1024,
+                                       active_process_limit=3)
+        calls = []
+
+        class Api:
+            def __init__(self, name):
+                self.name = name
+                self.argtypes = None
+                self.restype = None
+
+            def __call__(self, *args):
+                calls.append((self.name, args))
+                if self.name == 'CreateJobObjectW':
+                    return 101
+                if self.name == 'SetInformationJobObject':
+                    if not hasattr(kernel, 'configured'):
+                        kernel.configured = {}
+                    kernel.configured[args[1]] = (ctypes.string_at(args[2], args[3]), args[3])
+                    return 1
+                if self.name == 'QueryInformationJobObject':
+                    source, size = kernel.configured[args[1]]
+                    ctypes.memmove(args[2], source, size)
+                    return 1
+                if self.name == 'CloseHandle':
+                    return 1
+                raise AssertionError('unexpected WinAPI call: ' + self.name)
+
+        class Kernel:
+            def __getattr__(self, name):
+                value = Api(name)
+                setattr(self, name, value)
+                return value
+
+        kernel = Kernel()
+        kernel.configured = {}
+        import ctypes
+        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel):
+            returned_kernel, job, accounting = supervision._windows_job(limits)
+
+        self.assertIs(returned_kernel, kernel)
+        self.assertEqual(job, 101)
+        configured = [(args[1], args[2]._obj) for name, args in calls
+                      if name == 'SetInformationJobObject']
+        self.assertEqual({info_class for info_class, _ in configured}, {9, 15})
+        extended = next(value for info_class, value in configured if info_class == 9)
+        basic = extended.BasicLimitInformation
+        self.assertTrue(basic.LimitFlags & 0x2000)  # kill on close
+        self.assertTrue(basic.LimitFlags & 0x8)     # active process limit
+        self.assertTrue(basic.LimitFlags & 0x200)   # job memory limit
+        self.assertEqual(basic.ActiveProcessLimit, limits.active_process_limit)
+        self.assertEqual(extended.JobMemoryLimit, limits.job_memory_bytes)
+        cpu = next(value for info_class, value in configured if info_class == 15)
+        self.assertEqual(cpu.ControlFlags, 0x5)  # ENABLE | HARD_CAP
+        self.assertEqual(cpu.CpuRate, limits.cpu_rate)
+        query_calls = [(index, args[1]) for index, (name, args) in enumerate(calls)
+                       if name == 'QueryInformationJobObject']
+        self.assertEqual({info_class for _, info_class in query_calls}, {9, 15})
+        self.assertGreater(min(index for index, _ in query_calls),
+                           max(index for index, (name, _) in enumerate(calls)
+                               if name == 'SetInformationJobObject'))
+        queried = [(args[1], args[2]._obj) for name, args in calls
+                   if name == 'QueryInformationJobObject']
+        queried_extended = next(value for info_class, value in queried if info_class == 9)
+        self.assertEqual(queried_extended.BasicLimitInformation.ActiveProcessLimit,
+                         limits.active_process_limit)
+        self.assertEqual(queried_extended.JobMemoryLimit, limits.job_memory_bytes)
+        queried_cpu = next(value for info_class, value in queried if info_class == 15)
+        self.assertEqual(queried_cpu.CpuRate, limits.cpu_rate)
+
+    def test_diagnostic_requires_job_limits_and_returns_verified_job_evidence(self):
+        limits = supervision.JobLimits(cpu_rate=1800, job_memory_bytes=16 * 1024 * 1024,
+                                       active_process_limit=5)
+        evidence = {'cpu_rate': 1800, 'job_memory_bytes': 16 * 1024 * 1024,
+                    'active_process_limit': 5, 'peak_job_memory_bytes': 4096,
+                    'total_processes': 2, 'active_processes_after_cleanup': 0}
+        completed = subprocess.CompletedProcess(['probe'], 0)
+        completed.job_evidence = evidence
+        with patch.object(supervision.os, 'name', 'nt'), \
+             patch.object(supervision, '_run_diagnostic_with_input', return_value=completed) as run:
+            result = supervision.run_diagnostic(['probe'], timeout=1, capture_output=True,
+                                                 job_limits=limits)
+        self.assertIs(result, completed)
+        self.assertEqual(result.job_evidence, evidence)
+        self.assertEqual(run.call_args.args[0], ['probe'])
+        self.assertEqual(run.call_args.kwargs['job_limits'], limits)
+
+    def test_diagnostic_refuses_invalid_supplied_limits_before_broker_launch(self):
+        with patch.object(supervision.os, 'name', 'nt'), \
+             patch.object(supervision, '_run_diagnostic_with_input') as run:
+            with self.assertRaises((TypeError, ValueError, supervision.SupervisionError)):
+                supervision.run_diagnostic(['probe'], timeout=1, capture_output=True,
+                                           job_limits={'cpu_rate': 0})
+        run.assert_not_called()
+
+    def test_windows_job_configuration_failure_closes_job_and_fails_closed(self):
+        limits = supervision.JobLimits(cpu_rate=2500, job_memory_bytes=8192,
+                                       active_process_limit=3)
+        calls = []
+
+        class Api:
+            def __init__(self, name):
+                self.name = name
+                self.argtypes = None
+                self.restype = None
+
+            def __call__(self, *args):
+                calls.append(self.name)
+                if self.name == 'CreateJobObjectW':
+                    return 101
+                if self.name == 'SetInformationJobObject':
+                    return 0
+                if self.name == 'CloseHandle':
+                    return 1
+                raise AssertionError('unexpected WinAPI call: ' + self.name)
+
+        class Kernel:
+            def __getattr__(self, name):
+                value = Api(name)
+                setattr(self, name, value)
+                return value
+
+        kernel = Kernel()
+        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel):
+            with self.assertRaises(supervision.SupervisionError):
+                supervision._windows_job(limits)
+        self.assertEqual(calls.count('CreateJobObjectW'), 1)
+        self.assertEqual(calls.count('SetInformationJobObject'), 1)
+        self.assertEqual(calls.count('CloseHandle'), 1)
+        self.assertNotIn('QueryInformationJobObject', calls)
+
+    def test_named_job_collision_fails_before_configuration_or_process_launch(self):
+        limits = supervision.JobLimits(cpu_rate=2000, job_memory_bytes=8192,
+                                       active_process_limit=3)
+        calls = []
+
+        class Api:
+            def __init__(self, name):
+                self.name = name
+                self.argtypes = None
+                self.restype = None
+
+            def __call__(self, *args):
+                calls.append((self.name, args))
+                if self.name == 'CreateJobObjectW':
+                    return 101
+                if self.name == 'CloseHandle':
+                    return 1
+                raise AssertionError('collision must stop before configuration')
+
+        class Kernel:
+            def __getattr__(self, name):
+                value = Api(name)
+                setattr(self, name, value)
+                return value
+
+        kernel = Kernel()
+        name = r'Local\VoiceCIProof-test-job'
+        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel), \
+             patch.object(supervision.ctypes, 'get_last_error', return_value=183):
+            with self.assertRaisesRegex(supervision.SupervisionError, 'already exists|collision'):
+                supervision._windows_job(limits, job_name=name)
+        create = next(args for method, args in calls if method == 'CreateJobObjectW')
+        self.assertEqual(create[1], name)
+        self.assertEqual(sum(method == 'CloseHandle' for method, _ in calls), 1)
+        self.assertFalse(any(method == 'SetInformationJobObject' for method, _ in calls))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows named Job Object acceptance')
+    def test_named_job_presence_query_is_read_only_and_exact(self):
+        name = r'Local\VoiceCIProof-' + uuid.uuid4().hex
+        kernel, job, _accounting = supervision._windows_job(job_name=name)
+        try:
+            self.assertTrue(supervision.named_job_exists(name))
+        finally:
+            self.assertTrue(kernel.CloseHandle(job))
+        self.assertFalse(supervision.named_job_exists(name))
+
+    def test_broker_cleanup_attempts_every_close_and_preserves_execution_failure(self):
+        calls = []
+
+        class PipeApi:
+            @staticmethod
+            def CloseHandle(_handle):
+                calls.append('pipe')
+                raise OSError('pipe close failed')
+
+        class Kernel:
+            @staticmethod
+            def CloseHandle(_handle):
+                calls.append('job')
+                return 0
+
+        class Process:
+            @staticmethod
+            def close():
+                calls.append('process')
+                raise RuntimeError('process close failed')
+
+        job_name = r'Local\VoiceCIProof-cleanup-' + uuid.uuid4().hex
+        with patch.object(supervision, 'named_job_exists',
+                          side_effect=OSError('job query failed')):
+            errors = supervision._close_broker_resources(
+                PipeApi, Kernel, 'pipe-handle', Process(), 'job-handle', job_name)
+        self.assertEqual(calls, ['pipe', 'process', 'job'])
+        self.assertEqual(len(errors), 4)
+
+        execution_failure = TimeoutError('execution timed out')
+        with self.assertRaises(BaseExceptionGroup) as raised:
+            supervision._finish_broker(object(), execution_failure, errors)
+        self.assertIn(execution_failure, raised.exception.exceptions)
+        self.assertEqual(len(raised.exception.exceptions), 2)
+
+    def test_broker_cleanup_rejects_job_that_remains_after_close(self):
+        calls = []
+
+        class PipeApi:
+            @staticmethod
+            def CloseHandle(_handle):
+                calls.append('pipe')
+
+        class Kernel:
+            @staticmethod
+            def CloseHandle(_handle):
+                calls.append('job')
+                return 1
+
+        class Process:
+            @staticmethod
+            def close():
+                calls.append('process')
+
+        job_name = r'Local\VoiceCIProof-remains-' + uuid.uuid4().hex
+        with patch.object(supervision, 'named_job_exists', return_value=True):
+            errors = supervision._close_broker_resources(
+                PipeApi, Kernel, 'pipe-handle', Process(), 'job-handle', job_name)
+        self.assertEqual(calls, ['pipe', 'process', 'job'])
+        with self.assertRaisesRegex(supervision.SupervisionError, 'cleanup failed'):
+            supervision._finish_broker(object(), None, errors)
+
+    def test_windows_job_rejects_failed_or_mismatched_limit_readback(self):
+        import ctypes
+        limits = supervision.JobLimits(cpu_rate=2500, job_memory_bytes=8192,
+                                       active_process_limit=3)
+        for failure in ('second_set', 'query', 'cpu_rate', 'memory',
+                        'active_process_limit', 'limit_flags'):
+            with self.subTest(failure=failure):
+                calls = []
+
+                class Api:
+                    def __init__(self, name):
+                        self.name = name
+                        self.argtypes = None
+                        self.restype = None
+
+                    def __call__(self, *args):
+                        calls.append((self.name, args))
+                        if self.name == 'CreateJobObjectW':
+                            return 101
+                        if self.name == 'SetInformationJobObject':
+                            if failure == 'second_set' and sum(
+                                    name == 'SetInformationJobObject' for name, _ in calls) == 2:
+                                return 0
+                            if not hasattr(kernel, 'configured'):
+                                kernel.configured = {}
+                            kernel.configured[args[1]] = (
+                                ctypes.string_at(args[2], args[3]), args[3])
+                            return 1
+                        if self.name == 'QueryInformationJobObject':
+                            if failure == 'query':
+                                return 0
+                            raw, size = kernel.configured[args[1]]
+                            ctypes.memmove(args[2], raw, size)
+                            value = args[2]._obj
+                            if failure == 'cpu_rate' and args[1] == 15:
+                                value.CpuRate += 1
+                            elif failure == 'memory' and args[1] == 9:
+                                value.JobMemoryLimit += 1
+                            elif failure == 'active_process_limit' and args[1] == 9:
+                                value.BasicLimitInformation.ActiveProcessLimit += 1
+                            elif failure == 'limit_flags' and args[1] == 9:
+                                value.BasicLimitInformation.LimitFlags ^= 0x200
+                            return 1
+                        if self.name == 'CloseHandle':
+                            return 1
+                        raise AssertionError('unexpected WinAPI call: ' + self.name)
+
+                class Kernel:
+                    def __getattr__(self, name):
+                        value = Api(name)
+                        setattr(self, name, value)
+                        return value
+
+                kernel = Kernel()
+                kernel.configured = {}
+                with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel):
+                    with self.assertRaises(supervision.SupervisionError):
+                        supervision._windows_job(limits)
+                self.assertEqual(sum(name == 'CloseHandle' for name, _ in calls), 1)
+
     @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
     def test_real_broker_ignores_python_environment_and_adjacent_shadows(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -134,6 +448,43 @@ class SupervisionTest(unittest.TestCase):
         with self.assertRaises(subprocess.TimeoutExpired):
             supervision.run_diagnostic([sys.executable, '-c', 'import time; time.sleep(10)'],
                                       timeout=.3, capture_output=True)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Job Object active-process limit acceptance')
+    def test_real_diagnostic_job_rejects_grandchild_and_reports_exact_limits_and_cleanup(self):
+        limits = supervision.JobLimits(cpu_rate=2500, job_memory_bytes=256 * 1024 * 1024,
+                                       active_process_limit=2)
+        child = ('import subprocess,sys\n'
+                 'try:\n'
+                 ' p=subprocess.Popen([sys.executable,"-c","pass"]); p.wait()\n'
+                 ' print("GRANDCHILD_CREATED")\n'
+                 'except OSError as error:\n'
+                 ' if error.winerror != 1816: raise\n'
+                 ' print("GRANDCHILD_REJECTED")')
+        job_name = r'Local\VoiceCIProof-' + uuid.uuid4().hex
+        result = supervision.run_diagnostic([sys.executable, '-I', '-S', '-c', child],
+                                             timeout=15, capture_output=True,
+                                              job_limits=limits, job_name=job_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'GRANDCHILD_REJECTED', result.stdout)
+        self.assertNotIn(b'GRANDCHILD_CREATED', result.stdout)
+        self.assertEqual(result.job_evidence['cpu_rate'], limits.cpu_rate)
+        self.assertEqual(result.job_evidence['job_memory_bytes'], limits.job_memory_bytes)
+        self.assertEqual(result.job_evidence['active_process_limit'], limits.active_process_limit)
+        self.assertGreaterEqual(result.job_evidence['peak_job_memory_bytes'], 0)
+        self.assertLessEqual(result.job_evidence['peak_job_memory_bytes'], limits.job_memory_bytes)
+        self.assertEqual(result.job_evidence['total_processes'], 2)
+        self.assertEqual(result.job_evidence['active_processes_after_cleanup'], 0)
+        self.assertEqual(result.job_evidence['job_name'], job_name)
+        self.assertFalse(supervision.named_job_exists(job_name))
+        control = supervision.run_diagnostic([sys.executable, '-I', '-S', '-c', child],
+            timeout=15, capture_output=True,
+            job_limits=supervision.JobLimits(cpu_rate=2500,
+                job_memory_bytes=256 * 1024 * 1024, active_process_limit=3))
+        self.assertEqual(control.returncode, 0, control.stderr)
+        self.assertIn(b'GRANDCHILD_CREATED', control.stdout)
+        self.assertNotIn(b'GRANDCHILD_REJECTED', control.stdout)
+        self.assertEqual(control.job_evidence['total_processes'], 3)
+        self.assertEqual(control.job_evidence['active_processes_after_cleanup'], 0)
 
     def test_public_diagnostic_refuses_unsupported_arguments_and_platform(self):
         with self.assertRaises((ValueError, supervision.SupervisionError)):

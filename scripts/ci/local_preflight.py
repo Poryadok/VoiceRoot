@@ -36,6 +36,7 @@ import local_golangci_execution
 import local_heavy_slots
 import local_overlay_execution
 import local_proto_execution
+import local_process_supervision
 from local_process_supervision import SupervisionError
 import local_source_snapshot
 
@@ -133,7 +134,7 @@ def _verify_overlay_evidence(output, source, image_id, report):
 
 
 def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
-                proofs_shard=False, proofs_bash=None, proofs_make='make',
+                proofs_shard=False, proofs_job_limits=None, proofs_bash=None, proofs_make='make',
                 overlay_image_id=None, overlay_kubectl=None):
     """Execute and verify supported fetched-candidate components.
 
@@ -154,6 +155,10 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
         raise ValueError('current-diff-contract is not selected')
     if proofs_shard and ('ci-script-tests' not in selected or not candidate_ref):
         raise ValueError('proofs shard requires a selected CI script check and fetched merge ref')
+    if proofs_shard and not isinstance(proofs_job_limits, local_process_supervision.JobLimits):
+        raise ValueError('proofs shard requires explicit Windows Job Object limits')
+    if not proofs_shard and proofs_job_limits is not None:
+        raise ValueError('proof Job Object limits require the proofs shard option')
     if not proofs_shard and (proofs_bash is not None or proofs_make != 'make'):
         raise ValueError('proofs tool inputs require the proofs shard option')
     overlay_selected = 'match-squad-overlay' in selected
@@ -192,7 +197,7 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
     if proofs_shard:
         proofs_component = local_ci_proofs_component.run(
             root, base, head, head_ref, candidate_ref, output / 'ci-script-tests-proofs',
-            bash_binary=proofs_bash, make_binary=proofs_make)
+            job_limits=proofs_job_limits, bash_binary=proofs_bash, make_binary=proofs_make)
         local_ci_proofs_component.verify_component(
             root, output / 'ci-script-tests-proofs', proofs_component)
     if affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
@@ -720,6 +725,12 @@ def main():
                         help='run only the fetched-candidate ci-script-tests proofs shard')
     parser.add_argument('--proofs-bash', help='absolute or PATH Git Bash executable for the proofs shard')
     parser.add_argument('--proofs-make', default='make', help='Make executable for the proofs shard')
+    parser.add_argument('--proofs-cpu-rate', type=int,
+                        help='required Windows Job Object CPU hard cap in 1/10000 units')
+    parser.add_argument('--proofs-job-memory-bytes', type=int,
+                        help='required Windows Job Object memory limit in bytes')
+    parser.add_argument('--proofs-active-process-limit', type=int,
+                        help='required Windows Job Object process limit, including broker and command')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-policy-assets', help='JSON mapping of pinned inputs for the policy component only')
     parser.add_argument('--protobuf-component', action='store_true', help='execute the selected protobuf component with candidate validation')
@@ -746,13 +757,24 @@ def main():
     args = parser.parse_args()
     if args.handoff:
         allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'candidate_ref',
-                   'ci_script_tests_proofs', 'proofs_bash', 'proofs_make', 'overlay_image_id', 'overlay_kubectl',
+                   'ci_script_tests_proofs', 'proofs_bash', 'proofs_make', 'proofs_cpu_rate',
+                   'proofs_job_memory_bytes', 'proofs_active_process_limit',
+                   'overlay_image_id', 'overlay_kubectl',
                    'protobuf_component', 'flutter_driver_component', 'golangci_component'}
         if args.protobuf_component or args.flutter_driver_component or args.golangci_component or any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
+        proofs_resource_values = (args.proofs_cpu_rate, args.proofs_job_memory_bytes,
+                                  args.proofs_active_process_limit)
+        if args.ci_script_tests_proofs and any(value is None for value in proofs_resource_values):
+            parser.error('--ci-script-tests-proofs requires all three --proofs-* resource limits')
+        if not args.ci_script_tests_proofs and any(value is not None for value in proofs_resource_values):
+            parser.error('--proofs-* resource limits require --ci-script-tests-proofs')
+        proofs_job_limits = (local_process_supervision.JobLimits(*proofs_resource_values)
+                             if args.ci_script_tests_proofs else None)
         report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output,
                              candidate_ref=args.candidate_ref,
                              proofs_shard=args.ci_script_tests_proofs,
+                             proofs_job_limits=proofs_job_limits,
                              proofs_bash=args.proofs_bash, proofs_make=args.proofs_make,
                              overlay_image_id=args.overlay_image_id, overlay_kubectl=args.overlay_kubectl)
         print(json.dumps(report, sort_keys=True))

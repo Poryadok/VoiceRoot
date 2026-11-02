@@ -24,12 +24,13 @@ def _windows():
     return os.name == 'nt'
 
 
-def _execute(command, *, cwd=None, env=None, input=None, timeout):
+def _execute(command, *, cwd=None, env=None, input=None, timeout, job_limits=None, job_name=None):
     wrapper = Path(__file__).with_name('local_golangci_capture.py')
     bounded = [sys.executable, '-B', str(wrapper), '--limit=16777216', *command]
     if _windows():
         return supervision.run_diagnostic(bounded, cwd=cwd, env=env, input=input,
-                                          timeout=timeout, capture_output=True, check=False)
+                                          timeout=timeout, capture_output=True, check=False,
+                                          job_limits=job_limits, job_name=job_name)
     return subprocess.run(bounded, cwd=cwd, env=env, input=input, timeout=timeout,
                           capture_output=True, check=False)
 

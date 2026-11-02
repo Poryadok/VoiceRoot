@@ -16,6 +16,10 @@ else:
     import fcntl
 
 
+class SlotAcquireTimeout(TimeoutError):
+    """A confirmed timeout before this caller owns any slot."""
+
+
 def host_slot_directory():
     """Return one OS-wide location for cooperating local CI schedulers.
 
@@ -47,6 +51,10 @@ def _write_marker(descriptor, value):
         raise OSError('short slot marker write')
     os.ftruncate(descriptor, 1 + len(value))
     os.fsync(descriptor)
+
+
+def _owned_slot_marker_written(descriptor, slot, run_id):
+    """Test seam immediately after the owner marker is durable."""
 
 
 class Lease:
@@ -160,7 +168,7 @@ def _configure(directory, capacity, deadline):
         os.close(descriptor)
 
 
-def acquire(directory, timeout, capacity=2):
+def acquire(directory, timeout, capacity=2, *, owner_id=None):
     """Acquire a configured host-shared slot or fail without starting work.
 
     Callers must use the same trusted host-local directory and hold the returned
@@ -172,12 +180,18 @@ def acquire(directory, timeout, capacity=2):
         raise ValueError('timeout must be finite and nonnegative')
     if type(capacity) is not int or not 1 <= capacity <= 64:
         raise ValueError('capacity must be an integer between 1 and 64')
+    if owner_id is not None and (not isinstance(owner_id, str) or
+                                 not re.fullmatch(r'voiceci-[0-9a-f]{32}', owner_id)):
+        raise ValueError('invalid slot owner identity')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     if not directory.is_dir() or directory.is_symlink() or directory.resolve() != directory.absolute():
         raise ValueError('slot directory must be a real directory')
     deadline = time.monotonic() + timeout
-    _configure(directory, capacity, deadline)
+    try:
+        _configure(directory, capacity, deadline)
+    except TimeoutError as error:
+        raise SlotAcquireTimeout(str(error)) from error
     while True:
         for slot in range(capacity):
             path = directory / ('heavy-' + str(slot) + '.lock')
@@ -197,8 +211,13 @@ def acquire(directory, timeout, capacity=2):
                     os.fsync(descriptor)
                 if _try_lock(descriptor):
                     if _marker(descriptor) == b'idle\n':
-                        marker = ('busy:' + uuid.uuid4().hex + '\n').encode('ascii')
+                        marker_value = 'busy:' + uuid.uuid4().hex
+                        if owner_id is not None:
+                            marker_value += ':' + owner_id
+                        marker = (marker_value + '\n').encode('ascii')
                         _write_marker(descriptor, marker)
+                        if owner_id is not None:
+                            _owned_slot_marker_written(descriptor, slot, owner_id)
                         return Lease(descriptor, slot, marker)
             except BaseException:
                 os.close(descriptor)
@@ -206,7 +225,7 @@ def acquire(directory, timeout, capacity=2):
             os.close(descriptor)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise TimeoutError('all local heavy CI slots are occupied')
+            raise SlotAcquireTimeout('all local heavy CI slots are occupied')
         time.sleep(min(0.05, remaining))
 
 

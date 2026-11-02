@@ -15,7 +15,9 @@ import sys
 
 import local_ci_matrix_inventory as matrix
 import local_current_diff
+import local_ci_proofs_scheduler as scheduler
 import local_proto_execution as execution
+import local_process_supervision as supervision
 import local_source_snapshot
 
 
@@ -31,6 +33,11 @@ LIMITATIONS = [
     'other selected checks and all remaining CI shards are not_run',
     'candidate test sources are treated as cooperative, matching hosted CI; this does not prove resistance to adversarial PR scripts',
     'same-user tool custody is assumed; executable publisher provenance is not authenticated',
+    'caller-supplied Windows Job Object limits bound only this proofs-shard process tree',
+    'host slot scheduling is cooperative and limited to participating local proofs runs; same-user journal and Job Object custody is assumed',
+    'recovery is bound to the creating Windows boot, session, and logon identity; mismatched contexts retain the slot for separate manual reconciliation',
+    'Windows directory-entry durability across sudden power loss is unproven; missing or corrupt journals fail closed and do not establish general crash recovery',
+    'this component does not prove host-wide saturation prevention or constrain unrelated processes and Docker',
     'aggregate local preflight remains incomplete',
 ]
 
@@ -99,6 +106,116 @@ def validate_execution(dry_run, stdout, stderr, returncode, *, expected_recipes)
     return {'recipes': expected_recipes,
             'unittest_runs': len(ran), 'unittest_tests': sum(map(int, ran)),
             'skipped': 0}
+
+
+def validate_job_evidence(evidence, job_limits, job_names=None):
+    """Require exact Job Object configuration and verified post-cleanup counters."""
+    if not isinstance(job_limits, supervision.JobLimits):
+        raise ValueError('explicit Windows Job Object limits are required')
+    if not isinstance(evidence, dict) or set(evidence) != {'make_dry_run', 'make'}:
+        raise ValueError('proof Job Object evidence inventory differs')
+    expected = job_limits.to_dict()
+    fields = set(expected) | {'job_name', 'peak_job_memory_bytes', 'total_processes',
+                              'active_processes_after_cleanup'}
+    observed_names = []
+    for name in ('make_dry_run', 'make'):
+        row = evidence[name]
+        if (not isinstance(row, dict) or set(row) != fields or
+                any(row.get(key) != value for key, value in expected.items()) or
+                type(row.get('peak_job_memory_bytes')) is not int or
+                row['peak_job_memory_bytes'] < 0 or
+                row['peak_job_memory_bytes'] > job_limits.job_memory_bytes or
+                type(row.get('total_processes')) is not int or row['total_processes'] < 1 or
+                type(row.get('active_processes_after_cleanup')) is not int or
+                row['active_processes_after_cleanup'] != 0 or
+                not isinstance(row.get('job_name'), str) or
+                not re.fullmatch(r'Local\\VoiceCIProof-[A-Za-z0-9_-]{1,96}', row['job_name'])):
+            raise ValueError('proof Job Object limits or cleanup evidence differ')
+        observed_names.append(row['job_name'])
+    if len(set(observed_names)) != 2 or (job_names is not None and tuple(observed_names) != tuple(job_names)):
+        raise ValueError('proof named Job Object inventory differs')
+    return evidence
+
+
+def execute_bounded_recipe(command, *, cwd, env, timeout, job_limits, job_name):
+    """Run one recipe under explicitly configured and verified Windows job limits."""
+    if not isinstance(job_limits, supervision.JobLimits):
+        raise ValueError('explicit Windows Job Object limits are required')
+    if not isinstance(job_name, str) or not re.fullmatch(
+            r'Local\\VoiceCIProof-[A-Za-z0-9_-]{1,96}', job_name):
+        raise ValueError('a reserved named Job Object is required')
+    result = execution._execute(command, cwd=cwd, env=env, timeout=timeout,
+                                job_limits=job_limits, job_name=job_name)
+    evidence = result.job_evidence
+    expected = job_limits.to_dict()
+    fields = set(expected) | {'job_name', 'peak_job_memory_bytes', 'total_processes',
+                              'active_processes_after_cleanup'}
+    if (not isinstance(evidence, dict) or set(evidence) != fields or
+            any(evidence.get(key) != value for key, value in expected.items()) or
+            evidence.get('job_name') != job_name or
+            type(evidence.get('peak_job_memory_bytes')) is not int or
+            not 0 <= evidence['peak_job_memory_bytes'] <= job_limits.job_memory_bytes or
+            type(evidence.get('total_processes')) is not int or evidence['total_processes'] < 1 or
+            type(evidence.get('active_processes_after_cleanup')) is not int or
+            evidence['active_processes_after_cleanup'] != 0):
+        raise ValueError('proof named Job Object evidence differs')
+    return result
+
+
+def run_proofs_recipe_suite(make_path, candidate_repo, env, output, expected_commands,
+                            job_limits, timeout=TIMEOUT_SECONDS):
+    """Hold one shared slot across bounded Make runs and exact cleanup evidence."""
+    if not isinstance(job_limits, supervision.JobLimits):
+        raise ValueError('explicit Windows Job Object limits are required')
+    if type(timeout) is not int or not 0 < timeout <= TIMEOUT_SECONDS:
+        raise ValueError('invalid proof recipe timeout')
+    output = Path(output)
+    if not output.is_dir() or output.is_symlink():
+        raise ValueError('proof output directory must already exist and be real')
+    scheduler.recover_proof_runs(capacity=2)
+    run = scheduler.ProofRun.start(timeout=300, capacity=2)
+    safe_to_release = True
+    evidence = {}
+    try:
+        command = [str(make_path), '--no-print-directory', '-n', 'ci-script-tests-proofs']
+        dry_job_name = run.reserve_job_name('make-dry-run')
+        safe_to_release = False
+        dry = execute_bounded_recipe(command, cwd=candidate_repo, env=env,
+                                     timeout=120, job_limits=job_limits,
+                                     job_name=dry_job_name)
+        evidence['make_dry_run'] = dry.job_evidence
+        safe_to_release = True
+        (output / 'make-dry-run.stdout').write_bytes(dry.stdout)
+        (output / 'make-dry-run.stderr').write_bytes(dry.stderr)
+        if dry.returncode:
+            raise ValueError('proof Make dry run failed')
+        if len(dry.stdout) > OUTPUT_LIMIT or len(dry.stderr) > OUTPUT_LIMIT:
+            raise ValueError('proof Make dry-run output exceeded its bound')
+        if dry.stdout.decode('utf-8', errors='strict').splitlines() != expected_commands:
+            raise ValueError('proof Make dry run differs from source-pinned recipes')
+
+        safe_to_release = False
+        make_job_name = run.reserve_job_name('make')
+        result = execute_bounded_recipe(
+            [str(make_path), '--no-print-directory', 'ci-script-tests-proofs'],
+            cwd=candidate_repo, env=env, timeout=timeout, job_limits=job_limits,
+            job_name=make_job_name)
+        evidence['make'] = result.job_evidence
+        safe_to_release = True
+        (output / 'make.stdout').write_bytes(result.stdout)
+        (output / 'make.stderr').write_bytes(result.stderr)
+        if len(result.stdout) > OUTPUT_LIMIT or len(result.stderr) > OUTPUT_LIMIT:
+            raise ValueError('proof Make output exceeded its bound')
+        summary = validate_execution(dry.stdout, result.stdout, result.stderr,
+                                     result.returncode, expected_recipes=RECIPE_COUNT)
+        validate_job_evidence(evidence, job_limits,
+                              job_names=(dry_job_name, make_job_name))
+        return summary, evidence
+    finally:
+        if safe_to_release:
+            run.close()
+        else:
+            run.abandon()
 
 
 def child_environment(source, bash_path):
@@ -198,6 +315,11 @@ def verify_component(root, output, report, *, candidate_repo=None):
             report.get('recipes') != RECIPE_COUNT or report.get('skipped') != 0 or
             report.get('limitations') != LIMITATIONS):
         raise ValueError('proof component status or scope differs')
+    try:
+        resource_limits = supervision.JobLimits(**report.get('resource_limits', {}))
+    except (TypeError, ValueError):
+        raise ValueError('proof resource limits are missing or invalid') from None
+    validate_job_evidence(report.get('job_evidence'), resource_limits)
     if candidate_repo is None:
         candidate_repo = output / 'candidate-repo'
     candidate_repo = Path(candidate_repo).resolve()
@@ -247,7 +369,7 @@ def verify_component(root, output, report, *, candidate_repo=None):
             raise ValueError('proof tool version changed after execution')
 
 
-def run(root, event_base, head, head_ref, candidate_ref, output, *,
+def run(root, event_base, head, head_ref, candidate_ref, output, *, job_limits,
         bash_binary=None, make_binary='make', remote='origin', timeout=TIMEOUT_SECONDS):
     """Fetch, validate and run only `ci-script-tests-proofs` in an isolated repo."""
     root, output = Path(root).resolve(), Path(output).resolve()
@@ -261,6 +383,8 @@ def run(root, event_base, head, head_ref, candidate_ref, output, *,
         raise ValueError('invalid fetched proofs component request')
     if not _windows():
         raise ValueError('proof shard requires Windows descendant supervision')
+    if not isinstance(job_limits, supervision.JobLimits):
+        raise ValueError('caller-supplied Windows Job Object limits are required')
     candidate_repo = output / 'candidate-repo'
     validate_windows_checkout_paths(candidate_repo, ())
     _git(root, 'check-ref-format', 'refs/heads/' + head_ref)
@@ -319,27 +443,11 @@ def run(root, event_base, head, head_ref, candidate_ref, output, *,
             raise ValueError('proof shard recipe count differs from trusted inventory')
         recipe_manifest_sha = hashlib.sha256(json.dumps(
             recipes, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-        dry = execution._execute([str(make_path), '--no-print-directory', '-n',
-                                  'ci-script-tests-proofs'], cwd=candidate_repo,
-                                 env=env, timeout=120)
-        if dry.returncode:
-            raise ValueError('proof Make dry run failed')
-        (output / 'make-dry-run.stdout').write_bytes(dry.stdout)
-        (output / 'make-dry-run.stderr').write_bytes(dry.stderr)
-        if len(dry.stdout) > OUTPUT_LIMIT or len(dry.stderr) > OUTPUT_LIMIT:
-            raise ValueError('proof Make dry-run output exceeded its bound')
         expected_commands = expected_recipe_commands(recipes, candidate_repo, bash_path)
-        if dry.stdout.decode('utf-8', errors='strict').splitlines() != expected_commands:
-            raise ValueError('proof Make dry run differs from source-pinned recipes')
-        result = execution._execute([str(make_path), '--no-print-directory',
-                                     'ci-script-tests-proofs'], cwd=candidate_repo,
-                                   env=env, timeout=timeout)
-        (output / 'make.stdout').write_bytes(result.stdout)
-        (output / 'make.stderr').write_bytes(result.stderr)
-        if len(result.stdout) > OUTPUT_LIMIT or len(result.stderr) > OUTPUT_LIMIT:
-            raise ValueError('proof Make output exceeded its bound')
-        summary = validate_execution(dry.stdout, result.stdout, result.stderr,
-                                     result.returncode, expected_recipes=RECIPE_COUNT)
+        summary, job_evidence = run_proofs_recipe_suite(
+            make_path, candidate_repo, env, output, expected_commands, job_limits, timeout)
+        dry_stdout = _read(output / 'make-dry-run.stdout')
+        result_stdout, result_stderr = _read(output / 'make.stdout'), _read(output / 'make.stderr')
         if matrix.build(candidate_repo)['shards'][SHARD] != recipes:
             raise ValueError('proof recipe sources changed during execution')
         if hashlib.sha256(Path(__file__).read_bytes()).hexdigest() != producer_sha:
@@ -364,9 +472,10 @@ def run(root, event_base, head, head_ref, candidate_ref, output, *,
                             'make': {'path': str(make_path), 'sha256': make_sha,
                                      'version': make_version}},
                   'execution': summary, 'recipes': RECIPE_COUNT, 'skipped': 0,
-                  'logs': {'make-dry-run.stdout': hashlib.sha256(dry.stdout).hexdigest(),
-                           'make.stdout': hashlib.sha256(result.stdout).hexdigest(),
-                           'make.stderr': hashlib.sha256(result.stderr).hexdigest()},
+                  'resource_limits': job_limits.to_dict(), 'job_evidence': job_evidence,
+                  'logs': {'make-dry-run.stdout': hashlib.sha256(dry_stdout).hexdigest(),
+                           'make.stdout': hashlib.sha256(result_stdout).hexdigest(),
+                           'make.stderr': hashlib.sha256(result_stderr).hexdigest()},
                   'remaining_shards': ['policy', 'runtime', 'staging'],
                   'remaining_selected_checks': 'not_run',
                   'limitations': LIMITATIONS}
@@ -388,9 +497,18 @@ def main():
     parser.add_argument('--bash', dest='bash_binary')
     parser.add_argument('--make', dest='make_binary', default='make')
     parser.add_argument('--remote', default='origin')
+    parser.add_argument('--cpu-rate', type=int, required=True,
+                        help='Windows Job Object CPU hard cap in 1/10000 units')
+    parser.add_argument('--job-memory-bytes', type=int, required=True,
+                        help='Windows Job Object memory limit in bytes')
+    parser.add_argument('--active-process-limit', type=int, required=True,
+                        help='Windows Job Object active-process limit, including broker and command')
     args = parser.parse_args()
+    job_limits = supervision.JobLimits(args.cpu_rate, args.job_memory_bytes,
+                                       args.active_process_limit)
     report = run(Path(__file__).resolve().parents[2], args.event_base, args.head,
                  args.head_ref, args.candidate_ref, args.output,
+                 job_limits=job_limits,
                  bash_binary=args.bash_binary, make_binary=args.make_binary,
                  remote=args.remote)
     print(json.dumps(report, sort_keys=True))

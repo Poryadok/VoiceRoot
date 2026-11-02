@@ -7,10 +7,64 @@ import tempfile
 import unittest
 from unittest import mock
 
+import local_heavy_slots as slots
 from local_heavy_slots import acquire, host_slot_directory
 
 
 class HeavySlotsTest(unittest.TestCase):
+    def test_owner_id_is_persisted_in_busy_marker_and_legacy_acquire_stays_compatible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner_id = 'voiceci-' + 'a' * 32
+            lease = acquire(root, timeout=0, capacity=1, owner_id=owner_id)
+            try:
+                raw = b'\0' + slots._marker(lease._descriptor)
+                self.assertRegex(raw[1:].decode('ascii'),
+                                 r'^busy:[0-9a-f]{32}:voiceci-a{32}\n$')
+            finally:
+                lease.close()
+            legacy = acquire(root, timeout=0, capacity=1)
+            try:
+                self.assertRegex(slots._marker(legacy._descriptor).decode('ascii'),
+                                 r'^busy:[0-9a-f]{32}\n$')
+            finally:
+                legacy.close()
+
+    def test_malformed_owner_id_fails_before_a_slot_is_reserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for owner_id in ('', 'voiceci-short', 'voiceci-' + 'A' * 32, 7):
+                with self.subTest(owner_id=owner_id), self.assertRaises(ValueError):
+                    try:
+                        unexpected = acquire(directory, timeout=0, owner_id=owner_id)
+                    except ValueError:
+                        raise
+                    else:
+                        unexpected.close()
+                        self.fail('malformed owner identifier acquired a slot')
+            self.assertFalse(any(Path(directory).glob('heavy-*.lock')))
+
+    def test_crash_after_owner_marker_write_leaves_recoverable_bound_busy_slot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner_id = 'voiceci-' + 'b' * 32
+
+            def crash_after_write(descriptor, slot, run_id):
+                self.assertEqual(run_id, owner_id)
+                raise KeyboardInterrupt('simulated crash after durable owner binding')
+
+            with mock.patch.object(slots, '_owned_slot_marker_written', side_effect=crash_after_write):
+                with self.assertRaisesRegex(KeyboardInterrupt, 'simulated crash'):
+                    acquire(root, timeout=0, capacity=1, owner_id=owner_id)
+
+            busy = root / 'heavy-0.lock'
+            marker = busy.read_bytes()[1:].decode('ascii')
+            self.assertRegex(marker, r'^busy:[0-9a-f]{32}:voiceci-b{32}\n$')
+            with self.assertRaises(TimeoutError):
+                acquire(root, timeout=0, capacity=1)
+            recovered = slots.recover_bound(root, 0, owner_id, capacity=1)
+            recovered.close()
+            self.assertEqual(busy.read_bytes()[1:], b'idle\n')
+
     def test_host_slot_directory_is_absolute_and_not_selected_by_environment(self):
         expected = host_slot_directory()
         self.assertTrue(expected.is_absolute())
