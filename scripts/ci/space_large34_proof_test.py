@@ -262,7 +262,7 @@ exit 83
         self.assertIn('-tags=spacebanintegration', log)
         self.assertIn('-run ^TestAccountBanFixtureLargeCohort34$', log)
         self.assertIn('matrix-produce reject-skips=yes', log)
-        self.assertIn('space_large34', log)
+        self.assertIn('identity-database', log)
         self.assertIn('inspect-absent manifest=no', log)
         self.assertIn('guard-2 manifest=no', log)
         self.assertIn('matrix-verify reject-skips=no manifest=no', log)
