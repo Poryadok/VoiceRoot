@@ -22,10 +22,12 @@ class HistoricalVerifierTests(unittest.TestCase):
             'binding':{'credential':'unchanged'},'mounts':{'story':{'uid':'original'}},
             'proofs':{'story':{'verifier_sha256':self.old_sha,'credential_sha256':'a'*64,
                 'effective_permissions_sha256':'b'*64,'signed_chain_verified':True}},
-            'source_acl_sha256':'c'*64,'story_schema':{'version':4},
+            'generation':'r20260930a4','source_acl_sha256':'c'*64,'story_schema':{'version':4},
             'compatible_story_candidate':{'image':'immutable content','root_witness_authority':{'bound':'original'}}}
         self.bind_hash(self.previous)
         self.current=copy.deepcopy(self.previous)
+        from resource_claim import production_installation
+        self.current.update(schema='voice-nats-service-actor-authority-v2',installation_sha256=production_installation().sha256)
         self.current['proofs']['story']['verifier_sha256']=self.new_sha;self.bind_hash(self.current)
     def bind_hash(self,row):
         row['compatible_story_candidate']['actor_sha256']=root.hash_bytes(json.dumps(
@@ -37,7 +39,7 @@ class HistoricalVerifierTests(unittest.TestCase):
             root.revalidate('kube','source','CURRENT',{'nats-rollout-preservation/bootstrap-renewer':self.new_sha},
                 'stage',['story'],'decoder',previous or self.previous,historical_code=Path('/preserved-v9'))
             fresh.assert_called_once_with('kube','source','CURRENT',
-                {'nats-rollout-preservation/bootstrap-renewer':self.new_sha},'stage',['story'],'decoder')
+                {'nats-rollout-preservation/bootstrap-renewer':self.new_sha},'stage',['story'],'decoder',installation=__import__('resource_claim').production_installation())
     def test_fresh_current_verification_accepts_only_bound_helper_provenance_delta(self):
         before=copy.deepcopy(self.previous);current=copy.deepcopy(self.current)
         self.run_actual(current)
@@ -65,6 +67,9 @@ class HistoricalVerifierTests(unittest.TestCase):
                 self.old.pop('extra',None)
 
 class Tests(unittest.TestCase):
+    def preflight(self,*args,**kwargs):return root.preflight(*args,installation=getattr(self,'installation',None),**kwargs)
+    def revalidate(self,*args,**kwargs):return root.revalidate(*args,installation=self.installation,**kwargs)
+
     def test_story_schema_uses_exact_readonly_command_under_prerequisite_session(self):
         import resource_claim,resource_claim_test
         context=resource_claim_test.context();card=resource_claim_test.card(context)
@@ -102,7 +107,7 @@ class Tests(unittest.TestCase):
             rows=copy.deepcopy(fixture.snapshots)
             rows[runtime_stage.HUB]={'metadata':{'name':runtime_stage.HUB,'uid':'hub','resourceVersion':'1'},'spec':{'template':{'spec':{'containers':[]}}}}
             stage.snapshots=copy.deepcopy(rows);stage.old_images={'voice-story/story':image};stage.service={}
-            marker={'metadata':{'name':runtime_stage.MARKER,'uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'generation','dataPVC':'selected'}}
+            marker={'metadata':{'name':runtime_stage.MARKER,'uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'r20260930a4','dataPVC':'selected'}}
             stage.marker=copy.deepcopy(marker);original_get=kube.get.side_effect
             def get(kind,name):
                 if kind=='deployment':return copy.deepcopy(rows[name])
@@ -127,18 +132,18 @@ class Tests(unittest.TestCase):
             kube.run.side_effect=lambda args,*a,**kw:{'items':[]} if args[0]=='get' else {'database':'story_db','version':4,'dirty':False,'username':'voice'}
             chain={'requested_image':image,'manifest_image':image,'config_sha256':row['content']['config_sha256']}
             def read(path):return story_witness.encoded(selected) if path.name=='selector.json' else raw
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch('space_authority.capture',return_value={'root-pg':'bound'}),\
+            with patch('space_authority.capture',return_value={'root-pg':'bound'}),\
                  patch.object(root.actor_verification,'verify',return_value={'server_authentication_verified':True}),\
                  patch.object(story_witness,'read',read),patch('source_authority.immutable_image_identity',return_value=chain),\
                  patch.object(stage,'drain_client_pods'),patch.object(stage,'shutdown_original_hub',side_effect=lambda:stage.scale(runtime_stage.HUB,0)):
-                before=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
+                before=self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
                 self.assertEqual(before['compatible_story_candidate']['root_witness_authority']['witness_sha256'],sha)
                 stage.fence()
-                root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
+                self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
                 selected['revision']=2
-                with self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
+                with self.assertRaises(root.Blocked):self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
                 selected['revision']=1;selected['entries'][key]['enabled']=False
-                with self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
+                with self.assertRaises(root.Blocked):self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder,before)
 
     def test_story_promoted_alias_binds_reviewed_content_not_master_revision(self):
         alias='ghcr.io/poryadok/voiceroot/story@sha256:'+'d'*64
@@ -161,7 +166,7 @@ class Tests(unittest.TestCase):
             captured_rows={name:{'metadata':{'name':name,'namespace':'voice-staging','uid':name+'-uid','resourceVersion':'1'},'spec':{'template':{'spec':{'containers':[],'volumes':[]}}}} for name in (runtime_stage.HUB,'voice-gateway',*('voice-'+s for s in runtime_stage.LEAVES))}
             captured_rows['voice-social']=fixture.snapshots['voice-social']
             captured_rows[runtime_stage.HUB]['spec']['template']['spec']['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'selected'}}]
-            marker={'metadata':{'name':runtime_stage.MARKER,'uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'generation','dataPVC':'selected'}}
+            marker={'metadata':{'name':runtime_stage.MARKER,'uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'r20260930a4','dataPVC':'selected'}}
             claim={'metadata':{'name':'selected','uid':'pvc'},'spec':{'volumeName':'pv'}};pv={'metadata':{'uid':'pv'}}
             original_get=kube.get.side_effect
             def get(kind,name):
@@ -195,25 +200,25 @@ class Tests(unittest.TestCase):
             with patch.object(runtime_stage.Staging,'preflight',captured_preflight),patch.object(runtime_stage,'pv_storage_path',return_value='/captured/selected'),patch.object(runtime_stage,'running_image_pins',return_value={}):
                 stage=runtime_stage.RolloutStage.capture(kube,'a'*12,lambda event:None)
             self.assertNotIn('secret_refs',stage.expected)
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}) as verify,\
+            with patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}) as verify,\
                  patch.object(stage,'drain_client_pods'),patch.object(stage,'shutdown_original_hub',side_effect=lambda:stage.scale(runtime_stage.HUB,0)):
-                result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
+                result=self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
                 self.assertEqual(result['mounts']['social']['container'],'nats-leaf')
                 self.assertEqual(result['mounts']['social']['key'],'social.creds')
                 initial_rv=stage.snapshots['voice-social']['metadata']['resourceVersion']
                 self.assertTrue(stage.fence()['verified']) # real maintenance/scale/no-pods/closed sequence
                 self.assertNotEqual(stage.snapshots['voice-social']['metadata']['resourceVersion'],initial_rv)
                 self.assertNotEqual(captured_rows['voice-social']['metadata']['resourceVersion'],stage.snapshots['voice-social']['metadata']['resourceVersion'])
-                root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
+                self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
                 captured_rows['voice-social']['spec']['template']['spec']['unowned']='drift'
-                with self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
+                with self.assertRaises(root.Blocked):self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
                 captured_rows['voice-social']=copy.deepcopy(stage.snapshots['voice-social'])
                 for field in ('replicas','uid','namespace','credential'):
                     live=copy.deepcopy(captured_rows['voice-social'])
                     if field=='replicas':captured_rows['voice-social']['spec']['replicas']=1
                     elif field=='credential':captured_rows['voice-social']['spec']['template']['spec']['volumes'][0]['secret']['secretName']='unowned'
                     else:captured_rows['voice-social']['metadata'][field]='unowned'
-                    with self.subTest(live_drift=field),self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
+                    with self.subTest(live_drift=field),self.assertRaises(root.Blocked):self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
                     captured_rows['voice-social']=live
                 baseline=copy.deepcopy(stage.snapshots['voice-social'])
                 for field in ('container','env','key','path','readonly','namespace','uid'):
@@ -225,21 +230,23 @@ class Tests(unittest.TestCase):
                     elif field=='readonly':leaf['volumeMounts'][0]['readOnly']=False
                     else:row['metadata'][field]='other'
                     verify.reset_mock()
-                    with self.subTest(field=field),self.assertRaises(root.Blocked):root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
+                    with self.subTest(field=field),self.assertRaises(root.Blocked):self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
                     verify.assert_not_called()
 
     def fixture(self,source,role='social'):
         path=source/root.ACL;path.parent.mkdir(parents=True);path.write_text('version: 1\nservices:\n  social:\n    no_response: true\n    publish:\n      - social.friend_removed\n    subscribe:\n      - _INBOX.voice.social.>\n')
         public='U'+'A'*55;account='A'+'B'*55
+        from resource_claim import InstallationAuthority
+        self.installation=InstallationAuthority('owned-isolated-v1','1b8f60a7-38ab-4e29-9fe0-f478325026cc','r20260930a4',root.hash_bytes(account.encode()),'b'*64,'c'*64)
         token='header.'+base64.urlsafe_b64encode(json.dumps({'sub':public,'name':'voice-'+role}).encode()).decode().rstrip('=')+'.signature'
         creds=('-----BEGIN NATS USER JWT-----\n'+token+'\n------END NATS USER JWT------\n').encode()
         def secret(name,data):return {'metadata':{'name':name,'uid':name+'-uid','resourceVersion':'1'},'data':{k:base64.b64encode(v).decode() for k,v in data.items()}}
-        service=secret('voice-nats-service-credentials-generation',{role+'.creds':creds})
-        operator=secret('voice-nats-operator-generation',{'account.public':account.encode(),'account.jwt':b'account','operator.jwt':b'operator'})
+        service=secret('voice-nats-service-credentials-r20260930a4',{role+'.creds':creds})
+        operator=secret('voice-nats-operator-r20260930a4',{'account.public':account.encode(),'account.jwt':b'account','operator.jwt':b'operator'})
         database=secret('voice-app-secrets',{'STORY_DATABASE_URL':b'postgres://voice:synthetic@voice-postgres:5432/story_db?sslmode=disable','POSTGRES_PASSWORD':b'synthetic'})
         config={'metadata':{'name':'voice-app-config','uid':'config-uid','resourceVersion':'1'},'data':{'POSTGRES_USER':'voice'}}
         kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(database if name=='voice-app-secrets' else config if name=='voice-app-config' else service if name==service['metadata']['name'] else operator)
-        stage=types.SimpleNamespace(expected={'generation':'generation','deployment_uids':{'voice-story':'story-uid','voice-'+role:role+'-uid'}})
+        stage=types.SimpleNamespace(expected={'generation':'r20260930a4','deployment_uids':{'voice-story':'story-uid','voice-'+role:role+'-uid'}})
         stage.snapshots={'voice-story':{'metadata':{'name':'voice-story','namespace':'voice-staging','uid':'story-uid'},'spec':{'template':{'spec':{'containers':[{'name':'story','env':[{'name':'DATABASE_URL','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'STORY_DATABASE_URL'}}}]}]}}}}}
         if role!='story':stage.snapshots['voice-'+role]={'metadata':{'name':'voice-'+role,'namespace':'voice-staging','uid':role+'-uid','resourceVersion':'1'},'spec':{'template':{'spec':{'containers':[]}}}}
         else:stage.expected['deployment_uids']['voice-story']='story-uid'
@@ -263,8 +270,8 @@ class Tests(unittest.TestCase):
             (source/root.ACL).write_bytes(canonical)
             copy_historical_story_schema(source)
             kube.run.return_value={'database':'story_db','version':4,'dirty':False,'username':'voice'}
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch('space_authority.capture',return_value={'root-pg':'bound'}),patch.object(root.actor_verification,'verify',return_value={'server_authentication_verified':True}) as verify:
-                result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
+            with patch('space_authority.capture',return_value={'root-pg':'bound'}),patch.object(root.actor_verification,'verify',return_value={'server_authentication_verified':True}) as verify:
+                result=self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
                 self.assertIsNotNone(result,'candidate Story actor cannot be skipped')
                 self.assertEqual(result['roles'],['story'])
                 self.assertEqual(result['story_schema']['observation'],{k:v for k,v in kube.run.return_value.items() if k!='username'})
@@ -274,30 +281,30 @@ class Tests(unittest.TestCase):
                 self.assertEqual(set(required['pub']),{'story.created','story.viewed','story.reacted','story.expired','story.highlight_created','story.lfp_created','story.lfp_response','$JS.API.STREAM.INFO.story_events'})
                 self.assertEqual(required['sub'],['_INBOX.voice.story.>'])
                 stage.snapshots['voice-story']['spec']['template']['spec']['volumes'][0]['secret']['secretName']='other'
-                with self.assertRaises(root.Blocked):root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
+                with self.assertRaises(root.Blocked):self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
                 stage.snapshots['voice-story']['spec']['template']['spec']['volumes'][0]['secret']['secretName']=service['metadata']['name']
                 verify.reset_mock();kube.run.return_value={'database':'story_db','version':4,'dirty':True}
-                with self.assertRaises(root.Blocked):root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
+                with self.assertRaises(root.Blocked):self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['story'],decoder)
                 verify.assert_not_called()
 
     def test_source_requirements_and_actual_mount_bound_before_fence(self):
         with tempfile.TemporaryDirectory() as td:
             source=Path(td);kube,stage,decoder,service,operator,account=self.fixture(source)
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}) as verify:
-                result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social','user'],decoder)
+            with patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}) as verify:
+                result=self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social','user'],decoder)
                 self.assertEqual(result['roles'],['social'])
                 self.assertEqual(verify.call_args.args[7],{'pub':['social.friend_removed'],'sub':['_INBOX.voice.social.>']})
                 stage.snapshots['voice-social']['spec']['template']['spec']['volumes'][0]['secret']['secretName']='other'
-                with self.assertRaises(root.Blocked):root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
+                with self.assertRaises(root.Blocked):self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
 
     def test_messaging_preflight_attests_exact_music_consumer_grants_on_existing_mount(self):
         canonical=(Path(__file__).resolve().parents[3]/root.ACL).read_bytes()
         with tempfile.TemporaryDirectory() as td:
             source=Path(td);kube,stage,decoder,service,operator,account=self.fixture(source,'messaging')
             (source/root.ACL).write_bytes(canonical)
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),\
+            with \
                  patch.object(root.actor_verification,'verify',return_value={'signed_chain_verified':True}) as verify:
-                result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['messaging'],decoder)
+                result=self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['messaging'],decoder)
             self.assertEqual(result['roles'],['messaging'])
             self.assertEqual(result['mounts']['messaging']['key'],'messaging.creds')
             required=verify.call_args.args[7]
@@ -319,10 +326,10 @@ class Tests(unittest.TestCase):
     def test_secret_drift_or_different_role_identity_refuses_revalidation(self):
         with tempfile.TemporaryDirectory() as td:
             source=Path(td);kube,stage,decoder,service,operator,account=self.fixture(source)
-            with patch.object(root,'ACCOUNT_SHA',root.hash_bytes(account.encode())),patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}):
-                result=root.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
+            with patch.object(root.actor_verification,'verify',return_value={'verified':'root-produced'}):
+                result=self.preflight(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder)
                 service['metadata']['resourceVersion']='2'
-                with self.assertRaises(root.Blocked):root.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
+                with self.assertRaises(root.Blocked):self.revalidate(kube,source,source,{'nats-rollout-preservation/bootstrap-renewer':'c'*64},stage,['social'],decoder,result)
                 raw=root.secret_bytes(service,'social.creds')
                 with self.assertRaises(root.Blocked):root.public_user(raw,'space')
 
@@ -349,7 +356,7 @@ class Tests(unittest.TestCase):
 
     def test_unaffected_user_has_no_hidden_credential_or_actor_mutation(self):
         kube=Mock()
-        self.assertIsNone(root.preflight(kube,Path('/unused'),Path('/unused'),{},None,['user'],None))
+        self.assertIsNone(self.preflight(kube,Path('/unused'),Path('/unused'),{},None,['user'],None))
         kube.get.assert_not_called()
 
     def test_current_story_schema_cannot_reuse_historical_clean4_witness(self):

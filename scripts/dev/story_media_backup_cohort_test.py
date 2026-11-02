@@ -2,6 +2,9 @@ import copy
 import io
 import tempfile
 import unittest
+import sys
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 import story_media_backup_cohort as cohort
@@ -29,6 +32,28 @@ class CohortTest(unittest.TestCase):
             output = io.BytesIO()
             cohort.decrypt(self.root, self.key, self.binding, self.databases, manifest, member, output)
             self.assertEqual(output.getvalue(), ('fixture-' + member).encode())
+
+    def test_staging_fixed_archive_flow_uses_private_single_attempt_destination(self):
+        import guard
+        binding=copy.deepcopy(self.binding);binding['operation_id']='stg-run-17'
+        session=SimpleNamespace(operation='a'*12);members={'auth_db','voice_db','roles'}
+        adapter=Mock();adapter.validate_backup_binding.return_value=members
+        adapter.backup_custody.return_value=(self.root,self.key)
+        adapter.produce_dump.side_effect=lambda _s,name,out:out.write(('fixture-'+name).encode())
+        adapter.restore_attempt.return_value='c'*32
+        private=self.root/'installed'/'cohort-preservation'/session.operation/'restore-input'
+        private.mkdir(parents=True,mode=0o700)
+        with patch.object(guard,'ROOT',self.root),patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
+            manifest=cohort.export_staging(session,binding,self.databases,{}, {})
+            self.assertEqual(cohort.verify_staging(session,binding,self.databases,manifest,{}, {}),members)
+            adapter.load_backup_archive.return_value={'binding':binding,'databases':self.databases,'manifest':manifest,
+                                                       'catalog_ref':{},'metadata_ref':{}}
+            path=cohort.decrypt_staging(session,'voice_db')
+            self.assertEqual(path.read_bytes(),b'fixture-voice_db')
+            self.assertEqual(path.stat().st_mode & 0o777,0o600)
+            with self.assertRaises(cohort.CohortError):cohort.decrypt_staging(session,'voice_db')
+        with self.assertRaises(cohort.CohortError):
+            cohort.verify(self.root,self.key,binding,self.databases,manifest)
 
     def test_second_cycle_is_distinct_and_other_cycles_are_rejected(self):
         binding = copy.deepcopy(self.binding); binding['operation_id'] = 'media-c2-' + 'a' * 32

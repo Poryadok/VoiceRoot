@@ -1,5 +1,7 @@
 """Actual phase composition with synthetic Kubernetes and PostgreSQL transports."""
 import copy
+import hashlib
+import json
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -8,6 +10,8 @@ import frontend_runtime_executor
 import full_cohort_affected_plan as affected
 import media_backup_phase_test as base_fixture
 import media_operation_journal as journals
+import media_backup_phase
+import cohort_backup_phases
 import realtime_db_provision as provision
 import realtime_migration_job as migration
 import realtime_migration_job_test as migration_fixture
@@ -122,15 +126,24 @@ class JointTest(unittest.TestCase):
         secret_j=journal('secret',{}); secret_client,secret_fence=facade(secret_j)
         secret=secret_phase.SecretPhase(secret_j,secret_fence,secret_client,base.lock,'ns')
         credential=secret.run(password)
-        engine={'pod_uid':'p'}
+        engine={'namespace_uid':'ns','pod_uid':'p','pvc_uid':'pvc','pv_uid':'pv',
+                'container_id':'containerd://'+'c'*64,'restart_count':1}
         scope={'engine':engine,'server_start':'start','databases':['auth_db'],'database_oids':{'auth_db':10}}
-        baseline={'engine':engine,'server_start':'start','all_databases':{'auth_db':10},'excluded':{},
-                  'properties':{'auth_db':{'owner':1}}}
+        baseline={'engine':engine,'server_start':'start','all_databases':{'auth_db':10},'databases':{'auth_db':10},
+                  'excluded':{},'properties':{'auth_db':{'owner':1,'allowconn':True}},
+                  'operation_id':base.context['operation_id'],'source_sha':base.context['commit'],
+                  'namespace_uid':'ns','scope':'all-databases-connectable-backup'}
         class Catalog:
             def verify_receipt(inner,token): return copy.deepcopy(baseline)
-            def verify_current(inner,token): return copy.deepcopy(baseline)
+            def verify_current(inner,token):
+                if pg.state['database'] is not None: raise ValueError('original catalog changed')
+                return copy.deepcopy(baseline)
             def _guard(inner): pass
-        with mock.patch.object(affected,'FullCatalogPhase',Catalog): probe=affected.CatalogScopedProbe(Catalog(),'token')
+        self.enterContext(mock.patch.object(affected,'FullCatalogPhase',Catalog))
+        catalog_phase=Catalog(); catalog_j=journal('catalog',{}); catalog_client,catalog_fence=facade(catalog_j)
+        catalog_phase.journal,catalog_phase.client,catalog_phase.fence=catalog_j,catalog_client,catalog_fence
+        catalog_phase.lock,catalog_phase.namespace_uid=base.lock,'ns'
+        probe=affected.CatalogScopedProbe(catalog_phase,'token')
         source=writer_cut_test.workload('Deployment','voice-a','uid-a',1,'old')
         admission={'controllers':[source],'guards':{'jobs':[],'cronjobs':[],'hpas':[]},
                    'linked':{'jobs':[],'cronjobs':[]},'session_scope':scope}
@@ -154,19 +167,36 @@ class JointTest(unittest.TestCase):
                     'connection_limit':-1,'valid_until':None,'config':None}
         pg=PG()
         self.enterContext(mock.patch.object(provision,'KubePostgres',PG))
+        foreign=[False]
         def catalog(*args):
             db={'auth_db':10}
             if pg.state['database']: db['realtime_db']=13
-            return {'all_databases':db,'databases':copy.deepcopy(db),'excluded':{},'properties':{'auth_db':{'owner':1}}}
+            if foreign[0]: db['foreign_db']=99
+            return {'all_databases':db,'databases':copy.deepcopy(db),'excluded':{},
+                    'properties':{'auth_db':{'owner':1,'allowconn':True}}}
         self.enterContext(mock.patch.object(affected,'_full_catalog',side_effect=catalog))
         self.enterContext(mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:{
             'scope':copy.deepcopy(scope),'active_sessions':0,'active_transactions':0}))
         cut.drain()
+        catalog_hash=hashlib.sha256(json.dumps(baseline,sort_keys=True,separators=(',',':'),ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
+        binding={'operation_id':base.context['operation_id'],'source_sha':base.context['commit'],
+                 'snapshot_id':'capture-'+'b'*32,'databases':['auth_db'],
+                 'sources':{'roles':{'engine':engine,'server_start':'start'},
+                            'auth_db':{'engine':engine,'server_start':'start','database_oid':10}},
+                 'full_catalog':{'receipt_sha256':catalog_hash,'properties':baseline['properties']}}
+        capture={'snapshot_id':binding['snapshot_id'],**{k:engine[k] for k in
+                 ('pod_uid','pvc_uid','pv_uid','container_id','restart_count')}}
+        backup_j=journal('backup',{'cohort_binding':binding,'backup_capture':capture})
+        backup_client,backup_fence=facade(backup_j)
+        backup=media_backup_phase.BackupPhases(backup_j,backup_fence,backup_client,base.lock,'ns')
+        cohort=cohort_backup_phases.CohortPhases(backup,catalog_phase,'token')
+        cohort.bind_catalog_cut(cut)
         provision_j=journal('provision',{'postgres':engine,'realtime_credential':credential})
         provision_client,provision_fence=facade(provision_j)
         worker,receipt=bridge.run_owned(secret,provision_j,provision_client,provision_fence,base.lock,'ns',password)
         self.assertEqual(receipt['database_oid'],13)
         cut.bind_provision_scope(worker)
+        cohort._guard()
         public={k:credential[k] for k in ('name','uid','resourceVersion')}
         spec={'source_sha':base.context['commit'],'image':renderer.migrate,'platform_digest':migration.PLATFORMS['amd64'],
               'engine':engine,'database_oid':13,'credential':public,'node':renderer.node}
@@ -190,6 +220,7 @@ class JointTest(unittest.TestCase):
             value={'scope':copy.deepcopy(scope),'active_sessions':0,'active_transactions':0,'attributed_sessions':[]}
             state=base.ledger.row.get('realtime_migration',{}).get('steps',{}).get('job',{}).get('status')
             observed.append(state)
+            if state=='pending': cohort._guard()
             if lifecycle and current_phase() in ('Scheduling','Pulling') and state == 'owned':
                 self.assertIsNone(identity['pod_ip'])
                 self.assertIsNone(identity['pod_uid'])
@@ -234,6 +265,16 @@ class JointTest(unittest.TestCase):
             step='writer-cut-migration-finish-'+phase.invocation
             self.assertEqual(cut_j.state['steps'][step]['status'],'done')
             self.assertEqual(base.ledger.row['writer_cut_effects'][step]['status'],'done')
+            cohort._guard()
+            cut.bind_realtime_scope()
+            cohort._guard()
+            old_scope=copy.deepcopy(cut.provision_successor['scope'])
+            cut.provision_successor['scope']['database_oids']['realtime_db']=99
+            with self.assertRaises(cohort_backup_phases.CohortPhaseError): cohort._guard()
+            cut.provision_successor['scope']=old_scope
+            cohort._guard()
+            foreign[0]=True
+            with self.assertRaises(cohort_backup_phases.CohortPhaseError): cohort._guard()
 
     def test_combined_startup_edges_during_session_samples(self): self.exercise('combined')
     def test_pod_appears_during_session_sample(self): self.exercise('emergence')

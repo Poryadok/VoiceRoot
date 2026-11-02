@@ -34,9 +34,10 @@ def operation_path(raw):
     return base
 
 
-def public_code_sha(path):
+def public_code_sha(path,*,content=False):
     """Hash public captured code as the runner, without root-only O_NOATIME."""
     path=Path(path)
+    limit=(32 if path.parent.name=='nats-rollout-preservation' and path.name=='story-restored8-probe' else 16)<<20
     fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,
         s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
     parent_before=path.parent.lstat()
@@ -52,19 +53,20 @@ def public_code_sha(path):
             opened=os.fstat(fd)
             if (not stat.S_ISREG(opened.st_mode) or opened.st_uid!=0
                 or opened.st_mode&0o022 or opened.st_nlink!=1
-                or not 0<=opened.st_size<=16<<20 or fingerprint(before)!=fingerprint(opened)):
+                or not 0<=opened.st_size<=limit or fingerprint(before)!=fingerprint(opened)):
                 raise Blocked('rollout_code_custody_invalid')
-            digest=hashlib.sha256();count=0
+            digest=hashlib.sha256();count=0;chunks=[] if content else None
             while chunk:=os.read(fd,1<<20):
                 count+=len(chunk)
                 if count>opened.st_size:raise Blocked('rollout_captured_code_changed')
                 digest.update(chunk)
+                if chunks is not None:chunks.append(chunk)
             if (count!=opened.st_size or fingerprint(opened)!=fingerprint(os.fstat(fd))
                 or fingerprint(opened)!=fingerprint(os.stat(path.name,dir_fd=parent,follow_symlinks=False))
                 or fingerprint(parent_before)!=fingerprint(os.fstat(parent))
                 or fingerprint(parent_before)!=fingerprint(path.parent.lstat())):
                 raise Blocked('rollout_captured_code_changed')
-            return digest.hexdigest()
+            return b''.join(chunks) if chunks is not None else digest.hexdigest()
         finally:os.close(fd)
     finally:os.close(parent)
 
@@ -74,7 +76,11 @@ def code_binding(code):
     # Historical captures retain their bound; admit only the exact successor inventory.
     if (not isinstance(manifest,dict) or not (1<=len(manifest)<=89 or
         len(manifest)==94 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
-        == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20')):
+        == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20' or
+        len(manifest)==99 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+        == '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4' or
+        len(manifest)==100 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+        == '6d3ce2a5893bbb4d340a3a97daddb2e024f8ebfdb358db6641b0258e621bb002')):
         raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
@@ -150,12 +156,31 @@ def target_input(path,wanted):
     return value
 
 
-def publish_copy(base,state):
-    cut=state['cut'];row={'schema':'nats-rollout-copy-v1','operation':state['operation'],
+def _copy_record(state):
+    import resource_claim
+    installation=resource_claim.production_installation()
+    schema=state.get('schema')
+    if schema=='nats-rollout-root-v2':
+        binding=resource_claim.historical_binding(state,installation=installation)
+        if binding['schema']!='voice-staging-resource-fence-v2':raise Blocked('rollout_copy_checkpoint_changed')
+    elif schema=='nats-rollout-root-v1':
+        if 'installation_sha256' in state or 'installation_sha256' in state.get('target',{}):
+            raise Blocked('rollout_copy_checkpoint_changed')
+        if 'resource_fence' in state:
+            binding=resource_claim.historical_binding(state,installation=installation)
+            if binding['schema']!='voice-staging-resource-fence-v1':raise Blocked('rollout_copy_checkpoint_changed')
+    else:raise Blocked('rollout_copy_checkpoint_changed')
+    cut=state['cut'];row={'schema':'nats-rollout-copy-v2' if schema=='nats-rollout-root-v2' else 'nats-rollout-copy-v1','operation':state['operation'],
        'phase':state['phase'],'fence_status':state['fence_status'],
        'archive_sha256':cut['manifest']['archive_sha256'],'manifest_sha256':cut['manifest_sha256'],
        'census_sha256':cut['census_sha256'],'messages':sum(s['state']['messages'] for s in cut['census']['streams']),
        'streams':len(cut['census']['streams']),'consumers':len(cut['census']['consumers'])}
+    if schema=='nats-rollout-root-v2':row['installation_sha256']=installation.sha256
+    return row
+
+
+def publish_copy(base,state):
+    row=_copy_record(state)
     save(base/'copy-checkpoint.json',row)
     gid=grp.getgrnam('pmd').gr_gid
     for name in ('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json'):
@@ -216,10 +241,19 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None,_preservation_ref=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
-        base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
+        base=ROOT/('rollout-'+op)
+        if _preservation_ref is None:base.mkdir(mode=0o700)
+        else:
+            import staging_cohort_preservation
+            if (resource_session is None or resource_session.operation!=op
+                or staging_cohort_preservation.load_qualified(resource_session)!=_preservation_ref
+                or value['target'].get('cohort_preservation_sha256')!=transaction.canonical(_preservation_ref)):
+                raise Blocked('cohort_preserved_prepare_invalid')
+            if not callable(getattr(transaction,'prepare_preserved',None)):
+                raise Blocked('cohort_preserved_transaction_missing')
         # Runner code remains outside the overwritten target checkout. Copy
         # only the manifest's verified code members, never inputs/credentials.
         runner_code=base/'code';runner_code.mkdir(mode=0o750)
@@ -233,19 +267,39 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         save(runner_code/'capture-manifest.json',binding)
         os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
-        (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
+        if _preservation_ref is None:
+            (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
+        else:
+            fd=os.open(base/'apply-manifests.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,'wb') as stream:
+                stream.write(raw);stream.flush();os.fsync(stream.fileno())
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         if resource_session is not None:lifecycle_args['resource_session']=resource_session
         if gis_binding is not None:lifecycle_args['gis_binding']=gis_binding
         if realtime_bootstrap_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_bootstrap_receipt
         if prerequisites_capture is not None:lifecycle_args['prerequisites_capture']=prerequisites_capture
+        if _preservation_ref is not None:lifecycle_args['preservation_ref']=_preservation_ref
         gis_first_install=(None if 'gis_first_install' not in value else
             __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
+        prepare_transaction=transaction.prepare if _preservation_ref is None else transaction.prepare_preserved
+        state=prepare_transaction(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)
         return state
+
+
+def prepare_preserved_value(value,code,binding,op,*,resource_session,preservation_ref,
+                            nats_authority,actor_authority,actor_services,renderer_authority,
+                            gis_source_authority,gis_source_root,gis_source_capture,gis_transition,
+                            gis_binding,realtime_bootstrap_receipt,prerequisites_capture):
+    """Continue only an already qualified, root-owned preservation operation."""
+    if preservation_ref is None:raise Blocked('cohort_preserved_prepare_invalid')
+    return prepare_value(value,code,binding,op,resource_session=resource_session,_preservation_ref=preservation_ref,
+        nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,
+        renderer_authority=renderer_authority,gis_source_authority=gis_source_authority,
+        gis_source_root=gis_source_root,gis_source_capture=gis_source_capture,gis_transition=gis_transition,
+        gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt,prerequisites_capture=prerequisites_capture)
 
 
 def main(args):

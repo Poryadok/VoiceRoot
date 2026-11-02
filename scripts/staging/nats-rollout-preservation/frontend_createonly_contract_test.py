@@ -111,6 +111,8 @@ class FrontendCreateOnlyContract(unittest.TestCase):
                 {'gis_first_install': {'fixture': True}}, Mock(), Mock(), Mock())
         kube.run.assert_not_called()
 
+    # Synthetic admission isolates the frontend transaction; real admission is tested separately.
+    @patch('migrations.require_preserving_admission', new=lambda *args: None)
     def test_authorize_frontend_create_failure_never_publishes_authorization(self):
         real_datetime = dt.datetime
         now = real_datetime.now(dt.timezone.utc)
@@ -128,6 +130,7 @@ class FrontendCreateOnlyContract(unittest.TestCase):
                 binding = nonnats_plan.preflight(kube, plan, 'full')
                 target = copy.deepcopy(pack['target'])
                 target['migration_sha256'] = resource_claim.digest([])
+                target['installation_sha256'] = resource_claim.production_installation().sha256
                 context = resource_claim_test.context()
                 context.update(commit=target['tag'], images=copy.deepcopy(target['images']))
                 card = resource_claim_test.card(context)
@@ -136,7 +139,8 @@ class FrontendCreateOnlyContract(unittest.TestCase):
                     lambda: copy.deepcopy(card), resource_claim_test.MemoryJournal())
                 session.admit(start=True)
                 session.bind_target(target['tag'], target['images'], {}, resource_claim.digest(target))
-                state = {'operation': '123456abcdef', 'phase': 'AWAITING_OFF_NODE', 'status': 'WAITING',
+                state = {'schema': 'nats-rollout-root-v2', 'installation_sha256': session.installation.sha256,
+                    'operation': '123456abcdef', 'phase': 'AWAITING_OFF_NODE', 'status': 'WAITING',
                     'target': target, 'context': {}, 'events': [], 'provenance': {}, 'migrations': [],
                     'migration_secret_metadata': {}, 'nonnats': plan, 'nonnats_binding': binding,
                     'resource_fence': session.binding(),
@@ -191,10 +195,13 @@ class FrontendCreateOnlyContract(unittest.TestCase):
                         patch.object(transaction.space_safeguards, 'after_migrate', return_value={}),
                         patch.object(transaction.migrations, 'execute', return_value=[])):
                         stack.enter_context(seam)
+                    admission = object()
+                    issue = stack.enter_context(patch('staging_cohort_preservation.issue_final_admission', return_value=admission))
+                    complete = stack.enter_context(patch('staging_cohort_preservation.complete_authorization'))
                     stack.enter_context(resource_claim.command_scope(session.check))
                     if fault == 'positive':
                         authorization = transaction.authorize(kube, base, state, '6' * 64, '7' * 64, {},
-                            authorization_deadline=deadline)
+                            authorization_deadline=deadline, resource_session=session, cohort_request={})
                     else:
                         expected = (OSError if fault == 'checkpoint_failure' else nonnats_runtime.Blocked)
                         reason = {'deadline': 'preserved_upload_authorization_expired',
@@ -202,14 +209,17 @@ class FrontendCreateOnlyContract(unittest.TestCase):
                             'response_lost': 'frontend_bootstrap_outcome_unknown'}[fault]
                         with self.assertRaisesRegex(expected, reason):
                             transaction.authorize(kube, base, state, '6' * 64, '7' * 64, {},
-                                                  authorization_deadline=deadline)
+                                                  authorization_deadline=deadline, resource_session=session, cohort_request={})
                 saved = json.loads((base / 'checkpoint.json').read_text(encoding='utf-8'))
                 if fault == 'positive':
+                    issue.assert_called_once_with(session, base, state, {})
+                    complete.assert_called_once_with(admission, session, base, state)
                     self.assertEqual((saved['phase'], saved['status']), ('PAUSED_APPLY', 'WAITING'))
                     self.assertEqual(json.loads((base / 'apply-authorization.json').read_text()), authorization)
                     self.assertEqual(authorization['resource_fence'], session.binding())
                     self.assertEqual(authorization['target'], target)
                 else:
+                    complete.assert_not_called()
                     self.assertEqual(saved['status'], 'BLOCKED')
                     self.assertFalse((base / 'apply-authorization.json').exists())
                     self.assertNotIn('authorization', saved)

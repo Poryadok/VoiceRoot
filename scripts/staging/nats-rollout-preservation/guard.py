@@ -114,12 +114,23 @@ def recovery_at_use(receipt):
         raise Blocked('rollout_recovery_authority_shape_invalid') from None
 
 
-def validate(receipt, registry, tag, mode, changed, source_root):
+def validate(receipt, registry, tag, mode, changed, source_root, *, installation=None):
+    import resource_claim
+    try:installation=resource_claim.require_installation(installation)
+    except (ValueError,RuntimeError,TypeError):raise Blocked('rollout_receipt_schema_invalid') from None
+    scoped=receipt.get('schema')=='nats-rollout-preservation-v2'
     fields={'schema','operation','namespace_uid','marker','pvc','pv','target','backup','expires_at'}
+    if scoped:
+        if receipt.get('installation_sha256')!=installation.sha256:raise Blocked('rollout_receipt_schema_invalid')
+        fields.add('installation_sha256')
+    else:
+        try:resource_claim.require_production(installation)
+        except (ValueError,RuntimeError):raise Blocked('rollout_receipt_schema_invalid') from None
     if 'resource_fence' in receipt:
-        import resource_claim
         binding=receipt['resource_fence']
-        if (not isinstance(binding,dict) or set(binding)!={'schema','context','operation','helper_sha256','target_sha256'}
+        try:resource_claim.validate_fence_binding(binding,installation=installation)
+        except (ValueError,RuntimeError,TypeError,AttributeError):raise Blocked('rollout_resource_fence_invalid') from None
+        if ((binding.get('schema')=='voice-staging-resource-fence-v2')!=scoped
             or binding.get('operation')!=receipt.get('operation')
             or binding.get('target_sha256')!=resource_claim.digest(receipt.get('target'))):
             raise Blocked('rollout_resource_fence_invalid')
@@ -131,17 +142,29 @@ def validate(receipt, registry, tag, mode, changed, source_root):
         if value['source_sha']!=tag or mode!='images-only':raise Blocked('provisional_binding_invalid')
         fields.add('provisional')
     dedicated='expired_recovery_authority_sha256' in receipt
-    if set(receipt)!=(fields|{'expired_recovery_authority_sha256'} if dedicated else fields) or receipt['schema']!='nats-rollout-preservation-v1':
+    if (set(receipt)!=(fields|{'expired_recovery_authority_sha256'} if dedicated else fields)
+        or receipt['schema'] not in ('nats-rollout-preservation-v1','nats-rollout-preservation-v2')
+        or scoped and 'resource_fence' not in receipt):
         raise Blocked('rollout_receipt_schema_invalid')
     if not re.fullmatch(r'[a-f0-9]{12}',receipt['operation']) or not UUID.fullmatch(receipt['namespace_uid']):
         raise Blocked('rollout_receipt_identity_invalid')
     target=receipt['target']
     target_fields={'registry','tag','mode','changed_services','source_hashes','template_hashes','input_template_hashes','images','manifest_sha256','migration_sha256','nonnats_sha256'}
+    if scoped:
+        if (target.get('installation_sha256')!=installation.sha256
+            or binding['context']['commit']!=target.get('tag') or binding['context']['images']!=target.get('images')):
+            raise Blocked('rollout_receipt_schema_invalid')
+        target_fields.add('installation_sha256')
     if 'prerequisites_sha256' in target:
         if ('resource_fence' not in receipt or 'realtime_bootstrap_sha256' not in target
             or not isinstance(target['prerequisites_sha256'],str) or not SHA.fullmatch(target['prerequisites_sha256'])):
             raise Blocked('staging_prerequisites_target_invalid')
         target_fields.add('prerequisites_sha256')
+    if 'cohort_preservation_sha256' in target:
+        if ('resource_fence' not in receipt or 'prerequisites_sha256' not in target
+            or not isinstance(target['cohort_preservation_sha256'],str) or not SHA.fullmatch(target['cohort_preservation_sha256'])):
+            raise Blocked('cohort_preservation_target_invalid')
+        target_fields.add('cohort_preservation_sha256')
     if 'gis_first_install_sha256' in target or 'gis_first_install_normalized_sha256' in target:
         if ('resource_fence' not in receipt or any(not isinstance(target.get(key),str) or not SHA.fullmatch(target[key])
             for key in ('gis_first_install_sha256','gis_first_install_normalized_sha256'))):

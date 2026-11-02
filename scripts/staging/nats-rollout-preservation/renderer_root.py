@@ -98,9 +98,14 @@ def inputs(kube,stage):
         'sha256':digest(row)} for name,row in rows.items()}
     return rows,binding
 
-def revalidate(kube,stage,authority):
+def revalidate(kube,stage,authority,*,installation=None):
+    from resource_claim import require_installation
+    installation=require_installation(installation)
+    if stage.expected['generation']!=installation.generation:raise Blocked('renderer_input_generation_changed')
     stage.verify_selected_storage_identity()
-    _,binding=inputs(kube,stage)
+    rows,binding=inputs(kube,stage)
+    if hashlib.sha256(secret_bytes(rows['operator'],'account.public').decode().strip().encode()).hexdigest()!=installation.account_sha256:
+        raise Blocked('renderer_input_account_changed')
     if binding!=authority['input_binding'] or storage(stage)!=authority['descriptor']['storage_binding']:
         raise Blocked('renderer_input_authority_changed')
 
@@ -123,7 +128,21 @@ def validate_target(target,authority,stage):
     import renderer_transition
     if authority['descriptor']['source_sha']!=target['tag']:
         raise Blocked('renderer_target_source_changed')
-    snapshot=stage.snapshots[HUB];binding=authority['descriptor']['hub']
+    import commands,resource_claim
+    session=getattr(commands.authority_guard,'__self__',None)
+    if isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None:
+        import staging_cohort_preservation
+        protected=staging_cohort_preservation.capture_final_stage(session)
+        if (stage.expected!=protected.expected or stage.snapshots!=protected.snapshots
+            or stage.original_snapshots!=protected.original_snapshots or stage.old_images!=protected.old_images):
+            raise Blocked('renderer_target_capture_changed')
+        snapshot=stage.original_snapshots[HUB]
+        paused=stage.snapshots[HUB]
+        if (paused['metadata']['uid']!=snapshot['metadata']['uid'] or paused['spec'].get('replicas',1)!=0
+            or paused['spec']['template']!=snapshot['spec']['template']):
+            raise Blocked('renderer_target_capture_changed')
+    else:snapshot=stage.snapshots[HUB]
+    binding=authority['descriptor']['hub']
     if snapshot['metadata']['uid']!=binding['uid'] or snapshot['metadata']['resourceVersion']!=binding['resourceVersion']:
         raise Blocked('renderer_target_capture_changed')
     renderer_transition.validate(authority['descriptor'],snapshot,storage(stage),expected_hub=snapshot,paused=False)
@@ -138,9 +157,9 @@ def validate_target(target,authority,stage):
         raise Blocked('renderer_private_output_proof_missing')
     return {k:v for k,v in target['images'].items() if k.startswith(HUB+'/')}
 
-def apply_paused(stage,authority):
+def apply_paused(stage,authority,*,installation=None):
     import renderer_transition
-    stage.verify_closed();revalidate(stage.kube,stage,authority)
+    stage.verify_closed();revalidate(stage.kube,stage,authority,installation=installation)
     current=stage.kube.get('deployment',HUB)
     renderer_transition.validate(authority['descriptor'],current,storage(stage),expected_hub=stage.snapshots[HUB])
     before=authority['descriptor']['original_template'];after=authority['descriptor']['target_template']
@@ -157,10 +176,10 @@ def apply_paused(stage,authority):
     stage.save({'kind':'rollout_renderer_template_applied'})
     stage.verify_closed()
 
-def recovery_authority(stage,authority):
+def recovery_authority(stage,authority,*,installation=None):
     """Reverse only this operation's proven image delta on its paused ledger."""
     import renderer_transition
-    stage.verify_closed();revalidate(stage.kube,stage,authority)
+    stage.verify_closed();revalidate(stage.kube,stage,authority,installation=installation)
     current=stage.kube.get('deployment',HUB)
     renderer_transition.validate(authority['descriptor'],current,storage(stage),
         expected_hub=stage.snapshots[HUB])
@@ -182,13 +201,18 @@ def recovery_authority(stage,authority):
     return result
 
 
-def prove(kube,stage,source_sha,target_image):
+def prove(kube,stage,source_sha,target_image,*,installation=None):
     import renderer_transition
+    from resource_claim import require_installation
+    installation=require_installation(installation)
+    if stage.expected['generation']!=installation.generation:raise Blocked('renderer_input_generation_changed')
     hub=stage.snapshots[HUB];key=HUB+'/nats-config-renderer'
     if key not in stage.old_images or HUB+'/nats' not in stage.old_images:
         raise Blocked('renderer_actual_old_image_missing')
     descriptor=renderer_transition.plan(hub,stage.old_images[key],target_image,source_sha,storage(stage))
     rows,binding=inputs(kube,stage)
+    if hashlib.sha256(secret_bytes(rows['operator'],'account.public').decode().strip().encode()).hexdigest()!=installation.account_sha256:
+        raise Blocked('renderer_input_account_changed')
     authority={'descriptor':descriptor,'input_binding':binding,
         'broker_image':stage.old_images[HUB+'/nats'],
         'image_identities':{'old':image_identity(descriptor['images']['old']),
@@ -198,7 +222,7 @@ def prove(kube,stage,source_sha,target_image):
         current=kube.get('deployment',HUB)
         if current['metadata']['uid']!=hub['metadata']['uid'] or current['metadata']['resourceVersion']!=hub['metadata']['resourceVersion'] or current['spec']!=hub['spec']:
             raise Blocked('renderer_hub_capture_changed')
-        revalidate(kube,stage,authority)
+        revalidate(kube,stage,authority,installation=installation)
     with tempfile.TemporaryDirectory(prefix='renderer-proof-',dir=guard.ROOT) as td:
         base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
         dirs={}
@@ -222,10 +246,10 @@ def prove(kube,stage,source_sha,target_image):
     unchanged()
     return authority
 
-def verify_live(stage,authority):
+def verify_live(stage,authority,*,installation=None):
     """Called after HUB readiness and before the first application scale."""
     import renderer_transition
-    revalidate(stage.kube,stage,authority)
+    revalidate(stage.kube,stage,authority,installation=installation)
     row=stage.kube.get('deployment',HUB)
     renderer_transition.validate(authority['descriptor'],row,storage(stage),
         expected_hub=stage.snapshots[HUB],paused=False)

@@ -24,6 +24,7 @@ class PublicRecoveryTests(unittest.TestCase):
                 self.assertNotEqual(row['nonce'],bridge_client.request(args,{**env,'GITHUB_RUN_ATTEMPT':'2'})['nonce'])
                 self.assertNotEqual(row['nonce'],bridge_client.request(args,{**env,'GITHUB_SHA':'c'*40,'GITHUB_JOB':'other'})['nonce'])
                 actions=object.__new__(bridge_root.Actions)
+                actions.state=Mock(return_value=(None,{'target':{'mode':'images-only'},'migrations':[]}))
                 for _,name in self.rows():setattr(actions,name,Mock(side_effect=AssertionError('wrong action')))
                 expected={'status':'WAITING','operation':row['operation']};getattr(actions,method).side_effect=None
                 getattr(actions,method).return_value=expected
@@ -69,9 +70,11 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('ROLLOUT_ORIGINAL_ARTIFACT_ID',raw);self.assertIn('ROLLOUT_OBSERVATION_ARTIFACT_ID',raw)
 
     def test_real_active_release_feeds_new_latest_rollback_and_ordinary_finish_cannot_bypass(self):
+        import resource_claim
         with tempfile.TemporaryDirectory() as folder:
             actions=object.__new__(bridge_root.Actions)
-            state={'operation':'3340764a7d24','status':'PASS','input_target':{'mode':'images-only','changed_services':['story']},'target':{'manifest_sha256':'a'*64},
+            actions._installation=resource_claim.production_installation()
+            state={'schema':'nats-rollout-root-v1','operation':'3340764a7d24','status':'PASS','input_target':{'mode':'images-only','changed_services':['story']},'target':{'manifest_sha256':'a'*64},
                    'context':{'expected':{'namespace_uid':'ns','source_claim_uid':'pvc'}},
                    'expired_recovery_authority':{'purpose':'native-migration'}}
             actions.state=Mock(return_value=(Path(folder),state));actions._prepare=Mock(return_value={'new':'closed capture'})
@@ -104,26 +107,27 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('gis_existing_update.py',bundle.ROLLOUT)
         self.assertIn('realtime_bootstrap.py',bundle.ROLLOUT)
         self.assertIn('realtime_bootstrap_existing.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,94)
+        self.assertTrue({'staging_prerequisites.py','staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
+            'staging_gis_material.py','staging_release_policy_prepare.py'} <= set(bundle.ROLLOUT))
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,99)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}
-            for index in range(89):
+            for index in range(94):
                 name='module'+str(index)+'.py';raw=('pinned source '+str(index)).encode()
                 path=code/name;path.write_bytes(raw);path.chmod(0o440);manifest[name]=hashlib.sha256(raw).hexdigest()
             def write():
                 path=code/'capture-manifest.json'
                 if path.exists():path.chmod(0o600)
                 path.write_text(json.dumps(manifest));path.chmod(0o440)
-            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py')]
+            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py','module89.py','module90.py','module91.py','module92.py','module93.py')]
             write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest.update(last[:1]);write();self.assertEqual(root_cli.code_binding(code),manifest)
-            manifest.update(last[1:])
-            write();self.assertEqual(root_cli.code_binding(code),manifest)
-            manifest['extra.py']='a'*64;write()
+            manifest.update(last[1:3]);write();self.assertEqual(root_cli.code_binding(code),manifest)
+            manifest.update(last[3:4]);write()
             with self.assertRaises(root_cli.Blocked):root_cli.code_binding(code)
-            del manifest['extra.py'];write()
+            del manifest[last[3][0]];write()
             path=code/'module0.py';path.chmod(0o460)
             with self.assertRaises(root_cli.Blocked):root_cli.code_binding(code)
             path.chmod(0o600);path.write_bytes(b'changed bytes');path.chmod(0o440)
@@ -131,14 +135,21 @@ class PublicRecoveryTests(unittest.TestCase):
 
     def test_actual_bootstrap_prove_optional_get_census_and_cleanup_composition(self):
         import bootstrap_auth as auth,hashlib
+        from dataclasses import replace
+        from bootstrap_selection_test import owned_fixture
+        from docker_runtime import DockerRuntime, LABEL
         from nats_contract_actor import Actor
         from nats_contract_plan import DECLARATIONS,digest
         from rollout_census_test import stream,consumer,ACCOUNT
+        seen_operations=set()
         for mode in ('ordinary','get','denied','census-drift'):
             with self.subTest(mode=mode),tempfile.TemporaryDirectory() as folder:
                 configs={};requests=[];runs=[];trees=[0]
                 class Runtime:
-                    def __init__(self,*args):self.base=Path(args[0]);self.owned={'proof':{'id':'d'*64}}
+                    no_operation_containers=DockerRuntime.no_operation_containers
+                    def __init__(self,*args):
+                        self.base=Path(args[0]);self.operation=args[1];self.owned={'proof':{'id':'d'*64}}
+                        operations.append(self.operation)
                     def start_broker(self,*args):return 'proof'
                     def stop(self,*args):pass
                     def inspect(self,*args):return {'Id':'d'*64}
@@ -176,14 +187,20 @@ class PublicRecoveryTests(unittest.TestCase):
                     def info_config(self,name):return copy.deepcopy(configs['consumer' if '/' in name else name])
                 tokens={name:(ACCOUNT if name=='account.public' else 'synthetic-'+name).encode() for name in
                     ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
-                with patch.object(auth.guard,'ROOT',Path(folder)),patch.object(auth,'DockerRuntime',Runtime),patch.object(auth,'Actor',FixtureActor),patch.object(auth,'ready'),patch.object(auth,'secret_bytes',side_effect=lambda operator,key:tokens[key]),patch.object(auth,'ACCOUNT_SHA',hashlib.sha256(ACCOUNT.encode()).hexdigest()):
+                operations=[]
+                installation=replace(owned_fixture()[3],account_sha256=hashlib.sha256(ACCOUNT.encode()).hexdigest())
+                with patch.object(auth.guard,'ROOT',Path(folder)),patch.object(auth,'DockerRuntime',Runtime),patch.object(auth,'Actor',FixtureActor),patch.object(auth,'ready'),patch.object(auth,'secret_bytes',side_effect=lambda operator,key:tokens[key]):
                     if mode in ('denied','census-drift'):
-                        with self.assertRaises(auth.Blocked):auth.prove(b'synthetic retained identity',{},lambda:None,['chat_events','absent_events','social_events'])
+                        with self.assertRaises(auth.Blocked):auth.prove(b'synthetic retained identity',{},lambda:None,['chat_events','absent_events','social_events'],installation=installation)
                     else:
-                        result=auth.prove(b'synthetic retained identity',{},lambda:None,None if mode=='ordinary' else ['chat_events','absent_events','social_events'])
+                        result=auth.prove(b'synthetic retained identity',{},lambda:None,None if mode=='ordinary' else ['chat_events','absent_events','social_events'],installation=installation)
                         self.assertEqual('get_permissions' in result,mode=='get')
                         if mode=='get':self.assertEqual(result['get_permissions']['streams'],3)
-                    self.assertEqual(runs[-2:], [['rm','-f','d'*64],['ps','-a','--filter','id='+'d'*64,'--format','{{.ID}}']])
-                    self.assertEqual(list(Path(folder).iterdir()),[])
+                    self.assertEqual(len(operations),1)
+                    self.assertRegex(operations[0],r'^auth[0-9a-f]{12}$')
+                    self.assertNotIn(operations[0],seen_operations);seen_operations.add(operations[0])
+                    self.assertEqual(runs[-3:], [['rm','-f','d'*64],['ps','-a','--filter','id='+'d'*64,'--format','{{.ID}}'],
+                        ['ps','-a','--filter','label='+LABEL+'='+operations[0],'--format','{{.ID}}']])
+                    self.assertEqual(len(list(Path(folder).iterdir())),1 if mode in ('denied','census-drift') else 0)
                     get=[api for api in requests if api.startswith('$JS.API.STREAM.MSG.GET.')]
                     self.assertEqual(len(get),0 if mode=='ordinary' else 3)

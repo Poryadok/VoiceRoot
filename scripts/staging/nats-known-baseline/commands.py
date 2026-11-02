@@ -4,6 +4,7 @@ import hashlib
 import selectors
 import signal
 import subprocess
+import sys
 import time
 
 from controller import Blocked
@@ -13,6 +14,9 @@ TT_FENCE_VERSION=1
 _current_action='command'
 ACTIONS=frozenset(('get','patch','wait','scale','rollout','apply','create','delete','exec','run','inspect','stop','rm','image','info'))
 
+class CommandFailure(Blocked):
+    """Failure emitted by the bounded native subprocess transport."""
+
 def action_id(argv):
     executable=os.path.basename(str(argv[0])) if argv else ''
     if executable not in ('kubectl','docker','nats'):return 'command'
@@ -21,18 +25,32 @@ def action_id(argv):
 
 
 def failure(code,*,exit_code=None,timeout=False,cause='unknown'):
-    error=Blocked(code)
+    error=CommandFailure(code)
     error.diagnostic={'exit_code':exit_code,'timeout':timeout,'cause':cause,'action':_current_action}
     return error
 
 
+def launch_snapshot(argv,body,timeout,limit,env,pass_fds):
+    return (tuple(argv),bytes(body),timeout,limit,None if env is None else tuple(sorted(env.items())),tuple(pass_fds))
+
+
 def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None, pass_fds=()):
     global _current_action
+    argv=list(argv);body=bytes(body);env=None if env is None else dict(env);pass_fds=tuple(pass_fds)
     if len(body)>2<<20: raise Blocked('command_input_limit')
     action=action_id(argv)
     _current_action=action
-    if authority_guard is not None:authority_guard(argv)
+    guard=authority_guard
+    module=sys.modules.get('resource_claim');session=getattr(guard,'__self__',None)
+    bound=(module is not None and type(session) is module.Session and getattr(guard,'__func__',None) is module.Session.check)
+    privileged=bound and session._prerequisite_readonly_permit is not None
+    if guard is not None:
+        if bound:guard(argv,launch=launch_snapshot(argv,body,timeout,limit,env,pass_fds))
+        else:guard(argv)
     if diagnostic_observer is not None:diagnostic_observer(action,'STARTED')
+    if privileged:
+        if authority_guard != guard:raise RuntimeError('staging_resource_guard_changed')
+        session.readonly_current()
     try:
         child=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,env=env,start_new_session=True,pass_fds=pass_fds)

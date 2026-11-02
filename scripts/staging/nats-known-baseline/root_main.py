@@ -126,7 +126,7 @@ def public_read(path,limit=256<<10):
     finally: os.close(fd)
 
 
-def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=None):
+def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=None, *, installation=None):
     generation=CURRENT['generation'] if generation is None else generation
     if not re.fullmatch(r'r[0-9]{8}[a-z0-9]{0,8}',generation):
         raise Blocked('captured_generation_invalid')
@@ -135,7 +135,7 @@ def capture_inputs(kube, base, contract, generation=None, bootstrap_enrollment=N
               'services':'voice-nats-service-credentials-'+generation}
     if bootstrap_enrollment is not None:
         from bootstrap_selection import select
-        selected['bootstrap']=select(kube,bootstrap_enrollment,generation)
+        selected['bootstrap']=select(kube,bootstrap_enrollment,generation,installation=installation)
     secrets={role:kube.get('secret',name) for role,name in selected.items()}
     inputs=base/'inputs'; inputs.mkdir(mode=0o750); os.chown(inputs,0,65532); inputs.chmod(0o750)
     provenance={}

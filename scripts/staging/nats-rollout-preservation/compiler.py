@@ -321,6 +321,20 @@ def compile_target(source,documents,registry,tag,mode,changed,images,contract,en
                 container['image']=image;used_images[key]=image
             templates[name]=digest(template)
     if not templates or used_images!=images:raise Blocked('rollout_compile_image_inventory_changed')
+    plan=compile_migrations(source,mode,read)
+    return {'target':{'registry':registry,'tag':tag,'mode':mode,'changed_services':sorted(set(changed)),
+                     'source_hashes':hashes,'template_hashes':templates,'images':used_images,
+                     'manifest_sha256':digest(result),'migration_sha256':digest(plan)},
+            'manifests':result,'migrations':plan,'contract':copy.deepcopy(contract)}
+
+def compile_migrations(source,mode,read):
+    """One source inventory for pre-cut compatibility and the final DB plan.
+
+    The owning caller supplies its authenticated source reader. No workload or
+    changed-services selector can remove a database from full/app planning.
+    """
+    source=Path(source)
+    if mode not in ('full','app-only','images-only'):raise Blocked('rollout_compile_input_invalid')
     plan=[]
     if mode!='images-only':
         for database in migrations.DATABASES:
@@ -341,10 +355,7 @@ def compile_target(source,documents,registry,tag,mode,changed,images,contract,en
         plan.append({'database':'auth','image':migrations.FLYWAY_IMAGE,'secret_key':'POSTGRES_PASSWORD',
                      'files':files,'hashes':{name:hashlib.sha256(text.encode()).hexdigest() for name,text in files.items()}})
     migrations.validate_plan(plan,mode)
-    return {'target':{'registry':registry,'tag':tag,'mode':mode,'changed_services':sorted(set(changed)),
-                     'source_hashes':hashes,'template_hashes':templates,'images':used_images,
-                     'manifest_sha256':digest(result),'migration_sha256':digest(plan)},
-            'manifests':result,'migrations':plan,'contract':copy.deepcopy(contract)}
+    return plan
 
 if __name__=='__main__':
     try:main(sys.argv[1:])

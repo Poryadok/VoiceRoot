@@ -232,15 +232,15 @@ def verify_completed(phase):
             'role': 'realtime', 'role_oid': role['role']['oid'], 'scope': 'create-only'}
 
 
-CATALOG_SQL = """SELECT json_build_object(
- 'role', (SELECT json_build_object('oid', r.oid::bigint, 'login', r.rolcanlogin,
+CATALOG_SQL = """SELECT pg_catalog.json_build_object(
+ 'role', (SELECT pg_catalog.json_build_object('oid', r.oid::bigint, 'login', r.rolcanlogin,
    'superuser', r.rolsuper, 'createdb', r.rolcreatedb, 'createrole', r.rolcreaterole,
    'inherit', r.rolinherit, 'replication', r.rolreplication, 'bypassrls', r.rolbypassrls,
    'connection_limit', r.rolconnlimit, 'valid_until', r.rolvaliduntil, 'config', r.rolconfig,
-   'memberships', (SELECT count(*) FROM pg_auth_members m WHERE m.member=r.oid OR m.roleid=r.oid))
-   FROM pg_roles r WHERE r.rolname='realtime'),
- 'database', (SELECT json_build_object('oid', d.oid::bigint, 'owner_oid', d.datdba::bigint)
-   FROM pg_database d WHERE d.datname='realtime_db'));
+   'memberships', (SELECT count(*) FROM pg_catalog.pg_auth_members m WHERE m.member=r.oid OR m.roleid=r.oid))
+   FROM pg_catalog.pg_roles r WHERE r.rolname='realtime'),
+ 'database', (SELECT pg_catalog.json_build_object('oid', d.oid::bigint, 'owner_oid', d.datdba::bigint)
+   FROM pg_catalog.pg_database d WHERE d.datname='realtime_db'));
 """
 
 
@@ -255,7 +255,7 @@ class KubePostgres:
 
     def _psql(self, sql):
         script = ('export PGPASSWORD="$POSTGRES_PASSWORD"; export PGAPPNAME=voice-realtime-provision; '
-                  'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
+                  'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000 -c search_path=pg_catalog,public"; '
                   'exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres')
         command = ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',
                    '--namespace', 'voice-dev', '--request-timeout=15s', 'exec', '-i', 'voice-postgres-0',

@@ -1,18 +1,30 @@
 """Materialize and verify the captured native fixture before importing it."""
 
 import hashlib
+import importlib.abc
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import subprocess
 import sys
 
 
 _SHA256 = re.compile(r'[a-f0-9]{64}\Z')
 _ROOTS = frozenset({'nats-rollout-preservation', 'nats-known-baseline'})
 _CAPTURE_SOURCE = Path('/bundle/capture')
-_EXPECTED_CAPTURED_NAMES_SHA256 = '42a4a01270ac4e2328faa81c32dd363d19b8c4d8fe383d8b7aa46bbf97af2998'
+_EXPECTED_CAPTURED_NAMES_SHA256 = '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4'
+
+
+def _pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise RuntimeError('captured_code_manifest_invalid')
+        result[key] = value
+    return result
 
 
 def _materialize_capture(base):
@@ -25,8 +37,10 @@ def _materialize_capture(base):
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise RuntimeError('captured_code_manifest_missing')
     manifest_bytes = manifest_path.read_bytes()
-    manifest = json.loads(manifest_bytes)
-    if not isinstance(manifest, dict) or len(manifest) != 89:
+    manifest = json.loads(manifest_bytes, object_pairs_hook=_pairs)
+    if not isinstance(manifest, dict) or len(manifest) != 99:
+        raise RuntimeError('captured_code_manifest_invalid')
+    if manifest_bytes != json.dumps(manifest, sort_keys=True).encode():
         raise RuntimeError('captured_code_manifest_invalid')
     if any(not isinstance(relative, str) for relative in manifest):
         raise RuntimeError('captured_code_manifest_invalid')
@@ -34,7 +48,6 @@ def _materialize_capture(base):
     if hashlib.sha256(names).hexdigest() != _EXPECTED_CAPTURED_NAMES_SHA256:
         raise RuntimeError('captured_code_manifest_invalid')
     required = {
-        'nats-rollout-preservation/contract_fixture_entry.py',
         'nats-rollout-preservation/root_cli.py',
         'nats-known-baseline/kernel',
     }
@@ -53,7 +66,9 @@ def _materialize_capture(base):
             raise RuntimeError('captured_code_manifest_invalid')
         path = PurePosixPath(relative)
         if (not isinstance(relative, str) or path.is_absolute() or
-                '..' in path.parts or not path.parts or path.parts[0] not in _ROOTS or
+                '..' in path.parts or not path.parts or
+                (path.parts[0] not in _ROOTS and relative not in
+                 ('configure-kubectl-ci.sh', 'mail-only-patch.py')) or
                 not _SHA256.fullmatch(wanted)):
             raise RuntimeError('captured_code_manifest_invalid')
         source_path = source.joinpath(*path.parts)
@@ -79,7 +94,22 @@ def _materialize_capture(base):
         output.write(manifest_bytes)
     os.chown(copied_manifest, 0, 0)
     os.chmod(copied_manifest, 0o444)
-    sys.path[:0] = [str(code / 'nats-rollout-preservation'), str(code / 'nats-known-baseline')]
+    modules = {}
+    for relative in manifest:
+        path = PurePosixPath(relative)
+        if len(path.parts) == 2 and path.suffix == '.py':
+            name = path.stem
+            if name in modules or name in sys.modules:
+                raise RuntimeError('captured_module_collision')
+            modules[name] = code.joinpath(*path.parts)
+
+    class CapturedFinder(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname in modules:
+                return importlib.util.spec_from_file_location(fullname, modules[fullname])
+            return None
+
+    sys.meta_path.insert(0, CapturedFinder())
     import root_cli
     root_cli.code_binding(code)
     kernel = code / 'nats-known-baseline/kernel'
@@ -91,21 +121,37 @@ def _materialize_capture(base):
 
 
 def inner(base):
-    base = Path(base)
-    _materialize_capture(base)
-    from nats_contract_integration import inner as run_fixture
-    return run_fixture(str(base))
+    return _run('inner', base)
 
 
 def inner_a3(base):
-    base=Path(base)
-    _materialize_capture(base)
-    from nats_a3_roster_integration import inner as run_fixture
-    return run_fixture(str(base))
+    return _run('inner_a3', base)
 
 
 def inner_a3_existing(base):
-    base=Path(base)
-    _materialize_capture(base)
-    from nats_a3_roster_integration import inner_existing as run_fixture
+    return _run('inner_a3_existing', base)
+
+
+def _run(mode, base):
+    subprocess.run([sys.executable, '-I', str(Path(__file__).resolve()), mode, str(base)], check=True)
+
+
+def _execute(mode, base):
+    _materialize_capture(Path(base))
+    # Drivers are only visible after the production code has been bound.
+    sys.path.insert(0, '/bundle')
+    if mode == 'inner':
+        from nats_contract_integration import inner as run_fixture
+    elif mode == 'inner_a3':
+        from nats_a3_roster_integration import inner as run_fixture
+    elif mode == 'inner_a3_existing':
+        from nats_a3_roster_integration import inner_existing as run_fixture
+    else:
+        raise RuntimeError('fixture_mode_invalid')
     return run_fixture(str(base))
+
+
+if __name__ == '__main__':
+    if len(sys.argv) != 3:
+        raise SystemExit('fixture_arguments_invalid')
+    _execute(sys.argv[1], sys.argv[2])

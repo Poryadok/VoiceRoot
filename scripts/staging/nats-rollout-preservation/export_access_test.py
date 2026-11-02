@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import bridge_root
+from preserved_upload_actions_test import bind_copy
 
 
 class ExportAccessTests(unittest.TestCase):
@@ -17,7 +18,7 @@ class ExportAccessTests(unittest.TestCase):
                 private=base/'rollout-backup.cms';private.write_bytes(b'synthetic ciphertext');private.chmod(0o600)
                 before=private.stat();digest=hashlib.sha256(private.read_bytes()).hexdigest()
                 state={'operation':'3340764a7d24','cut':{'manifest':{'archive_sha256':'a'*64},'manifest_sha256':'b'*64,'census_sha256':'c'*64}}
-                actions=object.__new__(bridge_root.Actions)
+                actions=object.__new__(bridge_root.Actions);actions._installation=bind_copy(base,state)
                 old=os.umask(mask)
                 try:
                     with patch.object(bridge_root.encrypted_cut,'encrypt_cut',return_value={'cipher_sha256':digest,'cipher_bytes':private.stat().st_size}),\

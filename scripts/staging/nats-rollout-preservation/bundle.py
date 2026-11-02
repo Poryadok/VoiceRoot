@@ -30,8 +30,10 @@ ROLLOUT+=('realtime_bootstrap.py','realtime_bootstrap_existing.py')
 # bridge_root prepares these source-bound children before capturing workloads.
 ROLLOUT+=('staging_prerequisites.py','staging_release_policy_prepare.py','staging_p3_prerequisites.py',
     'staging_p3_prerequisites_crypto.py','staging_gis_material.py')
+ROLLOUT+=('staging_cohort_preservation.py','staging_cohort_preservation_pg.py')
+ROLLOUT+=('staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_runtime.py','staging_cohort_preservation_auth.py')
 
-def build(kernel,output,renewer,story_probe):
+def build(kernel,output,renewer,story_probe,*,story_target8=None):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
     raw=kernel.read_bytes()
     if not raw.startswith(b'\x7fELF') or len(raw)>32<<20:raise ValueError('Linux kernel required')
@@ -48,6 +50,14 @@ def build(kernel,output,renewer,story_probe):
     raw=Path(story_probe).read_bytes()
     if not raw.startswith(b'\x7fELF') or not 0<len(raw)<=32<<20:raise ValueError('Linux Story compatibility probe required')
     contents['nats-rollout-preservation/story-current4-probe']=raw
+    if story_target8 is not None:
+        path=Path(story_target8)
+        if path.is_symlink():raise ValueError('Qualified restored8 Story probe required')
+        raw=path.read_bytes()
+        if (not raw.startswith(b'\x7fELF') or not 0<len(raw)<=32<<20
+            or hashlib.sha256(raw).hexdigest()!='458e4e3e5e940137cddddaf42dda1c22505f92de5792600364907a343b209be0'):
+            raise ValueError('Qualified restored8 Story probe required')
+        contents['nats-rollout-preservation/story-restored8-probe']=raw
     contents['configure-kubectl-ci.sh']=(source/'configure-kubectl-ci.sh').read_bytes()
     contents['mail-only-patch.py']=(source/'mail-only-patch.py').read_bytes()
     contents['capture-manifest.json']=json.dumps({n:hashlib.sha256(v).hexdigest() for n,v in contents.items()},sort_keys=True).encode()
@@ -65,5 +75,5 @@ def build(kernel,output,renewer,story_probe):
     return sha
 
 if __name__=='__main__':
-    if len(sys.argv)!=5:raise SystemExit('usage: bundle.py LINUX_KERNEL OUTPUT_DIR LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE')
-    build(*sys.argv[1:])
+    if len(sys.argv) not in (5,6):raise SystemExit('usage: bundle.py LINUX_KERNEL OUTPUT_DIR LINUX_BOOTSTRAP_RENEWER LINUX_STORY_PROBE [LINUX_STORY_TARGET8_PROBE]')
+    build(*sys.argv[1:5],**({'story_target8':sys.argv[5]} if len(sys.argv)==6 else {}))

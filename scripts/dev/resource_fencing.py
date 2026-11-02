@@ -154,17 +154,77 @@ class Fence:
             raise RuntimeError('predecessor capture requires the C2 operation')
         self.authority()
         previous,revision=self.ledger.read()
-        descriptor=predecessor.capture(self,client,lock,namespace_uid,journal,previous,revision)
+        descriptor=copy.deepcopy(predecessor.capture(self,client,lock,namespace_uid,journal,previous,revision))
+        local=copy.deepcopy(journal.state['steps']['full-cohort-predecessor'])
+        step='predecessor-admission'
+        if step in journal.state['steps']:raise RuntimeError('predecessor admission already attempted')
+        pending={'status':'pending','descriptor':descriptor,'old_revision':list(revision)}
+        journal.state['steps'][step]=copy.deepcopy(pending);journal.save()
         attempted=False
         try:
             attempted=True
             self.ledger.write(revision,self.context | dict(status='active',step='admitted',predecessor=descriptor))
             self.authority()
+            row,new_revision=self.ledger.read()
+            if (not self.owned(row) or row.get('status')!='active' or row.get('step')!='admitted' or
+                    row.get('predecessor')!=descriptor or not isinstance(new_revision,tuple) or
+                    len(new_revision)!=2 or new_revision[0]!=revision[0] or
+                    journal.dirfd is None or journal.lockfd is None or
+                    journal.state['steps'].get('full-cohort-predecessor')!=local):raise RuntimeError('predecessor admission changed')
             predecessor.load(self,client,lock,namespace_uid,journal)
+            if (self.ledger.read()!=(row,new_revision) or journal.state['steps'].get(step)!=pending or
+                    journal.state['steps'].get('full-cohort-predecessor')!=local or
+                    journal.dirfd is None or journal.lockfd is None):raise RuntimeError('predecessor admission changed')
+            done={'status':'done','descriptor':descriptor,'old_revision':list(revision),'new_revision':list(new_revision)}
+            journal.state['steps'][step]=copy.deepcopy(done);journal.save()
+            self.authority()
+            if (self.ledger.read()!=(row,new_revision) or journal.state['steps'].get(step)!=done or
+                    journal.state['steps'].get('full-cohort-predecessor')!=local or
+                    journal.dirfd is None or journal.lockfd is None):raise RuntimeError('predecessor admission changed')
         except BaseException:
             if attempted:
                 try: self.admission_uncertain('C2 predecessor begin outcome uncertain')
                 except BaseException: pass
+            raise
+
+    def begin_image_only(self,client,lock,namespace_uid,journal):
+        """Preserve a qualified prior row atomically before initial C1 admission."""
+        import copy
+        import full_cohort_image_only_baseline as baseline
+        if (not re.fullmatch(r'media-c1-[a-f0-9]{32}',self.context['operation_id']) or
+                type(self.check) is not ResourceCheck or
+                getattr(self.on_uncertain,'__self__',None) is not self.check or
+                getattr(self.on_uncertain,'__func__',None) is not ResourceCheck.mark_uncertain):
+            raise RuntimeError('image-only capture requires the C1 operation')
+        self.authority()
+        previous,revision=self.ledger.read()
+        descriptor=copy.deepcopy(baseline.capture(self,client,lock,namespace_uid,journal,previous,revision))
+        local=copy.deepcopy(journal.state['steps'][baseline.STEP])
+        step='image-only-admission'
+        if step in journal.state['steps']: raise RuntimeError('image-only admission already attempted')
+        pending={'status':'pending','descriptor':descriptor,'old_revision':list(revision)}
+        journal.state['steps'][step]=copy.deepcopy(pending);journal.save()
+        attempted=False
+        try:
+            attempted=True
+            self.ledger.write(revision,self.context | dict(status='active',step='admitted',image_only_baseline=descriptor))
+            self.authority()
+            row,new_revision=self.ledger.read()
+            if (not self.owned(row) or row.get('status')!='active' or row.get('step')!='admitted' or
+                    row.get('image_only_baseline')!=descriptor or not isinstance(new_revision,tuple) or
+                    len(new_revision)!=2 or new_revision[0]!=revision[0] or
+                    journal.dirfd is None or journal.lockfd is None or journal.state['steps'].get(baseline.STEP)!=local):
+                raise RuntimeError('image-only admission changed')
+            done={'status':'done','descriptor':descriptor,'old_revision':list(revision),'new_revision':list(new_revision)}
+            journal.state['steps'][step]=copy.deepcopy(done);journal.save()
+            self.authority()
+            if (self.ledger.read()!=(row,new_revision) or journal.state['steps'].get(step)!=done or
+                    journal.state['steps'].get(baseline.STEP)!=local or journal.dirfd is None or journal.lockfd is None):
+                raise RuntimeError('image-only admission changed')
+        except BaseException:
+            if attempted:
+                try:self.admission_uncertain('image-only begin outcome uncertain')
+                except BaseException:pass
             raise
 
     def before_step(self,step):

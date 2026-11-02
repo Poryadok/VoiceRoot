@@ -1,0 +1,163 @@
+name: Owned NATS enrollment proof
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seeded-enrollment:
+    # Separate disposable VM: the fixture exclusively owns guard.ROOT.
+    # This job does not qualify P2, a selected PVC, or a rollout.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.2'
+          cache: false
+      - name: Qualify scoped enrollment and private seed
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          PYTHONDONTWRITEBYTECODE=1 python scripts/ci/p2_seeded_workflow_cleanup_test.py
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          work=$(sudo -n mktemp -d /root/voice-seeded-enrollment.XXXXXXXX)
+          case "$work" in /root/voice-seeded-enrollment.*) ;; *) exit 1 ;; esac
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [[ "$status" == 0 ]]; then
+              if sudo -n test -d "$work" && ! sudo -n test -L "$work" && [[ "$(sudo -n realpath -- "$work")" == "$work" ]]; then
+                sudo -n rm -rf -- "$work" || status=1
+              else
+                echo 'SEEDED_ENROLLMENT_CLEANUP_UNCONFIRMED' >&2
+                status=1
+              fi
+            else
+              echo 'SEEDED_ENROLLMENT_FIXTURE_RETAINED_UNTIL_VM_DISPOSAL' >&2
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          sudo -n mkdir -m 700 "$work/source" "$work/bundle" "$work/runtime"
+          git archive "$EXPECTED_SHA" | sudo -n tar -xf - -C "$work/source"
+          sudo -n chmod -R a-w "$work/source"
+          docker pull nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          docker pull natsio/nats-box@sha256:abdc9f9f0120bb8adfbf674eb037d1551db55356eb198b7bd4ffed377f6950a6
+          sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
+            env PATH="$PATH" HOME="$work" GOTOOLCHAIN=local PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/dev" \
+            "$(command -v python)" -c 'import sys,nats_contract_integration as f; f.build_fixture_records(__import__("pathlib").Path(sys.argv[1]))' "$work/bundle"
+          sudo -n --preserve-env=RUNNER_ENVIRONMENT,GITHUB_ACTIONS env PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONPATH="$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" \
+            "$(command -v python)" "$work/source/scripts/staging/nats-rollout-preservation/p2_seeded_identity_hosted.py" "$work/bundle" "$work/runtime"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+
+  owned-enrollment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Qualify isolated enrollment on exact source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          PYTHONDONTWRITEBYTECODE=1 python scripts/ci/p2_seeded_workflow_cleanup_test.py
+          work=$(sudo -n mktemp -d /root/voice-owned-nats-ci.XXXXXXXX)
+          case "$work" in /root/voice-owned-nats-ci.*) ;; *) exit 1 ;; esac
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if sudo -n test -d "$work" && ! sudo -n test -L "$work" && [[ "$(sudo -n realpath -- "$work")" == "$work" ]]; then
+              if [[ "$status" != 0 ]]; then
+                # A timed-out create can complete after an empty inventory.
+                # Best-effort removal cannot prove terminality: retain all paths
+                # until the disposable hosted VM is destroyed.
+                sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" after "$work/runtime" || true
+                echo 'OWNED_NATS_FAILED_FIXTURE_RETAINED_UNTIL_VM_DISPOSAL' >&2
+              elif sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" after "$work/runtime"; then
+                sudo -n rm -rf -- "$work" || status=1
+              else
+                echo 'OWNED_NATS_CONTAINER_RECONCILIATION_REQUIRED' >&2
+                status=1
+              fi
+            else
+              echo 'OWNED_NATS_FIXTURE_CLEANUP_UNCONFIRMED' >&2
+              status=1
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          sudo -n mkdir -m 700 "$work/source" "$work/bin" "$work/runtime"
+          git archive "$EXPECTED_SHA" | sudo -n tar -xf - -C "$work/source"
+          sudo -n chmod -R a-w "$work/source"
+          sudo -n python3 "$work/source/scripts/ci/nats_owned_runtime_cleanup.py" before "$work/runtime"
+          sudo -n sh -eu -c 'cd "$1/scripts/ci"; exec env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest nats_owned_enrollment_test nats_owned_runtime_cleanup_test nats_owned_broker_qualification_test' sh "$work/source"
+          sudo -n sh -eu -c 'cd "$1/scripts/staging/nats-rollout-preservation"; exec env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$1/scripts/staging/nats-known-baseline" python3 -m unittest scratch_inputs_test staging_cohort_auth_routing_test actor_permissions_test.PermissionTests.test_complete_canonical_bootstrap_acl_accepts_exact_grants actor_permissions_test.PermissionTests.test_exact_allow_still_obeys_deny_and_missing_allow' sh "$work/source"
+          sudo -n env PYTHONDONTWRITEBYTECODE=1 python3 "$work/source/scripts/ci/nats_owned_workflow_privilege_test.py"
+          python scripts/ci/staging_qualified_helpers.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-qualified"
+          sudo -n install -m 0500 "$RUNNER_TEMP/owned-qualified/bootstrap-renewer" "$work/bin/bootstrap-renewer"
+          docker run --rm --mount "type=bind,source=$work/source,target=/source,readonly" \
+            --mount "type=bind,source=$work/bin,target=/out" -w /source/src/backend/pkg \
+            golang@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c \
+            go build -trimpath -o /out/genesis /source/scripts/ci/nats-owned-genesis/main.go
+          sudo -n chmod 0500 "$work/bin/genesis"
+          docker pull nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb
+          docker pull natsio/nats-box@sha256:abdc9f9f0120bb8adfbf674eb037d1551db55356eb198b7bd4ffed377f6950a6
+          sudo -n --preserve-env=RUNNER_ENVIRONMENT env PYTHONDONTWRITEBYTECODE=1 \
+            python3 "$work/source/scripts/ci/nats_owned_broker_qualification.py" "$work/bin/genesis" "$work/bin/bootstrap-renewer" "$work/runtime"
+          # This component chain uses real PG/CMS and Session, with explicit
+          # synthetic NATS archive/readback, Kubernetes and GitHub boundaries;
+          # it is not full P2 proof.
+          python scripts/ci/staging_story_target8_helper.py --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/owned-target8"
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          sudo -n mkdir -m 700 "$work/qualified"
+          sudo -n install -m 0400 "$RUNNER_TEMP/owned-qualified/kernel" "$RUNNER_TEMP/owned-qualified/bootstrap-renewer" \
+            "$RUNNER_TEMP/owned-qualified/story-current4-probe" "$RUNNER_TEMP/owned-qualified/provenance.json" "$work/qualified/"
+          sudo -n install -m 0400 "$RUNNER_TEMP/owned-target8/story-restored8-probe" "$work/qualified/"
+          sudo -n install -m 0400 "$RUNNER_TEMP/owned-target8/provenance.json" "$work/qualified/target8-provenance.json"
+          pg_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["postgres"])')
+          docker pull "$pg_image"
+          migrate_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
+          docker pull "$migrate_image"
+          # These custody tests require the staging-named group, local to this disposable VM.
+          sudo -n groupadd --force --system pmd
+          sudo -n --preserve-env=RUNNER_ENVIRONMENT sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
+            env \
+            PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \
+            VOICE_COHORT_RETAINED_ROOT="$work/runtime" TMPDIR="$work/runtime" \
+            PYTHONPATH="$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries \
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_qualified_continuation_reaches_c1_final_prepare \
+            staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_c1_continuation_issues_typed_final_admission
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"

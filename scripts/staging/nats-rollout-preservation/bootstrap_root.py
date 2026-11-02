@@ -43,6 +43,15 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     private_read/save must provide existing root-owned no-follow bounded atomic
     custody. prove_auth must use only an owned network-none empty scratch store.
     """
+    from resource_claim import production_installation
+    return _enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,prove_auth,
+        installation=production_installation())
+
+def _enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,prove_auth,*,installation):
+    from resource_claim import InstallationAuthority,require_installation,production_installation
+    if type(installation) is not InstallationAuthority:fail()
+    installation=require_installation(installation)
+    if installation.generation!=GENERATION:fail()
     assert_idle()
     root=Path('/var/lib/voice-nats-preservation')
     # The v3 enrollment remains immutable evidence. Music renews the same
@@ -50,10 +59,12 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     from bootstrap_selection import select
     from nats_contract_plan import digest
     previous_enrollment=private_read(root/'bootstrap-enrollment.json')
-    if previous_enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v1':fail()
+    scoped=installation!=production_installation()
+    expected_schema='voice-nats-bootstrap-enrollment-scoped-v1' if scoped else 'voice-nats-bootstrap-enrollment-v1'
+    if previous_enrollment.get('schema')!=expected_schema:fail()
     from nats_root_plan import _LEGACY_AUTH_KEYS,_V3_AUTH_KEYS
     if set(previous_enrollment.get('auth_proof',{})) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS):fail()
-    previous_name=select(kube,previous_enrollment,GENERATION)
+    previous_name=select(kube,previous_enrollment,GENERATION,installation=installation)
     previous_secret=kube.get('secret',previous_name)
     marker=kube.get('configmap','voice-nats-generation')
     if (marker['metadata']['uid']!='cbafb90c-6974-4642-86d6-09b2eef1c843'
@@ -64,18 +75,18 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
         or old['metadata']['resourceVersion']!='2864382' or old.get('immutable') is not True):fail()
     operator=kube.get('secret','voice-nats-operator-'+GENERATION)
     account=secret_bytes(operator,'account.public').decode().strip()
-    if hash_bytes(account.encode())!=ACCOUNT_SHA:fail()
+    if hash_bytes(account.encode())!=installation.account_sha256:fail()
     previous=secret_bytes(previous_secret,'bootstrap.creds')
     binding={'generation':GENERATION,'marker_uid':marker['metadata']['uid'],'marker_rv':marker['metadata']['resourceVersion'],
         'old_secret':{k:old['metadata'][k] for k in ('name','uid','resourceVersion')}|{'credential_sha256':hash_bytes(secret_bytes(old,'bootstrap.creds'))},
         'operator_secret':{k:operator['metadata'][k] for k in ('name','uid','resourceVersion')},
-        'actor_sha256':ACTOR_SHA,'account_sha256':ACCOUNT_SHA,
+        'actor_sha256':installation.bootstrap_actor_sha256,'account_sha256':installation.account_sha256,
         'previous_enrollment_sha256':digest(previous_enrollment)}
     def unchanged():
         assert_idle()
         if kube.get('configmap','voice-nats-generation')!=marker or kube.get('secret',binding['old_secret']['name'])!=old or kube.get('secret',binding['operator_secret']['name'])!=operator:fail()
         if private_read(root/'bootstrap-enrollment.json')!=previous_enrollment or kube.get('secret',previous_name)!=previous_secret:fail()
-        select(kube,previous_enrollment,GENERATION)
+        select(kube,previous_enrollment,GENERATION,installation=installation)
     binary=Path(code)/'nats-rollout-preservation'/'bootstrap-renewer'
     relative='nats-rollout-preservation/bootstrap-renewer'
     if relative not in code_binding or hash_bytes(binary.read_bytes())!=code_binding[relative]:fail()
@@ -88,7 +99,7 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
     request={'schema':'voice-nats-existing-bootstrap-renewal-v1','old_creds':previous.decode(),
         'account_jwt':secret_bytes(operator,'account.jwt').decode().strip(),
         'operator_jwt':secret_bytes(operator,'operator.jwt').decode().strip(),
-        'signer_seed':protected_seed().decode(),'actor_sha256':ACTOR_SHA,'account_sha256':ACCOUNT_SHA}
+        'signer_seed':protected_seed().decode(),'actor_sha256':installation.bootstrap_actor_sha256,'account_sha256':installation.account_sha256}
     fresh=invoke(binary,request)
     if draft is None:
         draft={'schema':'voice-nats-bootstrap-renewal-draft-v4','binding':binding,'code_sha256':code_binding[relative],
@@ -108,9 +119,10 @@ def enroll_current(kube,code,code_binding,assert_idle,private_read,private_save,
         auth.update(result);return True
     committed={}
     def commit(receipt):
-        receipt=dict(receipt,schema='voice-nats-bootstrap-enrollment-v4',auth_proof=auth,
+        receipt=dict(receipt,schema='voice-nats-bootstrap-enrollment-scoped-v4' if scoped else 'voice-nats-bootstrap-enrollment-v4',auth_proof=auth,
             previous_enrollment=previous_enrollment,previous_enrollment_sha256=digest(previous_enrollment))
-        select(kube,receipt,GENERATION)
+        if scoped:receipt['installation_sha256']=installation.sha256
+        select(kube,receipt,GENERATION,installation=installation)
         path=root/'bootstrap-enrollment-v4.json'
         try:existing=private_read(path)
         except FileNotFoundError:existing=None

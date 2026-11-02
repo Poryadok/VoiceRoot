@@ -11,6 +11,24 @@ import actor_root
 import bridge_client
 import bridge_root
 import preserved_upload
+import resource_claim
+from resource_claim_test import context
+
+
+def bind_copy(base, state):
+    c=context()
+    c['commit']=state.get('target',{}).get('tag',c['commit'])
+    c['images']=state.get('target',{}).get('images',c['images'])
+    state.setdefault('target',{}).update(tag=c['commit'],images=c['images'])
+    state['schema']='nats-rollout-root-v1'
+    state['code_capture']={'nats-rollout-preservation/resource_claim.py':'b'*64}
+    state['resource_fence']={'schema':'voice-staging-resource-fence-v1','operation':state['operation'],
+        'context':c,'helper_sha256':resource_claim.digest(state['code_capture']),
+        'target_sha256':resource_claim.digest(state['target'])}
+    state['cut'].setdefault('census_sha256','c'*64)
+    installation=resource_claim.production_installation()
+    bridge_root.save(base/'copy-checkpoint.json',bridge_root._copy_checkpoint(state,state['cut'],installation))
+    return installation
 
 
 class ActionsTests(unittest.TestCase):
@@ -32,6 +50,7 @@ class ActionsTests(unittest.TestCase):
             'workflow_id':263689731,'path':run['path'],'repository':'Poryadok/VoiceRoot','nonce':prepare['nonce']}
         record={'deadline':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(minutes=5)).isoformat(),'upload_execution':expected}
         actions=object.__new__(bridge_root.Actions);actions.code=Path('/captured');actions.binding={'root':'hash'}
+        actions._installation=bind_copy(base,state)
         return state,request,run,expected,record,actions
 
     def invoke(self,base,*,actor_error=False,deadline_error=False,run_change=None,execution_change=False):
@@ -48,7 +67,8 @@ class ActionsTests(unittest.TestCase):
         def load(*args,**kwargs):
             if execution_change:raise preserved_upload.UploadError('preserved_upload_upload_dispatcher_changed')
             self.assertEqual(kwargs['execution'],expected);return record,b'record',b'snapshot'
-        def actor(*args):
+        def actor(*args,**kwargs):
+            self.assertIs(kwargs['installation'],actions.installation)
             order.append('actor')
             if actor_error:raise bridge_root.Blocked('actor_drift')
         def deadline(*args):
@@ -91,6 +111,18 @@ class ActionsTests(unittest.TestCase):
                 with self.assertRaisesRegex(bridge_root.Blocked,'explicit_authorization_required'):
                     actions.execute({'action':'authorize','operation':state['operation'],'token':'synthetic','artifact_id':123})
                 normal.assert_not_called();dedicated.assert_not_called()
+
+    def test_changed_copy_checkpoint_rejects_before_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);state,request,_,_,_,actions=self.fixture(base)
+            checkpoint=bridge_root.private_json(base/'copy-checkpoint.json')
+            checkpoint['archive_sha256']='0'*64
+            bridge_root.save(base/'copy-checkpoint.json',checkpoint)
+            with patch.object(actions,'state',return_value=(base,state)),\
+                 patch.object(preserved_upload,'verify_artifact') as readback:
+                with self.assertRaisesRegex(bridge_root.Blocked,'rollout_copy_checkpoint_changed'):
+                    actions.execute(request)
+                readback.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

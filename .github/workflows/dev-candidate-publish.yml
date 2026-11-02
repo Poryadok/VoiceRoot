@@ -63,6 +63,12 @@ on:
       - scripts/dev/writer_cut_migration.py
       - scripts/dev/writer_cut_migration_test.py
       - scripts/dev/writer_cut_migration_inventory_test.py
+      - scripts/dev/writer_cut_space.py
+      - scripts/dev/writer_cut_space_test.py
+      - scripts/dev/space_fresh_install_phase*.py
+      - scripts/dev/space_creator_runtime_profile*.py
+      - scripts/dev/realtime_config_transition*.py
+      - scripts/dev/space_p3_issuer*.py
       - scripts/dev/backend_config_transition*.py
       - scripts/dev/full_cohort_chat_health.py
       - scripts/dev/full_cohort_chat_health_test.py
@@ -74,9 +80,49 @@ on:
       - scripts/dev/full_cohort_oci.py
       - scripts/dev/full_cohort_oci_test.py
       - scripts/dev/full_cohort_package_phase.py
+      - scripts/dev/full_cohort_supervisor.py
+      - scripts/dev/full_cohort_supervisor_test.py
+      - scripts/dev/full_cohort_image_only_baseline.py
+      - scripts/dev/full_cohort_image_only_baseline_test.py
+      - scripts/dev/full_cohort_chat_health.py
+      - scripts/dev/full_cohort_chat_health_test.py
+      - scripts/dev/realtime_jwks_publisher_oci.py
+      - scripts/dev/realtime_jwks_publisher_oci_test.py
+      - scripts/dev/space_native_tool_identity.py
+      - scripts/dev/space_native_tool_identity_test.py
+      - scripts/dev/space_native_tool_identity_phase_test.py
+      - scripts/dev/space_native_tool_identity_integration_test.py
+      - scripts/dev/space_native_tool_identity_closure_test.py
+      - scripts/dev/space_native_tool_identity_custody.py
+      - scripts/dev/space_native_tool_identity_custody_test.py
+      - scripts/dev/space_native_tool_identity_staging.py
+      - scripts/dev/space_native_tool_identity_staging_test.py
+      - scripts/dev/full_cohort_pg_physical_identity.py
+      - scripts/dev/full_cohort_pg_physical_identity_test.py
+      - scripts/dev/full_cohort_backup_metadata.py
+      - scripts/dev/full_cohort_backup_metadata_test.py
+      - scripts/dev/full_cohort_backup_phase*.py
+      - scripts/dev/full_cohort_release_activation*.py
+      - scripts/dev/full_cohort_go_migration.py
+      - scripts/dev/full_cohort_go_migration_plan.py
+      - scripts/dev/full_cohort_go_migration_plan_test.py
+      - scripts/dev/full_cohort_go_migration_test.py
+      - scripts/dev/full_cohort_go_migration_joint_test.py
+      - scripts/dev/full_cohort_go_migration_cut_test.py
+      - scripts/dev/cohort_go_role_qualification_test.py
+      - scripts/dev/cohort_go_role_qualification_integration_test.py
+      - scripts/dev/full_cohort_config_custody.py
+      - scripts/dev/full_cohort_config_custody_test.py
+      - scripts/dev/cohort_unmanaged_actual.py
+      - scripts/dev/cohort_unmanaged_actual_test.py
+      - scripts/dev/story_media_backup_cohort.py
+      - scripts/dev/story_media_backup_cohort_restore.py
+      - scripts/dev/story_media_backup_restore.py
       - scripts/dev/full_cohort_package_phase_test.py
       - scripts/dev/full_cohort_inventory_phase.py
       - scripts/dev/full_cohort_inventory_phase_test.py
+      - scripts/dev/full_cohort_namespace_census.py
+      - scripts/dev/full_cohort_namespace_census_test.py
       - scripts/dev/full_cohort_activation_plan.py
       - scripts/dev/full_cohort_activation_plan_test.py
       - scripts/dev/full_cohort_affected_plan.py
@@ -93,6 +139,7 @@ on:
       - scripts/dev/realtime_migration_verify_test.py
       - scripts/dev/realtime_migration_job.py
       - scripts/dev/realtime_migration_job_test.py
+      - scripts/dev/realtime_migration_cut_joint_test.py
       - scripts/dev/writer_cut_pg_probe.py
       - scripts/dev/writer_cut_pg_probe_test.py
       - scripts/dev/writer_cut_resumed_probe.py
@@ -100,6 +147,8 @@ on:
       - scripts/dev/realtime_db_provision.py
       - scripts/dev/realtime_db_provision_test.py
       - scripts/dev/realtime_db_provision_journal_test.py
+      - scripts/dev/realtime_absent_phase.py
+      - scripts/dev/realtime_absent_phase_test.py
       - scripts/dev/realtime_p3_adoption.py
       - scripts/dev/realtime_p3_adoption_test.py
       - scripts/dev/realtime_p3_public_inputs.py
@@ -134,7 +183,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -176,6 +225,23 @@ jobs:
           python -B scripts/dev/writer_cut_activation_test.py
           python -B scripts/dev/writer_cut_migration_test.py
           python -B scripts/dev/writer_cut_migration_inventory_test.py
+          python -B scripts/dev/writer_cut_space_test.py
+          python -B scripts/dev/space_fresh_install_phase_runtime_joint_test.py
+          python -B scripts/dev/space_creator_runtime_profile_test.py
+          python -B scripts/dev/space_creator_runtime_profile_material_test.py
+          python -B scripts/dev/space_creator_runtime_profile_phase_test.py
+          python -B scripts/dev/space_creator_runtime_profile_config_test.py
+          python -B scripts/dev/space_creator_runtime_profile_auth_test.py
+          python -B scripts/dev/space_creator_runtime_profile_jdk_test.py
+          python -B scripts/dev/space_creator_runtime_profile_target_trust_test.py
+          python -B scripts/dev/space_creator_runtime_profile_trust_test.py
+          python -B scripts/dev/space_p3_issuer_preflight_bundle_test.py
+          python -B scripts/dev/space_p3_issuer_preflight_source_test.py
+          python -B scripts/dev/realtime_config_transition_space_service_test.py
+          python -B scripts/dev/realtime_config_transition_space_health_test.py
+          python -B scripts/dev/realtime_config_transition_joint_test.py
+          python -B scripts/dev/realtime_config_transition_issuer_joint_test.py
+          python -B scripts/dev/realtime_config_transition_health_service_joint_test.py
           python -B scripts/dev/backend_config_transition_test.py
           python -B scripts/dev/backend_config_transition_probe_test.py
           python -B scripts/dev/backend_config_transition_observation_test.py
@@ -188,7 +254,31 @@ jobs:
           python -B scripts/dev/full_cohort_image_apply_composition_test.py
           python -B scripts/dev/full_cohort_oci_test.py
           python -B scripts/dev/full_cohort_package_phase_test.py
+          python -B scripts/dev/full_cohort_supervisor_test.py
+          python -B scripts/dev/full_cohort_image_only_baseline_test.py
+          python -B scripts/dev/full_cohort_chat_health_test.py
+          python -B scripts/dev/realtime_jwks_publisher_oci_test.py
+          python -B scripts/dev/space_native_tool_identity_test.py
+          python -B scripts/dev/space_native_tool_identity_phase_test.py
+          python -B scripts/dev/space_native_tool_identity_closure_test.py
+          python -B scripts/dev/space_native_tool_identity_custody_test.py
+          python -B scripts/dev/space_native_tool_identity_staging_test.py
+          python -B scripts/dev/full_cohort_pg_physical_identity_test.py
+          python -B scripts/dev/full_cohort_backup_metadata_test.py
+          python -B scripts/dev/full_cohort_backup_phase_test.py
+          python -B scripts/dev/full_cohort_backup_phase_guard_test.py
+          python -B scripts/dev/full_cohort_backup_phase_key_test.py
+          python -B scripts/dev/full_cohort_backup_phase_verify_test.py
+          python -B scripts/dev/full_cohort_release_activation_test.py
+          python -B scripts/dev/full_cohort_go_migration_plan_test.py
+          python -B scripts/dev/full_cohort_go_migration_test.py
+          python -B scripts/dev/full_cohort_go_migration_joint_test.py
+          python -B scripts/dev/full_cohort_go_migration_cut_test.py
+          python -B scripts/dev/cohort_go_role_qualification_test.py
+          python -B scripts/dev/full_cohort_config_custody_test.py
+          python -B scripts/dev/cohort_unmanaged_actual_test.py
           python -B scripts/dev/full_cohort_inventory_phase_test.py
+          python -B scripts/dev/full_cohort_namespace_census_test.py
           python -B scripts/dev/full_cohort_activation_plan_test.py
           python -B scripts/dev/full_cohort_affected_plan_test.py
           python -B scripts/dev/full_cohort_config_custody_test.py
@@ -197,10 +287,12 @@ jobs:
           python -B scripts/dev/realtime_secret_provision_test.py
           python -B scripts/dev/realtime_migration_verify_test.py
           python -B scripts/dev/realtime_migration_job_test.py
+          python -B scripts/dev/realtime_migration_cut_joint_test.py
           python -B scripts/dev/writer_cut_pg_probe_test.py
           python -B scripts/dev/writer_cut_resumed_probe_test.py
           python -B scripts/dev/realtime_db_provision_test.py
           python -B scripts/dev/realtime_db_provision_journal_test.py
+          python -B scripts/dev/realtime_absent_phase_test.py
           python -B scripts/dev/realtime_p3_adoption_test.py
           python -B scripts/dev/realtime_p3_public_inputs_test.py
           python -B scripts/dev/story_media_backup_cohort_finalize_test.py

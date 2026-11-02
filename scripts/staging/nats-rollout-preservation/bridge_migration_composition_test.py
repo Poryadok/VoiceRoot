@@ -22,7 +22,10 @@ class Tests(unittest.TestCase):
             workspace=Path(td);installed=workspace/'installed';installed.mkdir()
             code=workspace/'code';(code/'nats-known-baseline').mkdir(parents=True)
             kernel=code/'nats-known-baseline/kernel';kernel.write_bytes(b'fixture-external-kernel')
-            binding={'nats-known-baseline/kernel':hashlib.sha256(kernel.read_bytes()).hexdigest()}
+            (code/'nats-rollout-preservation').mkdir()
+            helper=code/'nats-rollout-preservation/resource_claim.py';helper.write_bytes(b'fixture-helper')
+            binding={'nats-known-baseline/kernel':hashlib.sha256(kernel.read_bytes()).hexdigest(),
+                'nats-rollout-preservation/resource_claim.py':hashlib.sha256(helper.read_bytes()).hexdigest()}
             store=workspace/'store';store.mkdir();(store/'record.blk').write_bytes(b'five known fixture records')
             uid='a'*8+'-'+ 'a'*4+'-'+ 'a'*4+'-'+ 'a'*4+'-'+ 'a'*12
             old_image=next(iter(actor_root.STORY_IMAGES));child,config,component=actor_root.STORY_IMAGES[old_image]
@@ -31,6 +34,7 @@ class Tests(unittest.TestCase):
             wanted=copy.deepcopy(old);wanted['spec']['template']['spec']['containers'][0]['image']='ghcr.io/poryadok/voiceroot/story@sha256:09c6481710665e056d5b29c092189bff899a78e6c457be5a521edec12bbb0fa9'
             empty={'checks':[],'actions':[]}
             target={'mode':'images-only','changed_services':['story'],'tag':'c'*40,'images':{'voice-story/story':wanted['spec']['template']['spec']['containers'][0]['image']},
+                'registry':'ghcr.io/poryadok/voiceroot','source_hashes':{'fixture':'d'*64},
                 'template_hashes':{'voice-story':digest(wanted['spec']['template'])},'manifest_sha256':digest([wanted]),
                 'migration_sha256':digest([]),'nonnats_sha256':digest(empty)}
             scripts={part:{'part':part,'configMapUID':part,'configMapResourceVersion':'1','sha256':hashlib.sha256(b'old').hexdigest(),'bytes':3} for part in ('realtime','analytics-chat')}
@@ -93,7 +97,16 @@ class Tests(unittest.TestCase):
                 return {'verified':True,'old_record_files_verified':True,'proof':{'fixture-external-proof':True},'cut':{'post-config-baseline':messages[0]}}
             def proof(runtime,source,cut,fence):
                 self.assertEqual(cut,{'post-config-baseline':messages[0]});order.append('post-config-store-proof');return {'messages':messages[0],'native_files_verified':True}
+            import commands,resource_claim,resource_claim_test
             actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding=binding
+            actions._installation=resource_claim.production_installation()
+            context=resource_claim_test.context()
+            context.update(commit=target['tag'],images=copy.deepcopy(target['images']))
+            card=resource_claim_test.card(context);card['observed']['images']=copy.deepcopy(stage.old_images)
+            session=resource_claim.Session(context,'a'*12,transaction.canonical(binding),
+                lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+            session.admit(start=True);actions.tt_session=session
+            target['installation_sha256']=session.installation.sha256
             decrypt_patch=patch.object(actions,'_verify_decrypted_restore');decrypt_patch.start();self.addCleanup(decrypt_patch.stop)
             protected_receipt=guard.protected_receipt
             with patch.object(root_cli,'ROOT',workspace),patch.object(guard,'ROOT',workspace),patch.object(bridge_root,'INSTALLED',installed),\
@@ -107,7 +120,7 @@ class Tests(unittest.TestCase):
                 patch.object(actor_root,'revalidate'),\
                 patch.object(transaction,'DockerRuntime',side_effect=runtime),patch.object(transaction,'capture_cut',side_effect=cold),\
                 patch.object(transaction,'apply_contract',side_effect=migration),patch.object(transaction,'verify_post_apply',side_effect=proof):
-                state=root_cli.prepare_value({'target':target,'manifests':[wanted],'contract':contract,'migrations':[],'nonnats':empty},code,binding,'a'*12,nats_authority=authority,actor_authority=actor,actor_services=['story'])
+                state=root_cli.prepare_value({'target':target,'manifests':[wanted],'contract':contract,'migrations':[],'nonnats':empty},code,binding,'a'*12,nats_authority=authority,actor_authority=actor,actor_services=['story'],resource_session=session)
                 capture.assert_called_once();self.assertEqual(capture.call_args.kwargs['bootstrap_enrollment'],enrollment)
                 self.assertEqual(order,['closed-fence','original-cold-cut']);base=workspace/('rollout-'+'a'*12)
                 recovery=installed/'recovery';recovery.mkdir(mode=0o700);encrypted_cut.initialize_recovery_key(recovery)
@@ -122,8 +135,12 @@ class Tests(unittest.TestCase):
                         if url.endswith('/99'):return http.Reply(200,json.dumps(metadata).encode())
                         if url.endswith('/zip'):return http.Reply(302,headers={'Location':'https://productionresultssa1.blob.core.windows.net/artifact'})
                         order.append('complete-offnode-readback');return http.Reply(200,zipped)
+                    authorize_patch=patch.object(transaction,'authorize',wraps=transaction.authorize)
+                    authorize=authorize_patch.start();self.addCleanup(authorize_patch.stop)
                     with patch.object(github_custody,'_request',side_effect=request):
                         actions.execute({'action':'authorize','operation':state['operation'],'token':'fixture','artifact_id':99})
+                    self.assertIs(authorize.call_args.kwargs['resource_session'],actions.tt_session)
+                    authorize_patch.stop()
                 authorize_bound(base,state)
                 state=actions.state('a'*12)[1]
                 self.assertEqual(state['contract']['scripts'][0]['sha256'],hashlib.sha256(b'target').hexdigest())
@@ -134,8 +151,11 @@ class Tests(unittest.TestCase):
                 paused=paused_documents(json.loads((base/'apply-manifests.json').read_bytes()),state['authorization'])
                 self.assertEqual(paused[0]['spec']['replicas'],0)
                 self.assertEqual(paused[0]['spec']['template']['spec']['containers'][0]['image'],target['images']['voice-story/story'])
-                with patch.object(guard,'protected_receipt',side_effect=lambda path:protected_receipt(path,root=workspace)):
+                with patch.object(commands,'authority_guard',session.check):
+                    receipt_patch=patch.object(guard,'protected_receipt',side_effect=lambda path:protected_receipt(path,root=workspace))
+                    receipt_patch.start();self.addCleanup(receipt_patch.stop)
                     result=actions.execute({'action':'finish','operation':'a'*12,'claim_rv':'2'})
+                    receipt_patch.stop()
                 self.assertEqual(result['status'],'PASS');self.assertEqual(order,['closed-fence','original-cold-cut','complete-offnode-readback','migration-after-custody','prepared-after-config-proof','post-config-store-proof','verified-before-restart','sole-restart'])
                 self.assertEqual(json.loads((installed/'active-release.json').read_bytes())['operation'],'a'*12)
                 self.assertEqual(json.loads((base/'checkpoint.json').read_bytes())['preservation']['messages'],5)
@@ -145,13 +165,20 @@ class Tests(unittest.TestCase):
                 (store/'record.blk').write_bytes((store/'record.blk').read_bytes()+b'known-post-release-record');messages[0]=6
                 stage.operation='b'*12;stage.snapshots={'voice-story':copy.deepcopy(wanted)}
                 stage.original_snapshots=copy.deepcopy(stage.snapshots);stage.old_images=copy.deepcopy(target['images'])
+                rollback_context=resource_claim_test.context()
+                rollback_context.update(commit=package['target']['tag'],images=copy.deepcopy(package['target']['images']))
+                rollback_card=resource_claim_test.card(rollback_context)
+                rollback_card['observed']['images']=copy.deepcopy(stage.old_images)
+                rollback_session=resource_claim.Session(rollback_context,'b'*12,transaction.canonical(binding),
+                    lambda:copy.deepcopy(rollback_card),resource_claim_test.MemoryJournal())
+                rollback_session.admit(start=True);actions.tt_session=rollback_session
                 order.clear()
                 def rollback_producer(request,prior):
                     self.assertEqual(prior['operation'],'a'*12)
                     fresh_actor=copy.deepcopy(actor);image=stage.old_images['voice-story/story']
                     fresh_child,fresh_config,fresh_component=actor_root.STORY_IMAGES[image]
                     fresh_actor['compatible_story_candidate'].update(image=image,child_sha256=fresh_child,config_sha256=fresh_config,component_source_sha=fresh_component)
-                    return root_cli.prepare_value(package,code,actions.binding,request['nonce'][:12],previous=prior,nats_authority=authority,actor_authority=fresh_actor,actor_services=['story'])
+                    return root_cli.prepare_value(package,code,actions.binding,request['nonce'][:12],previous=prior,nats_authority=authority,actor_authority=fresh_actor,actor_services=['story'],resource_session=rollback_session)
                 with patch.object(actions,'_prepare',side_effect=rollback_producer):
                     fresh=actions.execute({'action':'prepare-rollback','operation':'a'*12,'nonce':'b'*64})
                 fresh_base=workspace/('rollout-'+'b'*12)
@@ -159,8 +186,10 @@ class Tests(unittest.TestCase):
                 self.assertNotEqual(fresh['cut']['manifest']['archive_sha256'],old_archive)
                 self.assertEqual(fresh['rollback_from']['operation'],'a'*12)
                 authorize_bound(fresh_base,fresh)
-                with patch.object(guard,'protected_receipt',side_effect=lambda path:protected_receipt(path,root=workspace)):
+                with patch.object(commands,'authority_guard',rollback_session.check):
+                    receipt_patch.start()
                     self.assertEqual(actions.execute({'action':'finish','operation':'b'*12,'claim_rv':'3'})['status'],'PASS')
+                    receipt_patch.stop()
                 self.assertEqual(json.loads((fresh_base/'checkpoint.json').read_bytes())['preservation']['messages'],6)
                 self.assertEqual(json.loads((installed/'active-release.json').read_bytes())['operation'],'b'*12)
                 self.assertTrue(all(row['data']['bootstrap.sh']=='target' for row in cms.values()))

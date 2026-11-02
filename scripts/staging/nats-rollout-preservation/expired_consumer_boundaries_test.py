@@ -255,8 +255,11 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                     state['target']['source_hashes'][relative]=hashlib.sha256(bootstrap).hexdigest()
                 tt_context=resource_context();tt_context.update(commit=state['target']['tag'],images=copy.deepcopy(state['target']['images']))
                 tt_card=resource_card(tt_context);tracker_requests=[]
+                installation=resource_claim.production_installation()
+                state.update(schema='nats-rollout-root-v2',installation_sha256=installation.sha256)
+                state['target']['installation_sha256']=installation.sha256
                 state['code_capture']=copy.deepcopy(helper_binding)
-                state['resource_fence']=dict(schema='voice-staging-resource-fence-v1',context=tt_context,
+                state['resource_fence']=dict(schema='voice-staging-resource-fence-v2',installation_sha256=installation.sha256,context=tt_context,
                     operation=state['operation'],helper_sha256=resource_claim.digest(helper_binding),
                     target_sha256=resource_claim.digest(state['target']))
                 def tracker(suffix,body=None):
@@ -297,8 +300,11 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                 (fixture.base.parent/'installed').mkdir(mode=0o700)
                 tt_journal=fixture.base.parent/'installed'/resource_claim.JOURNAL
                 transaction.save(tt_journal,{**state['resource_fence'],'status':'active','phase':'apply-ready'})
+                authority_session=resource_claim.Session(tt_context,state['operation'],resource_claim.digest(helper_binding),
+                    resource_claim.Check(tt_context),resource_claim.RootJournal(fixture.base.parent),installation=installation)
+                authority_session.admit(start=False)
                 receipt=transaction.authorize(None,fixture.base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],{},
-                    authorization_deadline=dt.datetime.fromisoformat(authority['expires_at']),expired_authority=authority)
+                    authorization_deadline=dt.datetime.fromisoformat(authority['expires_at']),expired_authority=authority,resource_session=authority_session)
                 manifest=fixture.base/'apply-manifests.json';manifest.write_bytes(raw);manifest.chmod(0o440)
                 receipt_path=fixture.base/'apply-authorization.json';receipt_path.chmod(0o440)
                 env={'VOICE_NATS_PRESERVATION_RECEIPT':str(receipt_path),'VOICE_IMAGE_REGISTRY':'registry','VOICE_IMAGE_TAG':receipt['target']['tag'],
@@ -335,7 +341,7 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                         projection_path.write_text(json.dumps(projected));projection_path.chmod(0o440)
                     return result
                 stack.enter_context(patch('guard.kubectl',side_effect=wire))
-                stack.enter_context(resource_claim.runner_scope(receipt,fixture.base.parent,helper_binding))
+                session=stack.enter_context(resource_claim.runner_scope(receipt,fixture.base.parent,helper_binding))
                 if late in ('claim','projection-drift-claim','tt-context-drift-claim'):
                     expected=RuntimeError if late=='tt-context-drift-claim' else Blocked
                     with self.assertRaises(expected):runner.preflight();guard.claim(receipt)
@@ -360,6 +366,7 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                             stack.enter_context(patch('bridge_root.INSTALLED',fixture.base.parent/'installed'))
                             stack.enter_context(patch.object(transaction,'verify_post_apply',return_value={'verified':True}))
                             actions=object.__new__(bridge_root.Actions);saved=bridge_root.save
+                            actions._installation=installation;actions.tt_session=session
                             def publish_save(path,value):
                                 saved(path,value)
                                 if Path(path).name=='active-release.json':current[0]=real_datetime.fromisoformat(authority['expires_at'])
@@ -388,8 +395,9 @@ class FinishPublicationCompositionTests(unittest.TestCase):
         import bridge_root,transaction,expired_transport
         for boundary in ('before-save','after-save'):
             with self.subTest(boundary=boundary),tempfile.TemporaryDirectory() as folder,ExitStack() as stack:
-                fixture=FinishCompositionTests();fixture.setup_files(folder);fixture.expire=False;fixture.adapters(stack)
+                fixture=FinishCompositionTests();fixture.setup_files(folder,publication=True);fixture.expire=False;fixture.adapters(stack)
                 actions=object.__new__(bridge_root.Actions)
+                actions._installation=fixture.session.installation;actions.tt_session=fixture.session
                 deadline=dt.datetime.fromisoformat(fixture.authority['expires_at']);old_receipt=copy.deepcopy(fixture.state['authorization'])
                 save=bridge_root.save
                 def actual_save(path,row):

@@ -13,25 +13,38 @@ from controller import Blocked
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from scenario import ready
 import guard
+from actor_auth import AuthScratch
 
-def prove(credentials,operator,unchanged,required_get_streams=None,*,version='voice-bootstrap-auth-v4'):
+def prove(credentials,operator,unchanged,required_get_streams=None,*,version='voice-bootstrap-auth-v4',installation=None):
+    from resource_claim import require_installation
+    installation=require_installation(installation)
     if version not in ('voice-bootstrap-auth-v4','voice-bootstrap-auth-v5'):raise Blocked('bootstrap_auth_version_invalid')
     declarations=V6_DECLARATIONS if version=='voice-bootstrap-auth-v5' else DECLARATIONS
     unchanged()
-    with tempfile.TemporaryDirectory(prefix='bootstrap-auth-',dir=guard.ROOT) as td:
-        base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
+    with AuthScratch('bootstrap-auth-',guard.ROOT) as scratch:
+        base=scratch.path;base.chmod(0o750);os.chown(base,0,65532)
         inputs=base/'inputs';inputs.mkdir(mode=0o750);os.chown(inputs,0,65532);inputs.chmod(0o750)
         for name,value in [('bootstrap.creds',credentials)]:
             p=inputs/name;p.write_bytes(value);p.chmod(0o440);os.chown(p,0,65532)
         tokens={key:secret_bytes(operator,key).decode().strip() for key in ('operator.jwt','account.jwt','system-account.jwt','account.public','system-account.public')}
-        if hash_bytes(tokens['account.public'].encode())!=ACCOUNT_SHA:raise Blocked('bootstrap_auth_account_changed')
+        if hash_bytes(tokens['account.public'].encode())!=installation.account_sha256:raise Blocked('bootstrap_auth_account_changed')
         q=json.dumps
         config='host: 127.0.0.1\nport: 4222\nhttp: 127.0.0.1:8222\nmax_control_line: 32768\noperator: '+q(tokens['operator.jwt'])+'\nsystem_account: '+q(tokens['system-account.public'])+'\nresolver: MEMORY\nresolver_preload: { '+q(tokens['account.public'])+': '+q(tokens['account.jwt'])+', '+q(tokens['system-account.public'])+': '+q(tokens['system-account.jwt'])+' }\njetstream { store_dir: /data }\n'
         p=base/'server.conf';p.write_text(config);p.chmod(0o440);os.chown(p,0,65532)
         store=base/'auth-store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
-        runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
+        import commands,resource_claim
+        session=getattr(commands.authority_guard,'__self__',None)
+        cohort_runtime=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+        if cohort_runtime:
+            scratch.hold() # Constructor may persist a journal before it returns.
+            import staging_cohort_preservation
+            runtime=staging_cohort_preservation.auth_runtime(session,base,'bootstrap')
+        else:runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
+        scratch.hold()
+        completed=False
         try:
-            broker=runtime.start_broker('proof',store);ready(runtime,broker)
+            broker=runtime.start_broker('proof',store)
+            ready(runtime,broker)
             actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,unchanged,
                 **({'plan':{'schema':V6_SCHEMA,'migration_id':V6_MIGRATION_ID}} if version=='voice-bootstrap-auth-v5' else {}))
             stream_subjects={}
@@ -72,13 +85,19 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
                     raise Blocked('bootstrap_auth_get_scratch_changed')
             runtime.stop(broker);unchanged()
             legacy=next(row['config'] for row in normalized_consumers if row['stream']=='social_events')
-            result={'schema':version,'verified':True,'server_image':NATS_IMAGE,'account_sha256':ACCOUNT_SHA,
+            result={'schema':version,'verified':True,'server_image':NATS_IMAGE,'account_sha256':installation.account_sha256,
                 'reply_prefix':'_INBOX.voice.bootstrap.reply','normalized_consumer':legacy,
                 'normalized_consumer_sha256':digest(legacy),'normalized_consumers':normalized_consumers,
                 'normalized_consumers_sha256':digest(normalized_consumers)}
             if get_proof is not None:result['get_permissions']=get_proof
+            completed=True
             return result
         finally:
-            for name in reversed(list(runtime.owned)):
-                row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
-                if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
+            try:
+                for name in reversed(list(runtime.owned)):
+                    row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
+                    if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
+            finally:
+                if cohort_runtime:runtime.finish_auth()
+            if not cohort_runtime:runtime.no_operation_containers()
+            if completed:scratch.release()

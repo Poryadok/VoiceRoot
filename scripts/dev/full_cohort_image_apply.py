@@ -371,7 +371,7 @@ class FullCohortImageApply:
                     or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory',
                                 'writer-cut-auth-successor', 'writer-cut-activation-plan', 'writer-cut-space-health',
                                 'writer-cut-publisher-health', 'writer-cut-chat-health', 'writer-cut-realtime-scope',
-                                'writer-cut-provision-scope')):
+                                'writer-cut-provision-scope', 'writer-cut-space-bind', 'writer-cut-space-finish')):
                 continue
             pending_resume = (self.activation_checking and step.startswith('writer-resume-') and
                               isinstance(item, dict) and item.get('status') == 'pending')
@@ -389,6 +389,14 @@ class FullCohortImageApply:
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
         cut = self.admission.cut
+        space=getattr(cut,'space_fresh',None)
+        if space is None:
+            if 'writer-cut-space-bind' in steps or 'writer-cut-space-finish' in steps:
+                raise RecoveryRequired('Space successor custody changed')
+        else:
+            import writer_cut_space
+            if writer_cut_space.verify_binding(cut,require_finished=True)!=space:
+                raise RecoveryRequired('Space successor custody changed')
         provision = getattr(cut, 'provision_successor', None)
         provision_step = steps.get('writer-cut-provision-scope')
         if (provision is None) != (provision_step is None):
@@ -737,8 +745,12 @@ class FullCohortImageApply:
                 self.activation_checking = False
 
     def verify_after_resume(self):
+        entered = False
         try:
+            if self.verifying:
+                raise RecoveryRequired('image verification already in progress')
             self.verifying = True
+            entered = True
             self._guard()
             if not self.started:
                 raise RecoveryRequired('invocation not owned')
@@ -830,6 +842,9 @@ class FullCohortImageApply:
             return observations
         except BaseException:
             self._uncertain()
+        finally:
+            if entered:
+                self.verifying = False
 
     @staticmethod
     def _controller(meta, kind):

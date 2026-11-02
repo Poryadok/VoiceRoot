@@ -53,6 +53,22 @@ def bind_package(phase, package, token):
     except BaseException: raise PhaseError('protected candidate package authority unavailable') from None
 
 
+def bind_metadata(phase, metadata_phase, token):
+    """Bind the source-owned metadata receipt used by mixed cohort restores."""
+    import full_cohort_backup_metadata as source
+    try:
+        _phase_identity(phase); p=phase.phases
+        if (type(metadata_phase) is not source.BackupMetadataPhase or not isinstance(token,str) or not token
+                or hasattr(phase,'_auth_metadata_binding') or metadata_phase.catalog is not phase.catalog_phase
+                or metadata_phase.fence.context!=p.fence.context or metadata_phase.lock!=p.lock
+                or metadata_phase.namespace_uid!=p.namespace_uid
+                or metadata_phase.fence.ledger.read()!=p.fence.ledger.read()): raise ValueError()
+        source.verify_completed(metadata_phase,token)
+        if metadata_phase.fence.ledger.read()!=p.fence.ledger.read(): raise ValueError()
+        phase._auth_metadata_binding=(metadata_phase,token)
+    except BaseException: raise PhaseError('protected cohort metadata authority unavailable') from None
+
+
 def _package_authority(phase):
     try:
         _phase_identity(phase); p=phase.phases
@@ -641,9 +657,10 @@ def cleanup_c1(phase, cut, source_root):
 
 def verified_sources(phase, metadata, version):
     """Verify current cohort custody and restore records from the common fence."""
-    p=phase.phases; row,_=p.fence.ledger.read()
-    binding,planned,marker,_=readback._snapshot(phase,row)
-    rd=p.journal.state['steps']['cohort-readback']; rs=p.journal.state['steps']['cohort-restore']
+    original_metadata=metadata; metadata=snapshot_protected(metadata)
+    p=phase.phases; row,revision=p.fence.ledger.read(); row=copy.deepcopy(row)
+    snapshot=copy.deepcopy(readback._snapshot(phase,row)); binding,planned,marker,_=snapshot
+    rd=copy.deepcopy(p.journal.state['steps']['cohort-readback']); rs=copy.deepcopy(p.journal.state['steps']['cohort-restore'])
     if (not isinstance(rd,dict) or set(rd)!={'status','intent','receipt'}
             or not isinstance(rs,dict) or set(rs)!={'status','intent','receipt'}
             or rd!=row.get('cohort_readback') or rs!=row.get('cohort_restore')
@@ -660,10 +677,28 @@ def verified_sources(phase, metadata, version):
             or rr!={'schema':'voice-cohort-custody-v1','destination':'github:Poryadok/VoiceRoot',
                     'artifact_id':ri['artifact_id'],**{k:v for k,v in artifact.items() if k!='created_at'}}): raise ValueError()
     intent,receipt=rs['intent'],rs['receipt']
-    if (set(intent)!={'status','operation_id','snapshot_id','invocation_nonce','manifest_sha256','artifact_id'}
-            or intent!={'status':'pending','operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
-                       'invocation_nonce':p.invocation,'manifest_sha256':marker['manifest_sha256'],'artifact_id':ri['artifact_id']}
-            or not isinstance(receipt,dict) or set(receipt)!={'operation_id','snapshot_id','source_sha','manifest_sha256','databases','scope','cleanup'}
+    changed=([db for db in binding['databases']
+              if restore.classify_plan(db,metadata['migrations'][db],True)=='migrate']
+             if 'full_catalog' in binding else [])
+    extra_intent={}; extra_receipt={}
+    if changed:
+        import cohort_restore_journal
+        metadata_phase,token=phase._auth_metadata_binding
+        roles=restore._qualified_roles(metadata_phase,token,phase.catalog_phase,binding,binding['databases'],metadata,changed)
+        extra_intent={'migration_roles_sha256':_digest(roles)}
+        extra_receipt={'migration_logins':{db:{'role':roles[db]['role'],
+                         'from':metadata['migrations'][db]['from'],'to':metadata['migrations'][db]['to']} for db in changed}}
+        for db in changed:
+            proof=cohort_restore_journal.verify_go_role(phase,metadata_phase,token,db)
+            if (proof['migration_roles_sha256']!=extra_intent['migration_roles_sha256']
+                    or proof['source_sha']!=binding['source_sha'] or proof['snapshot_id']!=binding['snapshot_id']
+                    or proof['manifest_sha256']!=marker['manifest_sha256']
+                    or any(proof[k]!=extra_receipt['migration_logins'][db][k] for k in ('role','from','to'))): raise ValueError()
+        if p.fence.ledger.read() != metadata_phase.fence.ledger.read(): raise ValueError()
+    if (intent!={'status':'pending','operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
+                       'invocation_nonce':p.invocation,'manifest_sha256':marker['manifest_sha256'],'artifact_id':ri['artifact_id'],**extra_intent}
+            or not isinstance(receipt,dict) or set(receipt)!={'operation_id','snapshot_id','source_sha','manifest_sha256','databases','scope','cleanup'}|set(extra_receipt)
+            or any(receipt.get(k)!=v for k,v in extra_receipt.items())
             or receipt.get('operation_id')!=binding['operation_id'] or receipt.get('snapshot_id')!=binding['snapshot_id']
             or receipt.get('source_sha')!=binding['source_sha'] or receipt.get('manifest_sha256')!=marker['manifest_sha256']
             or receipt.get('scope')!='selected-cohort-roles-catalog-and-ledger-only' or receipt.get('cleanup')!='verified'
@@ -671,13 +706,17 @@ def verified_sources(phase, metadata, version):
             or version not in (26,32)
             or receipt['databases'].get('auth_db')!={'mode':'restore-only','from':version,'to':version}): raise ValueError()
     resources=row.get('cohort_restore_resources')
-    local={k.removeprefix('cohort-restore-resource-'):v for k,v in p.journal.state['steps'].items()
-           if k.startswith('cohort-restore-resource-')}
+    local=copy.deepcopy({k.removeprefix('cohort-restore-resource-'):v for k,v in p.journal.state['steps'].items()
+                         if k.startswith('cohort-restore-resource-')})
     if (not isinstance(resources,dict) or not resources or set(resources)-{'postgres','migrate'} or local!=resources
             or any(r.get('status')!='removed' or r.get('operation_id')!=binding['operation_id']
                    or r.get('invocation_nonce')!=p.invocation for r in resources.values())): raise ValueError()
     inputs=binding['restore_inputs']
     restore._source(binding,binding['databases'],metadata,inputs['postgres_image'],inputs['migrate_image'])
+    if (p.fence.ledger.read()!=(row,revision) or readback._snapshot(phase,row)!=snapshot
+            or p.journal.state['steps'].get('cohort-readback')!=rd or p.journal.state['steps'].get('cohort-restore')!=rs
+            or {k.removeprefix('cohort-restore-resource-'):v for k,v in p.journal.state['steps'].items()
+                if k.startswith('cohort-restore-resource-')}!=local or original_metadata!=metadata): raise ValueError()
     return binding,{'manifest_sha256':marker['manifest_sha256'],'custody_sha256':_digest(rr),
                     'restore_sha256':_digest(receipt),'metadata_sha256':_digest(metadata)}
 

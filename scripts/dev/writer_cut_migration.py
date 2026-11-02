@@ -20,6 +20,11 @@ def normalized(cut, kind, phase, root):
     elif kind == 'realtime' and type(phase) is realtime.Migration:
         owner = phase
         module = realtime
+    elif kind == 'go':
+        import full_cohort_go_migration as go
+        if type(phase) is not go.Migration or phase.cut is not cut: raise ValueError('migration producer type invalid')
+        owner = phase
+        module = go
     else:
         raise ValueError('migration producer type invalid')
     namespace = getattr(owner, 'namespace_uid', getattr(owner, 'namespace', None))
@@ -39,11 +44,15 @@ def normalized(cut, kind, phase, root):
         config = {'authored': result['configmap'], **{k: record['configmap'][k] for k in ('state', 'uid', 'resourceVersion')}}
         stable = {k: record[k] for k in ('operation_id', 'source_sha', 'nonce', 'snapshot_id', 'input_sha256')}
         terminal = record['terminal_sha256']
-    else:
+    elif kind == 'realtime':
         record = result['record']
         job = result['job']
         config = {'receipt': result['configmap'], 'state': 'owned', 'uid': result['configmap']['uid'],
                   'resourceVersion': result['configmap']['resourceVersion']}
+        stable = {k: record[k] for k in ('operation_id', 'source_sha', 'nonce')}
+        terminal = record['terminal_sha256']
+    else:
+        record = result['record']; job = result['job']; config = result['configmap']
         stable = {k: record[k] for k in ('operation_id', 'source_sha', 'nonce')}
         terminal = record['terminal_sha256']
     if stable['operation_id'] != cut.fence.context['operation_id'] or stable['source_sha'] != cut.fence.context['commit']:
@@ -85,7 +94,7 @@ def observe(cut, binding, allow_removed=False):
         actual = None
         if any(x.get('metadata', {}).get('name') == job['authored']['metadata']['name'] for x in jobs):
             raise ValueError('unowned migration Job present')
-    if binding['kind'] == 'auth':
+    if binding['kind'] in ('auth','go'):
         cmstate = config['state']
         cms = cut.client.call('get', 'configmaps', '-o', 'json')['items']
         matching = [x for x in cms if x.get('metadata', {}).get('name') == config['authored']['metadata']['name']]

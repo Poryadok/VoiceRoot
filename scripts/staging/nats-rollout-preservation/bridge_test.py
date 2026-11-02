@@ -92,6 +92,7 @@ class ReplayTests(unittest.TestCase):
                     self_test.assertEqual(claimed.stat().st_uid,0)
                     return {'status':'PASS','operation':row['operation']}
                 def recover(self,row):return None
+                def validate_cached(self,request,result):pass
             self_test=self
             with patch.object(root_main,'operation_lock',contextlib.nullcontext),patch.object(bridge_root,'Actions',FakeActions),patch('grp.getgrnam',return_value=type('G',(),{'gr_gid':65532})()):bridge.drain(installed)
             response=installed/'responses'/(nonce+'.json')
