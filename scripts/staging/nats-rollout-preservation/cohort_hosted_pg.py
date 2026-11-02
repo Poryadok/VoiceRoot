@@ -110,21 +110,30 @@ class HostedPostgres:
             else:raise RuntimeError('isolated_postgres_not_ready')
             self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',
                 body=b"CREATE TABLE public.preservation_fixture(id integer PRIMARY KEY, value text); INSERT INTO public.preservation_fixture VALUES(1,'kept');")
-            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',body=b'CREATE DATABASE story_db;')
-            migrations=Path(__file__).resolve().parents[3]/'src/backend/migrations/story_db'
-            import actor_root
-            for name,expected in actor_root.STORY_UP.items():
-                raw=(migrations/name).read_bytes()
-                if actor_root.hash_bytes(raw)!=expected:raise RuntimeError('isolated_story_source_changed')
-                self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','story_db',body=raw)
-            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','story_db',
-                body=b'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (4, false);')
+            self._seed_story()
             return self
         except BaseException:
             try:self._cleanup()
             except BaseException as cleanup:
                 raise self._reconciliation_required() from cleanup
             raise
+
+    def _seed_story(self):
+        """Materialize real Story4 with a separately qualified owner."""
+        self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',
+            body=b"CREATE ROLE story_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD 'isolated-story-only';")
+        self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',
+            body=b'CREATE DATABASE story_db OWNER story_owner;')
+        self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','story_db',
+            body=b'ALTER SCHEMA public OWNER TO story_owner;')
+        migrations=Path(__file__).resolve().parents[3]/'src/backend/migrations/story_db'
+        import actor_root
+        for name,expected in actor_root.STORY_UP.items():
+            raw=(migrations/name).read_bytes()
+            if actor_root.hash_bytes(raw)!=expected:raise RuntimeError('isolated_story_source_changed')
+            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','story_owner','-d','story_db',body=raw)
+        self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','story_owner','-d','story_db',
+            body=b'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (4, false);')
 
     def __exit__(self,*_args):
         try:self._cleanup()

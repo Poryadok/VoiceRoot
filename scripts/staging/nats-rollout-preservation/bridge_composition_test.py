@@ -235,6 +235,20 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_hosted_story_seed_uses_separate_nonsuperuser_owner(self):
+        import actor_root,cohort_hosted_pg
+        pg=object.__new__(cohort_hosted_pg.HostedPostgres);pg.cid='fixture-container'
+        with patch.object(pg,'_docker') as docker:
+            pg._seed_story()
+        calls=docker.call_args_list
+        self.assertIn(b'LOGIN NOSUPERUSER',calls[0].kwargs['body'])
+        self.assertEqual(calls[1].kwargs['body'],b'CREATE DATABASE story_db OWNER story_owner;')
+        self.assertEqual(calls[2].kwargs['body'],b'ALTER SCHEMA public OWNER TO story_owner;')
+        self.assertEqual(len(calls),3+len(actor_root.STORY_UP)+1)
+        for call in calls[3:]:self.assertEqual(call.args[call.args.index('-U')+1],'story_owner')
+        with patch.dict(actor_root.STORY_UP,{next(iter(actor_root.STORY_UP)):'0'*64}),patch.object(pg,'_docker'):
+            with self.assertRaisesRegex(RuntimeError,'isolated_story_source_changed'):pg._seed_story()
+
     def test_public_fixture_story_image_is_preloaded_by_owned_workflow(self):
         import actor_root
         workflow=Path(__file__).resolve().parents[3]/'.github/workflows/nats-owned-enrollment-proof.yml'
