@@ -400,6 +400,7 @@ class SocialActions {
   Future<String?> blockAccount(
     String blockedAccountId, {
     String? blockedProfileId,
+    bool Function()? isCurrent,
   }) {
     return _ref
         .read(socialBlockMutationQueueProvider)
@@ -407,6 +408,7 @@ class SocialActions {
           () => _blockAccountTransaction(
             blockedAccountId,
             blockedProfileId: blockedProfileId,
+            isCurrent: isCurrent,
           ),
           onPendingChanged: _onBlockMutationPendingChanged,
         );
@@ -415,7 +417,9 @@ class SocialActions {
   Future<String?> _blockAccountTransaction(
     String blockedAccountId, {
     String? blockedProfileId,
+    bool Function()? isCurrent,
   }) async {
+    if (isCurrent?.call() == false) return 'actor_changed';
     final auth = _ref.read(authorizationHeaderProvider);
     if (auth == null) return 'not_authenticated';
     try {
@@ -423,6 +427,7 @@ class SocialActions {
     } catch (_) {
       return 'cache_clear_failed';
     }
+    if (isCurrent?.call() == false) return 'actor_changed';
     final FriendsApiResult<void> result;
     try {
       result = await _ref
@@ -433,6 +438,7 @@ class SocialActions {
             blockedProfileId: blockedProfileId,
           );
     } catch (_) {
+      if (isCurrent?.call() == false) return 'actor_changed';
       recordSocialBlockVisibilityChange(
         _ref,
         blocked: true,
@@ -441,6 +447,7 @@ class SocialActions {
       );
       return 'unknown_error';
     }
+    if (isCurrent?.call() == false) return 'actor_changed';
     if (result case FriendsApiFailure(:final message, :final statusCode)) {
       if (isDefinitiveSocialMutationRejection(statusCode)) {
         // The speculative operation was rejected, so the committed barrier

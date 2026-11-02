@@ -23,6 +23,7 @@ import '../../state/subscription_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_layout.dart';
 import '../../theme/voice_metrics.dart';
+import '../../theme/voice_colors.dart';
 import '../../routing/deep_link_urls.dart';
 import '../api_error_messages.dart';
 import '../core/chat_author_label.dart';
@@ -106,6 +107,10 @@ String _mmEntryLabel(
 }
 
 /// Bottom sheet with profile details, presence, and friend-request action.
+final _profileBlockPendingProvider = StateProvider.autoDispose.family<bool, String>(
+  (ref, profileId) => false,
+);
+
 class ProfileDetailSheet extends ConsumerWidget {
   const ProfileDetailSheet({super.key, required this.profileId});
 
@@ -140,6 +145,7 @@ class ProfileDetailSheet extends ConsumerWidget {
     final requestsAsync = ref.watch(friendRequestsProvider);
     final auth = ref.watch(authControllerProvider);
     final isProfileSwitching = ref.watch(profileSwitchInProgressProvider);
+    final blockPending = ref.watch(_profileBlockPendingProvider(profileId));
     final activeId = auth.activeProfileId;
     final isGuest = auth.isGuest;
     final isSelf = activeId == profileId;
@@ -199,6 +205,7 @@ class ProfileDetailSheet extends ConsumerWidget {
               ),
               isGuest: isGuest,
               isSelf: isSelf,
+              blockPending: blockPending || isProfileSwitching,
               onBlock: (profile) => _confirmBlock(context, ref, profile),
               onReport: () => _openReport(context),
             ),
@@ -393,17 +400,19 @@ class ProfileDetailSheet extends ConsumerWidget {
                             key: const Key('profile_not_in_contacts_warning'),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(12),
+                              color: Color.alphaBlend(
+                                VoiceColors.of(context).warning.withValues(alpha: 0.12),
+                                VoiceColors.of(context).canvas,
+                              ),
+                              border: Border.all(color: VoiceColors.of(context).warning),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Icon(
-                                  Icons.info_outline,
-                                  color: Theme.of(context).colorScheme.onSurface,
+                                  Icons.warning_amber_outlined,
+                                  color: VoiceColors.of(context).textPrimary,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
@@ -475,7 +484,9 @@ class ProfileDetailSheet extends ConsumerWidget {
                           const SizedBox(height: 8),
                           TextButton(
                             key: ProfileDetailSheet.blockKey,
-                            onPressed: () => _confirmBlock(context, ref, profile),
+                            onPressed: blockPending || isProfileSwitching
+                                ? null
+                                : () => _confirmBlock(context, ref, profile),
                             style: TextButton.styleFrom(
                               foregroundColor: Theme.of(context).colorScheme.error,
                             ),
@@ -513,39 +524,93 @@ class ProfileDetailSheet extends ConsumerWidget {
     WidgetRef ref,
     VoiceProfile profile,
   ) async {
-    final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final dialogL10n = AppLocalizations.of(ctx)!;
-        return AlertDialog(
-          title: Text(dialogL10n.profileBlockConfirmTitle),
-          content: Text(dialogL10n.profileBlockConfirmMessage),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(dialogL10n.commonCancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(dialogL10n.profileBlock),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true || !context.mounted) return;
-    final err = await ref
-        .read(socialActionsProvider)
-        .blockAccount(profile.accountId, blockedProfileId: profile.id);
-    if (!context.mounted) return;
-    if (err != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(socialActionErrorMessage(l10n, err))),
-      );
+    final pending = _profileBlockPendingProvider(profileId);
+    final controller = ref.read(authControllerProvider.notifier);
+    final generation = controller.sessionInstallGeneration;
+    final session = ref.read(authControllerProvider).session;
+    if (session == null ||
+        ref.read(profileSwitchInProgressProvider) ||
+        ref.read(pending)) {
       return;
     }
-    Navigator.of(context).pop();
+    var invalidated = false;
+    bool isCurrent() {
+      if (!context.mounted || invalidated) return false;
+      final current = ref.read(authControllerProvider).session;
+      return identical(ref.read(authControllerProvider.notifier), controller) &&
+          controller.sessionInstallGeneration == generation &&
+          !ref.read(profileSwitchInProgressProvider) &&
+          current?.accountId == session.accountId &&
+          current?.activeProfileId == session.activeProfileId &&
+          current?.authorizationHeader == session.authorizationHeader;
+    }
+
+    final authSubscription = ref.listenManual(authControllerProvider, (
+      _,
+      next,
+    ) {
+      final current = next.session;
+      if (current?.accountId != session.accountId ||
+          current?.activeProfileId != session.activeProfileId ||
+          current?.authorizationHeader != session.authorizationHeader) {
+        invalidated = true;
+      }
+    });
+    final switchSubscription = ref.listenManual(
+      profileSwitchInProgressProvider,
+      (_, next) {
+        if (next) invalidated = true;
+      },
+    );
+    ref.read(pending.notifier).state = true;
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final dialogL10n = AppLocalizations.of(ctx)!;
+          return AlertDialog(
+            title: Text(dialogL10n.profileBlockConfirmTitle),
+            content: Text(dialogL10n.profileBlockConfirmMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(dialogL10n.commonCancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(dialogL10n.profileBlock),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true || !isCurrent()) return;
+      String? err;
+      try {
+        err = await ref
+            .read(socialActionsProvider)
+            .blockAccount(
+              profile.accountId,
+              blockedProfileId: profile.id,
+              isCurrent: isCurrent,
+            );
+      } catch (_) {
+        err = 'unknown_error';
+      }
+      if (!context.mounted || !isCurrent()) return;
+      if (err != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(socialActionErrorMessage(l10n, err))),
+        );
+        return;
+      }
+      Navigator.of(context).pop();
+    } finally {
+      authSubscription.close();
+      switchSubscription.close();
+      if (context.mounted) ref.read(pending.notifier).state = false;
+    }
   }
 
   Future<void> _openDm(
@@ -617,6 +682,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.profile,
     required this.isGuest,
     required this.isSelf,
+    required this.blockPending,
     required this.onBlock,
     required this.onReport,
   });
@@ -624,6 +690,7 @@ class _ProfileHeader extends StatelessWidget {
   final VoiceProfile? profile;
   final bool isGuest;
   final bool isSelf;
+  final bool blockPending;
   final ValueChanged<VoiceProfile> onBlock;
   final VoidCallback onReport;
 
@@ -688,6 +755,7 @@ class _ProfileHeader extends StatelessWidget {
                     itemBuilder: (context) => [
                       PopupMenuItem(
                         key: const Key('profile_more_block'),
+                          enabled: !blockPending,
                         value: _ProfileMenuAction.block,
                         child: Text(l10n.profileBlock),
                       ),
