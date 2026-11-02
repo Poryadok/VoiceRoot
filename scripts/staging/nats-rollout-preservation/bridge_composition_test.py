@@ -37,6 +37,19 @@ def captured_cohort_modules(code,dev_root):
         yield
 
 
+def synthetic_source_readback(expected_sha):
+    """Synthetic public repository and immutable master ref for this fixture."""
+    import source_authority
+    def get(url,headers,deadline):
+        if headers!=source_authority._headers('fixture'):raise AssertionError('unexpected synthetic source headers')
+        if url==source_authority.API:
+            return {'full_name':source_authority.REPO,'private':False,'default_branch':'master'}
+        if url==source_authority.API+'/git/ref/heads/master':
+            return {'ref':'refs/heads/master','object':{'type':'commit','sha':expected_sha}}
+        raise AssertionError('unexpected synthetic source URL')
+    return get
+
+
 def canonical_stores():
     import source_plan_test as fixtures
     kube,params=fixtures.SourceTests().canonical_fixture('app-only')
@@ -189,6 +202,16 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_synthetic_source_readback_keeps_real_head_guard(self):
+        import source_authority,time
+        sha='a'*40
+        with patch.object(source_authority,'_get',side_effect=synthetic_source_readback(sha)):
+            headers=source_authority._headers('fixture')
+            self.assertEqual(source_authority._head(headers,sha,time.monotonic()+30)['full_name'],source_authority.REPO)
+            with self.assertRaises(source_authority.SourceError):source_authority._head(headers,'b'*40,time.monotonic()+30)
+            with self.assertRaises(AssertionError):source_authority._get(source_authority.API+'/unexpected',headers,time.monotonic()+30)
+            with self.assertRaises(AssertionError):source_authority._head(source_authority._headers('other'),sha,time.monotonic()+30)
+
     def test_early_canonical_inventory_is_rejected_by_actual_p3_preflight(self):
         import linecache,staging_prerequisites as prereq,staging_prerequisites_test,staging_cohort_preservation as cohort
         import staging_p3_prerequisites as p3
@@ -977,6 +1000,8 @@ class CompositionTests(unittest.TestCase):
                             successor=nats_patches.enter_context(patch.object(captured,'successor_nats_authority',side_effect=synthetic_successor))
                             nats_patches.enter_context(patch.object(auxiliary,'resume',return_value=None))
                             nats_patches.enter_context(patch.object(github_custody,'verify_artifact',side_effect=remote))
+                            nats_patches.enter_context(patch.object(bridge_root.source_authority,'_get',
+                                side_effect=synthetic_source_readback(approved['source_sha'])))
                             original_compile=compiler.main
                             def compile_public(*args,**kwargs):
                                 populate_public_fixture_inventory(kube,live)
