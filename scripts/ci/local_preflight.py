@@ -23,6 +23,7 @@ import local_auth_orchestration
 import local_auth_full_orchestration
 import local_ci_matrix_inventory
 import local_ci_policy_component
+import local_ci_proofs_component
 import local_chat_orchestration
 import local_compose_bridge
 import local_current_diff
@@ -132,11 +133,13 @@ def _verify_overlay_evidence(output, source, image_id, report):
 
 
 def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
+                proofs_shard=False, proofs_bash=None, proofs_make='make',
                 overlay_image_id=None, overlay_kubectl=None):
-    """Execute and verify a supported current-diff or overlay local plan.
+    """Execute and verify supported fetched-candidate components.
 
-    Only current-diff-contract receives a complete component receipt. Other
-    selected checks stay not_run and aggregate preflight remains incomplete.
+    Current-diff-contract and an explicitly requested CI proofs shard may
+    receive component receipts. The full CI script matrix and all other
+    selected checks stay not_run; aggregate preflight remains incomplete.
     The caller must fetch origin immediately before invoking this function.
     """
     root, output = Path(root).resolve(), Path(output).resolve()
@@ -149,6 +152,10 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
     selected = set(plan.get('checks', {}))
     if 'current-diff-contract' not in selected:
         raise ValueError('current-diff-contract is not selected')
+    if proofs_shard and ('ci-script-tests' not in selected or not candidate_ref):
+        raise ValueError('proofs shard requires a selected CI script check and fetched merge ref')
+    if not proofs_shard and (proofs_bash is not None or proofs_make != 'make'):
+        raise ValueError('proofs tool inputs require the proofs shard option')
     overlay_selected = 'match-squad-overlay' in selected
     overlay_requested = overlay_image_id is not None or overlay_kubectl is not None
     if overlay_requested and not overlay_selected:
@@ -181,6 +188,13 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
         overlay = local_overlay_execution.run_supervised(root, plan, output / 'overlay', overlay_image_id, overlay_kubectl,
                                                           base=base, head_ref=head_ref)
         _verify_overlay_evidence(output / 'overlay', source, overlay_image_id, overlay)
+    proofs_component = None
+    if proofs_shard:
+        proofs_component = local_ci_proofs_component.run(
+            root, base, head, head_ref, candidate_ref, output / 'ci-script-tests-proofs',
+            bash_binary=proofs_bash, make_binary=proofs_make)
+        local_ci_proofs_component.verify_component(
+            root, output / 'ci-script-tests-proofs', proofs_component)
     if affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
         raise ValueError('source or selected checks changed during handoff verification')
     _handoff_refs(root, base, head, head_ref)
@@ -196,6 +210,10 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
         report['limitations'].extend(['Python image publisher provenance is not authenticated',
                                       'exclusive Docker daemon and socket custody is assumed',
                                       'interruption and crash recovery acceptance is not established'])
+    if proofs_component is not None:
+        report['ci_proofs_component'] = 'ci-script-tests-proofs/proofs-component.json'
+        report['limitations'].extend(['only the proofs shard component completed',
+                                      'ci-script-tests remains not_run until every selected shard completes'])
     (output / 'handoff.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     return report
 
@@ -698,6 +716,10 @@ def main():
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
     parser.add_argument('--handoff', action='store_true', help='run a current-diff or overlay component handoff')
     parser.add_argument('--candidate-ref', help='fetch and validate refs/pull/<n>/merge for current-diff-contract')
+    parser.add_argument('--ci-script-tests-proofs', action='store_true',
+                        help='run only the fetched-candidate ci-script-tests proofs shard')
+    parser.add_argument('--proofs-bash', help='absolute or PATH Git Bash executable for the proofs shard')
+    parser.add_argument('--proofs-make', default='make', help='Make executable for the proofs shard')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
     parser.add_argument('--ci-policy-assets', help='JSON mapping of pinned inputs for the policy component only')
     parser.add_argument('--protobuf-component', action='store_true', help='execute the selected protobuf component with candidate validation')
@@ -723,11 +745,15 @@ def main():
         parser.add_argument('--compose-' + name, help='opt-in fixed private Compose fixture input')
     args = parser.parse_args()
     if args.handoff:
-        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'candidate_ref', 'overlay_image_id', 'overlay_kubectl', 'protobuf_component', 'flutter_driver_component', 'golangci_component'}
+        allowed = {'base', 'head', 'head_ref', 'output', 'flutter', 'go', 'buf', 'handoff', 'candidate_ref',
+                   'ci_script_tests_proofs', 'proofs_bash', 'proofs_make', 'overlay_image_id', 'overlay_kubectl',
+                   'protobuf_component', 'flutter_driver_component', 'golangci_component'}
         if args.protobuf_component or args.flutter_driver_component or args.golangci_component or any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
         report = run_handoff(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output,
                              candidate_ref=args.candidate_ref,
+                             proofs_shard=args.ci_script_tests_proofs,
+                             proofs_bash=args.proofs_bash, proofs_make=args.proofs_make,
                              overlay_image_id=args.overlay_image_id, overlay_kubectl=args.overlay_kubectl)
         print(json.dumps(report, sort_keys=True))
         return 0
