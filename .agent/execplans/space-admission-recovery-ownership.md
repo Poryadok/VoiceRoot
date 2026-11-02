@@ -28,8 +28,15 @@ with no published ports; shared DEV/STG is outside this continuation.
 - [x] Affected ownership/PG/Redis/P3 race selection: 76 PASS events, no skips or
   failures (163.076s); production factory race checks pass (49.529s), including
   all three existing production live-admission startup boundaries. Package
-  short checks and vet pass. Pinned package lint remains in progress.
-- [ ] Refresh AST graph, pin exact commit, independent review and develop PR.
+  short checks and vet pass. Repository-pinned package lint 2.6.1 passes with
+  zero issues on Go1.26.10.
+- [x] Required AST refresh completed: 132,623 nodes and 289,366 edges, no
+  clustering. `graphify-out/` is ignored by the current repository; there are
+  no generated tracked changes. Source review CLEAR is TT c24 from independent
+  Cedar1102-21 at `ebbd3396947fbc8a922de320892485be2b37686b`.
+- [x] Develop PR [1097](https://github.com/Poryadok/VoiceRoot/pull/1097) contains
+  the tested regression and this continuation. Hosted CI remains a delivery
+  gate; source qualification does not advance deployment or final acceptance.
 
 Native Linux Go1.26.10 inputs are bound to all 5,260 backend files from the
 base archive plus changed test SHA256
