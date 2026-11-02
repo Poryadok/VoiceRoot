@@ -1,0 +1,85 @@
+name: Space M50 diagnostic profile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-m50-diagnostic
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends postgresql-client
+      - name: Bind source and PostgreSQL image
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          image_id="$(docker inspect --format '{{.Image}}' "$POSTGRES_CONTAINER")"
+          [[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+          {
+            printf 'diagnostic_only=true\nsource_commit=%s\nsource_tree=%s\n' "$GITHUB_SHA" "$(git rev-parse HEAD^{tree})"
+            printf 'postgres_container_image_id=%s\n' "$image_id"
+            printf 'postgres_image_repo_digests=%s\n' "$(docker image inspect --format '{{json .RepoDigests}}' "$image_id")"
+            go version
+            git ls-files -z src/backend/migrations/space_db | sort -z | xargs -0 sha256sum
+          } > "$RUNNER_TEMP/space-profile50-identities.txt"
+      - name: Build source-bound migration driver
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          image="voice-m50-profile:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" -f src/backend/space/Dockerfile.native-migrate -t "$image" .
+          container="$(docker create "$image")"
+          trap 'docker rm -f "$container" >/dev/null' EXIT
+          docker cp "$container:/usr/local/bin/migrate" "$RUNNER_TEMP/native-migrate-driver"
+          chmod 755 "$RUNNER_TEMP/native-migrate-driver"
+          sha256sum "$RUNNER_TEMP/native-migrate-driver" >> "$RUNNER_TEMP/space-profile50-identities.txt"
+      - name: Check diagnostic counter validation
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          GOFLAGS: -mod=readonly
+        run: go test -p 2 -count=1 -timeout 1m -tags=spacebanintegration -run '^TestNative50ProfileDeltaRejectsIncompleteCounters$' ./internal/store
+      - name: Check diagnostic event validation
+        run: python3 -B scripts/ci/space_profile50_validate_test.py
+      - name: Check diagnostic lifecycle fault handling
+        run: python3 -B scripts/ci/space_profile50_lifecycle_test.py
+      - name: Run separate M50 diagnostic fixture
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          GOFLAGS: -mod=readonly
+          CANDIDATE_SHA: ${{ github.sha }}
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-m50-diagnostic@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-m50-diagnostic@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_profile50?sslmode=disable
+        run: bash ../../../scripts/ci/space_profile50_diagnostic.sh
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: space-m50-profile-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/space-profile50-*
+          if-no-files-found: error
