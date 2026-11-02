@@ -234,7 +234,54 @@ def report_realtime_failure(original):
     return checked
 
 
+def report_restore_failure(original):
+    """Observe bounded exception locations only during the synthetic fixture."""
+    def checked(*args,**kwargs):
+        import sys
+        allowed={'story_media_backup_cohort_restore.py','story_media_backup_restore.py',
+            'staging_cohort_preservation.py','staging_cohort_preservation_runtime.py',
+            'staging_cohort_preservation_pg.py','commands.py','cohort_hosted_pg.py','bridge_composition_test.py'}
+        kinds={'RestoreError','RestoreUncertain','CohortRestoreError','CommandFailure',
+            'Blocked','RuntimeError','ValueError','KeyError','AssertionError','OSError'}
+        events=[];previous=sys.gettrace()
+        def trace(frame,event,arg):
+            frame.f_trace_lines=False
+            if event=='exception':
+                name=Path(frame.f_code.co_filename).name;kind=arg[0].__name__
+                if name in allowed:
+                    row=[name,frame.f_code.co_name,frame.f_lineno,kind if kind in kinds else 'Other']
+                    if row not in events:events.append(row)
+                    if len(events)>64:events.pop(0)
+            return trace
+        sys.settrace(trace)
+        try:return original(*args,**kwargs)
+        except Exception:
+            print('RESTORE_FIXTURE_FAILURE '+json.dumps(events,separators=(',',':')),file=sys.stderr,flush=True)
+            raise
+        finally:sys.settrace(previous)
+    return checked
+
+
 class CompositionTests(unittest.TestCase):
+    def test_restore_diagnostic_keeps_swallowed_cleanup_location_private(self):
+        import contextlib,io,sys
+        marker='private-synthetic-password'
+        def fail():
+            try:raise ValueError(marker)
+            except ValueError:pass
+            raise RuntimeError(marker)
+        previous=sys.gettrace();output=io.StringIO()
+        with contextlib.redirect_stderr(output):
+            with self.assertRaisesRegex(RuntimeError,marker):report_restore_failure(fail)()
+        self.assertIs(sys.gettrace(),previous)
+        text=output.getvalue();self.assertNotIn(marker,text)
+        records=json.loads(text.removeprefix('RESTORE_FIXTURE_FAILURE '))
+        self.assertTrue(any(row[1]=='fail' and row[3]=='ValueError' for row in records))
+        self.assertTrue(any(row[1]=='fail' and row[3]=='RuntimeError' for row in records))
+        output=io.StringIO()
+        with contextlib.redirect_stderr(output):self.assertEqual(report_restore_failure(lambda:42)(),42)
+        self.assertEqual(output.getvalue(),'');self.assertIs(sys.gettrace(),previous)
+
     def test_hosted_story_seed_uses_separate_nonsuperuser_owner(self):
         import actor_root,cohort_hosted_pg
         pg=object.__new__(cohort_hosted_pg.HostedPostgres);pg.cid='fixture-container'
@@ -1146,6 +1193,8 @@ class CompositionTests(unittest.TestCase):
                             nats_patches.enter_context(patch.object(realtime_bootstrap,'run_prepare',
                                 side_effect=report_realtime_failure(realtime_bootstrap.run_prepare)))
                             captured=importlib.import_module('staging_cohort_preservation')
+                            nats_patches.enter_context(patch.object(captured,'_qualify_restore',
+                                side_effect=report_restore_failure(captured._qualify_restore)))
                             auxiliary=importlib.import_module('staging_cohort_preservation_auxiliary')
                             import github_custody
                             recovery=installed/'recovery';recovery.mkdir(mode=0o700)
