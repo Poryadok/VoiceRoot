@@ -177,6 +177,12 @@ class _OnboardingOverlayState extends ConsumerState<OnboardingOverlay> {
       anchorKey: anchorKey,
       title: title,
       body: body,
+      step: switch (ref.read(onboardingControllerProvider).currentStep) {
+        OnboardingStep.spaces => 2,
+        OnboardingStep.matchmaking => 3,
+        OnboardingStep.wrapUp => 4,
+        _ => 1,
+      },
       onContinue: () async {
         _clearCoachMark();
         await onContinue();
