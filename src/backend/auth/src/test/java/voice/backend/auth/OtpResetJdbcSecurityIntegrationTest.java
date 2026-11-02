@@ -93,6 +93,77 @@ class OtpResetJdbcSecurityIntegrationTest {
     }
   }
 
+  @Test void preUpgradeRowsCannotResurrectAfterNewestCodeWasAlreadyConsumed() {
+    var account = account();
+    jdbc.getJdbcTemplate().update("DELETE FROM otp_codes WHERE account_id = ?", account.id());
+    insertLegacyCode(account.id(), "111111", NOW.minusSeconds(120), null);
+    insertLegacyCode(account.id(), "222222", NOW.minusSeconds(60), NOW.minusSeconds(30));
+    assertThatThrownBy(() -> service(accounts, codes, refresh).resetPassword(
+        new ResetPasswordCommand(account.email(), "111111", "RejectedPassword99!")))
+        .isInstanceOf(AuthException.class).hasMessage("invalid_otp");
+    assertThat(accounts.findById(account.id().toString()).orElseThrow().passwordHash())
+        .isEqualTo(account.passwordHash());
+    assertThat(refresh.findByHash("refresh-" + account.id()).orElseThrow().revoked()).isFalse();
+  }
+
+  @Test void consumingPreUpgradeNewestCodeDoesNotExposeItsUnusedPredecessor() {
+    var account = account();
+    jdbc.getJdbcTemplate().update("DELETE FROM otp_codes WHERE account_id = ?", account.id());
+    insertLegacyCode(account.id(), "111111", NOW.minusSeconds(120), null);
+    insertLegacyCode(account.id(), "222222", NOW.minusSeconds(60), null);
+    var service = service(accounts, codes, refresh);
+    service.resetPassword(new ResetPasswordCommand(account.email(), "222222", "AcceptedPassword99!"));
+    assertThatThrownBy(() -> service.resetPassword(
+        new ResetPasswordCommand(account.email(), "111111", "RejectedPassword99!")))
+        .isInstanceOf(AuthException.class).hasMessage("invalid_otp");
+    assertThat(passwords.matches("AcceptedPassword99!",
+        accounts.findById(account.id().toString()).orElseThrow().passwordHash())).isTrue();
+  }
+
+  private void insertLegacyCode(UUID accountId, String code, Instant issued, Instant used) {
+    // The pre-upgrade writer inserted without invalidating earlier rows.
+    jdbc.getJdbcTemplate().update("""
+        INSERT INTO otp_codes(account_id, code, type, expires_at, created_at, used_at)
+        VALUES (?, decode(?, 'hex'), 'password_reset', ?, ?, ?)
+        """, accountId, codec.hash(code), java.sql.Timestamp.from(issued.plusSeconds(600)),
+        java.sql.Timestamp.from(issued), used == null ? null : java.sql.Timestamp.from(used));
+  }
+
+  @Test void newestLegacyIssuanceIsAuthoritativeEvenWhenItExpiresBeforeItsPredecessor() {
+    var account = account();
+    jdbc.getJdbcTemplate().update("DELETE FROM otp_codes WHERE account_id = ?", account.id());
+    insertLegacyCode(account.id(), "111111", NOW.minusSeconds(120), null);
+    insertLegacyCode(account.id(), "222222", NOW.minusSeconds(60), null);
+    jdbc.getJdbcTemplate().update("UPDATE otp_codes SET expires_at = ? WHERE account_id = ? AND created_at = ?",
+        java.sql.Timestamp.from(NOW.minusSeconds(1)), account.id(), java.sql.Timestamp.from(NOW.minusSeconds(60)));
+    assertThat(codes.findLatestValid(account.id(), "password_reset", NOW)).isEmpty();
+  }
+
+  @Test void ambiguousLegacyLatestIssuanceFailsClosedForUnusedAndSpentTies() {
+    for (Instant used : Arrays.asList(null, NOW.minusSeconds(10))) {
+      var account = account();
+      jdbc.getJdbcTemplate().update("DELETE FROM otp_codes WHERE account_id = ?", account.id());
+      insertLegacyCode(account.id(), "111111", NOW.minusSeconds(60), null);
+      insertLegacyCode(account.id(), "222222", NOW.minusSeconds(60), used);
+      assertThat(codes.findLatestValid(account.id(), "password_reset", NOW)).isEmpty();
+      // A real resend establishes a fresh unambiguous authority even with a backward clock.
+      var fresh = codes.create(account.id(), codec.hash("333333"), "password_reset",
+          NOW.plusSeconds(30), NOW.minusSeconds(120));
+      assertThat(codes.findLatestValid(account.id(), "password_reset", NOW)).contains(fresh);
+    }
+  }
+
+  @Test void fixedAndBackwardClocksAndShorterExpiryDoNotChangeIssuanceOrder() {
+    var account = account();
+    var second = codes.create(account.id(), codec.hash("222222"), "password_reset", NOW.plusSeconds(300), NOW);
+    assertThat(codes.findLatestValid(account.id(), "password_reset", NOW)).contains(second);
+    var third = codes.create(account.id(), codec.hash("333333"), "password_reset",
+        NOW.plusSeconds(100), NOW.minusSeconds(60));
+    assertThat(codes.findLatestValid(account.id(), "password_reset", NOW)).contains(third);
+    codes.markUsed(third.id(), NOW);
+    assertThat(codes.findLatestValid(account.id(), "password_reset", NOW)).isEmpty();
+  }
+
   @Test void independentResetServicesHaveExactlyOneWinner() throws Exception {
     var account = account();
     var entered = new CountDownLatch(1);

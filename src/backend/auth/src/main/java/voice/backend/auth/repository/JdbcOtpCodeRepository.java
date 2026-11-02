@@ -44,10 +44,16 @@ public class JdbcOtpCodeRepository implements OtpCodeRepository {
           WHERE account_id = :accountId AND type = :type AND used_at IS NULL
           """, new MapSqlParameterSource("accountId", accountId)
               .addValue("type", type).addValue("now", Timestamp.from(now)));
+      // Order issuance at PostgreSQL timestamp precision under the same lock,
+      // even when application clocks repeat or move backward. Invalid history
+      // must fail the transaction rather than commit predecessor invalidation.
       return jdbc.queryForObject(
         """
         INSERT INTO otp_codes (account_id, code, type, expires_at, created_at)
-        VALUES (:accountId, decode(:codeHash, 'hex'), :type, :expiresAt, :createdAt)
+        SELECT :accountId, decode(:codeHash, 'hex'), :type, :expiresAt,
+               GREATEST(:createdAt, COALESCE(MAX(created_at) + INTERVAL '1 microsecond', :createdAt))
+        FROM otp_codes WHERE account_id = :accountId AND type = :type
+        HAVING MAX(created_at) IS NULL OR isfinite(MAX(created_at))
         RETURNING id, account_id, encode(code, 'hex') AS code_hash, type, expires_at, used_at
         """,
         new MapSqlParameterSource()
@@ -62,24 +68,26 @@ public class JdbcOtpCodeRepository implements OtpCodeRepository {
 
   @Override
   public Optional<OtpCodeRecord> findLatestValid(UUID accountId, String type, Instant now) {
-    return jdbc.query(
+    // Rank all history before checking usability, including rows written before
+    // predecessor invalidation existed. A spent/expired newest code is a tombstone.
+    var latest = jdbc.query(
             """
             SELECT id, account_id, encode(code, 'hex') AS code_hash, type, expires_at, used_at
             FROM otp_codes
             WHERE account_id = :accountId
               AND type = :type
-              AND used_at IS NULL
-              AND expires_at > :now
-            ORDER BY expires_at DESC
-            LIMIT 1
+              AND isfinite(created_at)
+              AND created_at = (SELECT MAX(created_at) FROM otp_codes
+                                WHERE account_id = :accountId AND type = :type)
+            LIMIT 2
             """,
             new MapSqlParameterSource()
                 .addValue("accountId", accountId)
-                .addValue("type", type)
-                .addValue("now", Timestamp.from(now)),
-            ROW_MAPPER)
-        .stream()
-        .findFirst();
+                .addValue("type", type),
+            ROW_MAPPER);
+    // Legacy equal issuance timestamps have no trustworthy ordering. Fail closed.
+    return latest.size() == 1 ? Optional.of(latest.getFirst()).filter(r -> r.isUsable(now))
+        : Optional.empty();
   }
 
   @Override
