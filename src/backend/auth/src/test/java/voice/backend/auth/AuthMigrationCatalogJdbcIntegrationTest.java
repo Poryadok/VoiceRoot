@@ -73,13 +73,13 @@ class AuthMigrationCatalogJdbcIntegrationTest {
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();
       var loader = flyway(postgres, "classpath:db/migration");
-      assertThat(loader.migrate().migrationsExecuted).isEqualTo(29);
+      assertThat(loader.migrate().migrationsExecuted).isEqualTo(31);
       assertThat(java.util.Arrays.stream(loader.info().applied())
           .map(migration -> migration.getVersion().getVersion()).toList())
           .containsExactlyElementsOf(java.util.stream.Stream.concat(
               java.util.stream.IntStream.rangeClosed(1, 26).mapToObj(version -> Integer.toString(version)),
-              java.util.stream.Stream.of("28", "31", "32")).toList());
-      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("32");
+              java.util.stream.Stream.of("28", "31", "32", "33", "34")).toList());
+      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("34");
       flywayCatalog = authorizationCatalog(jdbc(postgres));
       assertThat(loader.migrate().migrationsExecuted).isZero();
     }
@@ -87,7 +87,7 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       postgres.start();
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       var database = jdbc(postgres);
-      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(33);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(35);
       assertThat(authorizationCatalog(database)).isEqualTo(flywayCatalog);
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       try(var reader=new voice.backend.auth.authoritysource.AuthAuthorityReader(
