@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,35 @@ import local_proto_execution as proto
 
 
 class LocalProtoExecutionTests(unittest.TestCase):
+    def test_component_evidence_rejects_tampered_logs_and_skips(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp); base, head, candidate = 'a'*40, 'b'*40, 'c'*40
+            source = {'head':head}
+            package = 'voice/r23-contract-test'; test = 'TestR23GeneratedRuntimeConsumers/Java'
+            events = [{'Action':'start','Package':package},{'Action':'run','Package':package,'Test':test},
+                      {'Action':'pass','Package':package,'Test':test},{'Action':'pass','Package':package}]
+            receipt = {'event_base':base,'base':base,'head':head,'merge':candidate,
+                       'checkout':candidate,'parents':[base,head]}
+            payloads = {'r23-contract.stdout':''.join(json.dumps(e)+'\n' for e in events).encode(),
+                        'buf-pr-regressions.stderr':b'Ran 1 test in 1s\n\nOK\n',
+                        'buf-pr-candidate.stdout':json.dumps(receipt).encode()}
+            commands=[]
+            for name in proto.COMPONENT_COMMANDS:
+                row={'name':name,'exit_code':0}
+                for suffix in ('stdout','stderr'):
+                    raw=payloads.get(name+'.'+suffix,b''); (out/(name+'.'+suffix)).write_bytes(raw)
+                    row[suffix+'_sha256']=hashlib.sha256(raw).hexdigest()
+                commands.append(row)
+            (out/'base-protos.tar').write_bytes(b'archive')
+            report={'schema':'voice-local-protobuf-diagnostic-v1','status':'incomplete','source':source,
+                    'base':base,'candidate':candidate,'commands':commands,
+                    'base_archive_sha256':hashlib.sha256(b'archive').hexdigest(),
+                    'r23':{'packages':[package],'passed':1,'skipped':[]},'pr_regressions':1,'pr_candidate':receipt}
+            proto.verify_component_evidence(out, source, base, report)
+            (out/'buf-pr-regressions.stderr').write_bytes(b'Ran 1 test in 1s\nOK (skipped=1)\n')
+            with self.assertRaises(ValueError): proto.verify_component_evidence(out, source, base, report)
+            commands[-2]['stderr_sha256'] = hashlib.sha256((out/'buf-pr-regressions.stderr').read_bytes()).hexdigest()
+            with self.assertRaises(ValueError): proto.verify_component_evidence(out, source, base, report)
     def test_candidate_git_is_visible_to_buf_and_restored_on_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); snapshot = root/'snapshot'; snapshot.mkdir()

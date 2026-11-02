@@ -695,6 +695,12 @@ The local protobuf diagnostic uses the same Windows Job supervision for its
 Git, tool and test commands and limits each captured stream to 16 MiB, including
 the binary baseline archive. Exceeding that limit fails the diagnostic. POSIX
 subprocess timeouts likewise do not prove descendant cleanup.
+With `--protobuf-component`, the selected protobuf check additionally runs the
+immutable-base regressions and PR breaking check against a locally constructed
+two-parent candidate, verifies bounded logs and rejects skipped tests. Its
+component result does not complete the overall preflight or substitute for the
+GitHub merge candidate. Tool and dependency publisher provenance remains
+unbound; fetch refs immediately before execution.
 
 The optional `--ci-policy-assets` input runs the selected CI-script policy shard
 as a component: it verifies all Linux recipe logs and owned Docker cleanup, then
