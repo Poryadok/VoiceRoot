@@ -37,12 +37,20 @@ def launch_snapshot(argv,body,timeout,limit,env,pass_fds):
 def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None, pass_fds=()):
     global _current_action
     argv=list(argv);body=bytes(body);env=None if env is None else dict(env);pass_fds=tuple(pass_fds)
-    if len(body)>2<<20: raise Blocked('command_input_limit')
     action=action_id(argv)
     _current_action=action
     guard=authority_guard
     module=sys.modules.get('resource_claim');session=getattr(guard,'__self__',None)
     bound=(module is not None and type(session) is module.Session and getattr(guard,'__func__',None) is module.Session.check)
+    large=len(body)>2<<20
+    if bound and not large and session._cohort_restore_large_permit is not None:
+        session._cohort_restore_large_permit=None
+        raise RuntimeError('cohort_restore_large_input_invalid')
+    if large:
+        if not bound or len(body)>64<<20:
+            if bound:session._cohort_restore_large_permit=None
+            raise Blocked('command_input_limit')
+        large_permit=session.consume_restore_large_input(argv,body,timeout,limit,env,pass_fds)
     privileged=bound and session._prerequisite_readonly_permit is not None
     if guard is not None:
         if bound:guard(argv,launch=launch_snapshot(argv,body,timeout,limit,env,pass_fds))
@@ -51,6 +59,12 @@ def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None, pass_fds=()):
     if privileged:
         if authority_guard != guard:raise RuntimeError('staging_resource_guard_changed')
         session.readonly_current()
+    if large:
+        if authority_guard!=guard:raise RuntimeError('staging_resource_guard_changed')
+        import staging_cohort_preservation_runtime
+        staging_cohort_preservation_runtime.revalidate_restore_large_input(session,large_permit,argv,body)
+        if authority_guard!=guard:raise RuntimeError('staging_resource_guard_changed')
+        session.check()
     try:
         child=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,env=env,start_new_session=True,pass_fds=pass_fds)
