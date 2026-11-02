@@ -9,15 +9,18 @@ readonly run_id="$(date +%s)-${RANDOM}${RANDOM}"
 readonly project="voice-r22-f14-${run_id}"
 readonly volume="${project}_voice_pgdata"
 readonly bootstrap="${project}-bootstrap"
+readonly evidence_dir="${ROOT}/tmp/${project}-space-evidence"
 readonly sentinel_hex='006f6c642d766f6c756d652d73656e74696e656cff'
 # Pin the reviewed catalog, so a future migration must update this proof too.
-readonly expected_voice_version=12
+readonly expected_voice_version=15
 compose_started=false
 bootstrap_created=false
 volume_created=false
+evidence_created=false
 
 compose() {
   COMPOSE_PROJECT_NAME="${project}" POSTGRES_PORT=0 \
+    SPACE_NATIVE_EVIDENCE_DIR="./tmp/${project}-space-evidence" \
     docker compose -f "${ROOT}/docker-compose.yml" "$@"
 }
 
@@ -50,6 +53,10 @@ cleanup() {
   if [[ "${volume_created}" == true ]] && volume_is_owned; then
     docker volume rm "${volume}" >/dev/null
   fi
+  if [[ "${evidence_created}" == true ]]; then
+    rm -f "${evidence_dir}/prior.jsonl"
+    rmdir "${evidence_dir}"
+  fi
   return "${status}"
 }
 trap cleanup EXIT
@@ -81,6 +88,10 @@ query() {
 }
 
 docker image inspect postgres:18-alpine >/dev/null || fail 'postgres:18-alpine is required locally'
+
+mkdir -p "${ROOT}/tmp"
+mkdir "${evidence_dir}"
+evidence_created=true
 
 docker volume create \
   --label "${label_key}=${run_id}" \
@@ -117,6 +128,12 @@ first_output="$(compose --profile app run --rm compose-db-init 2>&1)" || {
   printf '%s\n' "${first_output}" >&2
   fail 'first compose-db-init run failed'
 }
+# Space's repeat init verifies the original controller receipt; it must never
+# try to adopt an existing database as a new installation.
+printf '%s\n' "${first_output}" | grep '^{"event":' >"${evidence_dir}/prior.jsonl" ||
+  fail 'first init did not emit native Space controller evidence'
+grep -q '^{"event":"complete",' "${evidence_dir}/prior.jsonl" ||
+  fail 'first init did not complete native Space provisioning'
 
 [[ "$(query voice "SELECT count(*) FROM pg_database WHERE datname = 'voice_db'")" == '1' ]] || fail 'voice_db was not created on the existing volume'
 schema_state="$(query voice_db 'SELECT version::text || chr(58) || dirty::text FROM schema_migrations LIMIT 1')"
@@ -143,12 +160,16 @@ expected_tables=(
   voice_profile_account_mappings
   voice_room_instances
   voice_room_memberships
+  voice_roster_outbox
   voice_sdk_conversion_fence_receipts
   voice_space_lifecycle_fence_heads
   voice_space_lifecycle_fence_receipts
   voice_space_lifecycle_purge_receipts
+  voice_space_lifecycle_targets
   voice_space_media_admission_outbox
+  voice_space_media_admission_owners
   voice_space_media_admissions
+  voice_space_media_grants
   voice_space_media_room_heads
 )
 expected_catalog="$(IFS=,; printf '%s' "${expected_tables[*]}")"
@@ -161,6 +182,8 @@ second_output="$(compose --profile app run --rm compose-db-init 2>&1)" || {
   printf '%s\n' "${second_output}" >&2
   fail 'second compose-db-init run failed'
 }
+grep -q '^{"event":"verified",' <<<"${second_output}" ||
+  fail 'second init did not verify the retained native Space controller evidence'
 schema_state_second="$(query voice_db 'SELECT version::text || chr(58) || dirty::text FROM schema_migrations LIMIT 1')"
 sentinel_after="$(query chat_db 'SELECT encode(payload, '\''hex'\'') FROM r22_existing_volume_sentinel WHERE id = 1')"
 [[ "${schema_state_second}" == "${expected_voice_version}:false" ]] || fail "second init changed Voice migration state to ${schema_state_second}"
