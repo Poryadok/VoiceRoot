@@ -1,0 +1,49 @@
+{
+  "activation_authority": false,
+  "current_or_future_path_authority": false,
+  "dag": {
+    "path": "docs/testing/f13-current-source-v1/dag.raw",
+    "sha256": "afe2c9c80dafe772f55c5032bf55ab2be169b147c90558f35ed5e73f4cc26529"
+  },
+  "native": {
+    "closure": {
+      "path": "docs/testing/f13-current-source-v1/native-closure.json",
+      "sha256": "da9d5889993859e0e34d6224cf2a3ea1641bd8f3cce23ad0f75deb5090301dd2"
+    },
+    "raw_go_list": {
+      "path": "docs/testing/f13-current-source-v1/native-go-list.json",
+      "sha256": "c7d639c6107282a48b6113cebc1db8ed381a49b281f309a0bdc31098e2087cde"
+    }
+  },
+  "predecessor": {
+    "native_sha256": "a220c85d67ed0bc56eecb24347f165d6f892a30e636cebf39303ff67b47056db",
+    "production_sha256": "4a603a07a6e7e4c7677a954cdbac8aca26faa9600e4a46fe930e0cfd202356e4",
+    "record": "b12a122e9a656afb3894b86c065b4992ad81653e",
+    "role_sha256": "f63595ab202fc1bf8852077cc637d5cbf416047ac02ff89ca66af9ead0c7a702",
+    "source": "a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259"
+  },
+  "role": {
+    "closure": {
+      "path": "docs/testing/f13-current-source-v1/role-closure.json",
+      "sha256": "0e19f19ab5a179be2d7fb26ab190bdeb381ffdb3f51ac246faf0688e1d4c2c66"
+    },
+    "historical_runtime_gap": "Old9dc composition unconditionally rechecked nickname after accepted creation;144c69 HOLD. Original author/runtime evidence and taint stay historical. No executed historical cross-merge success is invented.",
+    "raw_go_list": {
+      "path": "docs/testing/f13-current-source-v1/role-go-list.json",
+      "sha256": "14c91a25fe7e0f43af6570d51d222de49e219d4c3873ea5df5bc1ae6922f3f4b"
+    }
+  },
+  "runtime_evidence": {
+    "path": "docs/testing/f13-current-source-v1/runtime-evidence.json",
+    "sha256": "76cdb6db588e517ea2545d984733e6393305ca9438d705a97f90b6227569dc04"
+  },
+  "runtime_pass": false,
+  "source": "ffad84570c38455ec77f387ad9ec04fd94411004",
+  "source_review": {
+    "path": "docs/testing/f13-current-source-v1/source-review.json",
+    "sha256": "c160fe0a6b7ef6b3338366a8ae43cf9bdecbb19b8edae7c8b3481a166ae8bac2"
+  },
+  "source_tree": "b5c476db56c880310853ac1ec47b3220120b8b76",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "version": "F13-CURRENT-SOURCE-SUCCESSOR-v1"
+}
