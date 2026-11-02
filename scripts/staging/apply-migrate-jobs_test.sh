@@ -189,6 +189,14 @@ for arg in "$@"; do
 done
 EOF
 chmod +x "${TEST_BIN}/migrate"
+cat >"${TEST_BIN}/psql" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"${PSQL_ARGV_CAPTURE:?}"
+printf '%s' "${PGPASSWORD:-}" >"${PSQL_PASSWORD_CAPTURE:?}"
+printf 'voice_db|1|f\n'
+EOF
+chmod +x "${TEST_BIN}/psql"
 
 readonly RESERVED_USER='u@ser /%?#:'
 readonly RESERVED_PASSWORD='R22 a@b/%?#: space END'
@@ -265,6 +273,12 @@ kubectl() {
       ;;
     exec)
       local probe_dsn probe_db
+      if [[ "${PROBE_EXECUTE:-false}" == true ]]; then
+        while [[ "$1" != -- ]]; do shift; done
+        shift
+        PATH="${TEST_BIN}:${PATH}" "$@"
+        return
+      fi
       IFS= read -r probe_dsn
       probe_db="${probe_dsn#*5432/}"
       printf '%s\n' 'db.probe' >>"${CALLS}"
@@ -766,6 +780,30 @@ run_retained_database_hold_cases() {
   done
 }
 
+run_probe_credential_transport_case() {
+  reset_mock || return 1
+  local result=0
+  migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}"
+  : >"${JOB_EXISTS}"
+  printf 1 >"${JOB_SUCCEEDED}"
+  PG_PASS="${RESERVED_PASSWORD}"
+  export PSQL_ARGV_CAPTURE="${TEST_TMP}/psql-argv"
+  export PSQL_PASSWORD_CAPTURE="${TEST_TMP}/psql-password"
+  PROBE_EXECUTE=true
+  apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations >/dev/null || result=$?
+  PROBE_EXECUTE=false
+  [[ $result == 0 ]] || { echo 'FAIL: actual remote probe shell did not reach psql'; return 1; }
+  assert_no_credential_fragments "$(cat "${PSQL_ARGV_CAPTURE}")" || {
+    echo 'FAIL: psql process argv contains a raw or encoded password'; return 1;
+  }
+  [[ "$(cat "${PSQL_PASSWORD_CAPTURE}")" == "${RESERVED_PASSWORD}" ]] || {
+    echo 'FAIL: libpq environment did not receive the exact decoded password'; return 1;
+  }
+  grep -Fxq 'postgres://voice@voice-postgres:5432/voice_db?sslmode=disable' "${PSQL_ARGV_CAPTURE}" || {
+    echo 'FAIL: password removal changed the probe target'; return 1;
+  }
+}
+
 run_secret_leak_case() {
   reset_mock || return 1
   readonly sentinel_password='R22_F_PASSWORD_MUST_NOT_APPEAR_7f4c'
@@ -812,6 +850,9 @@ case "${1:-all}" in
   sanitize)
     run_reserved_diagnostics_case
     ;;
+  transport)
+    run_probe_credential_transport_case
+    ;;
   rerun)
     run_changed_content_case
     run_unchanged_content_case
@@ -828,6 +869,7 @@ case "${1:-all}" in
     run_changed_content_case || failures=$((failures + 1))
     run_unchanged_content_case || failures=$((failures + 1))
     run_retained_database_hold_cases || failures=$((failures + 1))
+    run_probe_credential_transport_case || failures=$((failures + 1))
     run_gameintegration_caller_case fresh || failures=$((failures + 1))
     run_gameintegration_caller_case noop || failures=$((failures + 1))
     run_secret_leak_case || failures=$((failures + 1))
@@ -836,7 +878,7 @@ case "${1:-all}" in
     ((failures == 0)) || exit 1
     ;;
   *)
-    echo "usage: $0 [all|selftest|rerun|secret|encoding|sanitize]" >&2
+    echo "usage: $0 [all|selftest|rerun|secret|encoding|sanitize|transport]" >&2
     exit 2
     ;;
 esac

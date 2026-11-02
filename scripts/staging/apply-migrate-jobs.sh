@@ -182,7 +182,7 @@ print("postgres://%s:%s@voice-postgres:5432/%s?sslmode=disable" %
 }
 
 verify_retained_migration_target() {
-  local db="$1" dir="$2" template="$3" target dsn observed
+  local db="$1" dir="$2" template="$3" target dsn probe_input observed
   if ! target="$(find "$dir" -maxdepth 1 -type f -name '*.up.sql' -printf '%f\n' |
       sed -nE 's/^([0-9]+)_.+\.up\.sql$/\1/p' | sed 's/^0*//' | sort -n | tail -1)" ||
      [[ ! "$target" =~ ^[0-9]+$ ]] ||
@@ -197,11 +197,42 @@ verify_retained_migration_target() {
     echo "HOLD: cannot resolve current migration target for ${db}; explicit reconciliation required" >&2
     return 1
   fi
-  # Credentials travel only over stdin, never kubectl arguments or diagnostics.
+  # Remove the URI password before invoking psql. Refuse connection selectors
+  # whose override semantics cannot be preserved by this password split.
+  if ! probe_input="$(printf '%s' "$dsn" | python3 -c '
+import base64, re, sys
+from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
+try:
+    uri = urlsplit(sys.stdin.read())
+    selectors = {"password", "sslpassword", "passfile", "service", "servicefile", "user", "dbname", "host", "hostaddr", "port"}
+    if (uri.scheme not in ("postgres", "postgresql") or not uri.hostname or
+        uri.username is None or uri.password is None or uri.fragment or
+        re.search(r"%(?![0-9a-fA-F]{2})", uri.password) or
+        any(key.lower() in selectors for key, _ in parse_qsl(uri.query, keep_blank_values=True))):
+        raise ValueError()
+    uri.port  # Reject invalid port syntax before the probe.
+    userinfo, host = uri.netloc.rsplit("@", 1)
+    clean = urlunsplit(uri._replace(netloc=userinfo.split(":", 1)[0] + "@" + host))
+    password = unquote(uri.password, errors="strict").encode()
+    if b"\0" in password:
+        raise ValueError()
+    print(clean)
+    print(base64.b64encode(password).decode())
+except (ValueError, UnicodeError):
+    sys.exit(1)' 2>/dev/null)"; then
+    echo "HOLD: unsupported migration connection for ${db}; explicit reconciliation required" >&2
+    return 1
+  fi
+  # Passwords travel only over stdin and libpq environment, never process argv
+  # or diagnostics. Base64 framing preserves decoded password newlines.
   # -X ignores psqlrc; query errors and connection details are deliberately not
   # printed. A missing/ambiguous ledger cannot attest a retained Job's success.
-  if ! observed="$(printf '%s\n' "$dsn" | kubectl exec -i --request-timeout=30s -n "$NS" "${VOICE_POSTGRES_POD:-voice-postgres-0}" -- \
+  if ! observed="$(printf '%s\n' "$probe_input" | kubectl exec -i --request-timeout=30s -n "$NS" "${VOICE_POSTGRES_POD:-voice-postgres-0}" -- \
       sh -ec 'IFS= read -r database_url
+        IFS= read -r password_base64
+        PGPASSWORD="$(printf "%s" "$password_base64" | base64 -d && printf "\001")"
+        PGPASSWORD="${PGPASSWORD%?}"
+        export PGPASSWORD
         export PGCONNECT_TIMEOUT=10 PGOPTIONS="-c statement_timeout=10000 -c default_transaction_read_only=on"
         exec psql "$database_url" -X -A -t -F "|" -v ON_ERROR_STOP=1 \
           -c "SELECT current_database(), version, dirty FROM public.schema_migrations"' 2>/dev/null)" ||

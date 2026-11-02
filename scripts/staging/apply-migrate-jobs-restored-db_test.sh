@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run inside an owned disposable postgres:16-bookworm container with this repo
-# mounted at /repo: bash /repo/scripts/staging/apply-migrate-jobs-restored-db_test.sh
+# mounted at /repo, with python3 installed:
+# bash /repo/scripts/staging/apply-migrate-jobs-restored-db_test.sh
 # PostgreSQL must be initialized with POSTGRES_PASSWORD=fixture. No real kubectl.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
@@ -14,6 +15,8 @@ printf 'SELECT 2;\n' > "$work/sql/000002_fixture.up.sql"
 hash=$(migration_content_hash "$work/sql")
 calls="$work/calls"
 fixture_target=restored_db
+fixture_query=sslmode=disable
+fixture_suffix=
 unavailable=false
 secret_missing=false
 retained=true
@@ -24,7 +27,7 @@ kubectl() {
     'get job') [[ $retained == true ]] || return 1; [[ "$*" != *status.succeeded* ]] || printf 1 ;;
     'get secret')
       [[ $secret_missing == false ]] || return 1
-      printf '%s' "postgres://postgres:fixture@127.0.0.1:5432/$fixture_target?sslmode=disable" | base64 -w0 ;;
+      printf '%s' "postgres://postgres:fixture@127.0.0.1:5432/$fixture_target?$fixture_query$fixture_suffix" | base64 -w0 ;;
     'exec '*)
       [[ $unavailable == false ]] || return 1
       while [[ "$1" != -- ]]; do shift; done
@@ -61,7 +64,11 @@ check_retained() {
       echo "FAIL: $label accepted retained Job without valid actual DB state"; exit 1;
     }
   fi
-  if [[ $secret_missing == false ]]; then grep -Fxq exec "$calls"; fi
+  if [[ ${3:-probe} == no-probe ]]; then
+    ! grep -Fxq exec "$calls"
+  elif [[ $secret_missing == false ]]; then
+    grep -Fxq exec "$calls"
+  fi
   ! grep -Eq '^(delete|apply|annotate|wait|configmap.apply)$' "$calls"
   ! grep -Fq 'fixture@' <<< "$output"
   echo "PASS: $label"
@@ -73,6 +80,14 @@ check_retained retained-job-older-restored-db hold
 [[ $(psql -X -U postgres -d restored_db -Atqc 'SELECT value FROM restored_payload') == preserved ]]
 sql 'UPDATE schema_migrations SET version=2'
 check_retained current-clean skip
+fixture_query='sslmode=disable&dbname=other_db'
+check_retained unsupported-query-target-selector hold no-probe
+fixture_query='sslmode=disable&password=fixture'
+check_retained unsupported-query-credential-selector hold no-probe
+fixture_query=sslmode=disable
+fixture_suffix=$'\n'
+check_retained trailing-newline-secret hold no-probe
+fixture_suffix=
 sql 'UPDATE schema_migrations SET version=2,dirty=true'
 check_retained dirty hold
 sql 'UPDATE schema_migrations SET version=3,dirty=false'
