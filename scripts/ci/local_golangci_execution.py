@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import affected_check_plan
+import local_private_git
 import local_process_supervision as supervision
 import local_source_snapshot
 
@@ -84,7 +85,7 @@ def _run_modules(source_copy, modules, go, lint, env, record=None):
     return rows
 
 
-def run(root, plan, output, go, go_sha256, lint, lint_sha256, *, base, head_ref):
+def run(root, plan, output, go, go_sha256, lint, lint_sha256, *, base, head_ref, verify_module_inputs=False):
     if not _windows():
         raise ValueError('Windows supervised Go lint diagnostic required')
     root, output = Path(root).resolve(), Path(output).resolve()
@@ -108,11 +109,16 @@ def run(root, plan, output, go, go_sha256, lint, lint_sha256, *, base, head_ref)
     output.mkdir(parents=True)
     source_copy = local_source_snapshot.materialize(root, source, output / 'source')
     env = {k: v for k, v in os.environ.items()
-           if not k.upper().startswith(('GO', 'GOLANGCI'))}
+           if not k.upper().startswith(('GO', 'GOLANGCI', 'GIT_', 'PYTHON'))}
+    temp = output/'temp'; temp.mkdir()
     env.update(GOENV='off', GOTOOLCHAIN='local', GOFLAGS='-mod=readonly -p=2', GOMAXPROCS='2',
                GOCACHE=str(output / 'go-cache'), GOMODCACHE=str(output / 'go-mod-cache'),
                GOLANGCI_LINT_CACHE=str(output / 'lint-cache'),
+               TEMP=str(temp), TMP=str(temp), TMPDIR=str(temp), GOTMPDIR=str(temp), PYTHONDONTWRITEBYTECODE='1',
                PATH=str(go.parent) + os.pathsep + env.get('PATH', ''))
+    private_git = (local_private_git.prepare(root, source, source_copy, output/'fixture.git',
+                                            runner=lambda command, **kwargs: _private_git_execute(command, **kwargs))
+                   if verify_module_inputs else None)
     def record(row, stdout, stderr):
         prefix = row['action'] + '-' + row['module']
         (output / (prefix + '.stdout')).write_bytes(stdout)
@@ -129,5 +135,103 @@ def run(root, plan, output, go, go_sha256, lint, lint_sha256, *, base, head_ref)
               'platform': {'goos': 'windows', 'goarch': 'amd64'},
               'unbound_inputs': ['tool provenance', 'dependency provenance', 'host environment',
                                  'hosted Linux lint parity']}
+    if verify_module_inputs:
+        git_env = dict(env)
+        git_env.update({key:value for key,value in private_git.items() if key.upper().startswith('GIT_')})
+        stdout, stderr = _command([sys.executable, '-B', str(source_copy/'scripts/ci/check_go_modules_clean.py')],
+                                  cwd=source_copy, env=git_env)
+        (output/'module-clean.stdout').write_bytes(stdout); (output/'module-clean.stderr').write_bytes(stderr)
+        report['module_check'] = {'exit_code':0, 'stdout_sha256':hashlib.sha256(stdout).hexdigest(),
+                                  'stderr_sha256':hashlib.sha256(stderr).hexdigest()}
+        local_source_snapshot.verify_materialized(root,source,source_copy)
+        if (local_source_snapshot.capture(root,source['head']) != source or
+                _sha256(go) != go_sha256 or _sha256(lint) != lint_sha256):
+            raise ValueError('source or lint tools changed during module check')
     (output / 'diagnostic.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    return report
+
+
+def _private_git_execute(command, *, env=None, input=None, timeout=30):
+    wrapper = Path(__file__).with_name('local_golangci_capture.py')
+    return supervision.run_diagnostic([sys.executable, '-B', str(wrapper), *command], env=env, input=input,
+                                      timeout=timeout, capture_output=True, check=False)
+
+
+def _evidence_file(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024*1024:
+        raise ValueError('unsafe or oversized lint evidence')
+    raw = path.read_bytes()
+    if len(raw) > 1024*1024: raise ValueError('oversized lint evidence')
+    return raw
+
+
+def verify_component_evidence(output, plan, report, tools):
+    modules = modules_for(plan)
+    if (not isinstance(report, dict) or report.get('schema') != 'voice-local-golangci-diagnostic-v1' or
+            report.get('status') != 'incomplete' or report.get('source') != plan.get('source') or
+            report.get('modules') != modules or report.get('tools') != tools or
+            report.get('platform') != {'goos':'windows','goarch':'amd64'}):
+        raise ValueError('lint component identity differs')
+    rows = report.get('commands')
+    if (not isinstance(rows,list) or any(not isinstance(row,dict) for row in rows) or
+            [(row.get('action'),row.get('module')) for row in rows] !=
+            [(action,module) for action in ('resolve','lint') for module in modules] or
+            any(type(row.get('exit_code')) is not int or row['exit_code'] != 0 for row in rows)):
+        raise ValueError('lint module inventory differs')
+    output = Path(output)
+    for row in rows:
+        for suffix in ('stdout','stderr'):
+            raw = _evidence_file(output/(row['action']+'-'+row['module']+'.'+suffix))
+            if hashlib.sha256(raw).hexdigest() != row.get(suffix+'_sha256'):
+                raise ValueError('lint log digest differs')
+    clean = report.get('module_check')
+    if not isinstance(clean,dict) or type(clean.get('exit_code')) is not int or clean['exit_code'] != 0:
+        raise ValueError('Go module check missing')
+    for suffix in ('stdout','stderr'):
+        raw = _evidence_file(output/('module-clean.'+suffix))
+        if hashlib.sha256(raw).hexdigest() != clean.get(suffix+'_sha256'):
+            raise ValueError('Go module check log differs')
+        if suffix == 'stdout' and raw.splitlines() != [b'Go module inputs match the CI checkout.']:
+            raise ValueError('Go module check did not complete')
+
+
+def verify_component(output, plan, base, report, tools):
+    if (not isinstance(report,dict) or report.get('schema') != 'voice-local-golangci-component-v1' or
+            report.get('status') != 'complete' or report.get('scope') != 'golangci' or
+            report.get('source') != plan.get('source') or report.get('base') != base or
+            report.get('diagnostic') != 'worker/diagnostic.json' or report.get('tools') != tools):
+        raise ValueError('lint component identity differs')
+    output = Path(output)
+    diagnostic = json.loads(_evidence_file(output/'worker/diagnostic.json'))
+    verify_component_evidence(output/'worker', plan, diagnostic, tools)
+
+
+def run_component(root, base, head, head_ref, output, *, go, go_sha256, lint, lint_sha256):
+    """Execute selected local Windows lint, never a whole-preflight pass."""
+    import local_preflight
+    root, output = Path(root).resolve(), Path(output).resolve()
+    if not _windows() or output.exists() or output == root or root in output.parents:
+        raise ValueError('lint component requires Windows and new external output')
+    local_preflight._handoff_refs(root,base,head,head_ref)
+    plan = affected_check_plan.build_local_plan(root,base,head,head_ref)
+    source = plan['source']
+    if ('golangci' not in plan['checks'] or source.get('head') != head or source.get('changed_paths') or
+            source.get('raw_mismatch_paths')):
+        raise ValueError('lint component requires selected clean committed source')
+    output.mkdir(parents=True)
+    diagnostic = run(root, plan, output/'worker', go, go_sha256, lint, lint_sha256,
+                     base=base, head_ref=head_ref, verify_module_inputs=True)
+    tools = {'go_sha256':go_sha256,'golangci_sha256':lint_sha256}
+    verify_component_evidence(output/'worker',plan,diagnostic,tools)
+    if (local_source_snapshot.capture(root,head) != source or
+            affected_check_plan.build_local_plan(root,base,head,head_ref) != plan):
+        raise ValueError('lint source or selection changed')
+    local_preflight._handoff_refs(root,base,head,head_ref)
+    report={'schema':'voice-local-golangci-component-v1','status':'complete','scope':'golangci',
+            'source':source,'base':base,'head_ref':head_ref,'diagnostic':'worker/diagnostic.json','tools':tools,
+            'limitations':['Windows lint differs from hosted Linux',
+                           'tool and dependency publisher provenance is not authenticated',
+                           'fetched refs are not a live remote observation']}
+    verify_component(output,plan,base,report,tools)
+    (output/'golangci-component.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n',encoding='utf-8')
     return report

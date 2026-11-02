@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,29 @@ import local_golangci_capture as bounded_capture
 
 
 class LocalGolangciExecutionTests(unittest.TestCase):
+    def test_component_rejects_missing_module_and_tampered_log(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out=Path(temp); source={'head':'a'*40}; plan={'source':source,'components':{'go':['chat']}}
+            rows=[]
+            for action in ('resolve','lint'):
+                for module in ('pkg','chat'):
+                    row={'action':action,'module':module,'exit_code':0}
+                    for suffix in ('stdout','stderr'):
+                        data=b''; (out/(action+'-'+module+'.'+suffix)).write_bytes(data)
+                        row[suffix+'_sha256']=hashlib.sha256(data).hexdigest()
+                    rows.append(row)
+            clean=b'Go module inputs match the CI checkout.\n'
+            (out/'module-clean.stdout').write_bytes(clean); (out/'module-clean.stderr').write_bytes(b'')
+            report={'schema':'voice-local-golangci-diagnostic-v1','status':'incomplete','source':source,
+                    'modules':['pkg','chat'],'commands':rows,'tools':{'go_sha256':'b'*64,'golangci_sha256':'c'*64},
+                    'platform':{'goos':'windows','goarch':'amd64'},
+                    'module_check':{'exit_code':0,'stdout_sha256':hashlib.sha256(clean).hexdigest(),
+                                    'stderr_sha256':hashlib.sha256(b'').hexdigest()}}
+            lint.verify_component_evidence(out,plan,report,report['tools'])
+            with self.assertRaises(ValueError): lint.verify_component_evidence(out,plan,dict(report,commands=rows[:-1]),report['tools'])
+            (out/'lint-chat.stdout').write_bytes(b'changed')
+            with self.assertRaises(ValueError): lint.verify_component_evidence(out,plan,report,report['tools'])
+
     def test_explicit_proto_capture_limit_preserves_binary_and_rejects_excess(self):
         wrapper = Path(lint.__file__).with_name('local_golangci_capture.py')
         binary = 'import sys; sys.stdout.buffer.write(b"\\x00\\xff" * 700000)'

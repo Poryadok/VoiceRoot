@@ -343,6 +343,23 @@ class LocalPreflightTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 local_preflight._validate_full_go_report(bad, 'bot', self.source, self.full_go_inputs(['bot'])['bot'],
                                                          self.output / 'go-full' / 'bot')
+
+    def test_lint_component_composes_without_completing_other_checks(self):
+        plan={'source':self.source,'checks':{'golangci':['go'],'backend-auth':['shared']},'components':{'go':['chat']}}
+        inputs={'go':str(self.root/'go'),'go_sha256':'a'*64,'lint':str(self.root/'lint'),'lint_sha256':'b'*64}
+        component={'schema':'voice-local-golangci-component-v1','status':'complete','scope':'golangci',
+                   'source':self.source,'base':'c'*40,'diagnostic':'worker/diagnostic.json'}
+        with patch.object(local_preflight.affected_check_plan,'build_local_plan',return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot,'capture',return_value=self.source), \
+             patch.object(local_preflight.local_chat_orchestration,'_verify_file'), \
+             patch.object(local_preflight.local_golangci_execution,'run_component',return_value=component) as run, \
+             patch.object(local_preflight.local_golangci_execution,'verify_component') as verify:
+            report=local_preflight.run(self.root,'c'*40,self.source['head'],self.output,'flutter',
+                                       head_ref='codex/test',lint_inputs=inputs,golangci_component=True)
+        run.assert_called_once(); verify.assert_called_once()
+        self.assertEqual(report['status'],'incomplete')
+        self.assertEqual(report['checks']['golangci']['status'],'complete')
+        self.assertEqual(report['checks']['backend-auth']['status'],'not_run')
     def full_auth_inputs(self):
         return {'helper': str(self.root / 'helper'), 'helper_sha256': 'a' * 64,
                 'client_image_id': 'sha256:' + 'b' * 64, 'maven_cache': str(self.root / 'cache'),
