@@ -202,7 +202,7 @@ RUNTIME_MARKERS = (
 # re-audited if their tests or decorators change. This is not Windows coverage.
 POLICY_SKIP_FILES = {
     21: ('scripts/ci/local_source_snapshot_test.py', 'bdaf3b29b56dc2e879e00c1219a4dc9d7c736068ecb578451a8209b626dbb159', 1),
-    24: ('scripts/ci/local_process_supervision_test.py', 'b0df7a67070eccb0adfb59a052e210e5da9780b7f11a65ce53aadd8102263538', 35),
+    24: ('scripts/ci/local_process_supervision_test.py', '8226abf916337725621ca5c42ed60770d7b5f34d6e60b28a5b176c0927b53c44', 35),
     33: ('scripts/ci/local_ci_routing_test.py', 'e5da4335ed1975d4eefeccbe4a79f09258f033e6b20a8ef640f44e89e6294c5f', 1),
     43: ('scripts/ci/local_nats_hosted_diagnostic_test.py', '1b49039756b9aabd7c7963ec22f86a0acd2591b547993fc52e4ee150fbb8a5d6', 2),
 }
