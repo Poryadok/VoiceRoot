@@ -150,6 +150,7 @@ jobs:
           migrate_image=$(sudo -n sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/dev" env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$work/source/scripts/dev" "$(command -v python)" -c 'from auth_user_adoption_runtime import QUALIFIED_TOOLS; print(QUALIFIED_TOOLS["migrate"])')
           docker pull "$migrate_image"
           docker pull ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f
+          sudo -n sh -eu -c 'cd "$1/source/scripts/staging/nats-rollout-preservation"; exec env PYTHONDONTWRITEBYTECODE=1 VOICE_STORY_PROBE="$1/qualified/story-restored8-probe" PYTHONPATH="$1/source/scripts/staging/nats-known-baseline" python3 -m unittest story_probe_loader_integration_test' sh "$work"
           # These custody tests require the staging-named group, local to this disposable VM.
           sudo -n groupadd --force --system pmd
           sudo -n --preserve-env=RUNNER_ENVIRONMENT sh -c 'cd "$1" || exit 1; shift; exec "$@"' sh "$work/source/scripts/staging/nats-rollout-preservation" \
