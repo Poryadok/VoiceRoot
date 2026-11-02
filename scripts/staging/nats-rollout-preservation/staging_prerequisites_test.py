@@ -389,6 +389,24 @@ class PrepareCompositionTests(unittest.TestCase):
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
             realtime_source=True,fixture_complete_candidate=True)
 
+    def test_qualified_fixture_first_install_source_authority_reaches_source_inputs(self):
+        import copy,os,gis_prerequisite,transaction
+        if not os.environ.get('VOICE_QUALIFIED_BINARIES'):self.skipTest('qualified fixture binaries required')
+        class ReachedSourceInputs(Exception):pass
+        def ready(actions,request,approved,execution,workspace,stage,*_):
+            target={'gis_first_install_sha256':'f'*64}
+            first={'source_plan_sha256':'f'*64,'source_sha':approved['source_sha']}
+            def run(authority):
+                return transaction._prepare(None,workspace,workspace,target,{},actions.tt_session.operation,{},[],{},
+                    gis_first_install=first,gis_source_root=workspace,gis_source_capture={},gis_source_authority=authority)
+            with patch.object(gis_prerequisite,'source_inputs',side_effect=ReachedSourceInputs):
+                bad=copy.deepcopy(approved);bad['source_sha']='0'*40
+                with self.assertRaisesRegex(transaction.Blocked,'gis_first_install_source_authority_invalid'):run(bad)
+                bad=copy.deepcopy(approved);bad.pop('lock_artifact_id',None)
+                with self.assertRaisesRegex(transaction.Blocked,'gis_first_install_source_authority_invalid'):run(bad)
+                with self.assertRaises(ReachedSourceInputs):run(approved)
+        self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,realtime_source=True,fixture_complete_candidate=True)
+
     def test_fixture_preserved_root_cli_uses_isolated_rollout_directory(self):
         import guard,root_cli,staging_cohort_preservation as cohort,transaction
         class ReachedTransaction(Exception):pass
@@ -586,6 +604,9 @@ class PrepareCompositionTests(unittest.TestCase):
             if fixture_complete_candidate:
                 approved['images'].update(user=user_image,
                     realtime=bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'d'*64)
+                # Synthetic CI provenance is fixed before the source receipt is digested.
+                approved.update(run_id=17,run_attempt=1,workflow_id=bridge_root.source_authority.WORKFLOW,
+                    tree_sha='b'*40,lock_artifact_id=19,lock_sha256='c'*64)
             if not strict_helpers:
                 approved['source_files']['scripts/staging/'+helper]=manifest[helper]
                 approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
