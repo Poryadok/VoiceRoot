@@ -63,6 +63,7 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
             .flushPendingAfterAuth();
       }
       await _resolveGuestNicknameAfterRestore();
+      await _resolveRestoredProfile();
       if (mounted) {
         setState(() => _restoreComplete = true);
       }
@@ -70,6 +71,34 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
       if (mounted) {
         setState(() => _restoreError = error);
       }
+    }
+  }
+
+  Future<void> _resolveRestoredProfile() async {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.isAuthenticated ||
+        auth.needsGuestNickname ||
+        auth.isEmailVerificationPending ||
+        auth.isEmailVerificationPromotionPending) {
+      return;
+    }
+
+    // Refresh the same provider used by the shell, including on startup Retry.
+    // A stored token alone does not mean the restored profile is usable.
+    try {
+      final profile = await ref.refresh(
+        profileProvider(auth.activeProfileId!).future,
+      );
+      final current = ref.read(authControllerProvider);
+      if (current.isAuthenticated &&
+          (profile == null ||
+              profile.id != current.activeProfileId ||
+              profile.accountId != current.session!.accountId)) {
+        throw StateError('Restored profile unavailable');
+      }
+    } on Object {
+      // A definitive 401 may have returned the session to the login screen.
+      if (ref.read(authControllerProvider).isAuthenticated) rethrow;
     }
   }
 
@@ -141,6 +170,7 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
               final l10n = AppLocalizations.of(ctx)!;
               return Scaffold(
                 body: VoiceStatePanel(
+                  key: const Key('session_restore_failure'),
                   title: l10n.backendUnavailable,
                   icon: Icons.error_outline,
                   actionLabel: l10n.commonRetry,
