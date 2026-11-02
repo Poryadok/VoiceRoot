@@ -7,7 +7,7 @@ Prepare PR #1048 for review and merge to `master`: connect the dedicated User Sp
 - TTenrec task: `A2-USER-SPACE-CAPTURE-RUNTIME`.
 - PR #1048 currently points at `2bf87e7938ee172460776a1e2366e63dbf904ff4`, is open and draft, and hosted CI run `41339581848` passed; no review decision is recorded.
 - PR is broad (about 280 changed files, including public game/GIS work) and must not be merged solely on the strength of A2 checks.
-- Authoritative worktree is `.treehouse/Voice-451d38/48/Voice`. No product source/test edits are pending; only this ExecPlan is modified. Preserve other active leases and untracked slot 63 host-session files.
+- Authoritative worktree is `.treehouse/Voice-451d38/48/Voice`. A GIS keep-group review fix and its tests are in progress. Preserve other active leases and untracked slot 63 host-session files.
 - Existing T40 Compose run used synthetic custody and is not evidence of qualified DEV/STG source readiness.
 
 ## Scope
@@ -19,7 +19,7 @@ Prepare PR #1048 for review and merge to `master`: connect the dedicated User Sp
 - [x] PR head, CI, base, task state, and active worktrees/leases inspected.
 - [x] Review runtime contract: dedicated Space capture RPC only; complete pinned mTLS/JWKS/replay, Auth parent, custody binding and keyset; startup waits for qualified custody; a held grant verifies physical source and identity state before installing the guarded store; failure/cancellation keeps User admission closed.
 - [x] `go test -short ./...` passes in User; `go test -short .` passes in Controlledgame.
-- [x] Pass the full isolated Docker/Compose Ban scenario on PR SHA `2bf87e7938ee172460776a1e2366e63dbf904ff4` and record images, command, result, and synthetic fixture limitations.
+- [ ] Repeat the full isolated Docker/Compose Ban scenario on the final PR head after the GIS review fix and record images, command, result, and synthetic fixture limitations. It passed on `cca6c12abafd5c64f3dbf2c39c84bf6b9606fe5d` before that fix.
 - [ ] Complete the remaining source-custody/runtime race checks or establish their coverage in required CI.
 - [x] Record DEV/STG prerequisites, evidence gates, and explicitly unassigned source/custody owners in TTenrec.
 - [ ] Independent review and required CI green on final head; merge PR with merge commit before rollout.
@@ -34,7 +34,7 @@ Prepare PR #1048 for review and merge to `master`: connect the dedicated User Sp
 ## Validation
 - [x] `go test -short ./...` from `src/backend/user`.
 - [ ] Relevant source-custody/runtime package tests pass; run race checks where required by existing CI/PR.
-- [x] T40 Compose Ban test passed with `VOICE_T40_COMPOSE_PUBLIC_SESSIONS=1`, A2 User and Space overlays, actual Auth-provisioned profiles in the same User source, and synthetic custody. See execution update below for images and limitations.
+- [ ] Repeat T40 Compose Ban with `VOICE_T40_COMPOSE_PUBLIC_SESSIONS=1` on the final head. The prior A2-enabled pass used actual Auth-provisioned profiles in the same User source and synthetic custody; see execution update below.
 - [x] Review/test fail-closed incomplete config, capture-only protected listener, mTLS/JWKS/replay transport and runtime lifecycle through User `go test -short ./...` on the current PR head. Qualified live source and end-to-end capture/Ban are not verified.
 - [ ] All required checks green on the final PR head; independent review accepted; merge SHA recorded.
 - [x] TTenrec records DEV/STG evidence gates and explicitly unassigned source/custody ownership blockers.
@@ -42,7 +42,7 @@ Prepare PR #1048 for review and merge to `master`: connect the dedicated User Sp
 ## Progress
 - [x] ExecPlan saved in the authoritative PR worktree.
 - [x] Repository/task/PR/worktree state inspected; no files changed in main checkout.
-- [ ] Independent review, final required checks, and merge remain. The A2-enabled Compose Ban acceptance passed on the current head.
+- [ ] Finish and re-review the GIS keep-group fix, repeat A2-enabled Compose Ban on its final head, finish required CI, and merge.
 - [x] Current execution and tracker comments c73, c77, c78, and c79 recorded in TTenrec; linked blocker `A2-T40-COMPOSE-SOURCE-QUALIFICATION` is unassigned for human appointment. Isolated Compose project stopped with volumes/artifacts preserved.
 
 ## Decisions
@@ -56,7 +56,15 @@ Prepare PR #1048 for review and merge to `master`: connect the dedicated User Sp
 - The last inspected PR head has no recorded review decision; check again before any merge.
 - T40 must be rerun on the final head; a previous synthetic-custody pass is historical evidence only.
 - The T40 source uses synthetic custody and an already guarded fixture; it provides integration evidence only. DEV/STG writer and custody qualification remain separate rollout prerequisites.
+- Before deploying the additive GIS keep-group change to DEV or STG, quiesce old GIS writers and requests, drain in-flight Chat calls, reconcile pending legacy `new_chat` operations and uncertain outcomes using independently verified Chat receipts and an approved recovery procedure, and verify zero pending operations before new instances serve. Do not blindly resend legacy replacement requests. A changed `AddOnly` request has a different owner request hash and method. Record evidence or establish that the predecessor never ran in that environment; the TTenrec task and rollout follow-up contain this gate.
+- GIS validates lease, consent, policy and binding before the remote Chat mutation, so Chat can commit after that authority changes. G09 does not specify whether a permanent keep-group Chat mutation is a governed session write or where authorization linearizes. Resolve and test `A2-GIS-KEEP-GROUP-LEASE-BOUNDARY` before DEV/STG GIS rollout; the T40 pass does not establish G09.
 - DEV/STG rollout is blocked until source qualification, writers, custody/guard procedures, credentials, owners, and acceptance evidence are established.
+
+## Execution update — 2026-11-02 (independent review and GIS correction)
+- Independent review found that an older standalone keep-group consent snapshot could complete after a newer one and replace its Chat roster, removing a later consenter. A deterministic integration regression reproduced the failure before the fix.
+- The correction sends the existing additive Chat membership operation for both new groups and existing parties. The regression and existing keep-group tests pass, including a race run; a Chat database regression verifies that a later smaller addition and receipt replay preserve both members. Review of this change found no new blocker in that scope.
+- Old pending replacement operations cannot transparently retry as additive operations because their owner request hash and method differ. The DEV/STG quiescence and reconciliation gate is recorded in TTenrec before rollout. GIS consent validation and Chat mutation remain separate calls; the expiry/authority boundary gap is tracked in `A2-GIS-KEEP-GROUP-LEASE-BOUNDARY` and is a DEV/STG rollout gate.
+- The final-head T40, final CI, and the independent review recheck remain required after this code change.
 
 ## Execution update — 2026-11-02 (A2 Compose Ban passed)
 - On PR head `2bf87e7938ee172460776a1e2366e63dbf904ff4`, a network-isolated copy of the stopped source showed `guards_active=true` and `baseline_cut=2`. The earlier fixture request incorrectly specified `GuardCutover=true`. Following supported recovery, a signed request with `GuardCutover=false` opened the already guarded synthetic source.

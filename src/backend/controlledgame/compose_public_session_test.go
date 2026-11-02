@@ -127,6 +127,36 @@ func TestT40ComposePublicClientPartyThreeMatchesAndChatMembership(t *testing.T) 
 	require.Equal(t, party.ChatID, partyAfterClose.ChatID)
 	require.Len(t, seenRooms, 3)
 
+	// A standalone match creates a separate permanent group. Each consented
+	// participant is added through the real GIS-to-Chat owner transport.
+	standaloneOp := uuid.NewString()
+	_, err = client.CreateSession(ctx, gameCredential, PublicSessionRequest{
+		OperationID: standaloneOp, Kind: "match", ExternalKey: "t40-standalone-" + uuid.NewString(),
+		DisplayName: "T40 standalone match", RosterRevision: 1, RosterComplete: true, Members: profiles,
+	})
+	require.NoError(t, err)
+	standalone := waitT40Operation(t, ctx, client, gameCredential, standaloneOp, "active")
+	require.NoError(t, client.ConsentToKeepGroup(ctx, playerOneToken, standalone.SessionID, PublicConsentRequest{
+		OperationID: uuid.NewString(), RosterRevision: 1,
+	}))
+	firstKeep, err := client.KeepGroup(ctx, playerOneToken, standalone.SessionID, PublicConsentRequest{
+		OperationID: uuid.NewString(), RosterRevision: 1,
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, standalone.ChatID, firstKeep.ChatID)
+	require.NoError(t, chatDB.QueryRow(ctx, `SELECT count(*) FROM chat_members WHERE chat_id=$1`, firstKeep.ChatID).Scan(&memberCount))
+	require.Equal(t, 1, memberCount, "the permanent group initially contains only the first consenter")
+	require.NoError(t, client.ConsentToKeepGroup(ctx, playerTwoToken, standalone.SessionID, PublicConsentRequest{
+		OperationID: uuid.NewString(), RosterRevision: 1,
+	}))
+	secondKeep, err := client.KeepGroup(ctx, playerTwoToken, standalone.SessionID, PublicConsentRequest{
+		OperationID: uuid.NewString(), RosterRevision: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, firstKeep.ChatID, secondKeep.ChatID)
+	require.NoError(t, chatDB.QueryRow(ctx, `SELECT count(*) FROM chat_members WHERE chat_id=$1 AND profile_id=ANY($2::uuid[])`, firstKeep.ChatID, profiles).Scan(&memberCount))
+	require.Equal(t, 2, memberCount, "both consenting members remain in the permanent group")
+
 	communitySpaceID := exerciseT40CommunityRoster(t, ctx, client, profileOne, profileTwo)
 	require.NotEqual(t, uuid.Nil, communitySpaceID)
 }

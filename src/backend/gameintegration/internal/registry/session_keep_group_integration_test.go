@@ -64,11 +64,62 @@ VALUES($1,$2,$3,'match','match-no-party','Private group','active','active',3,tru
 	require.Equal(t, "session/"+sessionID.String(), receipt.DestinationKey)
 	require.Equal(t, []uuid.UUID{profileID}, receipt.AddedProfiles)
 	require.Equal(t, 1, owners.createCalls)
-	require.Equal(t, 0, owners.addCalls)
-	require.Equal(t, 1, owners.syncCalls)
+	require.Equal(t, 1, owners.addCalls)
+	require.Equal(t, 0, owners.syncCalls)
 	require.NotNil(t, owners.lastSync)
-	require.False(t, owners.lastSync.GetAddOnly(), "a newly created group starts with its consented roster")
+	require.True(t, owners.lastSync.GetAddOnly(), "concurrent consent snapshots must not replace the permanent group roster")
 	require.Equal(t, []string{profileID.String()}, owners.lastSync.GetProfileIds())
+}
+
+func TestKeepSessionGroupOlderSnapshotCannotRemoveLaterConsenter(t *testing.T) {
+	store, ctx, principal, existingSession, accountA, profileA, _ := setupT34KeepGroupSession(t)
+	var accountB, profileB uuid.UUID
+	require.NoError(t, store.Pool.QueryRow(ctx, `SELECT account_id,profile_id FROM player_bindings
+WHERE application_id=$1 AND environment_id=$2 AND profile_id<>$3`, principal.ApplicationID, principal.EnvironmentID, profileA).Scan(&accountB, &profileB))
+	sessionID := uuid.New()
+	_, err := store.Pool.Exec(ctx, `INSERT INTO gis_sessions
+(id,application_id,environment_id,kind,external_key,display_name,session_status,stage,roster_revision,roster_complete,members,lease_expires_at)
+SELECT $1,application_id,environment_id,'match','keep-concurrent','Group','active','active',4,true,$2,clock_timestamp()+interval '60 seconds'
+FROM gis_sessions WHERE id=$3`, sessionID, []uuid.UUID{profileA, profileB}, existingSession)
+	require.NoError(t, err)
+	_, err = store.RecordSessionConsent(ctx, accountA, profileA, sessionID, uuid.New(), 4)
+	require.NoError(t, err)
+	older := SessionKeepGroupInput{OperationID: uuid.New(), SessionID: sessionID, AccountID: accountA, ProfileID: profileA, RosterRevision: 4}
+	_, saved, err := store.prepareSessionKeepGroup(ctx, older)
+	require.NoError(t, err)
+	require.Nil(t, saved)
+	_, err = store.RecordSessionConsent(ctx, accountB, profileB, sessionID, uuid.New(), 4)
+	require.NoError(t, err)
+
+	chatID := uuid.New()
+	members := map[string]bool{}
+	owners := SessionOwnerAdapters{
+		CreateChat: func(_ context.Context, request SessionOwnerRequest) (SessionOwnerReceipt, error) {
+			return SessionOwnerReceipt{ResourceID: chatID, ReceiptID: request.OperationID, RequestHash: request.RequestHash}, nil
+		},
+		SyncChatRoster: func(_ context.Context, request SessionOwnerRequest) (SessionOwnerReceipt, error) {
+			message := request.Proto.(*chatv1.SyncManagedChatMembersRequest)
+			if !message.GetAddOnly() {
+				clear(members)
+			}
+			for _, profile := range message.GetProfileIds() {
+				members[profile] = true
+			}
+			return SessionOwnerReceipt{ResourceID: request.ChatID, ReceiptID: request.OperationID, RequestHash: request.RequestHash}, nil
+		},
+	}
+	orchestrator := NewSessionOrchestrator(store, owners)
+	younger := SessionKeepGroupInput{OperationID: uuid.New(), SessionID: sessionID, AccountID: accountB, ProfileID: profileB, RosterRevision: 4}
+	_, err = orchestrator.KeepSessionGroup(ctx, younger)
+	require.NoError(t, err)
+	_, err = orchestrator.KeepSessionGroup(ctx, older)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{profileA.String(): true, profileB.String(): true}, members,
+		"a delayed older consent snapshot must not remove a member added by a later operation")
+	replay, err := orchestrator.KeepSessionGroup(ctx, younger)
+	require.NoError(t, err)
+	require.True(t, replay.Replayed)
+	require.Equal(t, map[string]bool{profileA.String(): true, profileB.String(): true}, members)
 }
 
 func TestSuspendedApplicationCannotGrantFreshConsentOrKeepGroup(t *testing.T) {
@@ -149,7 +200,7 @@ FROM gis_sessions WHERE id=$3`, noPartySessionID, []uuid.UUID{profileID}, sessio
 	require.Equal(t, []uuid.UUID{profileID}, receipt.AddedProfiles)
 	require.Len(t, owners.createOps, 2)
 	require.Equal(t, owners.createOps[0], owners.createOps[1], "Chat create uses one stable idempotency key across outage retry")
-	require.Equal(t, 1, owners.syncCalls)
+	require.Equal(t, 1, owners.addCalls)
 }
 
 func setupT34KeepGroupSession(t *testing.T) (*Store, context.Context, SessionPrincipal, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID) {

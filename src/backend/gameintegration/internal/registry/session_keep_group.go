@@ -107,10 +107,9 @@ func (o *SessionOrchestrator) KeepSessionGroup(ctx context.Context, input Sessio
 	if err := o.Store.validateSessionKeepGroupWork(ctx, work); err != nil {
 		return SessionKeepGroupReceipt{}, err
 	}
-	stage := "chat_roster"
-	if work.TargetKind == "party_chat" {
-		stage = "chat_add_members"
-	}
+	// Each operation carries its own consent snapshot. Replacing the roster
+	// would let a delayed older operation remove a later consenting member.
+	stage := "chat_add_members"
 	request := SessionOwnerRequest{OperationID: work.MembersOp, ApplicationID: work.ApplicationID, EnvironmentID: work.EnvironmentID,
 		SessionID: work.Input.SessionID, ChatID: work.ChatID, Members: append([]uuid.UUID(nil), work.Members...)}
 	message, err := BuildSessionOwnerProto(stage, request)
