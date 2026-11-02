@@ -10,6 +10,24 @@ CHECKER = Path(__file__).with_name('current-diff-contract.py')
 CHAT21_PATH = 'src/backend/migrations/chat_db/000021_chat_deleted_event_outbox.down.sql'
 CHAT21_BEFORE = '37d5d9d0b0dd93f708f81b03e7e2484c8be31749'
 CHAT21_AFTER = 'f552270c91ce84925144712f09bf0c4a3b22fe36'
+# Carry the reviewed output: the sibling consumer branch need not be fetched.
+CHAT21_AFTER_CONTENT = b"""DO $$
+BEGIN
+    -- A stronger isolation level can retain an empty snapshot from before a
+    -- writer committed, even after this transaction acquires the table lock.
+    IF current_setting('transaction_isolation') NOT IN ('read committed', 'read uncommitted') THEN
+        RAISE EXCEPTION 'chat deleted event outbox rollback requires read committed isolation'
+            USING ERRCODE = '55000';
+    END IF;
+    -- Serialize with first writers before checking retained evidence. Keep the
+    -- lock through DROP so an event cannot commit between the probe and DDL.
+    LOCK TABLE chat_deleted_event_outbox IN ACCESS EXCLUSIVE MODE;
+    IF EXISTS (SELECT 1 FROM chat_deleted_event_outbox) THEN
+        RAISE EXCEPTION 'chat deleted event outbox contains retained evidence';
+    END IF;
+    DROP TABLE chat_deleted_event_outbox;
+END $$;
+"""
 
 
 REVIEWED_FIXTURES = [('src/backend/voice/logger.go', None, '44ff46d26c9e4f9d7b067e84d4e7771a797290f3'),
@@ -210,8 +228,11 @@ class CurrentDiffTests(unittest.TestCase):
     def chat21_blob(self, blob, path=CHAT21_PATH):
         target = self.repo / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(subprocess.check_output(
+        content = (CHAT21_AFTER_CONTENT if blob == CHAT21_AFTER else subprocess.check_output(
             ['git', '-C', str(CHECKER.parents[2]), 'cat-file', 'blob', blob]))
+        self.assertEqual(subprocess.check_output(
+            ['git', 'hash-object', '--stdin'], input=content).decode().strip(), blob)
+        target.write_bytes(content)
 
     def chat21_fixture(self):
         self.chat21_blob(CHAT21_BEFORE)
