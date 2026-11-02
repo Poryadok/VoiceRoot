@@ -1,10 +1,14 @@
 """The heavy slot must outlive the exact owned fixture cleanup."""
+import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-from local_docker_owned import OwnershipError
+import local_ci_proofs_scheduler as proof_scheduler
+import local_heavy_slots as heavy_slots
+from local_docker_owned import OwnedRun, OwnershipError
+from local_heavy_slots import acquire as acquire_slot
 from local_docker_owned_test import FakeEngine
 from local_docker_scheduled import ScheduledRun
 
@@ -32,6 +36,69 @@ class ScheduledRunTests(unittest.TestCase):
             self.assertNotIn(('network', resource), self.engine.resources)
             later = ScheduledRun.start_host(other_checkout, self.engine, 0, capacity=1)
             later.close()
+
+    def test_durable_run_identity_precedes_owner_bound_slot_acquisition(self):
+        events = []
+        create = OwnedRun.create.__func__
+
+        def create_with_receipt(cls, checkout, engine):
+            run = create(cls, checkout, engine)
+            journal = json.loads((run.directory / 'ownership.json').read_text(encoding='utf-8'))
+            self.assertEqual(journal['run_id'], run.run_id)
+            events.append(('journal', run.run_id))
+            return run
+
+        def acquire_after_journal(directory, timeout, capacity=2, *, owner_id=None):
+            events.append(('acquire', owner_id))
+            self.assertTrue(events and events[0][0] == 'journal')
+            self.assertEqual(owner_id, events[0][1])
+            return acquire_slot(directory, timeout, capacity=capacity, owner_id=owner_id)
+
+        with mock.patch.object(OwnedRun, 'create', classmethod(create_with_receipt)), \
+             mock.patch('local_docker_scheduled.acquire', side_effect=acquire_after_journal):
+            scheduled = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.assertEqual(events[0][0], 'journal')
+        self.assertEqual(events[1], ('acquire', events[0][1]))
+        self.assertEqual(scheduled.run.run_id, events[0][1])
+        scheduled.close()
+
+    def test_positive_named_job_recovery_cleans_exact_owner_before_releasing_reservation(self):
+        owner_id = 'voiceci-' + 'd' * 32
+        identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        limits = {'cpu_rate': 1000, 'job_memory_bytes': 2048, 'active_process_limit': 128}
+        host_job = {'schema': 1, 'slot': None,
+                    'job_names': ['Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-')],
+                    'limits': limits, 'session_identity': identity,
+                    'source_identity': {'root': str(self.root.resolve()), 'head': 'a' * 40,
+                                        'sha256': 'b' * 64}}
+        budget = {'nano_cpus': 4_000_000_000, 'memory_bytes': 8_000, 'pids_limit': 512}
+        claim = {'nano_cpus': 2_000_000_000, 'memory_bytes': 4_000, 'pids_limit': 256}
+        owner = OwnedRun.create(self.root, self.engine, run_id=owner_id, host_job=host_job)
+        lease = None
+        try:
+            lease = acquire_slot(self.slots, 0, capacity=1, owner_id=owner_id,
+                                 resource_claim=claim, capacity_budget=budget)
+            owner.state['host_job']['slot'] = lease.slot
+            owner._save()
+            owned_name = owner.create_resource('network')
+            foreign_key = ('volume', 'foreign-sentinel')
+            self.engine.resources[foreign_key] = {'id': 'foreign-sentinel', 'name': 'foreign-sentinel',
+                                                  'kind': 'volume', 'labels': {'owner': 'foreign'}}
+            directory, slot = owner.directory, lease.slot
+        finally:
+            owner.close()
+            if lease is not None:
+                lease.abandon()
+
+        with mock.patch.object(proof_scheduler, '_session_identity', return_value=identity), \
+             mock.patch.object(proof_scheduler, '_default_job_exists', return_value=False) as job_exists:
+            ScheduledRun.recover_host(directory, self.engine, slot, capacity=1)
+        job_exists.assert_called_once_with(host_job['job_names'][0])
+        self.assertNotIn(('network', owned_name), self.engine.resources)
+        self.assertIn(foreign_key, self.engine.resources)
+        marker = (self.slots / ('heavy-' + str(slot) + '.lock')).read_bytes()
+        self.assertEqual(marker[1:], b'idle\n')
+        self.assertIsNone(heavy_slots.active_resource_reservation(self.slots, owner_id))
 
     def test_recovers_a_created_resource_after_lost_create_response(self):
         one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
@@ -321,15 +388,16 @@ class ScheduledRunTests(unittest.TestCase):
             ScheduledRun.start(self.root, self.slots, self.engine, 0)
         occupied.close()
 
-    def test_failed_owner_initialization_does_not_free_uncertain_slot(self):
-        with mock.patch('local_docker_scheduled.OwnedRun.create', side_effect=OSError('journal failure')):
+    def test_failed_owner_initialization_never_acquires_or_leaves_a_busy_slot(self):
+        with mock.patch('local_docker_scheduled.OwnedRun.create', side_effect=OSError('journal failure')), \
+             mock.patch('local_docker_scheduled.acquire') as acquire:
             with self.assertRaisesRegex(OSError, 'journal failure'):
                 ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        acquire.assert_not_called()
         other = ScheduledRun.start(self.root, self.slots, self.engine, 0)
-        self.addCleanup(other.abandon)
-        with self.assertRaises(TimeoutError):
-            ScheduledRun.start(self.root, self.slots, self.engine, 0)
         other.close()
+        later = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        later.close()
 
 
 if __name__ == '__main__':

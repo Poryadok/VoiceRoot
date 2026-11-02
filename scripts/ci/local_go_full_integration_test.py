@@ -1,15 +1,20 @@
 """Only reviewed service profiles may run full private Go diagnostics."""
-import json
+import hashlib
 import io
-from types import SimpleNamespace
-from pathlib import Path
+import json
 import subprocess
-import tempfile
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import local_go_full_integration as subject
+import local_ci_proofs_scheduler as proof_scheduler
+import local_heavy_slots as heavy_slots
+from local_docker_owned import OwnedRun
+from local_docker_owned_test import FakeEngine
 
 
 class FullGoTests(unittest.TestCase):
@@ -17,6 +22,25 @@ class FullGoTests(unittest.TestCase):
         patcher = mock.patch.object(subject.auth_broker, '_require_worker_job')
         patcher.start()
         self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def resource_limits():
+        return {'client': {'nano_cpus': 1500000000, 'memory_bytes': 2 * 1024 * 1024 * 1024,
+                           'memory_swap_bytes': 3 * 1024 * 1024 * 1024, 'pids_limit': 384},
+                'daemon': {'nano_cpus': 1000000000, 'memory_bytes': 512 * 1024 * 1024,
+                           'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256},
+                'host_job': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                             'active_process_limit': 512},
+                'capacity_budget': {'nano_cpus': 8_000_000_000,
+                                    'memory_bytes': 12 * 1024 * 1024 * 1024,
+                                    'pids_limit': 2048}}
+
+    @staticmethod
+    def source_identity(root, source):
+        canonical = json.dumps(source, allow_nan=False, separators=(',', ':'), sort_keys=True).encode('utf-8')
+        return {'root': str(root.resolve()), 'head': source['head'],
+                'sha256': hashlib.sha256(canonical).hexdigest()}
+
     def test_worker_refuses_before_reading_request_when_job_is_unavailable(self):
         with mock.patch.object(sys, 'argv', ['worker', '--worker']), \
              mock.patch.object(subject.auth_broker, '_require_worker_job', side_effect=ValueError('no job')), \
@@ -44,31 +68,372 @@ class FullGoTests(unittest.TestCase):
                        'helper': str(output / 'helper'), 'helper_digest': 'a' * 64,
                        'archives': {'postgres:16-bookworm': {'archive': str(output / 'image'),
                                     'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + 'c' * 64}},
-                       'go_binary': 'go', 'base': 'd' * 40, 'head_ref': 'codex/test'}
+                       'go_binary': 'go', 'base': 'd' * 40, 'head_ref': 'codex/test',
+                       'resource_limits': self.resource_limits()}
+            limits = self.resource_limits()
+            readback = {'client': limits['client'], 'daemon': limits['daemon']}
             with mock.patch.object(sys, 'argv', ['worker', '--worker']), \
                  mock.patch.object(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
                  mock.patch.object(sys, 'stdout', new_callable=io.StringIO), \
                  mock.patch.object(subject.auth_broker, '_require_worker_job'), \
-                 mock.patch.object(subject, 'run_selected', return_value={'status': 'incomplete'}):
+                 mock.patch.object(subject, 'run_selected', return_value={'status': 'incomplete',
+                     'source': {'head': 'f' * 40}, 'resource_limit_readback': readback}) as run:
                 self.assertEqual(subject.main(), 0)
             report = json.loads((output / 'diagnostic.json').read_text(encoding='utf-8'))
             self.assertEqual(report['input_identity'], {'helper_sha256': 'a' * 64, 'archives': {
-                'postgres:16-bookworm': {'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + 'c' * 64}}})
+                'postgres:16-bookworm': {'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + 'c' * 64}},
+                'resource_limits': self.resource_limits()})
+            self.assertEqual(report['resource_limit_readback'], readback)
+            self.assertEqual(run.call_args.kwargs['resource_limits'], self.resource_limits())
+            self.assertEqual(report['status'], 'incomplete')
+
+    def test_worker_rejects_invalid_resource_limits_before_selected_run(self):
+        limits = self.resource_limits()
+        for domain, key, value in (('client', 'nano_cpus', True), ('client', 'memory_bytes', 0),
+                                   ('daemon', 'pids_limit', 1), ('host_job', 'cpu_rate', -1),
+                                   ('capacity_budget', 'pids_limit', 0)):
+            changed = json.loads(json.dumps(limits))
+            changed[domain][key] = value
+            request = {'plan': {}, 'service': 'bot', 'root': '.', 'output': '.', 'helper': 'helper',
+                       'helper_digest': 'a' * 64, 'archives': {'postgres:16-bookworm': {}},
+                       'go_binary': 'go', 'base': 'd' * 40, 'head_ref': 'codex/test',
+                       'resource_limits': changed}
+            with self.subTest(domain=domain, key=key), \
+                 mock.patch.object(sys, 'argv', ['worker', '--worker']), \
+                 mock.patch.object(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(json.dumps(request).encode()))), \
+                 mock.patch.object(sys, 'stdout', new_callable=io.StringIO), \
+                 mock.patch.object(subject.auth_broker, '_require_worker_job'), \
+                 mock.patch.object(subject, 'run_selected') as run, self.assertRaises(ValueError):
+                subject.main()
+            run.assert_not_called()
+
+    def test_selected_service_passes_resource_limits_to_its_executor(self):
+        source = {'head': 'a' * 40}
+        base = 'b' * 40
+        plan = {'base': base, 'source': source,
+                'checks': {'backend-go-integration-pr': ['bot']},
+                'components': {'go_integration': ['bot']}}
+        limits = self.resource_limits()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'output'
+            archives = {tag: {'archive': str(Path(directory) / str(index)),
+                              'archive_sha256': 'c' * 64, 'image_id': 'sha256:' + 'd' * 64}
+                        for index, tag in enumerate(subject.profile('bot')['images'])}
+            with mock.patch.object(subject.affected_check_plan, 'build_local_plan', return_value=plan), \
+                 mock.patch.object(subject.snapshot, 'capture', return_value=source), \
+                 mock.patch.object(subject, 'run', return_value={'status': 'incomplete', 'source': source}) as run:
+                result = subject.run_selected(plan, 'bot', root, output, 'helper', 'e' * 64, archives, 'go',
+                                              base=base, head_ref='codex/test', resource_limits=limits)
+            self.assertEqual(result['status'], 'incomplete')
+            self.assertEqual(run.call_args.kwargs['resource_limits'], limits)
 
     def test_supervised_worker_accepts_only_matching_saved_incomplete_report(self):
         plan = {'source': {'head': 'a' * 40}}
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'out'; output.mkdir()
-            report = {'status': 'incomplete', 'source': plan['source']}
+            limits = self.resource_limits()
+            report = {'status': 'incomplete', 'source': plan['source'],
+                      'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
+                                         'resource_limits': limits},
+                      'resource_limit_readback': {'client': limits['client'], 'daemon': limits['daemon']}}
             (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
             fake = subprocess.CompletedProcess([], 0, stdout=json.dumps(report).encode(), stderr=b'')
-            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake):
-                self.assertEqual(subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
-                                                        base='b' * 40, head_ref='codex/test'), report)
-                (output / 'diagnostic.json').write_text('{}', encoding='utf-8')
-                with self.assertRaises(ValueError):
-                    subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
-                                           base='b' * 40, head_ref='codex/test')
+            fake.job_evidence = {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                                 'active_process_limit': 512, 'peak_job_memory_bytes': 1024,
+                                 'active_processes_after_cleanup': 0}
+            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake) as broker:
+                result = subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+                                                base='b' * 40, head_ref='codex/test', resource_limits=limits)
+            self.assertEqual(result['resource_limit_readback']['host_job'], fake.job_evidence)
+            request = json.loads(broker.call_args.kwargs['input'])
+            self.assertEqual(request['resource_limits'], limits)
+            self.assertEqual(broker.call_args.kwargs['job_limits'], subject.supervision.JobLimits(
+                cpu_rate=1500, job_memory_bytes=3 * 1024 * 1024 * 1024, active_process_limit=512))
+            self.assertEqual(result['input_identity']['resource_limits'], limits)
+            (output / 'diagnostic.json').write_text('{}', encoding='utf-8')
+            with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake), \
+                 self.assertRaises(ValueError):
+                subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
+                                       base='b' * 40, head_ref='codex/test', resource_limits=limits)
+
+    def test_capacity_budget_above_measured_host_rejects_before_owner_slot_or_worker(self):
+        limits = self.resource_limits()
+        limits['capacity_budget']['nano_cpus'] = 5_000_000_000
+        limits['capacity_budget']['memory_bytes'] = 16 * 1024 * 1024 * 1024
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'out'; output.mkdir()
+            slots = Path(directory) / 'slots'
+            with mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 4_000_000_000, 'memory_bytes': 8 * 1024 * 1024 * 1024}), \
+                 mock.patch.object(subject, 'OwnedRun') as owned_run, \
+                 mock.patch.object(subject.supervision, 'run_diagnostic') as worker, \
+                 mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 self.assertRaisesRegex(ValueError, 'measured host capacity'):
+                subject.run_supervised({'source': {'head': 'a' * 40}}, 'bot', root, output,
+                                       'helper', 'c' * 64, {}, base='b' * 40,
+                                       head_ref='codex/test', resource_limits=limits)
+            owned_run.create.assert_not_called()
+            worker.assert_not_called()
+            self.assertFalse(slots.exists())
+            self.assertEqual(list(root.rglob('ownership.json')), [])
+
+    def test_supervised_launch_has_durable_named_job_intent_and_owner_bound_slot(self):
+        limits = self.resource_limits()
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'out'; output.mkdir()
+            slots = Path(directory) / 'slots'
+            readback = {'client': limits['client'], 'daemon': limits['daemon']}
+            report = {'status': 'incomplete', 'source': source,
+                      'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
+                                         'resource_limits': limits},
+                      'resource_limit_readback': readback}
+            slot_marker_written = []
+            owner_ids = []
+            admission_calls = []
+
+            def acquire_with_capacity(directory, timeout, capacity=2, *, owner_id=None,
+                                     resource_claim=None, capacity_budget=None):
+                admission_calls.append((owner_id, resource_claim, capacity_budget))
+                return heavy_slots.acquire(directory, timeout, capacity=capacity, owner_id=owner_id,
+                                           resource_claim=resource_claim, capacity_budget=capacity_budget)
+
+            def after_owner_marker(_descriptor, slot, owner_id):
+                slot_marker_written.append((slot, owner_id))
+                journals = list(root.rglob('ownership.json'))
+                self.assertEqual(len(journals), 1)
+                journal = json.loads(journals[0].read_text(encoding='utf-8'))
+                self.assertEqual(journal['run_id'], owner_id)
+                self.assertEqual(journal['host_job']['slot'], None)
+                self.assertEqual(journal['resources'], [])
+
+            def launch(command, *, input, job_limits, job_name, **kwargs):
+                request = json.loads(input)
+                owner_id = request['owner_id']
+                owner_ids.append(owner_id)
+                self.assertRegex(owner_id, r'^voiceci-[0-9a-f]{32}$')
+                self.assertEqual(job_name, 'Local\\VoiceCIProof-Go-' + owner_id.removeprefix('voiceci-'))
+                self.assertEqual(job_limits, subject.supervision.JobLimits(**limits['host_job']))
+                journal_path = Path(request['ownership_journal'])
+                journal = json.loads(journal_path.read_text(encoding='utf-8'))
+                self.assertEqual(journal['version'], 2)
+                self.assertEqual(journal['run_id'], owner_id)
+                intent = journal['host_job']
+                self.assertEqual(intent['schema'], 1)
+                self.assertEqual(intent['slot'], request['slot'])
+                self.assertEqual(intent['job_names'], [job_name])
+                self.assertEqual(intent['limits'], limits['host_job'])
+                self.assertEqual(set(intent['session_identity']), {'boot_id', 'logon_id', 'session_id'})
+                self.assertEqual(intent['source_identity'], self.source_identity(root, source))
+                self.assertNotEqual(intent['slot'], None)
+                self.assertIn(owner_id.encode('ascii'), (slots / ('heavy-' + str(request['slot']) + '.lock')).read_bytes())
+                (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
+                completed = subprocess.CompletedProcess(command, 0, stdout=json.dumps(report).encode(), stderr=b'')
+                completed.job_evidence = {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                                          'active_process_limit': 512, 'peak_job_memory_bytes': 1024,
+                                          'active_processes_after_cleanup': 0}
+                return completed
+
+            with mock.patch.object(subject, '_worker_command', return_value=['worker']), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=SimpleNamespace(daemon=lambda: 'daemon-a')), \
+                 mock.patch.object(heavy_slots, 'measured_host_capacity', return_value={
+                     'nano_cpus': 8_000_000_000, 'memory_bytes': 32 * 1024 * 1024 * 1024}), \
+                 mock.patch('local_docker_scheduled.acquire', side_effect=acquire_with_capacity), \
+                 mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 mock.patch('local_heavy_slots._owned_slot_marker_written', side_effect=after_owner_marker), \
+                 mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=launch):
+                result = subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
+                                                base='b' * 40, head_ref='codex/test', resource_limits=limits)
+            self.assertEqual(slot_marker_written, [(result['slot'], owner_ids[0])])
+            cpu_job = (8_000_000_000 * limits['host_job']['cpu_rate'] + 9_999) // 10_000
+            self.assertEqual(admission_calls, [(owner_ids[0], {
+                'nano_cpus': limits['client']['nano_cpus'] + limits['daemon']['nano_cpus'] + cpu_job,
+                'memory_bytes': limits['client']['memory_bytes'] + limits['daemon']['memory_bytes'] +
+                                limits['host_job']['job_memory_bytes'],
+                'pids_limit': limits['client']['pids_limit'] + limits['daemon']['pids_limit'] +
+                              limits['host_job']['active_process_limit']}, limits['capacity_budget'])])
+            self.assertEqual(result['status'], 'incomplete')
+            self.assertEqual(result['input_identity']['resource_limits'], limits)
+            self.assertEqual(result['resource_limit_readback']['host_job']['cpu_rate'], limits['host_job']['cpu_rate'])
+            limitations = ' '.join(result.get('unbound_inputs', [])).lower()
+            self.assertIn('pid', limitations)
+            self.assertTrue('foreign' in limitations or 'non-cooperating' in limitations)
+
+    def _run_interrupted_worker(self, *, probe=True, probe_error=False, change_daemon=False,
+                                session_identities=None):
+        limits = self.resource_limits()
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'out'; output.mkdir()
+            slots = Path(directory) / 'slots'
+            engine = FakeEngine()
+            owner_ids, resources, job_names = [], [], []
+
+            def interrupted_worker(_command, *, input, job_name, **_kwargs):
+                request = json.loads(input)
+                owner_ids.append(request['owner_id'])
+                job_names.append(job_name)
+                owner = OwnedRun.load(Path(request['ownership_journal']).parent, engine)
+                try:
+                    resources.append(owner.create_resource('network'))
+                finally:
+                    owner.close()
+                if change_daemon:
+                    engine.identity = 'different-daemon'
+                raise RuntimeError('worker outcome is uncertain')
+
+            identity = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+            identity_patch = mock.patch.object(proof_scheduler, '_session_identity',
+                side_effect=session_identities if session_identities is not None else lambda: identity)
+            probe_patch = (mock.patch.object(subject.supervision, 'named_job_exists', side_effect=RuntimeError('probe uncertain'))
+                           if probe_error else
+                           mock.patch.object(subject.supervision, 'named_job_exists', return_value=probe))
+            with mock.patch.object(subject, '_worker_command', return_value=['worker']), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                 mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=interrupted_worker), \
+                 probe_patch as exists, identity_patch, self.assertRaisesRegex(RuntimeError, 'uncertain'):
+                subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
+                                       base='b' * 40, head_ref='codex/test', resource_limits=limits)
+
+            markers = list(slots.glob('heavy-*.lock'))
+            marker = markers[0].read_bytes() if markers else b''
+            return engine, slots, marker, exists, owner_ids, resources, job_names
+
+    def test_named_job_present_or_probe_uncertain_keeps_resources_and_busy_slot(self):
+        for probe_error in (False, True):
+            with self.subTest(probe_error=probe_error):
+                engine, _slots, marker, exists, owner_ids, resources, job_names = self._run_interrupted_worker(
+                    probe=True, probe_error=probe_error)
+                exists.assert_called_once_with(job_names[0])
+                self.assertEqual(len(resources), 1)
+                self.assertTrue(engine.exists('network', resources[0]))
+                self.assertIn(owner_ids[0].encode('ascii'), marker)
+                self.assertIn(b'busy:', marker)
+
+    def test_absent_named_job_with_changed_daemon_keeps_resources_and_busy_slot(self):
+        engine, _slots, marker, exists, owner_ids, resources, job_names = self._run_interrupted_worker(
+            probe=False, change_daemon=True)
+        exists.assert_called_once_with(job_names[0])
+        self.assertEqual(len(resources), 1)
+        self.assertTrue(engine.exists('network', resources[0]))
+        self.assertIn(owner_ids[0].encode('ascii'), marker)
+        self.assertIn(b'busy:', marker)
+
+    def test_session_identity_change_prevents_named_job_probe_or_release(self):
+        original = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 7}
+        changed = {'boot_id': 'boot-a', 'logon_id': 'logon-a', 'session_id': 8}
+        engine, _slots, marker, exists, owner_ids, resources, _job_names = self._run_interrupted_worker(
+            probe=False, session_identities=[original, changed])
+        exists.assert_not_called()
+        self.assertEqual(len(resources), 1)
+        self.assertTrue(engine.exists('network', resources[0]))
+        self.assertIn(owner_ids[0].encode('ascii'), marker)
+        self.assertIn(b'busy:', marker)
+
+    def test_source_mismatch_rejects_receipt_after_exact_owned_cleanup(self):
+        limits = self.resource_limits()
+        source = {'head': 'a' * 40}
+        changed_source = {'head': 'f' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'; root.mkdir()
+            output = Path(directory) / 'out'; output.mkdir()
+            slots = Path(directory) / 'slots'
+            engine = FakeEngine()
+            resources, owner_ids = [], []
+            report = {'status': 'incomplete', 'source': changed_source,
+                      'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
+                                         'resource_limits': limits},
+                      'resource_limit_readback': {'client': limits['client'], 'daemon': limits['daemon']}}
+
+            def worker(command, *, input, **kwargs):
+                request = json.loads(input)
+                owner_ids.append(request['owner_id'])
+                owner = OwnedRun.load(Path(request['ownership_journal']).parent, engine)
+                try:
+                    resources.append(owner.create_resource('network'))
+                finally:
+                    owner.close()
+                (output / 'diagnostic.json').write_text(json.dumps(report), encoding='utf-8')
+                completed = subprocess.CompletedProcess(command, 0, stdout=json.dumps(report).encode(), stderr=b'')
+                completed.job_evidence = {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                                          'active_process_limit': 512, 'peak_job_memory_bytes': 1024,
+                                          'active_processes_after_cleanup': 0}
+                return completed
+
+            with mock.patch.object(subject, '_worker_command', return_value=['worker']), \
+                 mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                 mock.patch('local_docker_scheduled.host_slot_directory', return_value=slots), \
+                 mock.patch.object(subject.supervision, 'run_diagnostic', side_effect=worker), \
+                 mock.patch.object(subject.supervision, 'named_job_exists', return_value=False), \
+                 self.assertRaises(ValueError):
+                subject.run_supervised({'source': source}, 'bot', root, output, 'helper', 'c' * 64, {},
+                                       base='b' * 40, head_ref='codex/test', resource_limits=limits)
+
+            self.assertEqual(len(resources), 1)
+            self.assertFalse(engine.exists('network', resources[0]))
+            marker = next(slots.glob('heavy-*.lock')).read_bytes()
+            self.assertNotIn(owner_ids[0].encode('ascii'), marker)
+            self.assertEqual(marker[1:], b'idle\n')
+
+    def test_source_file_mutation_during_worker_invalidates_result_after_exact_owned_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'; root.mkdir()
+            output = Path(directory) / 'output'
+            source_file = root / 'fixture.txt'
+            source_file.write_text('before', encoding='utf-8')
+            head = 'a' * 40
+            engine = FakeEngine()
+            foreign_key = ('volume', 'foreign-sentinel')
+            engine.resources[foreign_key] = {'id': 'foreign-sentinel', 'name': 'foreign-sentinel',
+                                              'kind': 'volume', 'labels': {'owner': 'foreign'}}
+            owned_checkout = Path(directory) / 'owned'; owned_checkout.mkdir()
+            owner = OwnedRun.create(owned_checkout, engine)
+            scheduled = SimpleNamespace(run=owner, close=lambda: (owner.cleanup(), owner.close()))
+            captures = []
+
+            def capture(actual_root, actual_head):
+                self.assertEqual(Path(actual_root), root.resolve())
+                self.assertEqual(actual_head, head)
+                result = {'head': actual_head,
+                          'fixture_sha256': hashlib.sha256(source_file.read_bytes()).hexdigest()}
+                captures.append(result)
+                return result
+
+            def execute_worker(*args, **kwargs):
+                owned = owner.create_resource('network')
+                source_file.write_text('mutated while worker ran', encoding='utf-8')
+                scheduled.close()
+                return {'status': 'incomplete', 'source': captures[0], 'owned_resource': owned}
+
+            archives = {tag: {'archive': str(root / 'archive'), 'archive_sha256': 'b' * 64,
+                              'image_id': 'sha256:' + 'c' * 64}
+                        for tag in subject.profile('bot')['images']}
+            try:
+                with mock.patch.object(subject.auth_broker, '_require_worker_job'), \
+                     mock.patch.object(subject, 'DockerCLI', return_value=engine), \
+                     mock.patch.object(subject.orchestration, '_verify_file'), \
+                     mock.patch.object(subject.local_go_plan, '_check_go_toolchain', return_value='go'), \
+                     mock.patch.object(subject.snapshot, 'capture', side_effect=capture), \
+                     mock.patch.object(subject.snapshot, 'materialize', return_value=root / 'staged'), \
+                     mock.patch.object(subject.local_go_dependencies, 'acquire', return_value={}), \
+                     mock.patch.object(subject.ScheduledRun, 'start_host', return_value=scheduled), \
+                     mock.patch.object(subject.chat, 'publish_owner'), \
+                     mock.patch.object(subject.chat, 'run_owned', side_effect=execute_worker), \
+                     self.assertRaisesRegex(ValueError, 'source changed during cleanup'):
+                    subject.run('bot', root, head, output, 'helper', 'd' * 64, archives, 'go')
+                self.assertEqual(len(captures), 2)
+                self.assertNotEqual(captures[0], captures[1])
+                self.assertFalse(any(key[0] == 'network' for key in engine.resources))
+                self.assertIn(foreign_key, engine.resources)
+                self.assertFalse((output / 'diagnostic.json').exists())
+            finally:
+                owner.close()
+
     def test_supervised_worker_cannot_run_inline_or_accept_forged_receipt(self):
         plan = {'base': 'b' * 40, 'source': {'head': 'a' * 40},
                 'checks': {'backend-go-integration-pr': ['bot']}, 'components': {'go_integration': ['bot']}}
@@ -78,12 +443,13 @@ class FullGoTests(unittest.TestCase):
             with mock.patch.object(subject.supervision, 'run_diagnostic', return_value=fake) as broker, \
                  mock.patch.object(subject, 'run_selected') as inline, self.assertRaises(ValueError):
                 subject.run_supervised(plan, 'bot', Path(directory), output, 'helper', 'c' * 64, {},
-                                       base='b' * 40, head_ref='codex/test')
+                                       base='b' * 40, head_ref='codex/test', resource_limits=self.resource_limits())
             broker.assert_called_once()
             inline.assert_not_called()
             request = json.loads(broker.call_args.kwargs['input'])
             self.assertEqual(request['plan'], plan)
             self.assertEqual(request['service'], 'bot')
+            self.assertEqual(request['resource_limits'], self.resource_limits())
     def test_profiles_are_explicit_and_unsupported_services_refuse(self):
         self.assertEqual(subject.profile('voice')['images'],
                          ('postgres:16-bookworm', 'redis:7.4-bookworm', 'nats:2.12-alpine'))

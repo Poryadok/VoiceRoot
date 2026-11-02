@@ -156,6 +156,50 @@ class FullChatTests(unittest.TestCase):
                 subject.run_owned(scheduled, mock.Mock(), {}, root, root, root, 'helper', 'd' * 64, archives, {})
             scheduled.close.assert_called_once_with()
 
+    def test_go_limits_are_applied_separately_to_client_and_rootless_daemon_before_start(self):
+        limits = {'client': {'nano_cpus': 1500000000, 'memory_bytes': 2 * 1024 * 1024 * 1024,
+                             'memory_swap_bytes': 3 * 1024 * 1024 * 1024, 'pids_limit': 384},
+                  'daemon': {'nano_cpus': 1000000000, 'memory_bytes': 512 * 1024 * 1024,
+                             'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256},
+                  'host_job': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                               'active_process_limit': 512},
+                  'capacity_budget': {'nano_cpus': 8_000_000_000,
+                                      'memory_bytes': 12 * 1024 * 1024 * 1024,
+                                      'pids_limit': 2048}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / 'output'; output.mkdir()
+            archive = root / 'input.tar'; archive.write_bytes(b'fixture')
+            owner = mock.Mock(directory=root / 'owned')
+            owner.directory.mkdir()
+            owner.create_resource.side_effect = ['network', 'data', 'legacy', 'socket', 'workspace']
+            owner.create_container.return_value = 'client'
+            owner.create_rootless_container.return_value = 'daemon'
+            owner.execute.return_value = 0
+            scheduled = mock.Mock(run=owner, slot=0)
+            tags = ('postgres:16-bookworm', 'nats:2.10-alpine')
+            archives = {tag: {'archive': str(archive), 'archive_sha256': 'a' * 64,
+                              'image_id': 'sha256:' + 'b' * 64} for tag in tags}
+            engine = mock.Mock()
+            engine._call.return_value = 'sha256:' + 'c' * 64
+            with mock.patch.object(subject, 'validate_archives'), \
+                 mock.patch.object(subject.orchestration, '_verify_file'), \
+                 mock.patch.object(subject.orchestration, '_wait_daemon'), \
+                 mock.patch.object(subject.local_go_execution, 'transfer_source', return_value='d' * 64), \
+                 mock.patch.object(subject.local_go_execution, 'transfer_dependencies'), \
+                 mock.patch('local_go_full_integration.run_profile', return_value={'status': 'incomplete'}):
+                subject.run_owned(scheduled, engine, {}, root, root, output, 'helper', 'e' * 64,
+                                  archives, {}, service='bot', resource_limits=limits)
+            owner.create_container.assert_called_once()
+            self.assertEqual(owner.create_container.call_args.kwargs['resource_limits'], limits['client'])
+            owner.create_rootless_container.assert_called_once()
+            self.assertEqual(owner.create_rootless_container.call_args.kwargs['resource_limits'], limits['daemon'])
+            method_names = [call[0] for call in owner.method_calls]
+            self.assertLess(method_names.index('create_container'), method_names.index('start_container'))
+            self.assertLess(method_names.index('create_rootless_container'),
+                            method_names.index('start_container', method_names.index('start_container') + 1))
+            scheduled.close.assert_called_once_with()
+
 
 if __name__ == '__main__':
     unittest.main()

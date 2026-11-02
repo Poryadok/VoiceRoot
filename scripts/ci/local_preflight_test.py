@@ -324,11 +324,48 @@ class LocalPreflightTests(unittest.TestCase):
         run.assert_not_called()
 
     def full_go_inputs(self, services):
+        limits = self.go_resource_limits()
         return {name: {'helper': str(self.root / 'helper'), 'helper_sha256': 'a' * 64,
+                       'resource_limits': limits,
                        'archives': {tag: {'archive': str(self.root / (name + str(i))),
                                            'archive_sha256': 'b' * 64, 'image_id': 'sha256:' + str(i + 1) * 64}
                                     for i, tag in enumerate(local_preflight.local_go_full_integration.profile(name)['images'])}}
                 for name in services}
+
+    @staticmethod
+    def go_resource_limits():
+        return {'client': {'nano_cpus': 1500000000, 'memory_bytes': 2 * 1024 * 1024 * 1024,
+                           'memory_swap_bytes': 3 * 1024 * 1024 * 1024, 'pids_limit': 384},
+                'daemon': {'nano_cpus': 1000000000, 'memory_bytes': 512 * 1024 * 1024,
+                           'memory_swap_bytes': 1024 * 1024 * 1024, 'pids_limit': 256},
+                'host_job': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                             'active_process_limit': 512},
+                'capacity_budget': {'nano_cpus': 8_000_000_000,
+                                    'memory_bytes': 12 * 1024 * 1024 * 1024,
+                                    'pids_limit': 2048}}
+
+    def test_full_go_inputs_reject_invalid_resource_limits_before_worker(self):
+        plan = {'base': 'c' * 40, 'source': self.source,
+                'checks': {'backend-go-integration-pr': ['bot']},
+                'components': {'go_integration': ['bot']}}
+        valid = self.full_go_inputs(['bot'])
+        self.assertEqual(local_preflight._validate_full_go_inputs(plan, valid), ['bot'])
+        invalid = []
+        for domain, key, value in (('client', 'nano_cpus', True), ('client', 'memory_bytes', 0),
+                                   ('client', 'pids_limit', 3.5), ('daemon', 'nano_cpus', 999999999),
+                                   ('host_job', 'active_process_limit', -1)):
+            changed = json.loads(json.dumps(valid))
+            changed['bot']['resource_limits'][domain][key] = value
+            invalid.append(changed)
+        changed = json.loads(json.dumps(valid))
+        changed['bot']['resource_limits']['client']['memory_swap_bytes'] = 1
+        invalid.append(changed)
+        changed = json.loads(json.dumps(valid))
+        changed['bot']['resource_limits']['unexpected'] = 1
+        invalid.append(changed)
+        for inputs in invalid:
+            with self.subTest(limits=inputs['bot']['resource_limits']), self.assertRaises(ValueError):
+                local_preflight._validate_full_go_inputs(plan, inputs)
 
     def test_full_go_preflight_rejects_mixed_selection_before_workers(self):
         plan = {'base': 'c' * 40, 'source': self.source, 'checks': {'backend-go-integration-pr': ['bot', 'file']},
@@ -350,7 +387,13 @@ class LocalPreflightTests(unittest.TestCase):
                   'images': {tag: item['image_id'] for tag, item in self.full_go_inputs(['bot'])['bot']['archives'].items()},
                   'input_identity': {'helper_sha256': 'a' * 64,
                       'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
-                                   for tag, item in self.full_go_inputs(['bot'])['bot']['archives'].items()}},
+                                   for tag, item in self.full_go_inputs(['bot'])['bot']['archives'].items()},
+                      'resource_limits': self.go_resource_limits()},
+                  'resource_limit_readback': {'client': self.go_resource_limits()['client'],
+                      'daemon': self.go_resource_limits()['daemon'],
+                      'host_job': {'cpu_rate': 1500, 'job_memory_bytes': 3 * 1024 * 1024 * 1024,
+                                   'active_process_limit': 512, 'peak_job_memory_bytes': 1234,
+                                   'active_processes_after_cleanup': 0}},
                   'events_sha256': 'b' * 64, 'source_archive_sha256': 'c' * 64, 'required_inventory_sha256': 'd' * 64,
                   'required_count': 1, 'go_image_id': 'sha256:' + 'e' * 64, 'slot': 0,
                   'ownership_journal': str(self.output / 'go-full' / 'bot' / 'run' / 'tmp' / 'ci-local' / ('voiceci-' + 'f' * 32) / 'ownership.json'),
@@ -362,6 +405,7 @@ class LocalPreflightTests(unittest.TestCase):
             report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter',
                                          head_ref='codex/test', full_go_inputs=self.full_go_inputs(['bot']))
         run.assert_called_once()
+        self.assertEqual(run.call_args.kwargs['resource_limits'], self.go_resource_limits())
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['checks']['backend-go-integration-pr']['status'], 'not_run')
         self.assertEqual(report['go_full_reports']['bot']['skipped'], result['tests']['skipped'])
@@ -370,6 +414,12 @@ class LocalPreflightTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 local_preflight._validate_full_go_report(bad, 'bot', self.source, self.full_go_inputs(['bot'])['bot'],
                                                          self.output / 'go-full' / 'bot')
+        bad_readback = json.loads(json.dumps(result))
+        bad_readback['resource_limit_readback']['client']['pids_limit'] += 1
+        with self.assertRaises(ValueError):
+            local_preflight._validate_full_go_report(bad_readback, 'bot', self.source,
+                                                     self.full_go_inputs(['bot'])['bot'],
+                                                     self.output / 'go-full' / 'bot')
 
     def test_lint_component_composes_without_completing_other_checks(self):
         plan={'source':self.source,'checks':{'golangci':['go'],'backend-auth':['shared']},'components':{'go':['chat']}}
