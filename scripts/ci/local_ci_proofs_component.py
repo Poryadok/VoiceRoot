@@ -149,7 +149,8 @@ def _tool_version(path, name, env):
         version = result.stdout.decode('utf-8', errors='strict').strip()
     except UnicodeError as error:
         raise ValueError(name + ' version output is not UTF-8') from error
-    if (name == 'GNU Make' and not re.match(r'^GNU Make [0-9]+(?:\.[0-9]+)+$', version) or
+    first_line = version.splitlines()[0] if version else ''
+    if (name == 'GNU Make' and not re.fullmatch(r'GNU Make [0-9]+(?:\.[0-9]+)+', first_line) or
             name == 'Bash' and not version.startswith('GNU bash, version ')):
         raise ValueError(name + ' executable identity is not recognized')
     return version

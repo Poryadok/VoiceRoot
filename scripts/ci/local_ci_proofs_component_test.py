@@ -1,8 +1,10 @@
 """Source-bound tests for the fetched PR proofs-shard component."""
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import local_ci_proofs_component as proofs
 
@@ -111,6 +113,19 @@ class ProofComponentTest(unittest.TestCase):
         self.assertFalse({'MAKEFLAGS', 'GNUMAKEFLAGS', 'MFLAGS', 'MAKEFILES',
                           'MAKEOVERRIDES', 'BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS',
                           'GIT_DIR', 'PYTHONPATH'} & set(result))
+
+    def test_tool_version_accepts_standard_multiline_gnu_make_output(self):
+        output = (b'GNU Make 4.4.1\nBuilt for Windows32\nCopyright (C) Free Software Foundation\n')
+        with patch.object(proofs.execution, '_execute', return_value=SimpleNamespace(
+                returncode=0, stdout=output, stderr=b'')):
+            self.assertEqual(proofs._tool_version(self.repo / 'make.exe', 'GNU Make', {}),
+                             output.decode().strip())
+        for malformed in (b'Fake Make 4.4.1\n', b'GNU Make unknown\n'):
+            with self.subTest(output=malformed), patch.object(
+                    proofs.execution, '_execute', return_value=SimpleNamespace(
+                        returncode=0, stdout=malformed, stderr=b'')):
+                with self.assertRaisesRegex(ValueError, 'not recognized'):
+                    proofs._tool_version(self.repo / 'make.exe', 'GNU Make', {})
 
     def test_recipe_expansion_is_exact_and_unknown_make_syntax_refuses(self):
         bash = self.repo / 'bash.exe'
