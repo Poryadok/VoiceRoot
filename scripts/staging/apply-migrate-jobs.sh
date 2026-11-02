@@ -148,6 +148,106 @@ migration_content_hash() {
   find "${dir}" -type f -name '*.sql' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
 }
 
+# Resolve the same current connection input as the selected migration template.
+# Never infer a service SecretRef's target from the local Postgres database name.
+migration_target_dsn() {
+  local db="$1" template="$2" key user
+  if grep -Fq '__DATABASE_URL__' "$template"; then
+    postgres_migrate_dsn "$db"
+    return
+  fi
+  key="$(sed -nE 's/^[[:space:]]*secretKeyRef: \{name: voice-app-secrets, key: ([A-Z_]+_DATABASE_URL)\}[[:space:]]*$/\1/p' "$template")"
+  if [[ "$key" =~ ^[A-Z_]+_DATABASE_URL$ ]]; then
+    kubectl get secret voice-app-secrets -n "$NS" -o "jsonpath={.data.${key}}" | base64 -d
+    return
+  fi
+  # These two templates construct an encoded admin URL inside the Job.
+  grep -A1 -F 'name: POSTGRES_HOST' "$template" | grep -Eq '^[[:space:]]*value: voice-postgres$' || return 1
+  grep -A1 -F 'name: POSTGRES_DATABASE' "$template" | grep -Eq "^[[:space:]]*value: ${db}$" || return 1
+  case "$db" in
+    voice_db)
+      grep -A1 -F 'name: POSTGRES_USER' "$template" | grep -Eq '^[[:space:]]*value: voice$' || return 1
+      user=voice ;;
+    game_integration_db)
+      user="$(kubectl get configmap voice-app-config -n "$NS" -o jsonpath='{.data.POSTGRES_USER}')" || return 1
+      [ -n "$user" ] || return 1 ;;
+    *) return 1 ;;
+  esac
+  printf '%s\0%s' "$user" "$PG_PASS" | python3 -c '
+import sys
+from urllib.parse import quote
+user, password = sys.stdin.buffer.read().decode().split("\0", 1)
+print("postgres://%s:%s@voice-postgres:5432/%s?sslmode=disable" %
+      (quote(user, safe=""), quote(password, safe=""), sys.argv[1]), end="")' "$db"
+}
+
+verify_retained_migration_target() {
+  local db="$1" dir="$2" template="$3" target dsn probe_input observed
+  if ! target="$(find "$dir" -maxdepth 1 -type f -name '*.up.sql' -printf '%f\n' |
+      sed -nE 's/^([0-9]+)_.+\.up\.sql$/\1/p' | sed 's/^0*//' | sort -n | tail -1)" ||
+     [[ ! "$target" =~ ^[0-9]+$ ]] ||
+     ! dsn="$(migration_target_dsn "$db" "$template" 2>/dev/null | python3 -c '
+import sys
+raw = sys.stdin.buffer.read()
+if any(byte <= 32 or byte == 127 for byte in raw):
+    sys.exit(1)
+sys.stdout.buffer.write(raw)' 2>/dev/null)"; then
+    echo "HOLD: cannot resolve current migration target for ${db}; explicit reconciliation required" >&2
+    return 1
+  fi
+  # Validate bytes before Bash capture (which strips NUL/trailing LF) and URL
+  # parsing (which strips tabs/leading whitespace). Never normalize the target.
+  if [[ -z "$dsn" || "$dsn" == *$'\n'* || "$dsn" == *$'\r'* ]]; then
+    echo "HOLD: cannot resolve current migration target for ${db}; explicit reconciliation required" >&2
+    return 1
+  fi
+  # Remove the URI password before invoking psql. Refuse connection selectors
+  # whose override semantics cannot be preserved by this password split.
+  if ! probe_input="$(printf '%s' "$dsn" | python3 -c '
+import base64, re, sys
+from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
+try:
+    raw = sys.stdin.read()
+    uri = urlsplit(raw)
+    selectors = {"password", "sslpassword", "passfile", "service", "servicefile", "user", "dbname", "host", "hostaddr", "port"}
+    if (not raw.startswith(("postgres://", "postgresql://")) or
+        urlunsplit(uri) != raw or uri.netloc.count("@") != 1 or not uri.hostname or
+        uri.username is None or uri.password is None or uri.fragment or
+        re.search(r"%(?![0-9a-fA-F]{2})", uri.password) or
+        any(key.lower() in selectors for key, _ in parse_qsl(uri.query, keep_blank_values=True))):
+        raise ValueError()
+    uri.port  # Reject invalid port syntax before the probe.
+    userinfo, host = uri.netloc.rsplit("@", 1)
+    clean = urlunsplit(uri._replace(netloc=userinfo.split(":", 1)[0] + "@" + host))
+    password = unquote(uri.password, errors="strict").encode()
+    if b"\0" in password:
+        raise ValueError()
+    print(clean)
+    print(base64.b64encode(password).decode())
+except (ValueError, UnicodeError):
+    sys.exit(1)' 2>/dev/null)"; then
+    echo "HOLD: unsupported migration connection for ${db}; explicit reconciliation required" >&2
+    return 1
+  fi
+  # Passwords travel only over stdin and libpq environment, never process argv
+  # or diagnostics. Base64 framing preserves decoded password newlines.
+  # -X ignores psqlrc; query errors and connection details are deliberately not
+  # printed. A missing/ambiguous ledger cannot attest a retained Job's success.
+  if ! observed="$(printf '%s\n' "$probe_input" | kubectl exec -i --request-timeout=30s -n "$NS" "${VOICE_POSTGRES_POD:-voice-postgres-0}" -- \
+      sh -ec 'IFS= read -r database_url
+        IFS= read -r password_base64
+        PGPASSWORD="$(printf "%s" "$password_base64" | base64 -d && printf "\001")"
+        PGPASSWORD="${PGPASSWORD%?}"
+        export PGPASSWORD
+        export PGCONNECT_TIMEOUT=10 PGOPTIONS="-c statement_timeout=10000 -c default_transaction_read_only=on"
+        exec psql "$database_url" -X -A -t -F "|" -v ON_ERROR_STOP=1 \
+          -c "SELECT current_database(), version, dirty FROM public.schema_migrations"' 2>/dev/null)" ||
+     [ "$observed" != "${db}|${target}|f" ]; then
+    echo "HOLD: retained migration Job does not prove current clean ${db} at version ${target}; explicit reconciliation required" >&2
+    return 1
+  fi
+}
+
 # Retain the original authenticated Job/Pod/log observations, not a DB marker.
 retain_space_native_evidence() {
   local image="$1" work
@@ -228,7 +328,8 @@ apply_migrate() {
   if kubectl get job "${job_name}" -n "${NS}" >/dev/null 2>&1; then
     succeeded="$(kubectl get job "${job_name}" -n "${NS}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo 0)"
     if [ "${succeeded:-0}" = "1" ] && [ "${stored_hash}" = "${content_hash}" ]; then
-      echo "migrate job ${job_name} already succeeded for current migrations; skipping"
+      verify_retained_migration_target "$db_key" "$migrations_dir" "$template" || return 1
+      echo "migrate job ${job_name} and actual target database verified for current clean migrations; skipping"
       return 0
     fi
     if [ "${succeeded:-0}" = "1" ] && [ -n "${stored_hash}" ] && [ "${stored_hash}" != "${content_hash}" ]; then

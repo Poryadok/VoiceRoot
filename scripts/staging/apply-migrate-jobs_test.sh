@@ -161,6 +161,7 @@ trap 'rm -rf "${TEST_TMP}"' EXIT
 
 definitions="$(awk '/^if ! kubectl get secret/{exit} {print}' "${ROOT}/scripts/staging/apply-migrate-jobs.sh")"
 eval "${definitions}"
+PG_PASS=fixture
 
 CALLS="${TEST_TMP}/calls"
 STORED_HASH="${TEST_TMP}/stored-hash"
@@ -170,6 +171,7 @@ WAIT_FAIL="${TEST_TMP}/wait-fail"
 RENDERED_JOB="${TEST_TMP}/rendered-job.yaml"
 CAPTURED_DSN="${TEST_TMP}/captured-dsn"
 DIAGNOSTIC_LOG="${TEST_TMP}/diagnostic-log"
+DB_PROBE_RESULT="${TEST_TMP}/db-probe-result"
 MIGRATIONS="${TEST_TMP}/migrations"
 TEST_BIN="${TEST_TMP}/bin"
 mkdir -p "${MIGRATIONS}"
@@ -187,6 +189,14 @@ for arg in "$@"; do
 done
 EOF
 chmod +x "${TEST_BIN}/migrate"
+cat >"${TEST_BIN}/psql" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"${PSQL_ARGV_CAPTURE:?}"
+printf '%s' "${PGPASSWORD:-}" >"${PSQL_PASSWORD_CAPTURE:?}"
+printf 'voice_db|1|f\n'
+EOF
+chmod +x "${TEST_BIN}/psql"
 
 readonly RESERVED_USER='u@ser /%?#:'
 readonly RESERVED_PASSWORD='R22 a@b/%?#: space END'
@@ -206,6 +216,7 @@ readonly EXPECTED_POD_STATUS_REQUEST="kubectl.get.pod.request voice-migrate-voic
 reset_mock() {
   : >"${CALLS}" || return 1
   rm -f "${STORED_HASH}" "${JOB_EXISTS}" "${JOB_SUCCEEDED}" "${WAIT_FAIL}" "${RENDERED_JOB}" "${CAPTURED_DSN}" "${DIAGNOSTIC_LOG}" || return 1
+  rm -f "${DB_PROBE_RESULT}" || return 1
 }
 
 kubectl_apply_configmap() {
@@ -244,6 +255,7 @@ kubectl() {
           ;;
         configmap)
           printf '%s\n' 'configmap.get' >>"${CALLS}"
+          if [[ "$*" == *'.data.POSTGRES_USER'* ]]; then printf voice; return; fi
           [[ -f "${STORED_HASH}" ]] && cat "${STORED_HASH}"
           ;;
         pods)
@@ -258,6 +270,23 @@ kubectl() {
           fi
           ;;
       esac
+      ;;
+    exec)
+      local probe_dsn probe_db
+      if [[ "${PROBE_EXECUTE:-false}" == true ]]; then
+        while [[ "$1" != -- ]]; do shift; done
+        shift
+        PATH="${TEST_BIN}:${PATH}" "$@"
+        return
+      fi
+      IFS= read -r probe_dsn
+      probe_db="${probe_dsn#*5432/}"
+      printf '%s\n' 'db.probe' >>"${CALLS}"
+      if [[ -f "${DB_PROBE_RESULT}" ]]; then
+        cat "${DB_PROBE_RESULT}"
+      else
+        printf '%s|1|f\n' "${probe_db%%\?*}"
+      fi
       ;;
     delete)
       printf '%s\n' 'kubectl.delete.job' >>"${CALLS}"
@@ -665,6 +694,7 @@ run_unchanged_content_case() {
   apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations >/dev/null || return 1
 
   stored_hash_line="$(first_call_line '^configmap\.get$' || true)"
+  grep -Fxq db.probe "${CALLS}" || { echo 'FAIL: retained Job reuse must query the actual database'; return 1; }
   first_mutation_line="$(first_call_line '^(configmap\.apply |configmap\.annotate$)' || true)"
   [[ -n "${stored_hash_line}" ]] || {
     echo 'FAIL: unchanged migration reuse must read the stored ConfigMap hash' >&2
@@ -687,7 +717,7 @@ run_gameintegration_caller_case() {
   ROOT="${TEST_TMP}/gis-root"
   mkdir -p "${ROOT}/src/backend/migrations/game_integration_db" "${ROOT}/deploy/templates"
   printf '%s\n' 'SELECT 1;' >"${ROOT}/src/backend/migrations/game_integration_db/000001_fixture.up.sql"
-  printf '%s\n' 'apiVersion: batch/v1' >"${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml"
+  cp "${original_root}/deploy/templates/migrate-game-integration-db-job.yaml" "${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml"
   expected_hash="$(migration_content_hash "${ROOT}/src/backend/migrations/game_integration_db")" || return 1
 
   provision_gameintegration_runtime_role() {
@@ -727,6 +757,82 @@ run_gameintegration_caller_case() {
   fi
   ROOT="${original_root}"
 }
+
+run_retained_database_hold_cases() {
+  local observed output result
+  for observed in 'voice_db|0|f' 'voice_db|1|t' 'voice_db|2|f' 'other_db|1|f' '' $'voice_db|1|f\nvoice_db|1|f'; do
+    reset_mock || return 1
+    migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}" || return 1
+    : >"${JOB_EXISTS}"
+    printf 1 >"${JOB_SUCCEEDED}"
+    printf '%s' "$observed" >"${DB_PROBE_RESULT}"
+    set +e
+    output="$(apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations 2>&1)"
+    result=$?
+    set -e
+    [[ $result != 0 ]] && grep -Fq 'HOLD:' <<< "$output" || {
+      echo 'FAIL: invalid actual database state must hold retained Job reuse' >&2; return 1;
+    }
+    grep -Fxq db.probe "${CALLS}" || return 1
+    if grep -Eq '^(configmap\.apply |configmap\.annotate$|kubectl\.(delete|apply\.job|wait\.job))' "${CALLS}"; then
+      echo 'FAIL: retained migration reconciliation hold mutated resources' >&2; return 1
+    fi
+  done
+}
+
+run_probe_credential_transport_case() {
+  reset_mock || return 1
+  local result=0
+  migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}"
+  : >"${JOB_EXISTS}"
+  printf 1 >"${JOB_SUCCEEDED}"
+  PG_PASS="${RESERVED_PASSWORD}"
+  export PSQL_ARGV_CAPTURE="${TEST_TMP}/psql-argv"
+  export PSQL_PASSWORD_CAPTURE="${TEST_TMP}/psql-password"
+  PROBE_EXECUTE=true
+  apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations >/dev/null || result=$?
+  PROBE_EXECUTE=false
+  [[ $result == 0 ]] || { echo 'FAIL: actual remote probe shell did not reach psql'; return 1; }
+  assert_no_credential_fragments "$(cat "${PSQL_ARGV_CAPTURE}")" || {
+    echo 'FAIL: psql process argv contains a raw or encoded password'; return 1;
+  }
+  [[ "$(cat "${PSQL_PASSWORD_CAPTURE}")" == "${RESERVED_PASSWORD}" ]] || {
+    echo 'FAIL: libpq environment did not receive the exact decoded password'; return 1;
+  }
+  grep -Fxq 'postgres://voice@voice-postgres:5432/voice_db?sslmode=disable' "${PSQL_ARGV_CAPTURE}" || {
+    echo 'FAIL: password removal changed the probe target'; return 1;
+  }
+}
+
+run_probe_input_guard_cases() (
+  local kind output result
+  PROBE_RAW_DSN="${TEST_TMP}/raw-dsn"
+  migration_target_dsn() { cat "${PROBE_RAW_DSN}"; }
+  for kind in tab space nul scheme userinfo reconstruction; do
+    reset_mock || return 1
+    migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}"
+    : >"${JOB_EXISTS}"
+    printf 1 >"${JOB_SUCCEEDED}"
+    case "$kind" in
+      tab) printf 'postgres://voice:probe-pass@voi\tce-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      space) printf ' postgres://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      nul) printf 'postgres://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable\0' >"${PROBE_RAW_DSN}" ;;
+      scheme) printf 'POSTGRES://voice:probe-pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      userinfo) printf 'postgres://voice:probe@pass@voice-postgres:5432/voice_db?sslmode=disable' >"${PROBE_RAW_DSN}" ;;
+      reconstruction) printf 'postgres://voice:probe-pass@voice-postgres:5432/voice_db?' >"${PROBE_RAW_DSN}" ;;
+    esac
+    set +e
+    output="$(apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations 2>&1)"
+    result=$?
+    set -e
+    [[ $result != 0 ]] && grep -Fq 'HOLD:' <<< "$output" || {
+      echo "FAIL: raw ${kind} DSN was normalized into another connection"; return 1;
+    }
+    if grep -Eq '^(db.probe|configmap\.apply |configmap\.annotate$|kubectl\.(delete|apply\.job|wait\.job))' "${CALLS}"; then
+      echo "FAIL: raw ${kind} DSN reached a probe or resource mutation"; return 1
+    fi
+  done
+)
 
 run_secret_leak_case() {
   reset_mock || return 1
@@ -774,9 +880,16 @@ case "${1:-all}" in
   sanitize)
     run_reserved_diagnostics_case
     ;;
+  transport)
+    run_probe_credential_transport_case
+    ;;
+  normalization)
+    run_probe_input_guard_cases
+    ;;
   rerun)
     run_changed_content_case
     run_unchanged_content_case
+    run_retained_database_hold_cases
     ;;
   secret)
     run_secret_leak_case
@@ -788,6 +901,9 @@ case "${1:-all}" in
     run_diagnostics_oracle_self_test || failures=$((failures + 1))
     run_changed_content_case || failures=$((failures + 1))
     run_unchanged_content_case || failures=$((failures + 1))
+    run_retained_database_hold_cases || failures=$((failures + 1))
+    run_probe_credential_transport_case || failures=$((failures + 1))
+    run_probe_input_guard_cases || failures=$((failures + 1))
     run_gameintegration_caller_case fresh || failures=$((failures + 1))
     run_gameintegration_caller_case noop || failures=$((failures + 1))
     run_secret_leak_case || failures=$((failures + 1))
@@ -796,7 +912,7 @@ case "${1:-all}" in
     ((failures == 0)) || exit 1
     ;;
   *)
-    echo "usage: $0 [all|selftest|rerun|secret|encoding|sanitize]" >&2
+    echo "usage: $0 [all|selftest|rerun|secret|encoding|sanitize|transport|normalization]" >&2
     exit 2
     ;;
 esac

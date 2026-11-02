@@ -666,8 +666,13 @@ The same runner applies every Go-owned schema before application manifests:
 `moderation_db`, `notification_db`, `role_db`, `search_db`, `social_db`,
 `space_db`, `story_db`, `subscription_db`, `user_db`, and `voice_db`. Each
 service migration Job reads its database URL through a `voice-app-secrets`
-Secret reference. The runner reuses a completed Job only when the stored hash
-matches the current SQL files; otherwise it applies the service's migration
+Secret reference. The generic runner reuses a completed Job only when the stored
+hash matches the current SQL files and a fresh read-only query using that
+migration's current connection input confirms the expected database name, the
+latest source migration version, and a clean migration ledger. An older restored,
+dirty, ambiguous, wrong, or unverified target stops with an explicit reconciliation
+HOLD; retained Job/ConfigMap objects alone do not authorize skipping. When the Job
+or matching source hash is absent, the runner applies the service's migration
 ConfigMap and waits for the replacement Job before continuing.
 
 ### Space native installer
