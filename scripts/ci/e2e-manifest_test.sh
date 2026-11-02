@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MANIFEST="${ROOT}/.github/ci/e2e-features.yml"
 SCRIPT="${ROOT}/scripts/ci/e2e-manifest.sh"
 GO_DOWNLOAD_HELPER="${ROOT}/src/backend/scripts/docker-go-mod-download.sh"
+source "${ROOT}/scripts/ci/manifest-lines.sh"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -19,19 +20,8 @@ assert_normalized_fixture() {
     fail 'line normalization changed exact values or order'
 }
 read_normalized_lines() {
-  local line
-  normalized_lines=()
-  if [[ $# -gt 0 ]]; then
-    while IFS= read -r line || [[ -n "${line}" ]]; do
-      while [[ "${line}" == *$'\r' ]]; do line="${line%$'\r'}"; done
-      normalized_lines+=("${line}")
-    done < "$1"
-  else
-    while IFS= read -r line || [[ -n "${line}" ]]; do
-      while [[ "${line}" == *$'\r' ]]; do line="${line%$'\r'}"; done
-      normalized_lines+=("${line}")
-    done
-  fi
+  voice_normalize_manifest_lines "$@" || return 1
+  normalized_lines=("${voice_manifest_lines[@]}")
 }
 
 normalization_fixture="$(mktemp)"
@@ -41,6 +31,18 @@ read_normalized_lines "${normalization_fixture}"
 assert_normalized_fixture
 read_normalized_lines < <(printf 'First\r\nSecond\r\n')
 assert_normalized_fixture
+if read_normalized_lines < <(printf 'First\r\r\nSecond\r\n'); then
+  fail 'doubled carriage return was accepted'
+fi
+if read_normalized_lines < <(printf 'First\rSecond\r\n'); then
+  fail 'embedded carriage return was accepted'
+fi
+if read_normalized_lines < <(printf 'First\r'); then
+  fail 'unterminated carriage return was accepted'
+fi
+read_normalized_lines < <(printf 'First\nFinal')
+[[ "${#normalized_lines[@]}" -eq 2 && "${normalized_lines[1]}" == Final ]] || \
+  fail 'valid unterminated final line was rejected'
 
 count_gateway="$(bash "${SCRIPT}" "${MANIFEST}" smoke_gateway | wc -l | tr -d '[:space:]')"
 count_flutter="$(bash "${SCRIPT}" "${MANIFEST}" smoke_flutter | wc -l | tr -d '[:space:]')"
