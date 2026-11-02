@@ -284,6 +284,7 @@ class MultiDependenciesTests(unittest.TestCase):
         output = Path(outside.name) / 'notification-output'
         with mock.patch.object(subject.snapshot, 'verify_materialized'), \
              mock.patch.object(subject.snapshot, 'capture', return_value=self.source), \
+             mock.patch.object(subject.local_go_dependencies.local_current_diff, '_windows', return_value=True), \
              mock.patch.object(subject.local_go_dependencies, 'acquire', side_effect=acquire):
             result = subject.acquire(self.root, self.source, self.root, output, bounded_output=True)
 
@@ -292,6 +293,20 @@ class MultiDependenciesTests(unittest.TestCase):
         self.assertEqual(len({row[1] for row in calls}), 2)
         self.assertEqual(result['status'], 'incomplete')
         self.assertEqual(result['module_dirs'], list(subject.MODULES))
+
+    def test_notification_bounded_acquire_rejects_hosts_without_windows_job_supervision(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        output = Path(outside.name) / 'notification-output'
+        with mock.patch.object(subject.snapshot, 'verify_materialized'), \
+             mock.patch.object(subject.snapshot, 'capture', return_value=self.source), \
+             mock.patch.object(subject.local_go_dependencies.local_current_diff, '_windows', return_value=False), \
+             mock.patch.object(subject.local_go_dependencies, 'acquire') as acquire:
+            with self.assertRaisesRegex(ValueError, 'Windows Job supervision'):
+                subject.acquire(self.root, self.source, self.root, output, bounded_output=True)
+
+        acquire.assert_not_called()
+        self.assertFalse(output.exists())
 
     def test_notification_bounded_mode_has_an_independent_budget_per_module(self):
         source_temp = tempfile.TemporaryDirectory()
