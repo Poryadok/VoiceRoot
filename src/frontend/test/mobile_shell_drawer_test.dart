@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
@@ -88,6 +89,13 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Archive'), findsOneWidget);
         if (profileCount > 1) expect(find.text('Profile 3'), findsOneWidget);
+        Navigator.of(tester.element(find.text('Archive'))).pop();
+        await tester.pumpAndSettle();
+        Focus.of(tester.element(profileMenu)).requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.text('Archive'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

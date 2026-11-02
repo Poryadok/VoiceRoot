@@ -224,8 +224,11 @@ class _DrawerProfileStack extends ConsumerWidget {
         children: [
           for (final profile in entries)
             Builder(
-              builder: (anchorContext) => GestureDetector(
-                behavior: HitTestBehavior.opaque,
+              builder: (anchorContext) => InkWell(
+                customBorder: const CircleBorder(),
+                focusColor: VoiceColors.of(
+                  context,
+                ).focusRing.withValues(alpha: 0.25),
                 onTap: () => showProfileAvatarMenu(
                   context: context,
                   ref: ref,
