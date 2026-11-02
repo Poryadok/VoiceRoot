@@ -21,6 +21,7 @@ import local_ci_staging_request
 import local_auth_orchestration
 import local_auth_full_orchestration
 import local_ci_matrix_inventory
+import local_ci_policy_component
 import local_chat_orchestration
 import local_compose_bridge
 import local_current_diff
@@ -358,7 +359,7 @@ def _validate_full_go_report(result, service, source, inputs, output):
 
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
         auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None,
-        full_go_inputs=None, lint_inputs=None, overlay_inputs=None):
+        full_go_inputs=None, lint_inputs=None, overlay_inputs=None, policy_component_assets=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -389,6 +390,8 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if policy_component_assets is not None and ('ci-script-tests' not in plan['checks'] or staging_assets is not None):
+            raise ValueError('policy component requires selected CI scripts and cannot duplicate staging assets')
         if overlay_inputs is not None:
             if (not isinstance(overlay_inputs, dict) or set(overlay_inputs) != {'image_id', 'kubectl'} or
                     overlay_inputs['image_id'] != local_overlay_execution.PYTHON_IMAGE or
@@ -474,6 +477,11 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
                      ('router', len(local_ci_routing.ROUTER_CASES))]):
                 raise ValueError('CI routing diagnostic did not match the planned source and inventory')
             report['ci_routing_report'] = 'ci-routing/diagnostic.json'
+            if policy_component_assets is not None:
+                component = local_ci_policy_component.run(root, base, head, head_ref, output/'ci-policy-component',
+                                                          policy_component_assets)
+                local_ci_policy_component.verify_component(root, output/'ci-policy-component', plan['source'], base, component)
+                report['ci_policy_component'] = 'ci-policy-component/policy-component.json'
             if staging_assets is not None:
                 source = plan['source']
                 shards = [(name, local_ci_matrix_inventory.SHARD_RECIPE_COUNTS[name])
@@ -652,6 +660,7 @@ def main():
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
     parser.add_argument('--handoff', action='store_true', help='run a supported complete current-diff or overlay handoff plan')
     parser.add_argument('--ci-staging-assets', help='JSON mapping of pinned local staging inputs; runtime also requires phase0_jdk and phase0_compose')
+    parser.add_argument('--ci-policy-assets', help='JSON mapping of pinned inputs for the policy component only')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
     for name in ('go', 'go-sha256', 'lint', 'lint-sha256'):
@@ -698,6 +707,10 @@ def main():
     if args.ci_staging_assets:
         with Path(args.ci_staging_assets).open('rb') as stream:
             staging_assets = local_ci_staging_request.parse_assets(stream.read(1024 * 1024 + 1))
+    policy_component_assets = None
+    if args.ci_policy_assets:
+        with Path(args.ci_policy_assets).open('rb') as stream:
+            policy_component_assets = local_ci_staging_request.parse_assets(stream.read(1024 * 1024 + 1))
     runtime_images = None
     if args.ci_runtime_images:
         with Path(args.ci_runtime_images).open('rb') as stream:
@@ -721,7 +734,8 @@ def main():
                  compose if any(value is not None for value in compose.values()) else None, staging_assets, runtime_images,
                  full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs,
                  lint_inputs if any(value is not None for value in lint_inputs.values()) else None,
-                 overlay_inputs if any(value is not None for value in overlay_inputs.values()) else None)
+                 overlay_inputs if any(value is not None for value in overlay_inputs.values()) else None,
+                 policy_component_assets)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

@@ -9,6 +9,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -98,6 +99,50 @@ def r23_java_summary(raw, exit_code):
     return summary
 
 
+def pr_regression_count(raw, exit_code):
+    """Accept only a successful, non-empty unittest run with no skips."""
+    text = raw.decode('utf-8', errors='strict')
+    matches = re.findall(r'(?m)^Ran ([0-9]+) tests? in [0-9.]+s\s*$', text)
+    if exit_code != 0 or len(matches) != 1 or int(matches[0]) < 1 or not re.search(r'(?m)^OK\s*$', text):
+        raise ValueError('Buf PR regression tests did not pass without skips')
+    return int(matches[0])
+
+
+def validate_pr_receipt(raw, base, head, candidate):
+    try:
+        receipt = json.loads(raw)
+    except (ValueError, UnicodeError) as error:
+        raise ValueError('invalid Buf PR receipt') from error
+    if (not isinstance(receipt, dict) or receipt.get('event_base') != base or receipt.get('base') != base or
+            receipt.get('head') != head or receipt.get('merge') != candidate or
+            receipt.get('checkout') != candidate or receipt.get('parents') != [base, head]):
+        raise ValueError('Buf PR candidate identity differs')
+    return receipt
+
+
+def run_pr_candidate(command, snapshot, env, *, execute=_execute):
+    """Expose only the owned bare fixture at .git for Buf's file URL."""
+    snapshot = Path(snapshot).resolve()
+    private = Path(env['GIT_DIR'])
+    visible = snapshot / '.git'
+    if (private != snapshot.parent / 'fixture.git' or visible.exists() or visible.is_symlink() or
+            private.is_symlink() or getattr(private, 'is_junction', lambda: False)() or not private.is_dir() or
+            getattr(private.lstat(), 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400) or
+            private.resolve() != private or Path(env['GIT_WORK_TREE']).resolve() != snapshot):
+        raise ValueError('unsafe private Buf Git fixture')
+    os.replace(private, visible)
+    settled = True
+    try:
+        candidate_env = {key: value for key, value in env.items() if key not in ('GIT_DIR', 'GIT_WORK_TREE')}
+        return execute(command, cwd=snapshot, env=candidate_env, timeout=600)
+    except (supervision.SupervisionError, BaseExceptionGroup):
+        settled = False
+        raise
+    finally:
+        if settled:
+            os.replace(visible, private)
+
+
 def _tool(value, name):
     located = shutil.which(str(value))
     if not located:
@@ -115,7 +160,7 @@ def maven_options(repository):
     return '-Dmaven.repo.local="' + path + '"'
 
 
-def run(root, source, base, output, go_binary='go', buf_binary='buf'):
+def run(root, source, base, output, go_binary='go', buf_binary='buf', *, merge_candidate=False):
     root, output = Path(root).resolve(), Path(output).resolve()
     if output == root or root in output.parents or output.exists():
         raise ValueError('protobuf output must be new and outside the checkout')
@@ -190,6 +235,20 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
         git_env = dict(env)
         git_env.update({key: value for key, value in private_git.items() if key.upper().startswith('GIT_')})
         git_env['BUF_GO_PB_CHECK_SKIP_SELF_TEST'] = '1'
+        candidate = None
+        if merge_candidate:
+            if source.get('changed_paths') or source.get('raw_mismatch_paths'):
+                raise ValueError('Buf PR candidate requires clean committed source')
+            merged = _execute([str(git), 'merge-tree', '--write-tree', base, head], env=git_env, timeout=120)
+            if merged.returncode or merged.stdout.decode('ascii').strip() != source['tree']:
+                raise ValueError('Buf PR merge tree differs')
+            commit = _execute([str(git), 'commit-tree', source['tree'], '-p', base, '-p', head],
+                              input=b'local protobuf candidate\n', env=git_env, timeout=120)
+            commit.check_returncode()
+            candidate = commit.stdout.decode('ascii').strip()
+            for args in (['update-ref', 'refs/heads/master', candidate], ['read-tree', candidate]):
+                _execute([str(git), *args], env=git_env, timeout=120).check_returncode()
+            report['candidate'] = candidate
         report['base_archive_sha256'] = archive_baseline(root, base, output / 'baseline')
         commands = [
             ('buf-lint', [str(buf), 'lint'], snapshot, env),
@@ -201,8 +260,17 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
             ('auth-compile', [str(maven), '-B', '-DskipTests', 'compile'], snapshot / 'src/backend/auth', env),
             ('r23-contract', [str(go), 'test', '-json', '-count=1', '-v', './...'], snapshot / 'protos/voice/r23_contract_test', env),
         ]
+        if merge_candidate:
+            commands.extend([
+                ('buf-pr-regressions', [sys.executable, '-B', 'scripts/ci/buf-breaking-pr_test.py'], snapshot, env),
+                ('buf-pr-candidate', [sys.executable, '-B', 'scripts/ci/buf-breaking-pr.py', '--repo', str(snapshot),
+                                      '--base', base, '--head', head, '--merge', candidate], snapshot, git_env),
+            ])
         for name, command, cwd, command_env in commands:
-            result = _execute(command, cwd=cwd, env=command_env, timeout=600)
+            if name == 'buf-pr-candidate':
+                result = run_pr_candidate(command, snapshot, command_env)
+            else:
+                result = _execute(command, cwd=cwd, env=command_env, timeout=600)
             (output / (name + '.stdout')).write_bytes(result.stdout)
             (output / (name + '.stderr')).write_bytes(result.stderr)
             report['commands'].append({'name': name, 'argv': command, 'exit_code': result.returncode,
@@ -212,6 +280,10 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
                 raise ValueError(name + ' failed; inspect its diagnostic logs')
             if name == 'r23-contract':
                 report['r23'] = r23_java_summary(result.stdout, result.returncode)
+            elif name == 'buf-pr-regressions':
+                report['pr_regressions'] = pr_regression_count(result.stderr, result.returncode)
+            elif name == 'buf-pr-candidate':
+                report['pr_candidate'] = validate_pr_receipt(result.stdout, base, head, candidate)
             local_source_snapshot.verify_materialized(root, source, snapshot,
                                                        allowed_extra=['src/backend/auth/target/', 'gen/'])
         if local_source_snapshot.capture(root, head) != source:

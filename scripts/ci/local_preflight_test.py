@@ -615,6 +615,25 @@ class LocalPreflightTests(unittest.TestCase):
         route.assert_called_once_with(self.root, self.source, self.output / 'ci-routing')
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['checks']['ci-script-tests']['status'], 'not_run')
+
+    def test_policy_component_composes_without_completing_script_matrix(self):
+        plan = {'source': self.source, 'checks': {'ci-script-tests': ['CI change']}}
+        routing = {'schema':'voice-local-ci-routing-diagnostic-v1','status':'incomplete','source':self.source,
+                   'commands':[{'name':'gate-shell','tests':None}, {'name':'gate','tests':8}, {'name':'router','tests':4}]}
+        component = {'schema':'voice-local-policy-component-v1','status':'complete',
+                     'scope':'ci-script-tests/policy','source':self.source,'base':'c'*40,
+                     'remaining_shards':['runtime','staging','proofs']}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_ci_routing, 'run', return_value=routing), \
+             patch.object(local_preflight.local_ci_policy_component, 'run', return_value=component) as run, \
+             patch.object(local_preflight.local_ci_policy_component, 'verify_component') as verify:
+            report = local_preflight.run(self.root, 'c'*40, self.source['head'], self.output, 'flutter',
+                                         head_ref='codex/test', policy_component_assets={'fixture':'value'})
+        run.assert_called_once(); verify.assert_called_once()
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['ci-script-tests']['status'], 'not_run')
+        self.assertEqual(report['ci_policy_component'], 'ci-policy-component/policy-component.json')
         self.assertEqual(report['ci_routing_report'], 'ci-routing/diagnostic.json')
 
     def test_ci_routing_supervision_refusal_fails_closed(self):
@@ -876,6 +895,54 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(diagnostic['tests']['passed'], 1)
         self.assertEqual(report['checks']['flutter-unit-tests']['status'], 'diagnostic')
         self.assertEqual(report['status'], 'incomplete')
+
+
+class PolicyWindowsEvidenceTests(unittest.TestCase):
+    def test_owned_absence_rechecks_daemon_after_observation(self):
+        owner = unittest.mock.Mock()
+        owner.state = {'resources':[{'kind':'container','id':'c'*64}]}
+        owner.engine.exists.return_value = False
+        owner._check_daemon.side_effect = [None, ValueError('daemon changed')]
+        with self.assertRaisesRegex(ValueError, 'daemon changed'):
+            local_preflight.local_ci_policy_component.verify_owned_absence(owner)
+        self.assertEqual(owner._check_daemon.call_count, 2)
+
+    def test_windows_inventory_binds_exact_linux_skipped_tests(self):
+        expected = {21: {('__main__.Snapshot.test_timeout', 'Windows only')},
+                    24: {('__main__.Job.test_cleanup', 'Windows only')}}
+        files = {21: ('scripts/ci/local_source_snapshot_test.py', 'a'*64, 1),
+                 24: ('scripts/ci/local_process_supervision_test.py', 'b'*64, 1)}
+        with unittest.mock.patch.dict(local_preflight.local_ci_policy_component.dispatch.POLICY_SKIP_FILES, files, clear=True), \
+             unittest.mock.patch.object(local_preflight.local_ci_policy_component.dispatch, 'policy_expected_skips', return_value=expected):
+            self.assertEqual(local_preflight.local_ci_policy_component.windows_test_names('root', []),
+                             ['local_process_supervision_test.Job.test_cleanup',
+                              'local_source_snapshot_test.Snapshot.test_timeout'])
+
+    def test_windows_summary_rejects_skip_failure_or_incomplete_count(self):
+        self.assertEqual(local_preflight.local_ci_policy_component.windows_test_count(b'Ran 37 tests in 1.2s\n\nOK\n', 0, 37), 37)
+        for text, code in ((b'Ran 36 tests in 1s\nOK\n', 0),
+                           (b'Ran 37 tests in 1s\nOK (skipped=1)\n', 0),
+                           (b'Ran 37 tests in 1s\nOK\n', 1)):
+            with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.windows_test_count(text, code, 37)
+
+    def test_component_rejects_tampered_windows_log_and_missing_shards(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp); (out/'linux').mkdir(); (out/'linux/diagnostic.json').write_text('{}')
+            stdout, stderr = b'', b'Ran 37 tests in 1s\n\nOK\n'
+            (out/'windows.stdout').write_bytes(stdout); (out/'windows.stderr').write_bytes(stderr)
+            names = ['test.Module.test_'+str(i) for i in range(37)]
+            source = {'head':'a'*40}; base = 'b'*40
+            report = {'schema':'voice-local-policy-component-v1', 'status':'complete',
+                      'scope':'ci-script-tests/policy', 'source':source, 'base':base,
+                      'remaining_shards':['runtime','staging','proofs'], 'windows_tests':names,
+                      'windows_stdout_sha256':hashlib.sha256(stdout).hexdigest(),
+                      'windows_stderr_sha256':hashlib.sha256(stderr).hexdigest()}
+            with unittest.mock.patch.object(local_preflight.local_ci_policy_component, 'verify_linux_evidence', return_value=names):
+                local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
+                (out/'windows.stderr').write_bytes(b'Ran 37 tests in 1s\nOK (skipped=1)\n')
+                with self.assertRaises(ValueError): local_preflight.local_ci_policy_component.verify_component('root', out, source, base, report)
+                with self.assertRaises(ValueError):
+                    local_preflight.local_ci_policy_component.verify_component('root', out, source, base, dict(report, remaining_shards=[]))
 
 
 if __name__ == '__main__':
