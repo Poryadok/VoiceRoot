@@ -36,6 +36,21 @@ class OtpResetSecurityTest {
   }
 
   @Test
+  void latestMemoryIssuanceWinsWithFixedBackwardClocksAndShorterExpiry() {
+    var account = accounts.create("clock@example.com", null, "old", "regular");
+    for (String type : new String[] {"email_verify", "password_reset"}) {
+      codes.create(account.id(), codec.hash("111111"), type, NOW.plusSeconds(600), NOW);
+      var second = codes.create(account.id(), codec.hash("222222"), type, NOW.plusSeconds(300), NOW);
+      assertThat(codes.findLatestValid(account.id(), type, NOW)).contains(second);
+      var third = codes.create(account.id(), codec.hash("333333"), type,
+          NOW.plusSeconds(100), NOW.minusSeconds(60));
+      assertThat(codes.findLatestValid(account.id(), type, NOW)).contains(third);
+      codes.markUsed(third.id(), NOW);
+      assertThat(codes.findLatestValid(account.id(), type, NOW)).isEmpty();
+    }
+  }
+
+  @Test
   void resetConsumesOnceRevokesRefreshAndAdvancesDurableEpoch() {
     var account = accounts.create("reset@example.com", null, passwords.hash("OldPassword99!"), "regular");
     codes.create(account.id(), codec.hash("123456"), "password_reset", NOW.plusSeconds(600), NOW);
