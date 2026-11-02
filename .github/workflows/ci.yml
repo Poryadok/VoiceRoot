@@ -1391,7 +1391,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOFLAGS: -mod=readonly
-    timeout-minutes: 25
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -1428,6 +1428,52 @@ jobs:
             --events "$RUNNER_TEMP/go-integration-events.jsonl" --exit-code "$result" \
             --summary "$RUNNER_TEMP/go-integration-summary.json" --service "$SERVICE" \
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Space to User capture and Ban integration
+        if: matrix.service == 'space'
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: "1"
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -race -tags spacebanintegration -timeout 15m ./internal/store -run '^TestNativeBanThroughUserProcessCapture$' -count=1 > "$RUNNER_TEMP/space-user-capture-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_user_capture_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-user-capture-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-user-capture-receipt.json" --reject-skips
+      - name: Protected Space Ban to User process integration
+        if: matrix.service == 'space'
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: "1"
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -race -tags spacebanintegration -timeout 15m ./internal/grpcsvc -run '^TestPublicSpaceBanThroughUserProcessCapture$' -count=1 > "$RUNNER_TEMP/space-user-process-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_user_process_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-user-process-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-user-process-receipt.json" --reject-skips
+      - name: Upload Space capture integration evidence
+        if: always() && matrix.service == 'space'
+        uses: actions/upload-artifact@v4
+        with:
+          name: space-user-capture-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/space-user-capture-events.jsonl
+            ${{ runner.temp }}/space-user-capture-receipt.json
+            ${{ runner.temp }}/space-user-process-events.jsonl
+            ${{ runner.temp }}/space-user-process-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Install Gateway live test libraries
         if: matrix.service == 'gateway'
         run: |

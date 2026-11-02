@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"voice/backend/gameintegration/internal/communityspace"
 	"voice/backend/gameintegration/internal/registry"
 	voicejwt "voice/backend/pkg/jwt"
 )
@@ -51,19 +52,45 @@ type DiagnosticsStore interface {
 }
 
 type Handler struct {
-	Tokens             TokenValidator
-	Applications       ApplicationStore
-	Approvals          ApprovalStore
-	Production         ProductionAdmissionStore
-	Credentials        CredentialStore
-	Policies           PolicyStore
-	Installations      InstallationStore
-	Suspensions        SuspensionStore
-	Diagnostics        DiagnosticsStore
-	BindingExchanges   http.Handler
-	BindingRevocations http.Handler
-	CredentialKey      []byte
-	OperatorAccounts   map[uuid.UUID]struct{}
+	CommunityBootstraps          CommunityBootstrapStore
+	CommunityProvisioner         CommunitySpaceProvisioner
+	CommunityTemplates           map[string]struct{}
+	CommunityRecoveries          CommunityOwnerRecoveryStore
+	CommunityRecoveryProvisioner CommunityOwnerRecoveryProvisioner
+	Tokens                       TokenValidator
+	Applications                 ApplicationStore
+	Approvals                    ApprovalStore
+	Production                   ProductionAdmissionStore
+	Credentials                  CredentialStore
+	Policies                     PolicyStore
+	Installations                InstallationStore
+	Suspensions                  SuspensionStore
+	Diagnostics                  DiagnosticsStore
+	BindingExchanges             http.Handler
+	BindingRevocations           http.Handler
+	CredentialKey                []byte
+	OperatorAccounts             map[uuid.UUID]struct{}
+}
+
+type CommunityBootstrapStore interface {
+	OpenCommunityBootstrap(context.Context, registry.OpenCommunityBootstrapInput) (registry.CommunityBootstrapOperation, error)
+	ApproveCommunityBootstrap(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (registry.CommunityBootstrapOperation, error)
+	CompleteCommunityBootstrap(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (registry.CommunityBootstrapOperation, error)
+}
+
+type CommunitySpaceProvisioner interface {
+	ProvisionCommunityBootstrap(context.Context, registry.CommunityBootstrapOperation) (uuid.UUID, error)
+}
+
+type CommunityOwnerRecoveryStore interface {
+	OpenCommunityOwnerRecovery(context.Context, registry.OpenOwnerRecoveryInput) (registry.OwnerRecoveryOperation, error)
+	ApproveCommunityOwnerRecovery(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (registry.OwnerRecoveryOperation, error)
+	CancelCommunityOwnerRecovery(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) (registry.OwnerRecoveryOperation, error)
+	CompleteCommunityOwnerRecovery(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, int64) (registry.OwnerRecoveryOperation, error)
+}
+
+type CommunityOwnerRecoveryProvisioner interface {
+	ProvisionCommunityOwnerRecovery(context.Context, registry.OwnerRecoveryOperation) (communityspace.OwnerRecoveryReceipt, error)
 }
 
 func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
@@ -89,6 +116,12 @@ func NewHandler(tokens TokenValidator, applications ApplicationStore) *Handler {
 	if diagnostics, ok := applications.(DiagnosticsStore); ok {
 		h.Diagnostics = diagnostics
 	}
+	if community, ok := applications.(CommunityBootstrapStore); ok {
+		h.CommunityBootstraps = community
+	}
+	if recovery, ok := applications.(CommunityOwnerRecoveryStore); ok {
+		h.CommunityRecoveries = recovery
+	}
 	return h
 }
 
@@ -111,6 +144,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/game-integrations/applications/") {
+		if strings.Contains(r.URL.Path, "/community-bindings") {
+			h.serveCommunityBootstrap(w, r)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/policy") {
 			h.serveSandboxPolicyUpdate(w, r)
 			return

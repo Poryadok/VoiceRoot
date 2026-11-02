@@ -2,6 +2,42 @@
   "user": [
     [
       "voice/backend/user/internal/identityassociation",
+      "TestAuthParentClientMapsBoundAuthenticatedObservation"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestPristineProvisioningRejectsEqualGenerations"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthParentClientMutualTLSAndSignedRequest"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthParentRuntimeConfigAbsentOrComplete"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestOpenAuthParentRuntimeRequiresVerifiedReadyPeer"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestCustodyDigestBindsCompleteKeyset"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthParentClientRejectsMissingTransportMaterial"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthParentClientRejectsForeignAndIncompleteObservation"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthParentClientMapsRecoverableAndTerminalLifecycle"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
       "TestCanonicalUserSelectorGoldenDomains"
     ],
     [

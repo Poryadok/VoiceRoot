@@ -23,6 +23,7 @@
     ["voice/backend/bot/internal/store", "TestWhitelist_blocksUnknownChat"]
   ],
   "chat": [
+    ["voice/backend/chat/internal/store", "TestAddManagedChatMembersOlderSnapshotPreservesLaterMembers"],
     ["voice/backend/chat/internal/chatcreation", "TestAuthFloorSignedProtocolComponent"],
     ["voice/backend/chat/internal/grpcsvc", "TestAddMembers_FriendsOnlyInvitePrivacy_StrangerDenied"],
     ["voice/backend/chat/internal/grpcsvc", "TestAddMembers_InternalCaller_AllowsDuoMatchSquad"],
@@ -254,6 +255,16 @@
     ["voice/backend/file/internal/pdfproc", "TestRendererFirstPage"]
   ],
   "gameintegration": [
+    ["voice/backend/gameintegration/internal/registry", "TestCommunityBootstrapOwnerApprovalIsDurableExactAndExpiring"],
+    ["voice/backend/gameintegration/internal/registry", "TestCommunityBootstrapRequiresActiveSandboxAndUniqueCorporation"],
+    ["voice/backend/gameintegration/internal/registry", "TestCommunityOwnerRecoveryFreezesReopensAndFencesStaleGenerations"],
+    ["voice/backend/gameintegration/internal/registry", "TestPlayerSessionSnapshotBindsAccountProfileCurrentRosterAndLease"],
+    ["voice/backend/gameintegration/internal/registry", "TestSessionConsentReceiptIsParticipantBoundDurableAndIdempotent"],
+    ["voice/backend/gameintegration/internal/registry", "TestKeepSessionGroupCreatesNewChatWithOnlyConsentingProfiles"],
+    ["voice/backend/gameintegration/internal/registry", "TestKeepSessionGroupOlderSnapshotCannotRemoveLaterConsenter"],
+    ["voice/backend/gameintegration/internal/registry", "TestSuspendedApplicationCannotGrantFreshConsentOrKeepGroup"],
+    ["voice/backend/gameintegration/internal/registry", "TestKeepSessionGroupAddsOnlyCurrentConsentsToParentAndReplaysOwnerReceipt"],
+    ["voice/backend/gameintegration/internal/registry", "TestKeepSessionGroupRetriesAfterChatCreateOutageWithStableOwnerOperation"],
     ["voice/backend/gameintegration", "TestGISRuntimeDatabaseRoleCanWriteOnlyGISOwnedTables"],
     ["voice/backend/gameintegration/internal/httpapi", "TestGameIntegrationCleanBootstrapUsesOwnerAndSeparateOperatorAPIs"],
     ["voice/backend/gameintegration/internal/httpapi", "TestGameIntegrationProductionEnvironmentCredentialDeniedWithSeededFixture"],
@@ -896,6 +907,7 @@
     ["voice/backend/subscription/internal/store", "TestMarkPaymentFailed_setsGracePeriod"]
   ],
   "user": [
+    ["voice/backend/user/internal/sourcecustody", "TestUserSignerJWKSAndProtectedAuthParentIntegration"],
     ["voice/backend/user/internal/grpcsvc", "TestApplyVerificationSourceState_RequiresExactAuthCaller"],
     ["voice/backend/user/internal/grpcsvc", "TestApplyVerificationSourceState_ResolvesPrecedenceAndRejectsStaleUpdates"],
     ["voice/backend/user/internal/grpcsvc", "TestCatalogActorStatesExactOwnershipDeletedAtPostgres"],

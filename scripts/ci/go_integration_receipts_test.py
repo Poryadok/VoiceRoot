@@ -18,6 +18,38 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_space_user_capture_proofs_require_exact_pass_and_upload(self):
+        import yaml
+        cases = (
+            ('Space to User capture and Ban integration', 'space_user_capture_required.json',
+             'voice/backend/space/internal/store', 'TestNativeBanThroughUserProcessCapture', 'space-user-capture'),
+            ('Protected Space Ban to User process integration', 'space_user_process_required.json',
+             'voice/backend/space/internal/grpcsvc', 'TestPublicSpaceBanThroughUserProcessCapture', 'space-user-process'),
+        )
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        job = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']['backend-go-integration-pr']
+        upload = next(step for step in job['steps'] if step.get('name') == 'Upload Space capture integration evidence')
+        self.assertEqual(upload['if'], "always() && matrix.service == 'space'")
+        self.assertFalse(upload['with']['name'].startswith('go-integration-'))
+        for step_name, filename, package, name, artifact in cases:
+            with self.subTest(name=name):
+                inventory = json.loads((ROOT / 'scripts/ci' / filename).read_text(encoding='utf-8'))['space']
+                self.assertEqual(inventory, [[package, name]])
+                entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+                self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'backend-go-integration-pr'))
+                step = next(item for item in job['steps'] if item.get('name') == step_name)
+                self.assertEqual(step['if'], "matrix.service == 'space'")
+                for text in ('go test -json -race -tags spacebanintegration', f"-run '^{name}$'",
+                             filename, '--reject-skips', f'{artifact}-events.jsonl', f'{artifact}-receipt.json'):
+                    self.assertIn(text, step['run'])
+                self.assertIn(f'{artifact}-events.jsonl', upload['with']['path'])
+                self.assertIn(f'{artifact}-receipt.json', upload['with']['path'])
+                events = [{'Package': package, 'Test': name, 'Action': action} for action in ('run', 'pass')]
+                events.append({'Package': package, 'Action': 'pass'})
+                self.assertFalse(receipts.verify_required(events, inventory, 0))
+                events[1]['Action'] = 'skip'
+                self.assertIn((package, name), receipts.verify_required(events, inventory, 0))
+
     def test_native51_freeze_requires_qualified_source_and_exact_pass(self):
         import yaml
         package = 'voice/backend/space/internal/store'

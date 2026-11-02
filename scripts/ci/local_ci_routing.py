@@ -25,7 +25,7 @@ ROUTER_CASES = ('test_docs_exclusions_and_mixed_changes', 'test_leaf_ci_keeps_sc
                 'test_ci_only_changes_cannot_skip_script_matrix', 'test_current_diff_runs_for_all_prs_and_is_required')
 # Reviewed executable inputs: refuse changes until their isolation is re-audited.
 SAFETY_SURFACE = {
-    '.github/workflows/ci.yml': 'e036f5fc2b1a8241bd2728c7bc80e01fad9cf57d4f480dbf86dbc0852d21f4aa',
+    '.github/workflows/ci.yml': '7bbccbb3edda71254e417860a9dfad0b096cee26af150a24893a0e94c975708a',
     '.github/ci/verify-required-jobs_test.sh': '325955c7e1efe73ff85947e450d957aa4a524342ddad9c35aa3e8b9f6e4c6c63',
     '.github/ci/verify-required-jobs.sh': '311ec7b741371fa86cbee5c7e4e84167eaf7abea84e0520df5654b9cea3c5fb9',
     '.github/ci/selected-acceptance-gate_test.py': 'eaba8ca7546e40068fc8601aefb6d064c2986ba67b41284ff18581d8c4776755',

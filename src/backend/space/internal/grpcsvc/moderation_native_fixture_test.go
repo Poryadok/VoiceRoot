@@ -104,23 +104,42 @@ type nativeModerationFixture struct {
 	client                                            spacev1.SpaceServiceClient
 	ordinary                                          spacev1.SpaceServiceClient
 	issuer                                            *principal.Issuer
+	spaceIssuer                                       *principal.Issuer
+	roles                                             rolev1.RoleServiceClient
+	protectedRoles                                    rolev1.RoleServiceClient
 	space, owner, ownerAccount, target, targetAccount uuid.UUID
 }
 
 func newNativeModerationFixture(t *testing.T) *nativeModerationFixture {
+	return newNativeModerationFixtureWithProfiles(t, uuid.New(), uuid.New(), uuid.New(), uuid.New())
+}
+
+func newNativeModerationFixtureWithProfiles(t *testing.T, owner, ownerAccount, target, targetAccount uuid.UUID) *nativeModerationFixture {
+	return newNativeModerationFixtureWithMembership(t, owner, ownerAccount, target, targetAccount, false)
+}
+
+func newNativeModerationFixtureWithMembership(t *testing.T, owner, ownerAccount, target, targetAccount uuid.UUID, community bool) *nativeModerationFixture {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
 	ctx := context.Background()
-	f := &nativeModerationFixture{owner: uuid.New(), ownerAccount: uuid.New(), target: uuid.New(), targetAccount: uuid.New()}
+	f := &nativeModerationFixture{owner: owner, ownerAccount: ownerAccount, target: target, targetAccount: targetAccount}
 	pool, row := nativeLifecycleProofFixtureWithSeed(t, ctx, f.owner, "Native moderation", func(st *store.SpaceStore, row *store.SpaceRow) {
-		_, err := st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, f.target)
+		var err error
+		if community {
+			_, err = st.Pool.Exec(ctx, `INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at) VALUES($1,$2,$3,'ban-community',$4,$5,1,'active',1,$6,clock_timestamp()+interval '10 minutes')`, row.ID, uuid.New(), uuid.New(), f.ownerAccount, f.owner, bytes.Repeat([]byte{1}, 32))
+			require.NoError(t, err)
+			_, err = st.Pool.Exec(ctx, `INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at) VALUES($1,$2,'member',ARRAY['membership'],1,1,clock_timestamp()+interval '10 minutes')`, row.ID, f.target)
+		} else {
+			_, err = st.Pool.Exec(ctx, `INSERT INTO space_members(space_id,profile_id) VALUES($1,$2)`, row.ID, f.target)
+		}
 		require.NoError(t, err)
 	}, true)
 	f.space = row.ID
 	f.st = &store.SpaceStore{Pool: pool, AccountCaptures: moderationCaptureFixture{f.owner: f.ownerAccount, f.target: f.targetAccount}}
 	roles, closeRoles := startSharedRoleClient(t)
+	f.roles = roles
 	t.Cleanup(closeRoles)
 	_, err := roles.BootstrapSpaceRoles(ctx, &rolev1.BootstrapSpaceRolesRequest{SpaceId: row.ID.String(), OwnerProfileId: f.owner.String()})
 	require.NoError(t, err)
@@ -129,9 +148,14 @@ func newNativeModerationFixture(t *testing.T) *nativeModerationFixture {
 	f.issuer, err = principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "moderation-test", PrivateKey: key})
 	require.NoError(t, err)
 	verifier := lifecycleprincipal.Verifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, Replay: func(context.Context, string, string, time.Time) error { return nil }, Epoch: func(context.Context, string, int64) error { return nil }}
+	roleFixture := newInviteIngressFixture(t)
+	f.spaceIssuer = roleFixture.space
+	service := &SpaceGRPC{Store: f.st, Roles: roles, PrincipalIssuer: f.spaceIssuer}
+	f.protectedRoles = legacySettingsRoleFixture{RoleServiceClient: roles, svc: service, fixture: roleFixture}
+	service.OwnershipRoles = f.protectedRoles
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer(grpc.UnaryInterceptor(verifier.Unary()))
-	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: &SpaceGRPC{Store: f.st, Roles: roles}})
+	spacev1.RegisterSpaceServiceServer(server, &PublicLifecycleSpace{SpaceGRPC: service})
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	conn, err := grpc.NewClient("passthrough:///moderation", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -139,7 +163,10 @@ func newNativeModerationFixture(t *testing.T) *nativeModerationFixture {
 	t.Cleanup(func() { _ = conn.Close() })
 	f.client = spacev1.NewSpaceServiceClient(conn)
 	var cleanup func()
-	f.ordinary, cleanup = startSpaceGRPCTestServer(t, pool, withRoleClient(roles), withProfileAccounts(mapProfileAccounts{f.owner: f.ownerAccount, f.target: f.targetAccount}))
+	f.ordinary, cleanup = startSpaceGRPCTestServer(t, pool, withRoleClient(roles), withProfileAccounts(mapProfileAccounts{f.owner: f.ownerAccount, f.target: f.targetAccount}), func(s *SpaceGRPC) {
+		s.PrincipalIssuer = f.spaceIssuer
+		s.OwnershipRoles = f.protectedRoles
+	})
 	t.Cleanup(cleanup)
 	return f
 }

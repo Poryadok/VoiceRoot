@@ -31,6 +31,7 @@ INPUTS_KEYS = {'schema', 'database', 'configmaps', 'migrations', 'migration_inpu
 JOB_ROLES = ('provision', 'migrate', 'verify')
 VERIFIER_V1_SHA256 = '4297373f6d91364da34f46f959d5df8ea07f71553ebaf52d048f48782f5da11c'
 VERIFIER_V2_SHA256 = '9924cfc09d6c08c22e0d4b0b412f32cf212476ebfc4806b9fccc2c699f4dfd5e'
+VERIFIER_V3_SHA256 = 'bb230fc585ff4d8264e0edc7ec2a395e59c94794a437c13696939206676a8225'
 
 
 def _canonical(value):
@@ -50,7 +51,7 @@ def validate_source_revision(inputs):
             raise ValueError()
         revision = max(versions)
         if (revision, inputs['verifier_sql_sha256']) not in {
-                (31, VERIFIER_V1_SHA256), (32, VERIFIER_V2_SHA256)}:
+                (31, VERIFIER_V1_SHA256), (32, VERIFIER_V2_SHA256), (33, VERIFIER_V3_SHA256)}:
             raise ValueError()
         return revision
     except (KeyError,TypeError,ValueError,AttributeError):
@@ -684,9 +685,8 @@ def execute(kube, plan, source_root, code_capture, save, *, verify_storage=None)
         raise Blocked('gis_prerequisite_verifier_failed')
     dev = plan.get('namespace', gis.NS) == 'voice-dev'
     receipt = {
-        'schema': ((gis.DEV_PREREQUISITE_SCHEMA_V2 if dev else gis.PREREQUISITE_SCHEMA_V2)
-                   if revision == 32 else
-                   (gis.DEV_PREREQUISITE_SCHEMA if dev else gis.PREREQUISITE_SCHEMA)),
+        'schema': ({31: gis.DEV_PREREQUISITE_SCHEMA, 32: gis.DEV_PREREQUISITE_SCHEMA_V2, 33: gis.DEV_PREREQUISITE_SCHEMA_V3} if dev else
+                   {31: gis.PREREQUISITE_SCHEMA, 32: gis.PREREQUISITE_SCHEMA_V2, 33: gis.PREREQUISITE_SCHEMA_V3})[revision],
         'operation': plan['operation'],
         'source_sha': plan['source_sha'], 'source_plan_sha256': plan['source_plan_sha256'],
         'inputs_sha256': plan['inputs_sha256'], 'inputs': copy.deepcopy(plan['inputs']),

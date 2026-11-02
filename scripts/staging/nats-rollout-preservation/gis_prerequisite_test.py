@@ -148,7 +148,7 @@ class FakeKube:
         if args[0] == 'wait':
             return copy.deepcopy(self.objects[('job', args[2].split('/', 1)[1])])
         if args[0] == 'logs':
-            return json.dumps(gis.verifier_output(32), separators=(',', ':')) + '\n'
+            return json.dumps(gis.verifier_output(33), separators=(',', ':')) + '\n'
         raise AssertionError(args)
 
 
@@ -218,6 +218,16 @@ class ReadyKube:
 
 
 class Tests(unittest.TestCase):
+    def test_revision_33_requires_its_own_verifier_and_receipt_contract(self):
+        inputs = {'migrations': [{'name': '000033_restore.up.sql', 'sha256': 'a' * 64}],
+                  'verifier_sql_sha256': prerequisite.VERIFIER_V3_SHA256}
+        self.assertEqual(prerequisite.validate_source_revision(inputs), 33)
+        self.assertEqual(gis.verifier_output(33)['migration_version'], 33)
+        self.assertEqual(gis.verifier_output(33)['schema'], 'voice-gis-verifier-v3')
+        for digest in (prerequisite.VERIFIER_V1_SHA256, prerequisite.VERIFIER_V2_SHA256, '0' * 64):
+            with self.subTest(digest=digest), self.assertRaisesRegex(prerequisite.Blocked, 'source_revision_unsupported'):
+                prerequisite.validate_source_revision({**inputs, 'verifier_sql_sha256': digest})
+
     def test_unqualified_new_migration_cannot_use_historical_verifier(self):
         inputs={'migrations':[{'name':'000031_previous.up.sql','sha256':'a'*64}],
                 'verifier_sql_sha256':prerequisite.VERIFIER_V1_SHA256}
@@ -393,7 +403,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(before, [inputs['jobs']['provision']])
         self.assertEqual(after, [inputs['jobs'][role] for role in prerequisite.JOB_ROLES])
         self.assertEqual(len(after), len(set(after)))
-        self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA_V2)
+        self.assertEqual(receipt['schema'], gis.PREREQUISITE_SCHEMA_V3)
         self.assertEqual(plan['prerequisite_phase'], 'VERIFIED')
 
     def test_restart_after_job_create_before_receipt_reconciles_same_job(self):

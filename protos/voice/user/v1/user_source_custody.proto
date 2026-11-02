@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package voice.user.v1;
+
+option go_package = "voice.app/voice/user/v1;userv1";
+option java_multiple_files = true;
+option java_package = "app.voice.user.v1";
+
+// Private source-incarnation binding. Epoch is 1..MaxInt64; source_id is 1..128
+// ASCII letters, digits, '.', '_', ':' or '-'; generations are canonical
+// distinct lowercase non-nil UUIDs; keyset_digest is exactly 32 bytes and not all zero. Source ID is not
+// physical-custody proof.
+message UserSourcePermitBinding {
+  uint64 epoch = 1;
+  string source_id = 2;
+  string history_generation = 3;
+  string user_source_generation = 4;
+  bytes keyset_digest = 5;
+}
+
+message AcquireUserSourcePermitRequest {
+  // 1 is a legacy lock-only grant; 2 additionally binds the physical record.
+  // Unknown fields, missing binding and malformed values are denied.
+  uint32 protocol = 1;
+  UserSourcePermitBinding binding = 2;
+}
+
+// A controller-held physical record. These values can survive a physical
+// backup clone and are not by themselves proof of exclusive custody.
+message UserSourcePhysicalBinding {
+  string system_identifier = 1;
+  string database = 2;
+  uint32 database_oid = 3;
+}
+
+enum UserSourcePermitFrameKind {
+  USER_SOURCE_PERMIT_FRAME_KIND_UNSPECIFIED = 0;
+  USER_SOURCE_PERMIT_FRAME_KIND_GRANTED = 1;
+  USER_SOURCE_PERMIT_FRAME_KIND_HEARTBEAT = 2;
+}
+
+message AcquireUserSourcePermitResponse {
+  // Matches the request protocol and complete binding. The first frame is GRANTED
+  // with sequence 1, then HEARTBEAT with strictly increasing sequence; no
+  // unknown fields, unknown enum, overflow or mismatched binding is accepted.
+  uint32 protocol = 1;
+  UserSourcePermitBinding binding = 2;
+  uint64 sequence = 3;
+  UserSourcePermitFrameKind kind = 4;
+  // Required for protocol 2, absent for protocol 1, unchanged on heartbeats.
+  UserSourcePhysicalBinding physical = 5;
+}
+
+// Private User-only held grant. A verified mTLS peer and signed User service
+// principal bind the exact request and RPC; replay is denied before admission.
+// Stream lifetime cannot exceed credential expiry, and heartbeat does not
+// renew it. Loss cancels work but does not fence an in-flight User commit or
+// authorize a source transition.
+service UserSourceCustodyService {
+  rpc AcquireUserSourcePermit(AcquireUserSourcePermitRequest) returns (stream AcquireUserSourcePermitResponse);
+}

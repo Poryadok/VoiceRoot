@@ -11,6 +11,10 @@ import re
 
 TEST = re.compile(r'(?m)^func\s+(Test\w+)\s*\(\s*\w+\s+\*testing\.T\s*\)')
 DEDICATED = {
+    ('space', 'voice/backend/space/internal/store', 'TestNativeBanThroughUserProcessCapture'):
+        'backend-go-integration-pr',
+    ('space', 'voice/backend/space/internal/grpcsvc', 'TestPublicSpaceBanThroughUserProcessCapture'):
+        'backend-go-integration-pr',
     ('gateway', 'voice/backend/gateway', 'TestComposeSpaceLeaveDiagnosticPreservesStrictStatus'):
         'backend-go-integration-pr',
     ('role', 'voice/backend/role', 'TestMemberAdmissionPositiveProtectedReceipt'):

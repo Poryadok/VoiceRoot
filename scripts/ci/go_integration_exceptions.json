@@ -1,4 +1,6 @@
 [
+  {"package": "voice/backend/space/internal/store", "reason": "backend-go-integration-pr", "service": "space", "source": "src/backend/space/internal/store/space_user_capture_ban_integration_test.go", "status": "dedicated", "test": "TestNativeBanThroughUserProcessCapture"},
+  {"package": "voice/backend/space/internal/grpcsvc", "reason": "backend-go-integration-pr", "service": "space", "source": "src/backend/space/internal/grpcsvc/user_process_ban_integration_test.go", "status": "dedicated", "test": "TestPublicSpaceBanThroughUserProcessCapture"},
   {"package": "voice/backend/analytics/internal/store", "reason": "analytics-clickhouse-integration", "service": "analytics", "source": "src/backend/analytics/internal/store/clickhouse_integration_test.go", "status": "dedicated", "test": "TestClickHouseInsertBatch"},
   {"package": "voice/backend/chat", "reason": "chat-auth-java-integration", "service": "chat", "source": "src/backend/chat/chat_create_auth_java_integration_test.go", "status": "dedicated", "test": "TestChatAuthActualJavaInteroperability"},
   {"package": "voice/backend/chat/internal/store", "reason": "chat-lifecycle-integration", "service": "chat", "source": "src/backend/chat/internal/store/realtime_lifecycle_integration_test.go", "status": "dedicated", "test": "TestRealtimeNativeLifecycleReadsOnlyActualChatAndFailsClosedWithoutSchema"},

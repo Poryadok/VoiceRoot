@@ -53,6 +53,16 @@ func TestStartupSpaceCaptureDisabledWithOnlySharedVerifierConfig(t *testing.T) {
 	require.NoError(t, runUser(ctx), "absent capture settings preserve health-only startup")
 }
 
+func TestStartupRejectsCaptureDependenciesWithoutListener(t *testing.T) {
+	for _, name := range []string{"USER_CUSTODY_ADDR", "USER_IDENTITY_AUTH_GRPC_ADDR", "USER_IDENTITY_KEY_MANIFEST", "USER_IDENTITY_KEYS_DIR", "USER_PRINCIPAL_JWKS_LISTEN", "USER_PRINCIPAL_JWKS_TLS_CERT_FILE", "USER_PRINCIPAL_JWKS_TLS_KEY_FILE"} {
+		t.Run(name, func(t *testing.T) {
+			clearSpaceCaptureTestConfig(t)
+			t.Setenv(name, "configured")
+			require.ErrorContains(t, runUser(t.Context()), "capture listener required")
+		})
+	}
+}
+
 func completeSpaceCaptureTestConfig(t *testing.T) {
 	t.Helper()
 	root := repoRootFromComposeTest(t)

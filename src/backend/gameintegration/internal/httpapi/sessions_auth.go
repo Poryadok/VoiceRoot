@@ -10,6 +10,7 @@ import (
 )
 
 const sessionManageScope = "game.sessions.manage"
+const communityRosterWriteScope = "game.roster.write"
 
 type SessionCredentialStore interface {
 	VerifyCredential(context.Context, string, string, []byte) (registry.ServicePrincipal, error)
@@ -30,7 +31,11 @@ func (v RegistrySessionCredentialVerifier) VerifyGameServer(r *http.Request) (re
 	if !strings.HasPrefix(header, "Bearer ") || len(header) <= len("Bearer ") || strings.TrimSpace(header) != header {
 		return registry.SessionPrincipal{}, registry.ErrInvalidServiceCredential
 	}
-	credential, err := v.Store.VerifyCredential(r.Context(), strings.TrimPrefix(header, "Bearer "), sessionManageScope, v.Key)
+	scope := sessionManageScope
+	if strings.HasPrefix(r.URL.Path, "/api/v1/community-bindings/") && strings.HasSuffix(r.URL.Path, "/roster") {
+		scope = communityRosterWriteScope
+	}
+	credential, err := v.Store.VerifyCredential(r.Context(), strings.TrimPrefix(header, "Bearer "), scope, v.Key)
 	if err != nil {
 		return registry.SessionPrincipal{}, err
 	}

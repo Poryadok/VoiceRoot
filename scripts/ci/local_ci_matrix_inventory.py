@@ -11,7 +11,7 @@ import sys
 
 
 MAKEFILE_SHA256 = '486649f8ae3951312e7738cd43b051e51bd8bb4f0713926c55ba635ce9cce8bd'
-WORKFLOW_SHA256 = 'e036f5fc2b1a8241bd2728c7bc80e01fad9cf57d4f480dbf86dbc0852d21f4aa'
+WORKFLOW_SHA256 = '7bbccbb3edda71254e417860a9dfad0b096cee26af150a24893a0e94c975708a'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
 SHARD_RECIPE_COUNTS = {'policy': 77, 'runtime': 23, 'staging': 34, 'proofs': 15}
 TRANSITIVE_SOURCE_DEPENDENCIES = {
