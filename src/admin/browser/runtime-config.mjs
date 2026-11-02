@@ -131,6 +131,9 @@ try {
     });
     assert.equal(serviceCalls()[n].env, n === 0 ? 'dev' : 'stage');
     assert.match(serviceCalls()[n].path, /^\/api\/v1\/auth\/oauth2\/authorize\?/);
+    // The server can receive the request before its CDP network event is
+    // delivered to this process. Wait for that independent observation.
+    await until(async () => networkApiCalls.length >= n + 1);
     assert.equal(networkApiCalls.length, n + 1);
   }
   const negatives = [
