@@ -298,3 +298,82 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf', *, merge_c
         report['error'] = str(error)
     (output / 'diagnostic.json').write_text(json.dumps(report, indent=2, sort_keys=True), encoding='utf-8')
     return report
+
+
+COMPONENT_COMMANDS = ('buf-lint', 'buf-format', 'buf-breaking', 'go-codegen-selftest', 'go-codegen',
+                      'auth-proto-sync', 'auth-compile', 'r23-contract', 'buf-pr-regressions', 'buf-pr-candidate')
+
+
+def _evidence_file(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 16*1024*1024:
+        raise ValueError('unsafe or oversized protobuf evidence')
+    data = path.read_bytes()
+    if len(data) > 16*1024*1024: raise ValueError('oversized protobuf evidence')
+    return data
+
+
+def verify_component_evidence(output, source, base, report):
+    output = Path(output)
+    if (not isinstance(report, dict) or report.get('schema') != 'voice-local-protobuf-diagnostic-v1' or
+            report.get('status') != 'incomplete' or report.get('source') != source or report.get('base') != base or
+            not isinstance(report.get('candidate'), str) or not re.fullmatch(r'[0-9a-f]{40}', report['candidate'])):
+        raise ValueError('protobuf diagnostic identity differs')
+    commands = report.get('commands')
+    if (not isinstance(commands, list) or any(not isinstance(row, dict) for row in commands) or
+            [row.get('name') for row in commands] != list(COMPONENT_COMMANDS) or
+            any(type(row.get('exit_code')) is not int or row['exit_code'] != 0 for row in commands)):
+        raise ValueError('protobuf command evidence differs')
+    if hashlib.sha256(_evidence_file(output/'base-protos.tar')).hexdigest() != report.get('base_archive_sha256'):
+        raise ValueError('protobuf baseline archive differs')
+    logs = {}
+    for row in commands:
+        for suffix in ('stdout', 'stderr'):
+            raw = _evidence_file(output/(row['name']+'.'+suffix))
+            if hashlib.sha256(raw).hexdigest() != row.get(suffix+'_sha256'):
+                raise ValueError('protobuf log digest differs')
+            logs[row['name']+'.'+suffix] = raw
+    if (r23_java_summary(logs['r23-contract.stdout'], 0) != report.get('r23') or
+            pr_regression_count(logs['buf-pr-regressions.stderr'], 0) != report.get('pr_regressions') or
+            validate_pr_receipt(logs['buf-pr-candidate.stdout'], base, source['head'], report['candidate']) != report.get('pr_candidate')):
+        raise ValueError('protobuf parsed evidence differs')
+
+
+def verify_component(output, source, base, report):
+    if (not isinstance(report, dict) or report.get('schema') != 'voice-local-protobuf-component-v1' or
+            report.get('status') != 'complete' or report.get('scope') != 'protobuf' or
+            report.get('source') != source or report.get('base') != base or
+            report.get('diagnostic') != 'worker/diagnostic.json'):
+        raise ValueError('protobuf component identity differs')
+    output = Path(output)
+    diagnostic = json.loads(_evidence_file(output/'worker/diagnostic.json'))
+    verify_component_evidence(output/'worker', source, base, diagnostic)
+
+
+def run_component(root, base, head, head_ref, output, go_binary='go', buf_binary='buf'):
+    """Execute the selected protobuf component, never the whole preflight."""
+    import affected_check_plan
+    import local_preflight
+    root, output = Path(root).resolve(), Path(output).resolve()
+    if not _windows() or output.exists() or output == root or root in output.parents:
+        raise ValueError('protobuf component requires Windows and new external output')
+    local_preflight._handoff_refs(root, base, head, head_ref)
+    plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
+    source = plan['source']
+    if ('protobuf' not in plan['checks'] or source.get('head') != head or source.get('changed_paths') or
+            source.get('raw_mismatch_paths')):
+        raise ValueError('protobuf component requires selected clean committed source')
+    output.mkdir(parents=True)
+    diagnostic = run(root, source, base, output/'worker', go_binary, buf_binary, merge_candidate=True)
+    verify_component_evidence(output/'worker', source, base, diagnostic)
+    if (local_source_snapshot.capture(root, head) != source or
+            affected_check_plan.build_local_plan(root, base, head, head_ref) != plan):
+        raise ValueError('protobuf source or selection changed')
+    local_preflight._handoff_refs(root, base, head, head_ref)
+    report = {'schema':'voice-local-protobuf-component-v1', 'status':'complete', 'scope':'protobuf',
+              'source':source, 'base':base, 'head_ref':head_ref, 'diagnostic':'worker/diagnostic.json',
+              'limitations':['tool and dependency publisher provenance is not authenticated',
+                             'merge candidate is local, not the GitHub merge commit',
+                             'fetched refs are not a live remote observation']}
+    verify_component(output, source, base, report)
+    (output/'protobuf-component.json').write_text(json.dumps(report, indent=2, sort_keys=True)+'\n', encoding='utf-8')
+    return report

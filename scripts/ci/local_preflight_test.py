@@ -722,6 +722,21 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['checks']['protobuf']['status'], 'diagnostic')
 
+    def test_protobuf_component_composes_without_completing_other_checks(self):
+        plan = {'source':self.source,'checks':{'protobuf':['schema'],'backend-auth':['schema']}}
+        component = {'schema':'voice-local-protobuf-component-v1','status':'complete','scope':'protobuf',
+                     'source':self.source,'base':'c'*40,'diagnostic':'worker/diagnostic.json'}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_proto_execution, 'run_component', return_value=component) as run, \
+             patch.object(local_preflight.local_proto_execution, 'verify_component') as verify:
+            report = local_preflight.run(self.root,'c'*40,self.source['head'],self.output,'flutter',
+                                         head_ref='codex/test', protobuf_component=True)
+        run.assert_called_once(); verify.assert_called_once()
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['protobuf']['status'], 'complete')
+        self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
+
     def test_failed_or_mismatched_protobuf_diagnostic_fails_preflight(self):
         plan = {'source': self.source, 'checks': {'protobuf': ['contract changed']}}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
