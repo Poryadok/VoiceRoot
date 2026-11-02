@@ -85,12 +85,26 @@ export -f bash kubectl
     def test_installer_rejection_precedes_every_full_and_app_only_effect(self):
         for mode in ('full', 'app-only'):
             for image, source in (('', SOURCE), ('fixture.invalid/installer:latest', SOURCE),
-                                  (IMAGE + '\n', SOURCE), (IMAGE, ''), (IMAGE, 'c' * 40)):
+                                  (IMAGE + '\n', SOURCE), (IMAGE, ''), (IMAGE, 'c' * 40),
+                                  ('/@sha256:' + 'b' * 64, SOURCE),
+                                  (':@sha256:' + 'b' * 64, SOURCE),
+                                  ('fixture.invalid//installer@sha256:' + 'b' * 64, SOURCE),
+                                  ('fixture.invalid/Upper@sha256:' + 'b' * 64, SOURCE),
+                                  ('[::1]:5000/installer@sha256:' + 'b' * 64, SOURCE)):
                 with self.subTest(mode=mode, image=image, source=source):
                     result, events = self.run_entrypoint(mode, image=image, source=source)
                     self.assertNotEqual(result.returncode, 0, result.stdout)
                     self.assertEqual(events, [], result.stderr)
                     self.assertIn('SPACE_NATIVE_INSTALLER', result.stderr)
+
+    def test_valid_installer_reference_forms_are_forwarded(self):
+        for name in ('localhost:5000/voice/installer', 'fixture.invalid/voice/installer:release-1',
+                     'voice/installer__native'):
+            image = name + '@sha256:' + 'b' * 64
+            with self.subTest(image=image):
+                result, events = self.run_entrypoint('full', image=image)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('child:apply-infra.sh|' + image + '|' + SOURCE, events)
 
     def test_valid_inputs_keep_order_and_pinned_installer_in_children(self):
         expected = {

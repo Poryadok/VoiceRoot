@@ -693,8 +693,10 @@ For the protected GitHub `production` environment, the release owner sets
 `SPACE_NATIVE_INSTALLER_IMAGE` to that qualified platform digest and
 `SPACE_NATIVE_INSTALLER_SOURCE_SHA` to its exact 40-character source commit,
 matching the selected production candidate. Full and app-only production modes
-reject a missing/malformed digest or mismatched source before dispatching any
-cluster helper. This input check preserves the release owner's build/provenance
+reject a malformed image repository, missing/malformed digest or mismatched
+source before dispatching any cluster helper. IPv6 registry literals remain
+unsupported by the native migration adapter and are rejected at preflight too.
+This input check preserves the release owner's build/provenance
 obligation and the installer's independent compiled-source checks.
 
 The same environment's `PROD_RELEASE_POLICY_INPUT` secret contains the bound

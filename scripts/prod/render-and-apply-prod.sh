@@ -35,11 +35,8 @@ python3 "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring
 # Require the release owner's protected source/digest selection before dispatch;
 # the installer still verifies its independently compiled source and inventory.
 if [ "${MODE}" = full ] || [ "${MODE}" = app-only ]; then
-  if [[ ! "${SPACE_NATIVE_INSTALLER_IMAGE:-}" =~ ^[A-Za-z0-9._/:\-]+@sha256:[a-f0-9]{64}$ ]] \
-    || [ "${SPACE_NATIVE_INSTALLER_SOURCE_SHA:-}" != "${TAG}" ]; then
-    echo 'HOLD: select source-bound SPACE_NATIVE_INSTALLER_IMAGE and SPACE_NATIVE_INSTALLER_SOURCE_SHA for this candidate' >&2
-    exit 1
-  fi
+  python3 "${ROOT}/scripts/prod/validate-installer-input.py" \
+    "${SPACE_NATIVE_INSTALLER_IMAGE:-}" "${SPACE_NATIVE_INSTALLER_SOURCE_SHA:-}" "${TAG}"
   export SPACE_NATIVE_INSTALLER_IMAGE SPACE_NATIVE_INSTALLER_SOURCE_SHA
 fi
 
