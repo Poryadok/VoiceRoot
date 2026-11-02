@@ -12,6 +12,7 @@ import secrets
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 DOCKER=['/usr/bin/docker','--host=unix:///var/run/docker.sock']
@@ -109,6 +110,15 @@ class HostedPostgres:
             else:raise RuntimeError('isolated_postgres_not_ready')
             self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',
                 body=b"CREATE TABLE public.preservation_fixture(id integer PRIMARY KEY, value text); INSERT INTO public.preservation_fixture VALUES(1,'kept');")
+            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','postgres',body=b'CREATE DATABASE story_db;')
+            migrations=Path(__file__).resolve().parents[3]/'src/backend/migrations/story_db'
+            import actor_root
+            for name,expected in actor_root.STORY_UP.items():
+                raw=(migrations/name).read_bytes()
+                if actor_root.hash_bytes(raw)!=expected:raise RuntimeError('isolated_story_source_changed')
+                self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','story_db',body=raw)
+            self._docker('exec','-i',self.cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',ADMIN_USER,'-d','story_db',
+                body=b'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (4, false);')
             return self
         except BaseException:
             try:self._cleanup()
@@ -125,12 +135,13 @@ class HostedPostgres:
         def metadata(name,uid):return {'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1'}
         sts='00000000-0000-4000-8000-000000000021';pod='00000000-0000-4000-8000-000000000022'
         pvc='00000000-0000-4000-8000-000000000023';pv='00000000-0000-4000-8000-000000000024'
-        rows={('statefulset','voice-postgres'):{'metadata':metadata('voice-postgres',sts)},
+        rows={('statefulset','voice-postgres'):{'metadata':metadata('voice-postgres',sts),'spec':{'replicas':1}},
             ('pod','voice-postgres-0'):{'metadata':{**metadata('voice-postgres-0',pod),'labels':{'app':'voice-postgres'},
-                'ownerReferences':[{'kind':'StatefulSet','uid':sts,'controller':True}]},
+                'ownerReferences':[{'kind':'StatefulSet','name':'voice-postgres','uid':sts,'controller':True}]},
                 'spec':{'containers':[{'name':'postgres','volumeMounts':[{'name':'data','mountPath':'/var/lib/postgresql/data'}]}],
                     'volumes':[{'name':'data','persistentVolumeClaim':{'claimName':'pgdata-voice-postgres-0'}}]},
-                'status':{'podIP':'10.0.0.2','containerStatuses':[{'name':'postgres','state':{'running':{}},
+                'status':{'phase':'Running','podIP':'10.0.0.2','containerStatuses':[{'name':'postgres','ready':True,
+                    'imageID':'docker.io/library/postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6','state':{'running':{}},
                     'containerID':'containerd://'+'d'*64,'restartCount':0}]}},
             ('persistentvolumeclaim','pgdata-voice-postgres-0'):{'metadata':metadata('pgdata-voice-postgres-0',pvc),
                 'spec':{'volumeName':'postgres-pv'},'status':{'phase':'Bound'}},
@@ -150,6 +161,15 @@ class HostedPostgres:
         import commands
         commands.authority_guard(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get',kind,name,'-o','json'])
         return copy.deepcopy(self.rows[(kind.lower(),name)])
+
+    def actor_read(self,args):
+        """Execute only the two fixed read-only actor observations on this PG."""
+        import actor_root,commands
+        password=['exec','voice-postgres-0','--','sh','-ceu',
+            'printf "{\\"password_sha256\\":\\"%s\\"}" "$(printf %s "$POSTGRES_PASSWORD" | sha256sum | cut -d" " -f1)"']
+        if args not in (list(actor_root.STORY_SCHEMA_ARGS),password):raise RuntimeError('isolated_actor_read_invalid')
+        commands.authority_guard(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging',*args])
+        return json.loads(self._docker('exec',self.cid,*args[args.index('--')+1:]))
 
     def capture(self,argv,*,body=b'',fallback,**kwargs):
         import commands,resource_claim,staging_cohort_preservation_pg as pg

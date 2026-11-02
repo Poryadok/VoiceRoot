@@ -523,7 +523,7 @@ class PrepareCompositionTests(unittest.TestCase):
     def _cold_prepare(self,fault=None,*,realtime_source=False,bridge_missing=None,on_ready=None,
                       context_commit=None,full_source=False,strict_helpers=False,source_overrides=None,workspace_context=None,
                       fixture_installation=None,fixture_operation=None,fixture_candidate_images=None,
-                      fixture_manifest='d'*64,fixture_publisher_drift=False,fixture_complete_candidate=False):
+                      fixture_manifest='d'*64,fixture_publisher_drift=False,fixture_complete_candidate=False,fixture_story_candidate=False):
         import os, shutil, subprocess, base64, yaml, uuid, tarfile
         from contextlib import ExitStack
         import bridge_root, commands, compiler, root_cli, runtime_stage, stage_runtime
@@ -604,6 +604,7 @@ class PrepareCompositionTests(unittest.TestCase):
             if fixture_complete_candidate:
                 approved['images'].update(user=user_image,
                     realtime=bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'d'*64)
+                if fixture_story_candidate:approved['images']['story']=bridge_root.source_authority.REGISTRY+'/story@sha256:'+'d'*64
                 # Synthetic CI provenance is fixed before the source receipt is digested.
                 approved.update(run_id=17,run_attempt=1,workflow_id=bridge_root.source_authority.WORKFLOW,
                     tree_sha='b'*40,lock_artifact_id=19,lock_sha256='c'*64)

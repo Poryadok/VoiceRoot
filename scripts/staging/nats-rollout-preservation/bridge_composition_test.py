@@ -108,11 +108,41 @@ def capture_public_realtime(stage,kube,live,card):
     card['observed']['images']=copy.deepcopy(stage.old_images)
 
 
-def synthetic_realtime_actor_credentials():
+def capture_public_baseline(stage,kube,live):
+    """Capture synthetic pre-P2 workloads from one canonical inventory."""
+    import actor_root,gis_first_install,uuid
+    # The publisher is created by C1 and admitted by capture_final_stage.
+    for name in sorted(gis_first_install.baseline_workload_names(include_hub=False)-{'voice-user','voice-realtime','voice-p3-principal-jwks'}):
+        row=copy.deepcopy(kube.objects[('Deployment',name)])
+        row['metadata']['uid']=str(uuid.uuid5(uuid.NAMESPACE_DNS,name))
+        row['metadata']['generation']=1
+        spec=row['spec']['template']['spec']
+        role=name.removeprefix('voice-')
+        if role in actor_root.ROLES:
+            next(v for v in spec['volumes'] if v['name']=='nats-service-creds')['secret']['secretName']='voice-nats-service-credentials-'+stage.expected['generation']
+        if role=='story':
+            next(c for c in spec['containers'] if c['name']=='story')['image']=next(iter(actor_root.STORY_IMAGES))
+        stage.snapshots[name]=copy.deepcopy(row)
+        stage.expected['deployment_uids'][name]=row['metadata']['uid']
+        live[('deployment',name)]=copy.deepcopy(row)
+        kube.objects[('Deployment',name)]=copy.deepcopy(row)
+        for container in spec.get('initContainers',[])+spec['containers']:
+            stage.old_images[name+'/'+container['name']]=container['image']
+    for name in ('voice-user','voice-realtime'):
+        row=stage.snapshots[name];row['metadata']['uid']=str(uuid.uuid5(uuid.NAMESPACE_DNS,name))
+        stage.expected['deployment_uids'][name]=row['metadata']['uid']
+        live[('deployment',name)]=copy.deepcopy(row)
+        kube.objects[('Deployment',name)]=copy.deepcopy(row)
+
+
+def synthetic_actor_credentials(role):
     """Unsigned test-only identity; cryptographic NATS verification is a fixture."""
     import base64
-    payload=base64.urlsafe_b64encode(json.dumps({'sub':'U'+'A'*55,'name':'voice-realtime'}).encode()).rstrip(b'=')
+    payload=base64.urlsafe_b64encode(json.dumps({'sub':'U'+'A'*55,'name':'voice-'+role}).encode()).rstrip(b'=')
     return b'-----BEGIN NATS USER JWT-----\nheader.'+payload+b'.signature\n------END NATS USER JWT------\n'
+
+
+def synthetic_realtime_actor_credentials():return synthetic_actor_credentials('realtime')
 
 
 def fixture_realtime_secret_patch(session,live,kube,argv,body,checkpoint):
@@ -202,6 +232,80 @@ def report_realtime_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_hosted_actor_pg_read_is_exact_and_fenced(self):
+        import actor_root,cohort_hosted_pg,commands
+        pg=object.__new__(cohort_hosted_pg.HostedPostgres);pg.cid='fixture-container'
+        args=list(actor_root.STORY_SCHEMA_ARGS)
+        response={'database':'story_db','username':'voice','version':4,'dirty':False}
+        with patch.object(commands,'authority_guard') as guard,\
+             patch.object(pg,'_docker',return_value=json.dumps(response).encode()) as docker:
+            self.assertEqual(pg.actor_read(args),response)
+            guard.assert_called_once_with(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging',*args])
+            docker.assert_called_once_with('exec',pg.cid,*args[args.index('--')+1:])
+            with self.assertRaisesRegex(RuntimeError,'isolated_actor_read_invalid'):pg.actor_read(args[:-1]+['SELECT 1'])
+            self.assertEqual(guard.call_count,1);self.assertEqual(docker.call_count,1)
+        with patch.object(commands,'authority_guard',side_effect=RuntimeError('closed')),\
+             patch.object(pg,'_docker') as docker:
+            with self.assertRaisesRegex(RuntimeError,'closed'):pg.actor_read(args)
+            docker.assert_not_called()
+
+    def test_public_baseline_captures_all_first_install_workloads(self):
+        import gis_first_install,gis_prerequisite,resource_claim,staging_cohort_preservation as cohort
+        import staging_prerequisites,realtime_bootstrap,transaction
+        from types import SimpleNamespace
+        kube,_,_=canonical_stores();live={}
+        stage=SimpleNamespace(snapshots={},old_images={},expected={'deployment_uids':{},'generation':'r20260930a4'})
+        for name in ('voice-user','voice-realtime'):
+            row=copy.deepcopy(kube.objects[('Deployment',name)])
+            stage.snapshots[name]=row;stage.expected['deployment_uids'][name]=row['metadata']['uid']
+            live[('deployment',name)]=copy.deepcopy(row)
+        capture_public_baseline(stage,kube,live)
+        names=gis_first_install.baseline_workload_names(include_hub=False)
+        preexisting=names-{'voice-p3-principal-jwks'}
+        self.assertEqual(set(stage.snapshots),preexisting)
+        self.assertEqual(set(stage.expected['deployment_uids']),preexisting)
+        for name in preexisting-{'voice-user','voice-realtime'}:
+            self.assertEqual(stage.snapshots[name],live[('deployment',name)])
+            self.assertEqual(stage.snapshots[name],kube.objects[('Deployment',name)])
+            for container in stage.snapshots[name]['spec']['template']['spec'].get('initContainers',[])+stage.snapshots[name]['spec']['template']['spec']['containers']:
+                self.assertEqual(stage.old_images[name+'/'+container['name']],container['image'])
+        class ReachedNormalize(Exception):pass
+        installation=resource_claim.production_installation();op='a'*12
+        session=SimpleNamespace(operation=op,installation=installation)
+        preservation={'fixture':'qualified'};prerequisites={'fixture':'captured'}
+        rt={'schema':'voice-staging-realtime-bootstrap-receipt-v2'}
+        target={'mode':'app-only','installation_sha256':installation.sha256,
+            'cohort_preservation_sha256':transaction.canonical(preservation),
+            'prerequisites_sha256':transaction.canonical(prerequisites),
+            'realtime_bootstrap_sha256':transaction.canonical(rt),'gis_first_install_sha256':'f'*64}
+        first={'source_plan_sha256':'f'*64,'source_sha':'a'*40}
+        authority={'verified':True,'source_sha':'a'*40,'run_id':17,'run_attempt':1,'workflow_id':1,
+            'tree_sha':'b'*40,'lock_artifact_id':19,'lock_sha256':'c'*64}
+        files=('scripts/dev/migrations.py','docker/postgres/provision-gameintegration-runtime-role.sql',
+            'docker/postgres/verify-gameintegration-runtime-role.sql','deploy/templates/provision-gameintegration-runtime-role-job.yaml',
+            'deploy/templates/migrate-game-integration-db-job.yaml','deploy/templates/verify-game-integration-db-job.yaml')
+        source={name:'d'*64 for name in files}
+        nonnats={'checks':[{'objects':[{'kind':'Deployment','name':name} for name in names]}]}
+        with tempfile.TemporaryDirectory(dir='/root') as folder,ExitStack() as stack:
+            base=Path(folder);(base/'apply-manifests.json').write_text('[]')
+            stack.enter_context(patch.object(cohort,'load_qualified',return_value=preservation))
+            stack.enter_context(patch.object(cohort,'load_rollout_continuation',return_value={'contract':{}}))
+            stack.enter_context(patch.object(cohort,'capture_final_stage',return_value=stage))
+            stack.enter_context(patch.object(staging_prerequisites,'load_capture',return_value=prerequisites))
+            stack.enter_context(patch.object(realtime_bootstrap,'load_completed',return_value=rt))
+            stack.enter_context(patch.object(gis_prerequisite,'source_inputs',return_value={'migrations':[]}))
+            stack.enter_context(patch.object(transaction,'normalize_first_install',side_effect=ReachedNormalize))
+            def run():return transaction._prepare(None,base,base,target,{},op,{},[],nonnats,
+                gis_first_install=first,gis_source_root=base,gis_source_capture=source,
+                gis_source_authority=authority,resource_session=session,preservation_ref=preservation,
+                prerequisites_capture=prerequisites,realtime_bootstrap_receipt=rt)
+            # capture_final_stage separately admits the C1-created publisher.
+            stage.snapshots['voice-p3-principal-jwks']=copy.deepcopy(kube.objects[('Deployment','voice-p3-principal-jwks')])
+            removed=stage.snapshots.pop('voice-chat')
+            with self.assertRaisesRegex(transaction.Blocked,'cohort_preserved_workload_inventory_changed'):run()
+            stage.snapshots['voice-chat']=removed
+            with self.assertRaises(ReachedNormalize):run()
+
     def test_synthetic_source_readback_keeps_real_head_guard(self):
         import source_authority,time
         sha='a'*40
@@ -680,7 +784,11 @@ class CompositionTests(unittest.TestCase):
         self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
             through_workload=True,through_hub=True,through_storage=True)
 
-    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False,final_prepare=False,final_admission=False):
+    def test_public_precut_fences_full_fixture_workload_inventory(self):
+        self._exercise_public_precut(enrolled=True,through_nats=True,through_fence=True,
+            through_workload=True,fixture_full_baseline=True)
+
+    def _exercise_public_precut(self,*,enrolled,through_nats=False,through_fence=False,through_workload=False,through_hub=False,through_storage=False,postgres=None,qualify=False,final_prepare=False,final_admission=False,fixture_full_baseline=False):
         import commands, compiler, guard, staging_cohort_preservation as cohort
         import staging_prerequisites_test as prerequisites
         import source_plan_test as fixtures
@@ -692,27 +800,66 @@ class CompositionTests(unittest.TestCase):
         class ReachedFence(Exception):
             pass
         def run(actions,request,approved,execution,workspace,stage,live,transport,get,card):
+            import commands
             from docker_runtime import NATS_IMAGE
             if qualify:
                 self.assertEqual(approved.get('schema'),'voice-source-authority-v1')
                 self.assertIs(approved.get('verified'),True)
             kube,params,policy=canonical_stores()
-            if qualify:
+            if qualify or fixture_full_baseline:
                 import base64,cohort_hosted_pg
                 live[('secret','voice-app-secrets')]['data']['POSTGRES_PASSWORD']=base64.b64encode(
                     cohort_hosted_pg.ADMIN_PASSWORD.encode()).decode()
                 align_public_fixture_app_secret(kube,live)
+                app=live[('secret','voice-app-secrets')]
+                for db in ('space','story'):
+                    dsn='postgres://voice:'+cohort_hosted_pg.ADMIN_PASSWORD+'@voice-postgres:5432/'+db+'_db?sslmode=disable'
+                    app['data'][db.upper()+'_DATABASE_URL']=base64.b64encode(dsn.encode()).decode()
+                kube.objects[('Secret','voice-app-secrets')]=copy.deepcopy(app)
             installed=workspace.parents[1]
             (installed/'policy.json').write_text(json.dumps(policy))
             stage.kube=kube;stage.service={}
+            if qualify or fixture_full_baseline:
+                import actor_root,cohort_hosted_pg
+                pg_rows,_=cohort_hosted_pg.HostedPostgres._objects(None)
+                actor_original_get=kube.get;actor_original_run=kube.run
+                def actor_get(kind,name):
+                    if kind.lower()=='namespace' and name=='voice-staging':
+                        commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                        return {'metadata':{'uid':stage.expected['namespace_uid'],'resourceVersion':'1'}}
+                    if kind.lower()=='secret' and name=='voice-app-secrets':
+                        commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                        return copy.deepcopy(live[('secret',name)])
+                    if (kind.lower(),name) in pg_rows:
+                        if postgres is not None:return postgres.get(kind,name)
+                        commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                        return copy.deepcopy(pg_rows[(kind.lower(),name)])
+                    return actor_original_get(kind,name)
+                def actor_run(args,body=None,timeout=30):
+                    password=['exec','voice-postgres-0','--','sh','-ceu',
+                        'printf "{\\"password_sha256\\":\\"%s\\"}" "$(printf %s "$POSTGRES_PASSWORD" | sha256sum | cut -d" " -f1)"']
+                    if args in (list(actor_root.STORY_SCHEMA_ARGS),password):
+                        if postgres is not None:return postgres.actor_read(args)
+                        commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+args)
+                        if args==password:return {'password_sha256':hashlib.sha256(cohort_hosted_pg.ADMIN_PASSWORD.encode()).hexdigest()}
+                        return {'database':'story_db','username':'voice','version':4,'dirty':False}
+                    return actor_original_run(args,body=body,timeout=timeout)
+                kube.get=actor_get;kube.run=actor_run
+                if fixture_full_baseline:
+                    with patch.object(commands,'authority_guard',side_effect=RuntimeError('fixture_guard_denied')) as blocked:
+                        for kind,name in (('namespace','voice-staging'),('secret','voice-app-secrets')):
+                            with self.assertRaisesRegex(RuntimeError,'fixture_guard_denied'):kube.get(kind,name)
+                        self.assertEqual(blocked.call_count,2)
             params['dataPVC']=stage.expected['source_claim']
             stage.marker['data'].update(generation=params['generation'],dataPVC=params['dataPVC'])
             if enrolled:
                 import base64, bootstrap_selection, bootstrap_selection_test, nats_contract_plan as plan
                 _,previous,rows,installation=bootstrap_selection_test.owned_fixture()
-                if qualify:
+                if qualify or fixture_full_baseline:
+                    import actor_root
                     service=rows['voice-nats-service-credentials-'+installation.generation]
-                    service['data']['realtime.creds']=base64.b64encode(synthetic_realtime_actor_credentials()).decode()
+                    for role in actor_root.ROLES:
+                        service['data'][role+'.creds']=base64.b64encode(synthetic_actor_credentials(role)).decode()
                 self.assertEqual(actions.tt_session.installation,installation)
                 old_rows=[{'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)}
                     for stream,config in plan.V3_DECLARATIONS]
@@ -747,7 +894,9 @@ class CompositionTests(unittest.TestCase):
             kube.objects[('Deployment','voice-user')]['metadata']['generation']=1
             stage.snapshots={'voice-user':copy.deepcopy(kube.objects[('Deployment','voice-user')])}
             stage.old_images['voice-user/nats-leaf']=NATS_IMAGE
-            if qualify:capture_public_realtime(stage,kube,live,card)
+            if qualify or fixture_full_baseline:
+                capture_public_realtime(stage,kube,live,card)
+                capture_public_baseline(stage,kube,live)
             card['observed']['images']=copy.deepcopy(stage.old_images)
             if through_hub:
                 if through_storage:
@@ -853,7 +1002,7 @@ class CompositionTests(unittest.TestCase):
                     live[('secret','voice-nats-hub-tls-'+installation.generation)]={'metadata':{'uid':'tls-uid','resourceVersion':'1'}}
                     objects={('configmap','voice-nats-generation'):stage.marker,
                         ('deployment','voice-user'):stage.snapshots['voice-user']}
-                    if qualify:objects[('deployment','voice-realtime')]=stage.snapshots['voice-realtime']
+                    if qualify or fixture_full_baseline:objects.update({('deployment',name):row for name,row in stage.snapshots.items()})
                     if through_hub:
                         objects[('deployment',bridge_root.HUB)]=stage.snapshots[bridge_root.HUB]
                         objects[('pod',monitor_pod['metadata']['name'])]=monitor_pod
@@ -919,6 +1068,21 @@ class CompositionTests(unittest.TestCase):
             with patch.object(bridge_root,'INSTALLED',installed),patch.object(compiler,'decode_yaml',side_effect=fixtures.decoder),\
                  patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)),\
                  patch.object(bridge_root.source_authority,'capture_source',side_effect=capture_source),ExitStack() as nats_patches:
+                if qualify or fixture_full_baseline:
+                    import actor_root
+                    def synthetic_actor_verify(binary,binary_sha,credentials,account_token,operator_token,
+                                               actor_sha,account_sha,required,authenticate,unchanged):
+                        self.assertIn(credentials,[synthetic_actor_credentials(role) for role in actor_root.ROLES])
+                        self.assertEqual(actor_sha,hashlib.sha256(('U'+'A'*55).encode()).hexdigest())
+                        self.assertEqual(account_sha,installation.account_sha256)
+                        self.assertEqual(set(required),{'pub','sub'})
+                        unchanged()
+                        return {'synthetic_nats_actor_boundary':True}
+                    def synthetic_story_image(image,deadline):
+                        child,config,_=actor_root.STORY_IMAGES[image]
+                        return {'requested_image':image,'manifest_image':'ghcr.io/poryadok/voiceroot/story@sha256:'+child,'config_sha256':config}
+                    nats_patches.enter_context(patch.object(actor_root.actor_verification,'verify',side_effect=synthetic_actor_verify))
+                    nats_patches.enter_context(patch.object(bridge_root.source_authority,'immutable_image_identity',side_effect=synthetic_story_image))
                 if through_nats:
                     # Source-owned dynamic modules must be loaded from the
                     # captured tree even if unittest discovery imported their
@@ -954,15 +1118,6 @@ class CompositionTests(unittest.TestCase):
                             import staging_p3_prerequisites as p3
                             import realtime_bootstrap
                             import actor_root
-                            def synthetic_actor_verify(binary,binary_sha,credentials,account_token,operator_token,
-                                                       actor_sha,account_sha,required,authenticate,unchanged):
-                                self.assertEqual(credentials,synthetic_realtime_actor_credentials())
-                                self.assertEqual(actor_sha,hashlib.sha256(('U'+'A'*55).encode()).hexdigest())
-                                self.assertEqual(account_sha,installation.account_sha256)
-                                self.assertEqual(set(required),{'pub','sub'})
-                                unchanged()
-                                return {'synthetic_nats_actor_boundary':True}
-                            nats_patches.enter_context(patch.object(actor_root.actor_verification,'verify',side_effect=synthetic_actor_verify))
                             nats_patches.enter_context(patch.object(p3,'verify_complete',
                                 side_effect=report_p3_failure(p3.verify_complete)))
                             nats_patches.enter_context(patch.object(realtime_bootstrap,'run_prepare',
@@ -1122,7 +1277,7 @@ class CompositionTests(unittest.TestCase):
             workspace_context=nullcontext(tempfile.mkdtemp(prefix='public-cohort-',dir=retained))
         prerequisites.PrepareCompositionTests()._cold_prepare(on_ready=run,context_commit=fixtures.TAG,
             full_source=True,strict_helpers=True,realtime_source=qualify,source_overrides=overrides,workspace_context=workspace_context,
-            fixture_complete_candidate=qualify)
+            fixture_complete_candidate=qualify or fixture_full_baseline,fixture_story_candidate=qualify or fixture_full_baseline)
 
     def test_cut_store_capture_uses_canonical_source_and_live_pvc_identity(self):
         """Source rendering and store binding are real; Kubernetes is synthetic."""
