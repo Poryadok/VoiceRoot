@@ -514,16 +514,17 @@ func post(check bool) {
     helper=helper.replace('func main() {',post+'\nfunc main() { if len(os.Args)==2 && os.Args[1]=="post" {post(false);return};if len(os.Args)==2 && os.Args[1]=="verify-post" {post(true);return};')
     (bundle/'helper.go').write_text(helper)
     env=dict(os.environ,GOOS='linux',GOARCH='amd64',CGO_ENABLED='0')
-    fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env)
-    fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env)
-    fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env)
-    fixture.call(['go','build','-ldflags=-s -w','-o',str(bundle/'story-current4-probe'),'./cmd/owned-story-probe'],cwd=source/'src/backend/story',env=env)
+    # Allow slow hosted builds while keeping runtime effects at their existing deadline.
+    fixture.call(['go','build','-o',str(bundle/'helper'),str(bundle/'helper.go')],cwd=module,env=env,timeout=600)
+    fixture.call(['go','build','-o',str(bundle/'kernel'),'.'],cwd=module,env=env,timeout=600)
+    fixture.call(['go','build','-o',str(bundle/'bootstrap-renewer'),'./cmd/nats-jwt-issuer'],cwd=source/'src/backend/pkg',env=env,timeout=600)
+    fixture.call(['go','build','-ldflags=-s -w','-o',str(bundle/'story-current4-probe'),'./cmd/owned-story-probe'],cwd=source/'src/backend/story',env=env,timeout=600)
     # root_cli binds every capture member with a 16 MiB maximum.
     for name in ('kernel','bootstrap-renewer','story-current4-probe'):
         if (bundle/name).stat().st_size > 16 << 20:
             raise RuntimeError('fixture_capture_binary_too_large')
     if a3_roster:
-        fixture.call(['go','build','-o',str(bundle/'a3-client'),str(Path(__file__).parent/'testdata/a3_roster_client.go')],cwd=module,env=env)
+        fixture.call(['go','build','-o',str(bundle/'a3-client'),str(Path(__file__).parent/'testdata/a3_roster_client.go')],cwd=module,env=env,timeout=600)
     records={n:base64.b64encode((bundle/n).read_bytes()).decode() for n in ('helper','kernel','bootstrap-renewer')}
     if a3_roster:records['a3-client']=base64.b64encode((bundle/'a3-client').read_bytes()).decode()
     records['nats-9ae-predecessor.json']=base64.b64encode((Path(__file__).parent/'testdata/nats-9ae-predecessor.json').read_bytes()).decode()
