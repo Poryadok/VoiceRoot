@@ -67,7 +67,8 @@ class SupervisionTest(unittest.TestCase):
         kernel = Kernel()
         kernel.configured = {}
         import ctypes
-        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel):
+        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel, create=True), \
+             patch.object(supervision.ctypes, 'set_last_error', return_value=None, create=True):
             returned_kernel, job, accounting = supervision._windows_job(limits)
 
         self.assertIs(returned_kernel, kernel)
@@ -153,7 +154,8 @@ class SupervisionTest(unittest.TestCase):
                 return value
 
         kernel = Kernel()
-        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel):
+        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel, create=True), \
+             patch.object(supervision.ctypes, 'set_last_error', return_value=None, create=True):
             with self.assertRaises(supervision.SupervisionError):
                 supervision._windows_job(limits)
         self.assertEqual(calls.count('CreateJobObjectW'), 1)
@@ -188,8 +190,9 @@ class SupervisionTest(unittest.TestCase):
 
         kernel = Kernel()
         name = r'Local\VoiceCIProof-test-job'
-        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel), \
-             patch.object(supervision.ctypes, 'get_last_error', return_value=183):
+        with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel, create=True), \
+             patch.object(supervision.ctypes, 'set_last_error', return_value=None, create=True), \
+             patch.object(supervision.ctypes, 'get_last_error', return_value=183, create=True):
             with self.assertRaisesRegex(supervision.SupervisionError, 'already exists|collision'):
                 supervision._windows_job(limits, job_name=name)
         create = next(args for method, args in calls if method == 'CreateJobObjectW')
@@ -324,7 +327,8 @@ class SupervisionTest(unittest.TestCase):
 
                 kernel = Kernel()
                 kernel.configured = {}
-                with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel):
+                with patch.object(supervision.ctypes, 'WinDLL', return_value=kernel, create=True), \
+                     patch.object(supervision.ctypes, 'set_last_error', return_value=None, create=True):
                     with self.assertRaises(supervision.SupervisionError):
                         supervision._windows_job(limits)
                 self.assertEqual(sum(name == 'CloseHandle' for name, _ in calls), 1)
