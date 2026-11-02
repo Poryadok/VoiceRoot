@@ -354,14 +354,21 @@ class PrepareCompositionTests(unittest.TestCase):
         import os
         if not os.environ.get('VOICE_QUALIFIED_BINARIES'):self.skipTest('qualified fixture binaries required')
         def ready(actions,request,approved,execution,workspace,*_):
+            import gis_first_install
             session=actions.tt_session
             receipt=json.loads((workspace.parents[1]/'source-authority'/(session.operation+'.json')).read_bytes())
             self.assertEqual(receipt['approved_sha256'],prereq.digest(approved))
             self.assertEqual(approved['images']['realtime'],
                 'ghcr.io/poryadok/voiceroot/realtime@sha256:'+'d'*64)
+            required={name.removeprefix('voice-') for name in gis_first_install.baseline_workload_names(include_hub=False)
+                      if name!='voice-p3-principal-jwks'}
+            self.assertTrue(required<=set(approved['images']),required-set(approved['images']))
+            self.assertNotIn('nats-hub-config-renderer',required)
+            self.assertEqual(approved['images']['gameintegration'],
+                'ghcr.io/poryadok/voiceroot/gameintegration@sha256:'+'a'*64)
             self.assertEqual(set(session.context['images']),{'voice-gameintegration/gameintegration'})
         self._cold_prepare(on_ready=ready,full_source=True,strict_helpers=True,
-            realtime_source=True,fixture_complete_candidate=True)
+            realtime_source=True,fixture_complete_candidate=True,fixture_story_candidate=True)
 
     def test_complete_fixture_storage_identity_reaches_compiler_endpoint_guard(self):
         import copy,os,compiler,stage_runtime
@@ -603,7 +610,11 @@ class PrepareCompositionTests(unittest.TestCase):
             if fixture_complete_candidate:
                 approved['images'].update(user=user_image,
                     realtime=bridge_root.source_authority.REGISTRY+'/realtime@sha256:'+'d'*64)
-                if fixture_story_candidate:approved['images']['story']=bridge_root.source_authority.REGISTRY+'/story@sha256:'+'d'*64
+                if fixture_story_candidate:
+                    import gis_first_install
+                    for name in gis_first_install.baseline_workload_names(include_hub=False)-{'voice-p3-principal-jwks'}:
+                        service=name.removeprefix('voice-')
+                        approved['images'].setdefault(service,bridge_root.source_authority.REGISTRY+'/'+service+'@sha256:'+'d'*64)
                 # Synthetic CI provenance is fixed before the source receipt is digested.
                 approved.update(run_id=17,run_attempt=1,workflow_id=bridge_root.source_authority.WORKFLOW,
                     tree_sha='b'*40,lock_artifact_id=19,lock_sha256='c'*64)
