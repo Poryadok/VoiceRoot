@@ -110,7 +110,7 @@ def verify_linux_evidence(root, output, source, base, report):
 def verify_component(root, output, source, base, report):
     """Revalidate component evidence before it is composed into a job."""
     if (not isinstance(report, dict) or report.get('schema') != 'voice-local-policy-component-v1' or
-            report.get('status') != 'complete' or report.get('scope') != 'ci-script-tests/policy' or
+            report.get('status') != 'diagnostic' or report.get('scope') != 'ci-script-tests/policy' or
             report.get('source') != source or report.get('base') != base or
             report.get('remaining_shards') != ['runtime', 'staging', 'proofs']):
         raise ValueError('policy component identity differs')
@@ -128,7 +128,7 @@ def verify_component(root, output, source, base, report):
 def run(root, base, head, head_ref, output, assets):
     """Execute the selected policy shard and its exact Windows-only cases.
 
-    This returns only a policy component receipt, never a whole-job handoff.
+    This returns a head-only diagnostic, never a completed policy receipt.
     Fetched refs, daemon custody and external tool provenance remain assumptions.
     """
     import affected_check_plan
@@ -165,12 +165,14 @@ def run(root, base, head, head_ref, output, assets):
     if snapshot.capture(root, head) != source or affected_check_plan.build_local_plan(root, base, head, head_ref) != plan:
         raise ValueError('policy source or selection changed')
     local_preflight._handoff_refs(root, base, head, head_ref)
-    report = {'schema':'voice-local-policy-component-v1', 'status':'complete', 'scope':'ci-script-tests/policy',
+    report = {'schema':'voice-local-policy-component-v1', 'status':'diagnostic', 'scope':'ci-script-tests/policy',
               'source':source, 'base':base, 'head_ref':head_ref, 'linux':'linux/diagnostic.json',
               'windows_tests':names, 'windows_stdout_sha256':hashlib.sha256(stdout).hexdigest(),
               'windows_stderr_sha256':hashlib.sha256(stderr).hexdigest(),
               'remaining_shards':['runtime','staging','proofs'],
               'limitations':['fetched refs are not a live remote observation',
+                             'execution is on PR-head source, not the fetched merge candidate',
+                             'hard per-run disk and complete process resource bounds are not established',
                              'tool and dependency publisher provenance is not authenticated',
                              'exclusive Docker daemon and socket custody is assumed']}
     verify_component(root, output, source, base, report)
@@ -190,7 +192,8 @@ def main():
     assets = staging.contract.parse_assets(_read(args.assets, 1024*1024))
     report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.head_ref, args.output, assets)
     print(json.dumps(report, sort_keys=True))
+    return 2
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

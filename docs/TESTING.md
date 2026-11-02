@@ -679,7 +679,9 @@ That path checks the live master, PR branch and candidate refs before and after
 the run, checks exact merge parents and tree, and executes the validator bytes
 from the fetched candidate commit. It completes only the
 `current-diff-contract` component; aggregate local preflight remains
-incomplete. Without `--candidate-ref`, it constructs a local two-parent
+incomplete and the command exits 2. Shell callers must inspect the component
+receipts rather than treating an incomplete aggregate as a successful handoff.
+Without `--candidate-ref`, it constructs a local two-parent
 candidate and records a diagnostic only. When `match-squad-overlay` is
 selected, it stays `not_run` unless its pinned inputs are supplied. For that
 diagnostic, supply `--overlay-image-id` with the pinned local Linux Python
@@ -713,7 +715,8 @@ directory-entry durability across sudden power loss is not established, so
 this is not general crash recovery. The
 command still completes only the fetched-candidate proofs component; other
 selected checks, the remaining CI-script shards, and aggregate local preflight
-remain incomplete.
+remain incomplete. The older head-only policy path is diagnostic and exits 2:
+it does not establish merge-candidate identity or hard per-run disk bounds.
 
 The local current-diff diagnostic runs private Git preparation and the four
 subsequent Git/validator commands under a Windows Job with bounded output.

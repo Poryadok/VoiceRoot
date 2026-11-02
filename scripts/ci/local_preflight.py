@@ -796,7 +796,9 @@ def main():
                              proofs_bash=args.proofs_bash, proofs_make=args.proofs_make,
                              overlay_image_id=args.overlay_image_id, overlay_kubectl=args.overlay_kubectl)
         print(json.dumps(report, sort_keys=True))
-        return 0
+        # No aggregate handoff producer is complete yet. Do not trust a
+        # report's self-asserted status as authority to return success.
+        return 2
     chat = {'helper': args.chat_helper, 'helper_sha256': args.chat_helper_sha256,
             'postgres_archive': args.chat_postgres_archive, 'postgres_archive_sha256': args.chat_postgres_archive_sha256,
             'postgres_image_id': args.chat_postgres_image_id}
