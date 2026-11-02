@@ -717,6 +717,13 @@ Windows host execution does not establish the hosted Linux job, on-device
 acceptance or the remaining selected checks; Flutter SDK and package publisher
 provenance remain unbound.
 
+With `--golangci-component` and the pinned Go/lint tool inputs, local preflight
+also verifies every selected module's bounded resolve/lint logs and runs the
+Go-module source cleanliness check against a private Git fixture. Its component
+result is scoped to Windows lint execution and does not establish hosted Linux
+parity or complete other selected checks. Tool, dependency and host-environment
+provenance remain unbound.
+
 For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
 `--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and
 `--golangci-lint-sha256 <digest>`. On Windows, the diagnostic materializes the
