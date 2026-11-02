@@ -328,7 +328,8 @@ def restore_command(session,argv,*,body=b'',timeout=120):
         fixed_tool=(len(tail)==6 and tail[:2]==['exec','-i'] and tail[3:]==['sh','-ec',
             'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate'])
         fixed_probe=(len(tail)==3 and tail[:2]==['cp','-'] and resource is not None and resource['kind']=='story-probe')
-        if not fixed_probe and (not fixed_tool or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256')):
+        if (resource is None or resource.get('status')!='ACTIVE'
+            or not fixed_probe and (not fixed_tool or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256'))):
             raise Blocked('cohort_restore_body_limit')
         import resource_claim
         row=session.check()
