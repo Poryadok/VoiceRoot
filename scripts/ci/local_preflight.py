@@ -134,7 +134,8 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
                 overlay_image_id=None, overlay_kubectl=None):
     """Execute and verify a supported current-diff or overlay local plan.
 
-    Other selected checks have no accepted evidence producer and fail closed.
+    Only current-diff-contract receives a complete component receipt. Other
+    selected checks stay not_run and aggregate preflight remains incomplete.
     The caller must fetch origin immediately before invoking this function.
     """
     root, output = Path(root).resolve(), Path(output).resolve()
@@ -145,15 +146,15 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
     _handoff_refs(root, base, head, head_ref)
     plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
     selected = set(plan.get('checks', {}))
-    if selected not in ({'current-diff-contract'}, {'current-diff-contract', 'match-squad-overlay'}):
-        raise ValueError('unsupported selected checks prevent local handoff')
-    if ('match-squad-overlay' in selected and overlay_image_id != local_overlay_execution.PYTHON_IMAGE):
-        raise ValueError('pinned overlay image is required')
-    if 'match-squad-overlay' in selected and not overlay_kubectl:
-        raise ValueError('pinned overlay kubectl is required')
-    if 'match-squad-overlay' not in selected and (overlay_image_id is not None or overlay_kubectl is not None):
-        raise ValueError('overlay image supplied for an unselected check')
-    if 'match-squad-overlay' in selected:
+    if 'current-diff-contract' not in selected:
+        raise ValueError('current-diff-contract is not selected')
+    overlay_selected = 'match-squad-overlay' in selected
+    overlay_requested = overlay_image_id is not None or overlay_kubectl is not None
+    if overlay_requested and not overlay_selected:
+        raise ValueError('overlay inputs supplied for an unselected check')
+    if overlay_requested and (overlay_image_id != local_overlay_execution.PYTHON_IMAGE or not overlay_kubectl):
+        raise ValueError('complete pinned overlay inputs are required')
+    if overlay_requested:
         local_chat_orchestration._verify_file(overlay_kubectl, local_overlay_execution.KUBECTL_SHA256)
     source = plan['source']
     if source.get('head') != head or source.get('changed_paths') or source.get('raw_mismatch_paths'):
@@ -174,7 +175,8 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
                 contract.get('event_base') != base or contract.get('pr_head') != head):
             raise ValueError('synthetic merge diagnostic differs from the plan')
         current_check = {'status': 'diagnostic', 'report': 'current-diff/diagnostic.json'}
-    if 'match-squad-overlay' in selected:
+    overlay = None
+    if overlay_requested:
         overlay = local_overlay_execution.run_supervised(root, plan, output / 'overlay', overlay_image_id, overlay_kubectl,
                                                           base=base, head_ref=head_ref)
         _verify_overlay_evidence(output / 'overlay', source, overlay_image_id, overlay)
@@ -186,8 +188,10 @@ def run_handoff(root, base, head, head_ref, output, *, candidate_ref=None,
               'checks': {'current-diff-contract': current_check},
               'limitations': ['aggregate local preflight remains incomplete',
                               'all other selected and GitHub checks remain mandatory']}
-    if 'match-squad-overlay' in selected:
-        report['checks']['match-squad-overlay'] = 'overlay/diagnostic.json'
+    for name in sorted(selected - {'current-diff-contract'}):
+        report['checks'][name] = {'status': 'not_run'}
+    if overlay_selected and overlay_requested:
+        report['checks']['match-squad-overlay'] = {'status': 'diagnostic', 'report': 'overlay/diagnostic.json'}
         report['limitations'].extend(['Python image publisher provenance is not authenticated',
                                       'exclusive Docker daemon and socket custody is assumed',
                                       'interruption and crash recovery acceptance is not established'])

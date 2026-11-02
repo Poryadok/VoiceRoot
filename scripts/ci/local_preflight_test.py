@@ -40,12 +40,13 @@ class HandoffGateTests(unittest.TestCase):
         self.assertEqual(json.loads((self.output / 'handoff.json').read_text())['source'], self.source)
 
     def test_fetched_candidate_marks_only_current_diff_complete(self):
+        broad_plan = dict(self.plan, checks={'current-diff-contract': [], 'backend-go-pkg': []})
         proof = {'status': 'complete', 'check': 'current-diff-contract',
                  'aggregate_preflight': 'incomplete', 'base': self.base, 'head': self.head}
         with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
              patch.object(local_preflight, '_handoff_refs'), \
              patch.object(local_preflight.affected_check_plan, 'build_local_plan',
-                          side_effect=[self.plan, self.plan]), \
+                          side_effect=[broad_plan, broad_plan]), \
              patch.object(local_preflight.local_current_diff, 'run_fetched_merge_candidate',
                           return_value=proof) as run:
             report = local_preflight.run_handoff(
@@ -56,11 +57,15 @@ class HandoffGateTests(unittest.TestCase):
         self.assertEqual(report['checks']['current-diff-contract']['status'], 'complete')
         self.assertEqual(report['checks']['current-diff-contract']['report'],
                          'current-diff/current-diff-component.json')
+        self.assertEqual(report['checks']['backend-go-pkg']['status'], 'not_run')
 
-    def test_extra_selected_check_fails_closed(self):
-        plan = dict(self.plan, checks={'current-diff-contract': [], 'backend-auth': []})
-        with self.assertRaisesRegex(ValueError, 'unsupported selected checks'):
-            self.run_gate(plans=[plan])
+    def test_other_selected_check_stays_not_run(self):
+        plan = dict(self.plan, checks={'current-diff-contract': [], 'backend-go-pkg': []})
+        result, run = self.run_gate(plans=[plan, plan])
+        run.assert_called_once()
+        self.assertEqual(result['checks']['current-diff-contract']['status'], 'diagnostic')
+        self.assertEqual(result['checks']['backend-go-pkg']['status'], 'not_run')
+        self.assertEqual(result['status'], 'incomplete')
 
     def test_changed_plan_or_refs_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'changed during'):
@@ -89,15 +94,17 @@ class HandoffGateTests(unittest.TestCase):
         self.assertEqual(set(report['checks']), {'current-diff-contract', 'match-squad-overlay'})
         self.assertEqual(report['status'], 'incomplete')
 
-    def test_overlay_plan_requires_exact_image_before_execution(self):
+    def test_overlay_plan_without_inputs_leaves_overlay_not_run(self):
         plan = dict(self.plan, checks={'current-diff-contract': [], 'match-squad-overlay': []})
         with patch.object(local_preflight.local_current_diff, '_windows', return_value=True), \
              patch.object(local_preflight, '_handoff_refs'), \
              patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
-             patch.object(local_preflight.local_current_diff, 'run_merge_candidate') as current, \
-             self.assertRaisesRegex(ValueError, 'pinned overlay image'):
-            local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output)
-        current.assert_not_called()
+             patch.object(local_preflight.local_current_diff, 'run_merge_candidate',
+                          return_value={'source': self.source, 'contract': {'base': self.base,
+                                     'event_base': self.base, 'pr_head': self.head}}) as current:
+            report = local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output)
+        current.assert_called_once()
+        self.assertEqual(report['checks']['match-squad-overlay']['status'], 'not_run')
 
     def test_overlay_plan_requires_pinned_kubectl_before_execution(self):
         plan = dict(self.plan, checks={'current-diff-contract': [], 'match-squad-overlay': []})
@@ -105,7 +112,7 @@ class HandoffGateTests(unittest.TestCase):
              patch.object(local_preflight, '_handoff_refs'), \
              patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_current_diff, 'run_merge_candidate') as current, \
-             self.assertRaisesRegex(ValueError, 'pinned overlay kubectl'):
+             self.assertRaisesRegex(ValueError, 'complete pinned overlay inputs'):
             local_preflight.run_handoff(self.root, self.base, self.head, 'feature/overlay', self.output,
                                         overlay_image_id=local_preflight.local_overlay_execution.PYTHON_IMAGE)
         current.assert_not_called()

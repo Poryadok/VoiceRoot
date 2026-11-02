@@ -669,23 +669,24 @@ pkg non-short job, integrations and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
-The Windows-only `--handoff` mode supports plans containing only
-`current-diff-contract`, or that check plus `match-squad-overlay`. Supply the
-fetched master SHA, the clean committed PR head SHA, the PR branch name, and a
-new output directory outside the checkout. Add
+The Windows-only `--handoff` mode requires `current-diff-contract` to be
+selected. Supply the fetched master SHA, the clean committed PR head SHA, the
+PR branch name, and a new output directory outside the checkout. Other
+selected checks stay `not_run`; they do not prevent this single component from
+running. Add
 `--candidate-ref refs/pull/<number>/merge` to fetch the actual GitHub candidate.
 That path checks the live master, PR branch and candidate refs before and after
 the run, checks exact merge parents and tree, and executes the validator bytes
 from the fetched candidate commit. It completes only the
 `current-diff-contract` component; aggregate local preflight remains
 incomplete. Without `--candidate-ref`, it constructs a local two-parent
-candidate and records a diagnostic only. For the overlay plan, supply
-`--overlay-image-id` with the pinned local Linux Python image ID. The command
-executes the selected tests and checks their logs, source archive, ownership
+candidate and records a diagnostic only. When `match-squad-overlay` is
+selected, it stays `not_run` unless its pinned inputs are supplied. For that
+diagnostic, supply `--overlay-image-id` with the pinned local Linux Python
+image ID. The command executes those selected tests and checks their logs, source archive, ownership
 journal, resource removal and slot release. The local image's publisher
 provenance and exclusive Docker daemon/socket custody remain assumptions;
-interruption and crash recovery acceptance is not established. It refuses
-additional selected checks. Run the command again after any source, base, head
+interruption and crash recovery acceptance is not established. Run the command again after any source, base, head
 or selected-check change; do not reuse its JSON as a verifier.
 
 The local current-diff diagnostic runs private Git preparation and the four
