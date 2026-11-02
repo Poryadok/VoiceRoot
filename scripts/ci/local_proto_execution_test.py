@@ -10,6 +10,48 @@ import local_proto_execution as proto
 
 
 class LocalProtoExecutionTests(unittest.TestCase):
+    def test_candidate_git_is_visible_to_buf_and_restored_on_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot = root/'snapshot'; snapshot.mkdir()
+            private = root/'fixture.git'; private.mkdir(); (private/'marker').write_text('owned')
+            env = {'GIT_DIR':str(private),'GIT_WORK_TREE':str(snapshot)}
+            (root/'other.git').mkdir()
+            with self.assertRaises(ValueError):
+                proto.run_pr_candidate(['buf'], snapshot, dict(env, GIT_DIR=str(root/'other.git')))
+            original = Path.is_symlink
+            with mock.patch.object(Path, 'is_symlink', lambda path: True if path == private else original(path)):
+                with self.assertRaises(ValueError): proto.run_pr_candidate(['buf'], snapshot, env)
+            self.assertTrue((private/'marker').is_file())
+            def fail(command, **kwargs):
+                self.assertNotIn('GIT_DIR', kwargs['env'])
+                self.assertNotIn('GIT_WORK_TREE', kwargs['env'])
+                self.assertTrue((snapshot/'.git/marker').is_file())
+                raise subprocess.TimeoutExpired(command, 1)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                proto.run_pr_candidate(['buf'], snapshot, env, execute=fail)
+            self.assertTrue((private/'marker').is_file())
+            self.assertFalse((snapshot/'.git').exists())
+            def uncertain(command, **kwargs):
+                raise proto.supervision.SupervisionError('cleanup unverified')
+            with self.assertRaises(proto.supervision.SupervisionError):
+                proto.run_pr_candidate(['buf'], snapshot, env, execute=uncertain)
+            self.assertTrue((snapshot/'.git/marker').is_file())
+            self.assertFalse(private.exists())
+
+    def test_pr_regressions_require_executed_non_skipped_tests(self):
+        self.assertEqual(proto.pr_regression_count(b'....\n----------------------------------------------------------------------\nRan 4 tests in 1.0s\n\nOK\n', 0), 4)
+        for raw, code in ((b'Ran 0 tests in 0s\nOK\n', 0), (b'Ran 4 tests in 1s\nOK (skipped=1)\n', 0), (b'Ran 4 tests in 1s\nOK\n', 1)):
+            with self.assertRaises(ValueError): proto.pr_regression_count(raw, code)
+
+    def test_pr_receipt_binds_candidate_and_its_ordered_parents(self):
+        base, head, candidate = 'a'*40, 'b'*40, 'c'*40
+        receipt = {'event_base':base, 'base':base, 'head':head, 'merge':candidate,
+                   'checkout':candidate, 'parents':[base,head]}
+        proto.validate_pr_receipt(json.dumps(receipt).encode(), base, head, candidate)
+        for key, value in (('base','d'*40),('head','e'*40),('parents',[head,base]),('checkout',head)):
+            with self.assertRaises(ValueError):
+                proto.validate_pr_receipt(json.dumps(dict(receipt, **{key:value})).encode(), base, head, candidate)
+
     def test_command_uses_job_broker_and_propagates_timeout(self):
         result = subprocess.CompletedProcess([], 0, b'\x00\xff', b'')
         with mock.patch.object(proto, '_windows', return_value=True), \

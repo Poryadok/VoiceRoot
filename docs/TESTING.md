@@ -696,6 +696,14 @@ Git, tool and test commands and limits each captured stream to 16 MiB, including
 the binary baseline archive. Exceeding that limit fails the diagnostic. POSIX
 subprocess timeouts likewise do not prove descendant cleanup.
 
+The optional `--ci-policy-assets` input runs the selected CI-script policy shard
+as a component: it verifies all Linux recipe logs and owned Docker cleanup, then
+runs the exact Windows-only cases skipped by that Linux environment. Its
+component receipt does not complete the four-shard `ci-script-tests` job or the
+overall preflight; the other three shards and all other selected checks remain
+required. Fetched refs, external tool and dependency provenance, and exclusive
+Docker daemon/socket custody remain limitations.
+
 For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
 `--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and
 `--golangci-lint-sha256 <digest>`. On Windows, the diagnostic materializes the
