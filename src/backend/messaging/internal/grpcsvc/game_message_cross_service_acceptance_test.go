@@ -449,17 +449,6 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	revokeRequest := &messagingv1.ApplyGameMessageRequest{CompactJws: revokeRace.compactMessage, DeviceAuthorityAssertion: revokeAssertion}
 	revokeHash, err := principal.RequestHash(revokeRequest)
 	require.NoError(t, err)
-	chatGuard.arm()
-	messageResult := make(chan error, 1)
-	go func() {
-		_, callErr := apply(revokeRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, revokeHash)
-		messageResult <- callErr
-	}()
-	select {
-	case <-chatGuard.entered:
-	case <-ctx.Done():
-		t.Fatal("real Messaging operation did not reach the post-permit Chat barrier")
-	}
 	pendingOperationID := uuid.New()
 	pendingMutation := []byte("T16 explicit expiry with no receipt")
 	pendingPermit, err := permitClient.Issue(ctx, gameprotocol.DeviceAuthority{AssertionJWS: assertion}, pendingOperationID, pendingMutation)
@@ -484,6 +473,19 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.Equal(t, "issued", pendingPermitStatus)
 
 	ownerToken := t16OwnerAccessToken(t, fixture)
+	// Complete independent permit setup before holding a message inside its
+	// 250ms admission window; the pending permit still fences revoke until expiry.
+	chatGuard.arm()
+	messageResult := make(chan error, 1)
+	go func() {
+		_, callErr := apply(revokeRequest, gatewayIssuer, "messaging", messagingv1.MessagingService_ApplyGameMessage_FullMethodName, revokeHash)
+		messageResult <- callErr
+	}()
+	select {
+	case <-chatGuard.entered:
+	case <-ctx.Done():
+		t.Fatal("real Messaging operation did not reach the post-permit Chat barrier")
+	}
 	revokeStarted := time.Now()
 	revokeIdempotencyKey := uuid.NewString()
 	type revokeResult struct {
@@ -542,6 +544,10 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		time.Sleep(10 * time.Millisecond)
 	}
 	require.False(t, t0Observed.IsZero(), "GIS must durably commit activeâ†’revoking before permit drain")
+	var pendingStatusDuringRevoke string
+	require.NoError(t, gisDB.QueryRow(ctx, `SELECT status FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, pendingOperationID).Scan(&pendingStatusDuringRevoke))
+	require.Equal(t, "issued", pendingStatusDuringRevoke, "preexisting pending GIS permit must still be draining before releasing Messaging")
+	chatGuard.releaseBarrier()
 	// A new Auth/GIS permit is forbidden once the durable GIS binding transition
 	// has begun, even while permits issued before t0 are still draining.
 	postRevokeOperationID := uuid.New()
@@ -552,10 +558,6 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 	require.NoError(t, gisDB.QueryRow(ctx, `SELECT count(*) FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, postRevokeOperationID).Scan(&postRevokeGISRows))
 	require.Zero(t, postRevokeAuthRows, "revoking binding must not persist a new Auth permit")
 	require.Zero(t, postRevokeGISRows, "revoking binding must not persist a new GIS permit")
-	var pendingStatusDuringRevoke string
-	require.NoError(t, gisDB.QueryRow(ctx, `SELECT status FROM player_binding_execution_permits WHERE binding_id=$1 AND operation_id=$2`, fixture.bindingID, pendingOperationID).Scan(&pendingStatusDuringRevoke))
-	require.Equal(t, "issued", pendingStatusDuringRevoke, "preexisting pending GIS permit must still be draining before releasing Messaging")
-	chatGuard.releaseBarrier()
 	select {
 	case err = <-messageResult:
 		require.NoError(t, err, "the already-issued permit may finish during revoke drain")

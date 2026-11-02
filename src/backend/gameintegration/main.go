@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"voice/backend/gameintegration/internal/botproof"
+	"voice/backend/gameintegration/internal/communityspace"
 	"voice/backend/gameintegration/internal/httpapi"
 	"voice/backend/gameintegration/internal/registry"
 	"voice/backend/gameintegration/internal/sessionowners"
@@ -70,11 +71,25 @@ func main() {
 	mux := http.NewServeMux()
 	api := httpapi.NewHandler(authorizer, applications)
 	api.OperatorAccounts = cfg.OperatorAccounts
+	api.CommunityTemplates = cfg.CommunitySpaceTemplates
+	var communitySpaceClient *communityspace.Client
+	if cfg.CommunitySpaceAddr != "" {
+		communitySpaceClient, err = communityspace.New(cfg.CommunitySpaceAddr, cfg.CommunitySpaceToken)
+		if err != nil {
+			log.Fatalf("game integration Space bootstrap client: %v", err)
+		}
+		defer func() { _ = communitySpaceClient.Close() }()
+		api.CommunityProvisioner = communitySpaceClient
+		api.CommunityRecoveryProvisioner = communitySpaceClient
+	}
 	api.CredentialKey = cfg.CredentialKey
 	api.BindingExchanges = &httpapi.BindingExchangeHandler{Tokens: authorizer, Store: applications, Auth: cfg.AuthBindingClient}
 	api.BindingRevocations = &httpapi.BindingRevocationHandler{Tokens: authorizer, Store: applications, Auth: cfg.AuthBindingClient}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
+	if communitySpaceClient != nil {
+		go registry.RunCommunityRosterExpiryWorker(workerCtx, applications, time.Second)
+	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_GAME_INTEGRATION, ":9097")
 	if err != nil {
 		log.Fatal(err)
@@ -108,12 +123,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("game integration principal issuer: %v", err)
 		}
+		if communitySpaceClient != nil {
+			communitySpaceClient.SetPrincipalIssuer(issuer)
+		}
 		ownerClients, err := sessionowners.New(cfg.SessionOwnerConfig, issuer)
 		if err != nil {
 			log.Fatalf("game integration session owner clients: %v", err)
 		}
 		defer func() { _ = ownerClients.Close() }()
 		sessionOrchestrator = registry.NewSessionOrchestrator(applications, ownerClients.Adapters())
+		sessionOrchestrator.CommunityRosterProjector = communitySpaceClient
 		go registry.RunSessionWorker(workerCtx, sessionOrchestrator, 250*time.Millisecond)
 	}
 	if cfg.AuthBindingClient != nil {
@@ -122,10 +141,14 @@ func main() {
 	mux.Handle("/api/v1/game-integrations/", api)
 	if sessionOrchestrator != nil {
 		sessionHandler := httpapi.NewSessionHandler(httpapi.RegistrySessionCredentialVerifier{Store: applications, Key: cfg.CredentialKey}, sessionOrchestrator)
+		playerConsentHandler := httpapi.NewSessionConsentHandler(authorizer, applications)
+		playerKeepGroupHandler := httpapi.NewSessionKeepGroupHandler(authorizer, sessionOrchestrator)
+		playerSnapshotHandler := httpapi.NewPlayerSessionSnapshotHandler(authorizer, applications)
 		mux.Handle("/api/v1/sessions", sessionHandler)
-		mux.Handle("/api/v1/sessions/", sessionHandler)
+		mux.Handle("/api/v1/sessions/", httpapi.NewSessionRoutes(sessionHandler, playerConsentHandler, playerKeepGroupHandler, playerSnapshotHandler))
 		mux.Handle("/api/v1/operations/", sessionHandler)
 		mux.Handle("/api/v1/session-events/", sessionHandler)
+		mux.Handle("/api/v1/community-bindings/", sessionHandler)
 	}
 	mux.Handle("/internal/v1/authorizations/environments/", httpapi.NewInternalPolicyHandler(
 		httpapi.WorkloadVerifier{Key: cfg.AuthWorkloadKey, Now: time.Now,

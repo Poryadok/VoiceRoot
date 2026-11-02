@@ -2225,7 +2225,9 @@ a non-content external-key tombstone without expiry so retry cannot silently
 recreate the resource. A keep-group operation includes only consenting
 participants and never copies the match transcript. Chat owns
 membership, message content, and retention; GIS coordinates through owner APIs
-and has no direct SQL access to Chat.
+and has no direct SQL access to Chat. Keep-group adds its consented participants
+to the permanent group without replacing members added by another successful
+keep-group operation.
 
 SE03/SE04/SE07 in
 [Game Integrations acceptance](../testing/game-integrations-acceptance.md)

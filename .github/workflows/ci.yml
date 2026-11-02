@@ -1168,7 +1168,7 @@ jobs:
       needs.changes.result == 'success' &&
       needs.changes.outputs.integration_go_services != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -1186,6 +1186,18 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go test -timeout 20m ./...
+      - name: Space to User capture and Ban integration
+        if: matrix.service == 'space'
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -tags spacebanintegration -timeout 15m ./internal/store -run '^TestNativeBanThroughUserProcessCapture$' -count=1
+      - name: Protected Space Ban to User process integration
+        if: matrix.service == 'space'
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -tags spacebanintegration -timeout 15m ./internal/grpcsvc -run '^TestPublicSpaceBanThroughUserProcessCapture$' -count=1
 
   staging-images-push:
     needs: changes

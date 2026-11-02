@@ -271,6 +271,37 @@ func TestPlayerRosterMutationsCannotChangeManagedChat(t *testing.T) {
 	require.Equal(t, 1, countMembers(t, chatStore, created.ChatID))
 }
 
+func TestAddManagedChatMembersOlderSnapshotPreservesLaterMembers(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	pool := startChatDBForStoreTest(t, ctx)
+	applyChatMigrationsForStoreTest(t, ctx, pool)
+	chatStore := &DMStore{Pool: pool}
+	app, environment := uuid.New(), uuid.New()
+	created, err := chatStore.ProvisionManagedChat(ctx, ManagedChatCreate{
+		ApplicationID: app, EnvironmentID: environment, OperationID: uuid.New(),
+		ExternalKey: "keep-group:out-of-order", RequestHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Keep group",
+	})
+	require.NoError(t, err)
+	a, b := uuid.New(), uuid.New()
+	younger := ManagedChatMemberAddition{ApplicationID: app, EnvironmentID: environment, OperationID: uuid.New(), ChatID: created.ChatID,
+		RequestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ProfileIDs: []uuid.UUID{a, b}}
+	older := ManagedChatMemberAddition{ApplicationID: app, EnvironmentID: environment, OperationID: uuid.New(), ChatID: created.ChatID,
+		RequestHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", ProfileIDs: []uuid.UUID{a}}
+	_, err = chatStore.AddManagedChatMembers(ctx, younger)
+	require.NoError(t, err)
+	_, err = chatStore.AddManagedChatMembers(ctx, older)
+	require.NoError(t, err)
+	replayed, err := chatStore.AddManagedChatMembers(ctx, younger)
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	require.Equal(t, 2, countMembers(t, chatStore, created.ChatID))
+	require.Equal(t, "member", memberRole(t, chatStore, created.ChatID, a))
+	require.Equal(t, "member", memberRole(t, chatStore, created.ChatID, b))
+}
+
 func countMembers(t *testing.T, chatStore *DMStore, chatID uuid.UUID) int {
 	t.Helper()
 	count, err := chatStore.CountChatMembers(context.Background(), chatID)

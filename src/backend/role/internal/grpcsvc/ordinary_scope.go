@@ -13,6 +13,7 @@ import (
 	"voice/backend/role/internal/principalgrpc"
 	"voice/backend/role/internal/roleevents"
 	"voice/backend/role/internal/store"
+	"voice/backend/role/permissions"
 )
 
 // ordinaryEventBuffer defers every ordinary domain event until the database
@@ -176,6 +177,20 @@ func (s *RoleGRPC) GetMemberRoles(ctx context.Context, req *rolev1.GetMemberRole
 }
 
 func (s *RoleGRPC) CheckPermission(ctx context.Context, req *rolev1.CheckPermissionRequest) (*rolev1.CheckPermissionResponse, error) {
+	if req.GetPermissionName() == permissions.MemberBan {
+		if err := principalgrpc.RequireBanPermission(ctx, req); err != nil {
+			return nil, err
+		}
+		response, err := s.checkQualifiedSpaceDecision(ctx, req, permissions.MemberBan)
+		if err != nil {
+			return nil, err
+		}
+		p, _ := principal.FromContext(ctx)
+		if ctx.Err() != nil || !p.ExpiresAt.After(time.Now()) {
+			return nil, status.Error(codes.Unavailable, "ban permission expired")
+		}
+		return response, nil
+	}
 	if p, verified := principal.FromContext(ctx); verified && (p.Issuer == "messaging" || p.Issuer == "voice") {
 		if err := principalgrpc.RequireWorkloadDecision(ctx, req); err != nil {
 			return nil, err

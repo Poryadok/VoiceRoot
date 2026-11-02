@@ -832,7 +832,9 @@ consent and service credentials. Conservative invalidation may advance several
 times in one status mutation. Deletes and status-only `revoking → revoked`
 writes invalidate the source. Rollback preserves the floor; floor reset/removal,
 TRUNCATE and downgrade are refused. Preflight and every read require clean
-catalog32, canonical owning tables and pinned clock trigger/function bodies.
+catalog33, canonical owning tables and pinned clock trigger/function bodies.
+The atomic forward recovery and strict supported-layout guards are defined in
+[GIS forward33 compatibility](../testing/gis-forward33-exec-plan.md).
 State and clock share one read-only repeatable-read transaction with a one-second
 whole-read budget including pool checkout. Oversized/malformed/incomplete state
 fails closed. Time-only expiry preserves raw bytes/revision; a response validity

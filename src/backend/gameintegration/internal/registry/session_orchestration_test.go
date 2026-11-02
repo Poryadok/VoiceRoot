@@ -53,6 +53,12 @@ func (s *sessionOwnerScript) result(stage string, request SessionOwnerRequest) (
 		receiptID = request.OperationID
 	}
 	receipt := SessionOwnerReceipt{ResourceID: uuid.New(), ReceiptID: receiptID, RequestHash: request.RequestHash}
+	if stage == "chat_roster" {
+		receipt.ResourceID = request.ChatID
+	}
+	if stage == "voice_roster" {
+		receipt.ResourceID = request.VoiceRoomID
+	}
 	s.receipts[key] = receipt
 	s.sideEffects[key]++
 	if committed := s.committed[stage]; committed != nil {
@@ -78,6 +84,9 @@ func (s *sessionOwnerScript) adapters() SessionOwnerAdapters {
 		},
 		ProvisionVoice: func(_ context.Context, in SessionOwnerRequest) (SessionOwnerReceipt, error) {
 			return s.result("voice_provision", in)
+		},
+		ApplyVoiceRoster: func(_ context.Context, in SessionOwnerRequest) (SessionOwnerReceipt, error) {
+			return s.result("voice_roster", in)
 		},
 		ApplyRoleGrants: func(_ context.Context, in SessionOwnerRequest) (SessionOwnerReceipt, error) {
 			return s.result("role_apply", in)
@@ -105,6 +114,12 @@ func startT31SessionStore(t *testing.T) (*Store, context.Context) {
 	require.NoError(t, err, "T31 scoped operation identity migration must be installed")
 	_, err = pool.Exec(ctx, string(scopeMigration))
 	require.NoError(t, err)
+	for _, name := range []string{"000015_t32_session_authority.up.sql", "000016_t32_session_retention.up.sql"} {
+		body, err := os.ReadFile(filepath.Join("..", "..", "..", "migrations", "game_integration_db", name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(body))
+		require.NoError(t, err)
+	}
 	return &Store{Pool: pool}, ctx
 }
 
@@ -295,7 +310,8 @@ func TestSessionOrchestratorWaitsForEveryOwnerReceiptBeforeAtomicActiveOutbox(t 
 		{owner: "chat_create", stage: "accepted"},
 		{owner: "chat_roster", stage: "chat_ready"},
 		{owner: "voice_provision", stage: "roster_ready"},
-		{owner: "role_apply", stage: "voice_ready"},
+		{owner: "voice_roster", stage: "voice_ready"},
+		{owner: "role_apply", stage: "roster_lease_ready"},
 	} {
 		owners.blocked[step.owner] = true
 		_, err = orchestrator.AdvanceOne(ctx, operation.OperationID)
@@ -382,6 +398,8 @@ func stageAfterOwnerReceipt(owner string) string {
 		return "roster_ready"
 	case "voice_provision":
 		return "voice_ready"
+	case "voice_roster":
+		return "roster_lease_ready"
 	case "role_apply":
 		return "grants_ready"
 	default:
@@ -780,6 +798,9 @@ func advanceSessionUntil(t *testing.T, ctx context.Context, orchestrator *Sessio
 			return
 		}
 		_, err = orchestrator.AdvanceOne(ctx, operationID)
+		if errors.Is(err, ErrSessionLeaseLost) {
+			continue
+		}
 		require.NoError(t, err, "advance from durable stage %s", operation.Stage)
 	}
 	t.Fatalf("operation %s did not reach session_status %q", operationID, sessionStatus)

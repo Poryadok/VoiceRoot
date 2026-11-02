@@ -12,14 +12,116 @@ password and JWKS CA override; Space's HTTPS JWKS is selected from
 capture; no default port or ordinary User listener supplies capture authority.
 
 Partial or malformed transport settings fail startup before health or gRPC
-admission. Complete transport configuration currently also fails startup with
-`qualified User capture source unavailable`: the accepted production source
-custody/reopen contract and qualified opener are still missing. No capture
-listener is started, and startup does not initialize identity keys, bootstrap a
-source or activate writer guards. Entirely absent capture settings preserve the
-existing startup behavior. This configuration correction does not implement
-canonical SQL capture, production listener activation or complete Space bans.
-The remaining owner decision is recorded in [Backend gaps](../todo/backend.md#space).
+admission. Entirely absent capture settings preserve the existing startup path.
+Capture-only custody, identity or JWKS settings without the dedicated listener
+also fail startup instead of silently selecting the legacy path.
+When enabled, User also requires:
+
+- A verified TLS `DATABASE_URL`, with no libpq `PG*` environment overrides;
+  `USER_IDENTITY_KEY_MANIFEST` and `USER_IDENTITY_KEYS_DIR` for the complete
+  retained identity keyset.
+- `USER_CUSTODY_ADDR`, `USER_CUSTODY_TLS_CA_FILE`,
+  `USER_CUSTODY_TLS_SERVER_NAME`, `USER_CUSTODY_TLS_CERT_FILE`,
+  `USER_CUSTODY_TLS_KEY_FILE`, `USER_CUSTODY_SIGNING_KEYS_DIR`,
+  `USER_CUSTODY_ACTIVE_KID` and `USER_CUSTODY_HEARTBEAT_TIMEOUT`.
+- `USER_CUSTODY_EPOCH`, `USER_CUSTODY_SOURCE_ID`,
+  `USER_CUSTODY_HISTORY_GENERATION`, `USER_CUSTODY_USER_SOURCE_GENERATION` and
+  `USER_CUSTODY_KEYSET_DIGEST`, pinned from independent custody evidence.
+- `USER_PRINCIPAL_JWKS_LISTEN`, `USER_PRINCIPAL_JWKS_TLS_CERT_FILE`,
+  `USER_PRINCIPAL_JWKS_TLS_KEY_FILE`, and the `USER_IDENTITY_AUTH_*` protected
+  Auth-parent transport settings.
+
+User publishes its public JWKS before waiting up to five minutes for custody, then requires a
+qualified v2 stream and verifies the actual database's system identifier,
+database name/OID, identity generations, complete keyset and active guards in
+one source transaction. It installs one guarded profile store for its service
+and consumers and registers capture only on the dedicated Space principal
+listener. Each capture takes its own held custody stream and repeats the
+physical check inside its actual User transaction. Startup never initializes a
+source or activates guards.
+
+The custody service starts closed. An optional operator endpoint requires all of
+`CUSTODY_OPERATOR_LISTEN`, `CUSTODY_OPERATOR_TLS_CERT_FILE`,
+`CUSTODY_OPERATOR_TLS_KEY_FILE`, `CUSTODY_OPERATOR_CLIENT_CA_FILE`,
+`CUSTODY_OPERATOR_CLIENT_CERT_SHA256`,
+`CUSTODY_OPERATOR_SIGNER_PUBLIC_KEY_FILE`, `CUSTODY_SOURCE_ADMIN_DATABASE_URL`,
+`CUSTODY_SOURCE_DATABASE_URL`, `CUSTODY_USER_KEY_MANIFEST` and
+`CUSTODY_USER_KEYS_DIR`. It uses mutual TLS and pins the client leaf certificate
+to the configured lowercase SHA-256 digest; certificate rotation requires a
+coordinated configuration update. `GET /challenge` exposes the
+current leader's one-use challenge and `POST /open` accepts a short-lived
+Ed25519-signed decision that binds separately retained source/restore, writer
+deployment and Auth evidence digests. Authenticated `POST /close` closes admission, drains
+outstanding permits, stops that leader, fences its source and writer sessions,
+and exits the controller; a later opening needs recovery and a new decision.
+Once started, fencing continues even if the operator disconnects. Orderly
+operator-enabled server shutdown also attempts the same drain and physical
+fence before releasing its database connections, and reports failure if the
+fence cannot be completed. Forced termination cannot perform this cleanup.
+The offline
+`sourcecustody sign-open` command reads a
+reviewed JSON decision on stdin and a PKCS#8 Ed25519 private key from
+`CUSTODY_OPERATOR_SIGNER_PRIVATE_KEY_FILE`; it writes the signed decision to
+stdout. Keep that signing key under the independent custodian's control.
+`GuardCutover` must be explicitly signed to activate guards on a fenced,
+previously inactive source; a previously active guard must not be reactivated.
+
+The custodian must independently establish and preserve the asserted complete
+writer deployment, Auth continuity and exclusive administrative, network,
+restore and promotion custody. A signature, a database identifier or this
+endpoint does not prove those facts. Before a new operator-enabled controller
+takes leadership, it checks the recorded phase and, if opening was interrupted
+or the previous incarnation was active, fences the recorded source and writer.
+Recovery disables connections and drains source and writer sessions before
+recording `RECOVERED_CLOSED`; a live leader prevents the recovery attempt.
+The `recover-activation` command also performs this operation with explicit
+physical-source and writer-role inputs. A new leader must receive a fresh
+challenge and new signed decision. `RECOVERY_REQUIRED` alone does not authorize
+reopening.
+The optional, separately operated `watch-activation` command uses the same
+explicit physical-source and writer-role inputs as `recover-activation`. After
+checking an active leader and its source binding, it emits `WATCHING`, monitors
+the leader lock, and holds that lock while it fences the source and writer after
+leader loss. If a different leader takes the lock first, the monitor closes
+admission and waits a bounded time for the lock without terminating that leader;
+it reports failure if it cannot complete the fence. It exits after recovery or
+on an error. If no leader is present at startup, or leadership is lost during
+startup verification, it attempts recovery without emitting `WATCHING` when it
+can acquire the leader lock and validate the recorded source.
+On a normal stop after `WATCHING`, it attempts to terminate the same observed
+leader session and fence the source before exiting. It does not terminate a
+replacement leader, and reports failure if it cannot obtain the lock and fence
+within the bounded shutdown period. Operators must allow time for this work;
+forced termination cannot perform it.
+
+The monitor does not gate opening and cannot fence if it is itself absent or
+cannot reach either database. `WATCHING` is not proof of future supervision,
+exclusive custody or source continuity. Independent supervision, a safe
+admission gate, automatic fencing under monitor loss, and a complete deployed
+Ban proof remain open; do not enable this path without those controls. See
+[Backend gaps](../todo/backend.md#space).
+
+The planned supervised admission contract is not implemented by `WATCHING`.
+It requires a separately authenticated monitor to arm while the writer is
+`NOLOGIN`, using responses bound to the current leader challenge and the digest
+of the complete signed opening decision. The controller issues a fresh random
+nonce and increasing sequence for each probe; a valid response expires at the
+original local monotonic deadline and cannot be replayed to extend authority.
+Opening and permit issuance require live supervision. Loss or expiry revokes
+that controller incarnation permanently and starts bounded recovery; a later
+heartbeat cannot reopen it. A new leader requires a new challenge, monitor
+enrollment and signed opening decision. This contract provides bounded
+admission revocation, not a substitute for independent source-side fencing,
+session termination or restore and promotion custody.
+
+For an existing version-22 identity source, `quarantine-existing` first fences
+the supplied physical database. `check-existing-identity` then requires the
+independent control/source system IDs, database name/OID, source ID and epoch,
+`CUSTODY_HISTORY_GENERATION`, `CUSTODY_USER_SOURCE_GENERATION`,
+`CUSTODY_KEYSET_DIGEST`, `CUSTODY_USER_KEY_MANIFEST` and
+`CUSTODY_USER_KEYS_DIR`. It checks the retained identity state and publishes
+only a `CLOSED` control record. It does not create lineage, prove currentness,
+or authorize capture: a separately reviewed signed opening is still required.
 
 ## Notification primary lookup (BE-118 prerequisite)
 
@@ -67,18 +169,26 @@ acceptance require their separate version-bound proof.
 
 ## Owning authority source catalog
 
-The authority source serves only exact clean `user_db` version **21**. Migrations
-20 (`profile_last_seen`) and 21 (pending organization-challenge cleanup and its
+The authority source serves exact clean `user_db` versions **21** and **22**.
+For version 21, migrations 20 (`profile_last_seen`) and 21 (pending organization-challenge cleanup and its
 unique index) preserve the source's four relations, columns, constraints,
 indexes, eleven triggers and five function bodies. The real pinned migrator
 qualification compares their DDL before/after 19→21 and verifies the unchanged
-authority revision and profile tuple. Runtime source queries and function hashes
+authority revision and profile tuple. The authority projection and function hashes
 remain unchanged; dirty, older and unknown versions still fail closed.
 
 Migration19's permanent authority floors and inactive fences remain forward-only.
 The maintenance oracle returns through the unrelated additive migrations to19,
-then proves that its DOWN is refused and retained fences survive. This exact21
-qualification grants no future schema version, identity-association activation or
+then proves that its DOWN is refused and retained fences survive. The User
+authority reader also accepts exact22 after checking the named relations,
+triggers and function bodies in the generated catalog under its read transaction.
+This check does not qualify the complete identity schema, constraints or indexes.
+Privileged DDL outside the migration protocol is outside the lock guarantee.
+A version hint does not grant authority: the locked transaction rechecks the
+exact clean version. The
+exact21 reader rejects identity-migration artifacts rather than treating a
+relabelled identity schema as 21. This reader qualification does not activate
+identity association or establish source custody, writer readiness, or
 cross-service/runtime acceptance.
 
 ## Обзор
