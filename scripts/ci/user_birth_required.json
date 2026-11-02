@@ -1,0 +1,16 @@
+{
+  "user": [
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureAtomic"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureSubscriptionCap"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureOutboxFailureRollsBack"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureDoesNotAllowMixedWriter"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCapturePreservesLegacyMode"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureRejectsDifferentPool"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureDoesNotFallbackWhenAuthorityFails"],
+    ["voice/backend/user/internal/store", "TestSecondaryProfileBirthCaptureRetriesWholeTransaction"],
+    ["voice/backend/user/internal/store", "TestPrimaryProfileBirthCaptureAtomic"],
+    ["voice/backend/user/internal/store", "TestPrimaryProfileBirthCaptureIdempotent"],
+    ["voice/backend/user/internal/store", "TestPrimaryProfileBirthCaptureOutboxFailureRollsBack"],
+    ["voice/backend/user/internal/store", "TestPrimaryProfileBirthCaptureConcurrentEnsure"]
+  ]
+}

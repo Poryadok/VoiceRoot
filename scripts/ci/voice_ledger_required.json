@@ -1,0 +1,5 @@
+{
+  "voice": [
+    ["voice/backend/voice/internal/roomlifecycle", "TestRedisLedger_RealServerAtomicity"]
+  ]
+}

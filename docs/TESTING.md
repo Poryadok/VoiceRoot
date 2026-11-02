@@ -67,21 +67,21 @@ inputs расширяют проверку. Правила PR/master и сохр
 
 ### Help: реальный browser handoff
 
-Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
-и запускает `node scripts/ci/settings-help-browser-handoff.mjs
-src/frontend/build/help-launcher-web <evidence-dir>` из корня (Node.js 24,
-`CHROME_BIN=google-chrome`, `GITHUB_SHA` — полный SHA проверяемого checkout).
-Перед отдельным запуском из `src/frontend` нужны `flutter pub get` и
+The `flutter-help-proof` CI job builds `test/fixtures/settings_help_web_launcher_smoke.dart`
+and runs `node scripts/ci/settings-help-browser-handoff.mjs
+src/frontend/build/help-launcher-web <evidence-dir>` from the root (Node.js 24,
+`CHROME_BIN=google-chrome`, and `GITHUB_SHA` identifying the checkout).
+For a separate run, first run `flutter pub get` and the following from `src/frontend`:
 `flutter build web --release --no-pub --no-web-resources-cdn --target
 test/fixtures/settings_help_web_launcher_smoke.dart --output build/help-launcher-web`.
-Fixture использует настоящий `HelpSheet` и `url_launcher`; mock HTTP изолирует
-только посторонние backend-запросы. В H/V доверенные pointer clicks проходят
-Settings → Help → README / Issues; проверяются `Page.windowOpen.userGesture`,
-точный URL нового target, ровно одна новая вкладка и сохранение Help без ошибки.
-Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOURCE_SHA`,
-если задан) и SHA checkout (`GITHUB_SHA`), JSON событий/targets,
-версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
-загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
+The fixture uses the real `HelpSheet` and `url_launcher`; mock HTTP isolates
+unrelated backend requests. Trusted pointer clicks navigate Settings → Help →
+README / Issues in both orientations, checking `Page.windowOpen.userGesture`,
+the exact new target URL, exactly one new tab, and Help remaining error-free.
+The `settings-help-browser-<run_id>` artifact contains the head SHA
+(`VOICE_SOURCE_SHA` when set), checkout SHA, event and target JSON, Chrome
+version, and six PNGs. It proves browser handoff; external GitHub content and
+binding to the deployed SHA require separate checks.
 
 ### Web cold startup
 
@@ -103,15 +103,15 @@ must produce no API calls or first frame. External network is blocked; bundled
 CanvasKit bytes satisfy the renderer request. This does not qualify a live
 environment, its endpoint tuple, or a coherent backend image bundle.
 
-`node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
-RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
-по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
+`node --test scripts/ci/web-startup.test.mjs` checks the early HTML loader,
+RU/EN, bootstrap/engine/runApp errors, stalled startup, and loader removal only
+on `flutter-first-frame`. The `flutter-startup-proof` job builds the Help fixture and
 `node scripts/ci/web-startup-browser.mjs src/frontend/build/help-launcher-web <output>`
-проверяет настоящий Flutter engine: main.dart.js удерживается HTTP fixture,
-видны текущий Voice icon и статус до запуска Flutter; затем первый кадр снимает
-loader. Отдельный 503 для bootstrap и доверенный pointer click проверяют reload/retry.
-Используются fresh pages, отключённый browser cache, desktop и mobile viewport.
-Для проверки полной production-сборки передайте `src/frontend/build/web` после
+checks the real Flutter engine: the HTTP fixture holds main.dart.js, the current
+Voice icon and status appear before Flutter starts, and the first frame removes
+the loader. A separate bootstrap 503 and trusted pointer click test reload/retry.
+The check uses fresh pages, a disabled browser cache, and desktop and mobile viewports.
+To check a full production build, pass `src/frontend/build/web` after
 `flutter build web --release --no-pub --no-web-resources-cdn`.
 
 Node.js 24, Chrome/Chromium (`CHROME_BIN`) и полный `VOICE_SOURCE_SHA` обязательны.
@@ -127,8 +127,93 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
 
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
 - Утверждения: **`github.com/stretchr/testify`** (`require` / `assert`) — единый стиль по репозиторию для читаемости.
-- Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
+- PostgreSQL/Redis integration tests use **testcontainers-go** (helpers in [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Run `go test` on a host with a reachable Docker daemon. Ryuk is disabled on Windows by `integrationtest.ConfigureDockerTesting()`. Global Testcontainers pruning is unsafe on shared hosts and is disabled; run-owned cleanup and isolation are still being implemented.
+- `scripts/ci/local_heavy_slots.py` is a locking primitive under development. Its default capacity is two; callers can select 1–64 slots on first initialization. All cooperating callers must use the same trusted host-local directory, capacity, and implementation version; conflicting or damaged configuration fails closed. Capacity is fixed for that directory and is not automatically reconfigured. A crash or exception retains the slot for owner-aware recovery. It is not connected to general test execution and does not make parallel Docker runs safe by itself.
+- `ScheduledRun.start_host` and `recover_host` use one OS-wide slot directory: Windows common application data or `/var/tmp` on Linux. They do not fall back to a per-checkout directory if access fails. This location coordinates only callers that use the host scheduler; it does not yet supervise general Testcontainers or Compose commands.
+- `ScheduledRun.recover` can recover a slot bound to an exact `OwnedRun` journal after its owner exits. It checks the slot binding, journal lock, daemon and every owned Docker identity, then cleans those resources before releasing the slot. Uncertain operations and mismatched identities remain unavailable for manual reconciliation. This covers only resources explicitly created through `OwnedRun`; it does not supervise or recover arbitrary Testcontainers, Compose, or child processes.
+- `scripts/ci/local_compose_audit.py` checks a rendered Compose model for known shared ports, resource names, mounts, networks and build tags. It expects a run-specific scratch directory and reads the model from standard input. It is not yet connected to a runner and does not establish Docker resource ownership or safe cleanup.
+- `scripts/ci/local_docker_owned.py` journals creation and cleanup of explicitly created containers, networks and volumes on an internal network without host ports. The opt-in `VOICE_LOCAL_DOCKER_TEST=1 python scripts/ci/local_docker_owned_integration_test.py` checks that cleaning one such run preserves two other owned sets. `VOICE_LOCAL_DOCKER_TEST=1 python scripts/ci/local_docker_owned_cancel_test.py` checks cleanup after a controlled failure and recovery after terminating a fixture owner. Existing Testcontainers and Compose attribution, recovery of uncertain Docker operations, host access and runner integration remain unfinished.
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
+
+PR integration routing includes affected services, existing RPC and build-source
+consumers, and documented event subscribers. Shared package, proto, Auth and
+global wiring changes conservatively select every Go service integration. A
+successful matrix job alone is not proof that a particular opt-in or
+Docker-dependent test ran; inspect its execution evidence and skips.
+
+For a selected PR Go integration matrix, the evidence job rechecks all
+downloaded member diagnostics against `scripts/ci/go_integration_required.json`
+and the candidate/run/attempt. Its source audit requires a clean checkout at
+the exact candidate SHA and rejects untracked Go or workspace inputs. The
+initial list covers observed untagged
+integration cases plus an Analytics adapter sentinel; it does not inventory all
+native, tagged, opt-in, subtest or cross-service tests. Dedicated checks below
+remain required for their separate cases.
+The source audit requires every `*_integration_test.go` entrypoint to appear
+in that baseline or in `scripts/ci/go_integration_exceptions.json`. An
+`unresolved` entry records a coverage gap and is never evidence that it ran;
+the audit does not discover native tests under other filename conventions.
+The baseline also names the Space Bot installation add, remove and tombstone
+proofs, including both add/remove subtests. Their fixture uses the qualified
+native 45, 50 and 51 migration transitions; this does not replace the separate
+tagged Space catalog and account-ban suite.
+
+The affected Space native-installer job also provisions a separate fresh
+current-schema database with the source-bound installer and runs the tagged
+account-ban missing-capture guard through a signed native creator and the
+authenticated ban path, the native creator proof, and the account-ban catalog
+drift proof. The receipt requires all three cases and the eight catalog drift
+subtests, and rejects skips. These checks do not cover the other tagged cases
+that require populated historical 34, qualified 50, or separately qualified 51
+fixtures.
+
+The affected Story PR proof runs `go test -json -count=1 -p 1` for
+`./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an
+owned PostgreSQL service. It requires the named store and protected transport
+cases in `scripts/ci/story_lfp_required.json` and rejects every skipped test
+in those packages. Locally, set `LFP_TEST_DATABASE_DSN` only to an owned,
+disposable PostgreSQL database; the fixtures create and drop schemas there.
+An exit code of zero without that DSN is not evidence for those cases.
+
+The affected User PR proof runs `./internal/identityassociation` against an
+owned PostgreSQL service using `USER_ASSOCIATION_TEST_DSN`. It requires the
+named package inventory in `scripts/ci/user_association_required.json` and
+rejects skips. Its fixtures create and drop databases; point the DSN only at an
+owned disposable PostgreSQL server. The job also runs the protected capture
+transport against the same owned PostgreSQL and an owned Redis service. Its
+named subtests are listed in `scripts/ci/user_capture_required.json`; skips
+are rejected in that focused run. The User admission-eligibility transport
+test also runs with the owned PostgreSQL and Redis services; its named case is
+listed in `scripts/ci/user_admission_required.json`.
+The same PostgreSQL service runs the native primary and secondary profile-birth
+capture tests listed in `scripts/ci/user_birth_required.json`, with skips rejected.
+
+The affected Notification PR proof runs `./internal/chatquota` with
+`BE195_REDIS_ADDR` pointing to an owned Redis service, requires the named cases
+in `scripts/ci/notification_quota_required.json`, and rejects skips. Use only a
+disposable Redis server for the local real-Redis concurrency test.
+
+The affected Role PR proof runs `TestRole13` in `./internal/store` against an
+owned PostgreSQL server via `ROLE_MIGRATION_TEST_DSN`. The fixtures create and
+drop disposable databases. The named rollback and concurrency cases in
+`scripts/ci/role_migration_required.json` must run without skips.
+The same affected job also prepares an owned Role version 20 catalog from the
+ordered migration files and runs `TestBootstrapActualRole20PG` with owned Redis;
+that historical-catalog proof does not replace current-schema migration checks.
+The affected Bot PR proof uses an owned PostgreSQL server through
+`BOT_MEMBERSHIP_TEST_DATABASE_URL` and requires both native membership cases in
+`scripts/ci/bot_membership_required.json` without skips.
+The affected Voice PR proof runs the real Redis ledger atomicity case with an
+owned Redis server via `VOICE_R18_REDIS_TEST_ADDR` and rejects skips. The
+source-disabled later-slice crash harness seams remain separate and are not
+claimed as passing by this proof.
+The affected Messaging PR proof runs the immutable thread-list node and
+rollback test against owned PostgreSQL via `THREADLIST_TEST_DATABASE_URL` and
+rejects skips.
+The affected Space PR proof enables the `integration` tag and uses an owned
+PostgreSQL server configured to run a real, cost-delayed autovacuum worker.
+It requires `TestMaintenanceWindowWithRealAutovacuum` without skips and checks
+that the actual worker remains present while the maintenance window is valid.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.
@@ -164,6 +249,14 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
   must HOLD; restored state verifies without migration or resealing. The test
   drops only the exact database it created; discard the private server afterward.
   This bounded source regression does not prove full Compose/Gateway startup.
+  The separate `TestCommittedPhaseFailureNeverAutoResumes` also requires
+  `NATIVE_INSTALLER_TEST_FAILURE_HELPER`: build
+  `./internal/nativeinstaller/testdata/evidencefailure` with the same source
+  revision, backend Go source digest and migrate executable digest as the
+  production binary. The [CI job](../.github/workflows/ci.yml) shows the exact
+  build flags. Run it only against a fresh owned private server; its nine
+  subtests deliberately interrupt evidence writes and verify that the production
+  installer refuses to resume each retained database.
 - Space maintenance-window regression: on an owned disposable PostgreSQL server
   with absent `space_db`, configure `autovacuum_naptime=1s`,
   `autovacuum_vacuum_cost_delay=20ms` and `autovacuum_vacuum_cost_limit=1`.
@@ -537,7 +630,304 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Developer Portal | `cd src/developer-portal && npm ci && npm test && npm run build` (как job **`developer-portal`** в CI) |
 | Admin / Portal runtime config | Run each app's `npm test`, `npm run lint`, `npm run build`; from root run `node src/admin/browser/runtime-config.mjs src/admin/dist admin` and repeat with `src/developer-portal/dist portal`. Run `python3 src/admin/browser/runtime-config-manifest-test.py`, `python3 scripts/prod/frontend-runtime-render_test.py`, and `python3 scripts/staging/check-frontend-runtime-config_test.py`. The Chromium test checks one built asset identity across two origin bindings, missing/invalid/wrong-origin zero-API behavior and Retry. |
 
-Дополнительно: **`make build-all-breaking`** — то же + `buf breaking` против локальной ветки `master` (на PR в CI база другая — см. ниже). Хостовый buf: `make buf-lint`, `make buf-format`, `make buf-breaking`. После ручного прогона интеграционных тестов без `build-all`: **`make testcontainers-prune`** (удаляет только контейнеры с label `org.testcontainers`, не трогает `voice-*` compose). Контракт path-filter / promote matrix / **`ci-gate`**: **`make -j4 ci-script-tests-pr`** для текущих inputs; **`make ci-script-tests`** включает полный исторический аудит (parity с job `staging-stack-lock` drift-check — **`make image-catalog-drift-check`**). Проверка exact current merge запускается отдельно, команды ниже.
+Additionally, `make build-all-breaking` runs `buf breaking` against local `master`; PR CI uses its configured base. Host buf commands are `make buf-lint`, `make buf-format`, and `make buf-breaking`. `make testcontainers-prune` deliberately refuses unscoped cleanup. Run `make -j4 ci-script-tests-pr` for current path-filter, promotion-matrix and gate inputs; `make ci-script-tests` includes the historical audit. Exact current-merge verification is separate, as described below.
+
+The hosted Flutter job runs the AppIcon, draft storage, linked OAuth and
+presigned-upload browser suites in Chrome. It validates the JSON event stream
+against all four files and rejects skipped tests. The draft storage suite is
+browser-only; a VM run cannot prove it. The local isolated Flutter runner is
+still diagnostic and does not issue a complete preflight receipt. It checks
+captured source files and rejects added files or links outside its declared
+Flutter output paths after each command. Those output paths, the SDK and
+external package provenance remain unbound inputs; a successful diagnostic
+therefore cannot authorize a PR handoff.
+The full discovered inventory is divided into bounded VM and Chrome commands;
+each batch has its own event stream, and every required suite must appear in its
+assigned platform's results. This avoids Windows batch-command length limits.
+On Windows each diagnostic command runs in an owned Job Object with a bounded
+execution wait and verified descendant cleanup. Linux execution is refused until
+equivalent containment is available. Process creation, filesystem operations,
+temporary output growth, and external SDK provenance are not yet bounded or
+fully verified, so this remains diagnostic evidence only.
+When tests skip, the diagnostic records each skipped identity and its matching
+sections in the captured E2E catalog; an empty section list remains unmapped.
+Catalog membership is not execution evidence and does not waive a skip.
+When the accessibility capture suite is selected, the runner enables its
+capture switch and requires both H/V PNGs inside the isolated snapshot; their
+hashes are recorded as diagnostic artifacts.
+
+`python3 scripts/ci/local_preflight.py --base <full-base-sha> --head
+<full-head-sha> --head-ref <branch> --output <new-directory-outside-checkout>
+--flutter <flutter> --go <go-executable>`
+uses the shared local plan, runs selected Go service short-test diagnostics and
+the full Flutter diagnostic when selected. The Go executable must match the
+version of the digest-pinned Go image, which must already be present locally;
+the shared planner also requires `jq`. Go runs use host-wide slots, isolated
+source and Docker resources, limit Go runtime and package parallelism to two,
+and report individual skipped tests. The shared
+pkg non-short job, integrations and other unimplemented checks remain
+`not_run`. The report remains incomplete and the command exits nonzero even
+when all implemented diagnostics succeed: it cannot authorize a PR handoff.
+
+The Windows-only `--handoff` mode supports plans containing only
+`current-diff-contract`, or that check plus `match-squad-overlay`. Fetch
+`origin` immediately before running it, then supply the fetched master SHA,
+the clean committed PR head SHA, the PR branch name, and a new output directory
+outside the checkout. It verifies both locally fetched refs, rebuilds the plan,
+constructs the two-parent local merge candidate and executes the canonical
+contract, then checks the plan and refs again. For the overlay plan, supply
+`--overlay-image-id` with the pinned local Linux Python image ID. The command
+executes the selected tests and checks their logs, source archive, ownership
+journal, resource removal and slot release. The local image's publisher
+provenance and exclusive Docker daemon/socket custody remain assumptions;
+interruption and crash recovery acceptance is not established. It refuses a
+base that is not an ancestor of the head and any additional selected checks. This is a
+local handoff proof; fetched refs are not a live remote observation and the
+GitHub merge-candidate checks remain required. Run the command again after any
+source, base, head or selected-check change; do not reuse its JSON as a verifier.
+
+The local current-diff diagnostic runs private Git preparation and the four
+subsequent Git/validator commands under a Windows Job with bounded output.
+Snapshot capture uses its own supervisor and does not bound its temporary files
+while they are written. On POSIX subprocess timeouts do not prove cleanup of
+descendants. The synthetic target does not prove the GitHub merge candidate.
+The local protobuf diagnostic uses the same Windows Job supervision for its
+Git, tool and test commands and limits each captured stream to 16 MiB, including
+the binary baseline archive. Exceeding that limit fails the diagnostic. POSIX
+subprocess timeouts likewise do not prove descendant cleanup.
+With `--protobuf-component`, the selected protobuf check additionally runs the
+immutable-base regressions and PR breaking check against a locally constructed
+two-parent candidate, verifies bounded logs and rejects skipped tests. Its
+component result does not complete the overall preflight or substitute for the
+GitHub merge candidate. Tool and dependency publisher provenance remains
+unbound; fetch refs immediately before execution.
+
+The optional `--ci-policy-assets` input runs the selected CI-script policy shard
+as a component: it verifies all Linux recipe logs and owned Docker cleanup, then
+runs the exact Windows-only cases skipped by that Linux environment. Its
+component receipt does not complete the four-shard `ci-script-tests` job or the
+overall preflight; the other three shards and all other selected checks remain
+required. Fetched refs, external tool and dependency provenance, and exclusive
+Docker daemon/socket custody remain limitations.
+
+For planner-selected `golangci`, opt in with `--golangci-go <absolute-path>`,
+`--golangci-go-sha256 <digest>`, `--golangci-lint <absolute-path>` and
+`--golangci-lint-sha256 <digest>`. On Windows, the diagnostic materializes the
+captured source and serially runs the hosted job's dependency resolution and
+lint commands for `pkg` and every selected Go module. It checks Go 1.26.10,
+golangci-lint 2.6.1, tool bytes and source identity, limits Go parallelism to two,
+and records command logs.
+Caller-provided hashes identify bytes but do not authenticate tool or downloaded
+dependency provenance. This Windows diagnostic does not prove hosted Linux lint
+parity; the planner check remains `not_run`, and the result cannot authorize handoff.
+
+For planner-selected `match-squad-overlay`, `--overlay-image-id` and
+`--overlay-kubectl` opt into a Linux diagnostic using the pinned Python image already present on the owned
+daemon. It runs the selected source in a network-isolated container with a
+read-only source mount and checks the discovered test count and absence of skips.
+The latter input is an absolute path to Linux/amd64 kubectl v1.34.0 with
+SHA-256 `cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c`;
+the worker verifies its source bytes and the copy in the read-only client.
+Image provenance, daemon custody and crash recovery are not established by this
+diagnostic. The check remains `not_run` and preflight remains incomplete.
+
+When `ci-script-tests` is selected, `--ci-staging-assets <json-file>` supplies
+the local inputs for experimental owned staging, proofs and policy shard executions. The JSON
+object must contain exactly the absolute paths `helper`, `jq`, `postgres_image`,
+`go_image`, `python_image`, `nats_image`, `nats_box_image`, `alpine_image`,
+`packages`, `wheel`, `preservation_go_cache`, `staging_go_proxy`, and `kubectl` for the planner-selected policy shard. The runtime aggregate additionally requires `phase0_jdk` and `phase0_compose`; the preflight projects the exact assets needed by each shard before starting any worker. The worker
+requires its pinned byte hashes and image IDs, a clean checkout matching the
+planned commit and tree, and a full base SHA. Pinned client, Go, Node and Docker
+CLI images must already be present. Missing or mismatched inputs fail closed.
+The caller must maintain trusted control of the supplied assets, Docker daemon
+and private socket. The worker uses an owned internal network and a private
+daemon; uncertain operations retain the journal and slot for reconciliation.
+Its serial, offline Go execution and adapted preservation fixture differ from
+hosted CI. The preservation prebuild alone uses `GOGC=30` and a 1200 MiB Go
+soft memory target; this does not bound total container memory or establish why
+a previous compiler process was killed. Startup, filesystem work and disk growth are not independently
+bounded. The maintained staging path has not yet passed a complete real run.
+The policy runner checks 69 recipes and the hosted compiled-source test, with
+source-pinned, individually identified Linux platform skips; any other skip
+fails closed. The policy client requires the pinned Linux/amd64 kubectl v1.34.0
+binary (SHA-256 `cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c`)
+for the real loopback transport test. The hosted runner's kubectl version is
+not pinned by the workflow and has not been established. It uses the owned Python 3.12 client, which differs from the
+hosted step's default system Python. The policy path has not yet passed a
+complete real run. Without the runtime image inputs below, these runs omit runtime and leave `ci-script-tests`
+`not_run` and preflight incomplete even if the staging receipt is produced.
+
+Supplying `--ci-runtime-images <json-file>` as well requests the runtime shard
+after staging, proofs and policy. The staging-assets JSON must then also contain
+absolute paths `phase0_jdk` and `phase0_compose`: the Linux/amd64 Eclipse Temurin
+25.0.2+10 JDK archive (SHA-256 `987387933b64b9833846dee373b640440d3e1fd48a04804ec01a6dbf718e8ab8`)
+and Docker Compose v2.39.4 binary (SHA-256 `7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4`).
+The worker checks these bytes and transferred copies before use. The runtime-images JSON object has exactly `postgres`, `docker_cli`
+and `python` records; each record contains an absolute `archive` path, its
+`sha256`, and an `image_id`. PostgreSQL must match the fixture's fixed image ID;
+the caller authenticates the Docker 27 CLI and Python bookworm image identities
+and maintains custody of all archives. The owned private daemon loads and
+checks the supplied images. Phase0 retains the hosted non-root suite and verifies
+its sole source-pinned root-only skip separately in an owned network-none client
+with a read-only source volume. The worker binds both outputs to the exact test
+inventory; no unaccounted skip is accepted. The pinned story-media script is adapted to use the
+preloaded PostgreSQL image, an offline build and an owned private socket and
+read-only source mirror. These adaptations and image provenance are not hosted
+CI parity. The runtime path has not yet passed a complete real run, and
+`ci-script-tests` remains `not_run`.
+
+When the planner selects `backend-auth`, an optional private Auth diagnostic
+can run one selected Testcontainers case by supplying all of `--auth-helper`,
+`--auth-helper-sha256`, `--auth-postgres-archive`,
+`--auth-postgres-archive-sha256`, `--auth-postgres-image-id`,
+`--auth-maven-image-id`, `--auth-maven-cache`, and `--auth-maven-cache-sha256`.
+Paths must be absolute and image identities and SHA-256 values exact. The
+caller must maintain exclusive control of the Docker daemon, network and socket;
+the diagnostic does not authenticate helper, images, tools or Maven cache, or
+establish crash and concurrency acceptance. It reports `incomplete` and leaves
+the full `backend-auth` check `not_run`; it is not a preflight or PR receipt.
+
+For planner-selected `backend-go-integration-pr`, `--go-integration-inputs`
+accepts an absolute path to a JSON object keyed by every selected service. Each
+value contains exactly `helper`, `helper_sha256`, and `archives`. The helper is
+an absolute path; `archives` maps each required image tag to `archive` (absolute
+path), `archive_sha256`, and `image_id`. Chat requires `postgres:16-bookworm`,
+`redis:7.4-alpine`, and `migrate/migrate:v4.18.1`; Bot requires
+`postgres:16-bookworm` and `nats:2.10-alpine`; Search requires
+`postgres:16-bookworm`. Missing, extra or unsupported services and image inputs
+fail before owned execution. A supervised Windows Job worker recomputes the
+source plan. Per-service reports preserve skipped tests and unbound provenance
+limitations; the check remains `not_run` and the preflight remains `incomplete`.
+Caller custody of images, helper, Docker daemon and socket is required; this is
+not hosted CI parity or a PR receipt. The policy shard runs the full Go executor
+contract tests as a separate recipe.
+
+An alternative full Auth diagnostic requires `--auth-full-helper`,
+`--auth-full-helper-sha256`, `--auth-full-client-image-id`,
+`--auth-full-maven-cache`, `--auth-full-maven-cache-sha256`,
+`--auth-full-images`, and `--auth-full-images-sha256`. The image manifest maps
+each of `postgres:16-alpine`, `redis:7-alpine`, `redis:7.4-alpine`,
+`nats:2.11-alpine`, and `migrate/migrate:v4.18.1` to an absolute `archive`,
+archive `sha256`, and `image_id`. Repeated image IDs require separately verified
+archives for each tag and are loaded through a journaled private-daemon alias.
+The client image must provide Java, Maven, Bash, `ldd`, and the required shell
+utilities. A locally present pinned Linux Go/Bookworm image supplies GNU Make
+through an owned workspace; its binary hash and version are compared in the
+source and Maven clients, and the Maven client checks dynamic-library availability.
+The image ID identifies local bytes but does not establish publisher provenance.
+The tool identity is checked again after execution. It executes `make auth-test-ci` offline against a private daemon,
+checks the captured Surefire reports, and records non-required skips. The
+diagnostic's `stage.json` records only the last attempted fixed stage; it is
+not evidence that the stage succeeded or that owned resources were cleaned up.
+The caller must authenticate inputs and maintain exclusive daemon, socket and shared
+workspace custody. This diagnostic remains `incomplete`, keeps `backend-auth`
+`not_run`, and does not establish crash recovery or full preflight acceptance.
+
+When the plan selects `compose-config` or `compose-e2e`, the optional fixed
+private Compose fixture requires all five explicit inputs: `--compose-helper`,
+`--compose-helper-sha256`, `--compose-postgres-archive`,
+`--compose-postgres-archive-sha256`, and `--compose-postgres-image-id`.
+It runs a no-network fixture, retains the audited rendered model, and reports
+`incomplete`; the selected Compose checks remain `not_run`. It does not run
+the Voice stack. The caller must control the daemon, socket and evidence files;
+image, helper and tool provenance, concurrent failures and crash recovery are
+not established by this diagnostic. Its journal check relies on the trusted
+producer and is not an independent Docker or slot observation.
+
+The standalone Windows-only `python -B scripts/ci/local_nats_hosted_diagnostic.py
+<request.json>` runs the two named hosted NATS scripts in an owned private
+daemon. The JSON object has exactly `root`, `source`, `source_copy`, `deps`,
+`deps_archive`, `output`, `helper`, `helper_hash`, `jq`, `jq_hash`, and `images`.
+`source` is a captured source identity and `source_copy` its verified private
+materialization; `deps` and `deps_archive` are the matching private Go dependency
+acquisition and archive. `images` is an ordered array of `[archive path,
+archive SHA-256, image ID, tag]` for `nats:2.12-alpine`,
+`natsio/nats-box:0.18.0`, and `alpine:3.22`. Helper, jq and image paths must be
+absolute; hashes and IDs must match the supplied files and images. The caller
+authenticates these inputs and controls the daemon, private socket, network and
+files throughout. Each script must produce its own expected marker without its
+skip marker, and source and inner resources are rechecked after each run. The
+worker and broker use isolated Python imports (`-I -S`); only an explicit set
+of project modules is available to the worker. The caller must trust the
+parent Python interpreter and its ambient import environment. The Windows
+diagnostic broker provides a bounded wait. A timeout or
+worker failure can leave a journal and slot needing explicit recovery; the
+broker does not prove generic Docker-daemon cancellation. Process startup,
+filesystem operations and temporary disk growth have separate bounds or none.
+The report is always `incomplete`: the remaining shards, registry tag drift, Go
+ziphash provenance, filesystem and disk bounds, crash and foreign-sentinel
+acceptance remain unproven. This diagnostic cannot authorize a PR handoff.
+
+The staging preservation script retains its hosted `/var/tmp` behavior by
+default. Its optional `--owned-temp-root <absolute-private-directory>` creates
+the fixture under a canonical, non-symlink, mode-0700 directory owned by the
+non-root caller. The caller must retain exclusive custody and arrange the same
+private path in its isolated Docker daemon; the option alone does not establish
+source identity, daemon isolation, or safe cleanup after a crash.
+
+When the plan selects `protobuf`, the local diagnostic runs Buf lint, format,
+breaking against the captured immutable base, verifies Go generated-code drift
+with a private Git index, checks the Auth proto copy, compiles Auth with a private Maven
+repository, and runs the R23 contract suite including its Java generated
+consumer on an isolated source snapshot. It records tool versions, binary hashes,
+command logs and test counts, and requires no skipped R23 tests. It requires
+Go 1.26.10, Buf 1.50.0,
+JDK 25, Maven 3.9, and the CI-pinned Go protobuf generators on `PATH`. This
+diagnostic is still incomplete:
+dependency provenance and other consumer compilation are not yet complete
+preflight evidence.
+
+The separate `flutter-music-proof` job retains the Music capture and playback
+artifacts. Its selector includes frontend sources, shared test support, assets,
+dependency files, design inputs, protobufs, and global or unknown CI changes.
+Only the four independent browser suite files named above are excluded when
+they are the sole changes; mixed changes still select Music. The required-jobs
+gate rejects a missing, skipped, cancelled, or failing selected Music proof.
+Help handoff and web startup run as separate required proof jobs. They use the
+same conservative selection as Music, including shared frontend, design and
+protocol changes; only the four independent browser suite files are excluded
+when they are the sole changes. Each job builds the Help launcher fixture and
+retains the original evidence artifact name. A hosted same-candidate comparison
+passed both checks; two startup loading screenshots differed between runs.
+
+A manual CI dispatch with `profile=full` forces the code scope even when the
+last diff contains only documentation. A code push to `master` also selects the
+full validation jobs while retaining the independently resolved staging image
+build matrix. `full-validation-aggregation` rejects a non-master or mismatched
+checkout, non-successful required jobs, incomplete Go service matrices, and
+unresolved Go integration source inventory. Image promotion and staging deploy
+depend on that aggregation in the same workflow run. The gate currently fails
+because the integration inventory remains unresolved, so these promotions and
+deployments remain blocked until the missing proofs are implemented and pass.
+The source audit is limited to `*_integration_test.go`; other test files and
+generated or external inputs still require source-binding review.
+
+For PRs, the A1 multi-account proof follows its Auth, User, Chat, Messaging,
+Social, Gateway, Realtime, shared-package and protocol inputs. The Flutter
+profile-handoff proof follows all four manifest tests, shared frontend source
+and test support, package inputs, and the same relevant backend boundaries.
+Global and unknown CI changes select both proofs. An unrelated standalone
+frontend test does not select either A1 journey by itself; master full
+validation remains separate.
+
+The main Go CI jobs and dedicated Go integration proofs resolve and test with
+`-mod=readonly`, then reject changes to backend `go.mod` or `go.sum` files,
+including ignored newly created sums.
+The Gateway integration matrix also runs the Linux `live`-tagged leave diagnostic
+parent and requires its 204 and 503 subtests without skips. The child probe is
+an explicitly mapped subprocess helper: its 503 path intentionally fails inside
+the subprocess and the parent verifies that failure and redacted diagnostic.
+The Space native-installer job checks the real 45 and 50 transitions and the
+trusted-50 catalog boundary. A source-bound test helper interrupts evidence
+writing immediately after each migration; tests then perform the actual
+transition and require the catalog and creator cases without skips. The job
+removes only the database it just created in its disposable PostgreSQL service
+before provisioning each next fixture. Interrupted receipts are test input,
+not deployment evidence.
+`make backend-test-ci` uses the same read-only resolution; the explicit
+`make go-mod-tidy-all` target remains available for intentional maintenance.
+Other proof jobs and generated or external inputs still require source-binding
+review before the full run can qualify promotion.
 
 ### Локальные грабли (Windows, compose E2E)
 
@@ -615,13 +1005,22 @@ Self-hosted runner на staging: версия runner **≥ 2.327.1** для node
 `ci-script-tests` — четыре обязательных matrix job: `policy`, `runtime`,
 `staging`, `proofs`, с `fail-fast: false`. Они сохраняют все прежние команды;
 F05–F12 проверяются в `runtime`, а полный F13 replay вынесен в
-`voice-history-audit`. Отдельный `current-diff-contract` обязателен на каждом
+`f13-historical-replay`. Отдельный `current-diff-contract` обязателен на каждом
 PR, включая docs-only: проверяет точные event base/head, два parent commit,
 полное дерево чистого merge, неизменность существующих SQL-миграций
 (blob/type/mode, включая удаление и rename) и source-disabled Voice scope
 текущего diff. Это ограниченный regression guard, не доказательство всей
 исторической цепочки или семантической безопасности произвольного Go-кода.
 Auth/ACL, protobuf, migration/runtime tests и выбранные E2E остаются в gate.
+
+`chat-auth-java-integration` runs for affected Auth, Chat, shared Go and
+protobuf inputs. It compiles the candidate Auth fixture from a clean checkout,
+checks the Maven test report and classpath, then runs the actual Go-to-Java
+interoperability case against fresh PostgreSQL and Redis with no skips. Its
+candidate mode verifies the full checkout identity and preserves the existing
+fixed-pin mode for historical component proofs. The receipt binds the result
+to the CI candidate and attempt; the case uses a synthetic ingress peer and
+does not claim a public end-to-end flow.
 
 `flutter` сохраняет analyze, codegen, a11y, browser proofs и captures.
 Полный unit/widget discovery выполняется в четырёх `flutter-unit-tests`
@@ -653,14 +1052,18 @@ make -j4 ci-script-tests-pr
 Полный прогон — `make ci-script-tests`; отдельно replay —
 `VOICE_CONTRACT_PROFILE=full bash scripts/ci/voice-db-runtime-provisioning-contract_test.sh`.
 
-Полный аудит обязателен перед master release/staging acceptance: на каждом
-push в master `ci-gate` требует `voice-history-audit`. Также он выполняется
-ночью, при любом manual CI dispatch, в PR с изменением исторического
-валидатора/его scope/base helpers, в `codex/voice-master-release-*` и
-`codex/game-sdk-federation-docs`. Такие PR — явное исключение из быстрого
-пути, без исключения из latency-отчёта. Audit хранит SHA checkout и полный
-диагностический log на 14 дней, включая failure; текущая проверка хранит
-base/head/target, digest валидатора и diagnostics.
+The full `voice-history-audit` runs nightly at 02:00 UTC and on a manual full
+CI dispatch. It is not a dependency of `ci-gate` or staging validation.
+Production deployment checks the exact image-tag commit against the latest
+successful scheduled audit and its intervening history. The baseline is reused
+only when the source is an ancestor and every intervening change is known to
+be unrelated; a new merge, unknown inputs, a missing baseline, or an unverifiable history
+cause a fresh full audit. The currently recognized unrelated scope is limited
+to static `src/frontend/assets/` files. The deployment operator may explicitly
+select `skip_voice_history_audit` and provide a single-line reason; the reason
+is recorded in the workflow summary. A fresh audit retains the source SHA and
+diagnostic log as an artifact for 14 days, including on failure. This history
+audit does not replace the current-diff contract or the required PR checks.
 
 Методика, baseline и повторяемый сбор очереди, execution, attempts, mean/p95 —
 [CI gate policy](../.github/ci/gate-policy.md). Цель около 10 минут требует

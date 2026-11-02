@@ -1,4 +1,6 @@
-import 'package:flutter/foundation.dart';
+@TestOn('browser')
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +44,5 @@ void main() {
       expect(await third.read(key), isNull);
       expect(await third.read(other), 'other account');
     },
-    skip: !kIsWeb,
   );
 }

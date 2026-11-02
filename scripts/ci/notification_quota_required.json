@@ -1,0 +1,20 @@
+{
+  "notification": [
+    [
+      "voice/backend/notification/internal/chatquota",
+      "TestQuotaConcurrentLogicalReplayAndSuppression"
+    ],
+    [
+      "voice/backend/notification/internal/chatquota",
+      "TestQuotaConfig"
+    ],
+    [
+      "voice/backend/notification/internal/chatquota",
+      "TestQuotaExpiryReplayAndBadState"
+    ],
+    [
+      "voice/backend/notification/internal/chatquota",
+      "TestQuotaRealRedisConcurrent"
+    ]
+  ]
+}

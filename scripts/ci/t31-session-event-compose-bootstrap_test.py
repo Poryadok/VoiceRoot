@@ -22,6 +22,32 @@ SPEC.loader.exec_module(bootstrap)
 
 
 class ComposeBootstrapEnvironmentTests(unittest.TestCase):
+    def test_each_go_acceptance_phase_verifies_execution(self):
+        workflow = WORKFLOW.read_text(encoding='utf-8')
+        for phase in ('claim', 'reclaim', 'drop', 'replay'):
+            self.assertIn(f'--log "$RUNNER_TEMP/t31-{phase}.log"', workflow)
+        self.assertEqual(workflow.count('--test TestT31ComposeHTTPSClaimInboxEffectAckReclaim'), 4)
+        self.assertIn('--log "$RUNNER_TEMP/t30-chat-retry.log"', workflow)
+        self.assertIn('--test TestT30ComposeChatProvisionLostResponseRetriesRealReceipt', workflow)
+        overlay = (ROOT / 'docker-compose.t31-session-events-e2e.yml').read_text(encoding='utf-8')
+        runner = overlay.split('  t30-chat-retry-runner:', 1)[1]
+        self.assertRegex(runner, r'(?m)^\s+- -v$')
+
+    def test_workflow_routes_shared_contract_and_build_inputs(self):
+        import fnmatch
+        import yaml
+        workflow = yaml.load(WORKFLOW.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+        paths = workflow['on']['pull_request']['paths']
+        for path in ('src/backend/pkg/principal/verifier.go', 'protos/voice/chat/v1/chat.proto',
+                     'src/backend/migrations/chat_db/000001_initial.up.sql',
+                     'src/backend/file/pb/voice/file/v1/file.pb.go',
+                     'src/backend/messaging/pb/voice/events/v1/events.pb.go',
+                     'src/backend/user/pb/voice/common/v1/common.pb.go',
+                     'src/backend/scripts/docker-go-mod-download.sh',
+                     'src/backend/social/main.go', 'scripts/ci/t31-startup-diagnostics.py'):
+            with self.subTest(path=path):
+                self.assertTrue(any(fnmatch.fnmatchcase(path, pattern) for pattern in paths), path)
+
     def test_member_profile_ids_are_sorted_for_gis_validation(self):
         self.assertEqual(
             bootstrap.canonical_member_profile_ids(

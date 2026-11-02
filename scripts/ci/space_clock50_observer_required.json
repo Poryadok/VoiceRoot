@@ -1,0 +1,6 @@
+{"space": [
+  ["voice/backend/space/internal/store", "TestNativeObserverOtherProfileCommunityGap"],
+  ["voice/backend/space/internal/store", "TestNativeObserverOtherProfileCommunityGap/time_gap_cannot_preserve_old_history"],
+  ["voice/backend/space/internal/store", "TestNativeObserverOtherProfileCommunityGap/continuous_unrelated_write_preserves_history"],
+  ["voice/backend/space/internal/store", "TestNativeObserverNoopLeaseGapTuple"]
+]}

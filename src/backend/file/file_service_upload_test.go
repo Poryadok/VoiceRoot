@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -787,6 +789,33 @@ func startFilePostgresBackend(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	if dsn == "" {
 		return integrationtest.StartPostgres(t, ctx, "db", "")
 	}
+	if os.Getenv("BE264_ROOT_TEST_DATABASE_PER_TEST") == "1" {
+		// The caller supplies a private server with CREATE DATABASE permission.
+		// A fresh database retains the real public schema expected by native guards.
+		admin, err := pgxpool.New(ctx, dsn)
+		require.NoError(t, err)
+		name := "root_file_" + strings.ReplaceAll(uuid.NewString(), "-", "_")
+		_, err = admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
+		if err != nil {
+			admin.Close()
+			require.NoError(t, err)
+		}
+		t.Cleanup(func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, dropErr := admin.Exec(cleanup, "DROP DATABASE "+pgx.Identifier{name}.Sanitize())
+			admin.Close()
+			require.NoError(t, dropErr)
+		})
+		parsed, err := url.Parse(dsn)
+		require.NoError(t, err)
+		require.Contains(t, []string{"postgres", "postgresql"}, parsed.Scheme)
+		parsed.Path = "/" + name
+		pool, err := pgxpool.New(ctx, parsed.String())
+		require.NoError(t, err)
+		t.Cleanup(pool.Close)
+		return pool
+	}
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
 	schema := "root_file_" + strings.ReplaceAll(uuid.NewString(), "-", "_")
@@ -844,14 +873,14 @@ func startFileGRPCFull(t *testing.T, pool *pgxpool.Pool, deps grpcsvc.Deps) file
 		deps.Deleter = &recordingDeleter{}
 	}
 	filev1.RegisterFileServiceServer(srv, grpcsvc.New(grpcsvc.Deps{
-		Files:     deps.Files,
-		Presigner: deps.Presigner,
-		Deleter:   deps.Deleter,
-		Clock:     deps.Clock,
-		ChatGuard: deps.ChatGuard,
-		Processor: deps.Processor,
-		Reader:    deps.Reader,
-		Scanner:   deps.Scanner,
+		Files:        deps.Files,
+		Presigner:    deps.Presigner,
+		Deleter:      deps.Deleter,
+		Clock:        deps.Clock,
+		ChatGuard:    deps.ChatGuard,
+		Processor:    deps.Processor,
+		Reader:       deps.Reader,
+		Scanner:      deps.Scanner,
 		Entitlements: deps.Entitlements,
 	}))
 	go func() { _ = srv.Serve(lis) }()

@@ -1,0 +1,12 @@
+{
+  "user": [
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureCanonicalProducerNativeCompleteCohort"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureCanonicalProducerNativeArchiveAndRawErasure"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/auth"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/role"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/gateway"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/moderation"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/canonical-SQL-full-cohort"]
+  ]
+}

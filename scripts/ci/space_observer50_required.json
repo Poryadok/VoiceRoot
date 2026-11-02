@@ -1,0 +1,12 @@
+{"space": [
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/old_body_at50"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/prior_body_at50"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/old_catalog_at50"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/catalog_cost_drift"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/catalog_ACL_drift"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/cost_drift"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/definer_drift"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/search_path_drift"],
+  ["voice/backend/space/internal/store", "TestNativeObserver50DefinitionAndPreimage/ACL_drift"]
+]}

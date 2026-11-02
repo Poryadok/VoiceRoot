@@ -86,3 +86,4 @@ test('custom bootstrap catches load, engine and app failures and never dismisses
     assert.ok(!f.nodes['voice-startup-status'].textContent.includes('private URL'));
   }
 });
+import './web-startup-poll.test.mjs';

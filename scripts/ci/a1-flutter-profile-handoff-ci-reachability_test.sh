@@ -46,18 +46,19 @@ target_count="$(grep -Ec 'make[[:space:]]+compose-a1-flutter-profile-handoff([^[
 [[ "$target_count" -eq 1 ]] || fail "${JOB} must contain exactly one profile-handoff target occurrence, got ${target_count}"
 grep -Eq "VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:[[:space:]]*[\"']?true[\"']?[[:space:]]*$" "$job_file" || fail "${JOB} must set cleanup=true"
 
-trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|a1_t106_live|global)" "$job_file" | sed -E 's/^[[:space:]]*//')"
+trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|a1_t106_live|global|ci_global|full_validation)" "$job_file" | sed -E 's/^[[:space:]]*//')"
 expected_trigger_terms="$(printf '%s\n' \
   "github.event_name == 'schedule' ||" \
-  "(github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||" \
+  "((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true') ||" \
   "github.event_name == 'pull_request' &&" \
   "needs.changes.outputs.global == 'true' ||" \
+  "needs.changes.outputs.ci_global == 'true' ||" \
   "needs.changes.outputs.a1_t106_live == 'true'" \
   "github.event_name == 'push' &&" \
   "github.ref == 'refs/heads/master' &&" \
   "needs.changes.outputs.a1_e2e == 'true'")"
 [[ "$trigger_terms" == "$expected_trigger_terms" ]] || \
-  fail "${JOB} trigger terms must be exactly schedule, full dispatch, or filtered master push"
+  fail "${JOB} trigger terms must preserve filtered PR routing and select full master validation"
 grep -Fq "needs.changes.result == 'success' || needs.changes.result == 'skipped'" "$job_file" || fail "${JOB} must tolerate skipped changes on schedule/manual runs"
 
 grep -Fq 'a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}' "$WORKFLOW" || \
@@ -65,11 +66,17 @@ grep -Fq 'a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}' "$WORKFLOW" ||
 awk '/^a1_t106_live:[[:space:]]*$/ { inside = 1; next } inside && /^[^[:space:]][^:]*:/ { exit } inside { print }' "$FILTERS" >"$filter_block_file"
 [[ -s "$filter_block_file" ]] || fail "path-filters.yml must define a1_t106_live"
 sed -E -e 's/\r$//' -e 's/^[[:space:]]*-[[:space:]]*//' -e "s/^['\"]//; s/['\"][[:space:]]*$//" -e 's/[[:space:]]+#.*$//' "$filter_block_file" >"$filter_entries_file"
-[[ "$(grep -cve '^[[:space:]]*$' "$filter_entries_file")" -eq 2 ]] || fail "a1_t106_live must contain exactly the T055 and T106 test paths"
 grep -Fxq 'src/frontend/test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart' "$filter_entries_file" || \
   fail "a1_t106_live must match the T055 live test path"
 grep -Fxq 'src/frontend/test/t106_account_soft_delete_e2e_live_test.dart' "$filter_entries_file" || \
   fail "a1_t106_live must match the T106 live test path"
+for required in \
+  'src/frontend/test/t107_folders_quick_access_e2e_live_test.dart' \
+  'src/frontend/test/a1_pending_email_reentry_e2e_live_test.dart' \
+  'src/frontend/test/support/**' 'src/frontend/lib/**' 'src/frontend/pubspec.lock' \
+  'src/backend/auth/**' 'src/backend/gateway/**' 'src/backend/messaging/**' 'protos/**'; do
+  grep -Fxq "$required" "$filter_entries_file" || fail "a1_t106_live is missing proof input: $required"
+done
 
 job_block ci-gate >"$gate_file"
 [[ -s "$gate_file" ]] || fail "missing ci-gate workflow block"

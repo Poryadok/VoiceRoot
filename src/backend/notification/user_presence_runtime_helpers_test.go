@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -9,8 +10,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -63,6 +64,80 @@ type userPresenceChild struct {
 	done chan struct{}
 	err  error
 	once sync.Once
+}
+
+// Keep raw child output private and bounded; only fixed categories are returned.
+type userPresenceDiagnostic struct {
+	mu        sync.Mutex
+	data      []byte
+	truncated bool
+}
+
+func (d *userPresenceDiagnostic) Write(p []byte) (int, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	n := len(p)
+	const limit = 16384
+	available := limit - len(d.data)
+	if len(p) > available {
+		p = p[:available]
+		d.truncated = true
+	}
+	d.data = append(d.data, p...)
+	return n, nil
+}
+
+func (d *userPresenceDiagnostic) summary() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	category := "unclassified startup failure"
+	switch {
+	case bytes.Contains(d.data, []byte("address already in use")):
+		category = "listener address in use"
+	case bytes.Contains(d.data, []byte("connection refused")):
+		category = "dependency connection refused"
+	case bytes.Contains(d.data, []byte("x509:")):
+		category = "certificate verification failure"
+	case bytes.Contains(d.data, []byte("context deadline exceeded")):
+		category = "dependency deadline exceeded"
+	}
+	if d.truncated {
+		category += " (output truncated)"
+	}
+	return category
+}
+
+var errUserPresenceExited = errors.New("user child exited before readiness")
+
+func waitUserPresenceReady(ctx context.Context, done <-chan struct{}, interval time.Duration, probe func(context.Context) bool) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return errUserPresenceExited
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if probe(ctx) {
+			select {
+			case <-done:
+				return errUserPresenceExited
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				return nil
+			}
+		}
+		select {
+		case <-done:
+			return errUserPresenceExited
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 func (p *userPresenceChild) stop(t *testing.T) {
@@ -205,20 +280,18 @@ func (f *userPresenceRuntimeFixture) start(t *testing.T) {
 	t.Helper()
 	cmd := exec.Command(f.binary)
 	cmd.Dir, cmd.Env = f.sourceDir, f.env
-	// No environment or generated key material is emitted to test logs.
-	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	// Never emit child output, environment, or generated key material.
+	diagnostic := &userPresenceDiagnostic{}
+	cmd.Stdout, cmd.Stderr = diagnostic, diagnostic
 	require.NoError(t, cmd.Start())
 	p := &userPresenceChild{cmd: cmd, done: make(chan struct{})}
 	f.process = p
 	go func() { p.err = cmd.Wait(); close(p.done) }()
 	t.Cleanup(func() { p.stop(t) })
-	require.Eventually(t, func() bool {
-		select {
-		case <-p.done:
-			return false
-		default:
-		}
-		callCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	readyCtx, cancelReady := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelReady()
+	err := waitUserPresenceReady(readyCtx, p.done, 50*time.Millisecond, func(ctx context.Context) bool {
+		callCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		_, err := f.public.GetBulkPresence(callCtx, &userv1.GetBulkPresenceRequest{ProfileIds: []string{f.profileID.String()}})
 		if err != nil {
@@ -226,7 +299,8 @@ func (f *userPresenceRuntimeFixture) start(t *testing.T) {
 		}
 		_, err = f.checker.IsOnline(callCtx, f.profileID)
 		return err == nil
-	}, 15*time.Second, 50*time.Millisecond, "actual User public store and TLS/principal routing path become ready")
+	})
+	require.NoError(t, err, "actual User public store and TLS/principal routing path become ready: %s", diagnostic.summary())
 }
 
 func userPresenceTLSFiles(t *testing.T, dir string) (string, string, *x509.CertPool) {

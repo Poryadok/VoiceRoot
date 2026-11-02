@@ -47,31 +47,44 @@ jobs:
       contents: read
       packages: read
     outputs:
-      global: ${{ steps.filter.outputs.global }}
+      global: ${{ steps.filter.outputs.global == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       ci_global: ${{ steps.scope.outputs.ci_global }}
       ci_scripts: ${{ steps.filter.outputs.ci_scripts }}
+      local_docker_isolation: ${{ steps.filter.outputs.local_docker_isolation }}
+      f13_replay: ${{ steps.filter.outputs.f13_replay }}
+      t31: ${{ steps.filter.outputs.t31 }}
       nats_renderer: ${{ steps.filter.outputs.nats_renderer }}
       a1_attachment_restart: ${{ steps.filter.outputs.a1_attachment_restart }}
-      history_audit: ${{ steps.history.outputs.required }}
+      history_audit: ${{ steps.history.outputs.required == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}
       dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
+      a1_multi_account_pr: ${{ steps.filter.outputs.a1_multi_account_pr }}
+      flutter_live_suite: ${{ steps.filter.outputs.flutter_live_suite }}
+      affected_paths: ${{ steps.affected_scope.outputs.paths }}
       a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
-      windows_desktop: ${{ steps.filter.outputs.windows_desktop }}
+      music_inputs: ${{ steps.filter.outputs.music_inputs }}
+      help_inputs: ${{ steps.filter.outputs.help_inputs }}
+      startup_inputs: ${{ steps.filter.outputs.startup_inputs }}
+      windows_desktop: ${{ steps.filter.outputs.windows_desktop == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       auth: ${{ steps.filter.outputs.auth }}
+      auth_test_impact: ${{ steps.filter.outputs.auth_test_impact }}
       developer-portal: ${{ steps.filter.outputs.developer-portal }}
       admin: ${{ steps.filter.outputs.admin }}
       compose: ${{ steps.filter.outputs.compose }}
       staging_infra: ${{ steps.filter.outputs.staging_infra }}
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
-      code: ${{ steps.filter.outputs.code == 'true' || steps.fullrequest.outputs.requested == 'true' }}
+      code: ${{ steps.filter.outputs.code == 'true' || steps.affected_scope.outputs.unresolved == 'true' || steps.fullrequest.outputs.requested == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') }}
+      full_validation: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master' && (steps.filter.outputs.code == 'true' || steps.fullrequest.outputs.requested == 'true')) || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') }}
       full_application_request: ${{ steps.fullrequest.outputs.requested }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       docker_go_services: ${{ steps.gomatrix.outputs.docker_go_services }}
       integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
+      chat_auth_java: ${{ steps.filter.outputs.chat_auth_java_inputs == 'true' || steps.filter.outputs.auth == 'true' || steps.filter.outputs.protos == 'true' || steps.gomatrix.outputs.run_pkg == 'true' || contains(fromJSON(steps.gomatrix.outputs.integration_go_services), 'chat') }}
+      integration_analytics: ${{ steps.gomatrix.outputs.integration_analytics == 'true' || steps.filter.outputs.analytics_integration_inputs == 'true' }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
       build_services: ${{ steps.stagingmatrix.outputs.build_services }}
@@ -85,7 +98,7 @@ jobs:
       run_web: ${{ steps.stagingmatrix.outputs.run_web }}
       run_admin: ${{ steps.stagingmatrix.outputs.run_admin }}
       run_developer_portal: ${{ steps.stagingmatrix.outputs.run_developer_portal }}
-      run_flutter_tier2: ${{ steps.stagingmatrix.outputs.run_flutter_tier2 }}
+      run_flutter_tier2: ${{ steps.stagingmatrix.outputs.run_flutter_tier2 == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/master' && (steps.filter.outputs.code == 'true' || steps.fullrequest.outputs.requested == 'true')) }}
       promote_from_sha: ${{ steps.stagingmatrix.outputs.promote_from_sha }}
     steps:
       - uses: actions/checkout@v5
@@ -100,14 +113,30 @@ jobs:
         id: fullrequest
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.filter.outputs.full_application_request == 'true'
         run: python3 scripts/ci/full_application_request.py
+      - name: Resolve affected PR scope
+        id: affected_scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 scripts/ci/affected_check_plan.py --event-base --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF" > "$RUNNER_TEMP/affected-scope.json"
+          echo "ci_global=$(jq -r '.filters.ci_global' "$RUNNER_TEMP/affected-scope.json")" >> "$GITHUB_OUTPUT"
+          echo "unresolved=$(jq -r '.unresolved_filter_configuration != null' "$RUNNER_TEMP/affected-scope.json")" >> "$GITHUB_OUTPUT"
+          echo "paths=$(jq -c '.changed_paths' "$RUNNER_TEMP/affected-scope.json")" >> "$GITHUB_OUTPUT"
       - name: Resolve PR scope without narrowing master obligations
         id: scope
         env:
           EVENT_NAME: ${{ github.event_name }}
           CI_GLOBAL: ${{ steps.filter.outputs.ci_global }}
           CI_SCRIPTS: ${{ steps.filter.outputs.ci_scripts }}
+          AFFECTED_GLOBAL: ${{ steps.affected_scope.outputs.ci_global }}
         run: |
-          if [[ "$EVENT_NAME" != pull_request && "$CI_SCRIPTS" == true ]]; then
+          if [[ "$AFFECTED_GLOBAL" == true || ( "$EVENT_NAME" != pull_request && "$CI_SCRIPTS" == true ) ]]; then
             CI_GLOBAL=true
           fi
           echo "ci_global=${CI_GLOBAL}" >> "$GITHUB_OUTPUT"
@@ -122,12 +151,22 @@ jobs:
             codex/voice-master-release-*|codex/game-sdk-federation-docs) required=true ;;
           esac
           echo "required=${required}" >> "$GITHUB_OUTPUT"
+      - name: Resolve staging Go service matrix
+        id: staging-go-matrix
+        env:
+          FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
+          FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' }}
+        run: |
+          FILTER_JSON="$(jq --arg value "$CI_GLOBAL" '.ci_global = $value' <<< "$FILTER_JSON")"
+          export FILTER_JSON
+          bash scripts/ci/resolve-go-matrix.sh
       - name: Resolve Go service matrix
         id: gomatrix
         env:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
-          FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' }}
+          FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.filter.outputs.code == 'true') }}
         run: |
           FILTER_JSON="$(jq --arg value "$CI_GLOBAL" '.ci_global = $value' <<< "$FILTER_JSON")"
           export FILTER_JSON
@@ -144,9 +183,9 @@ jobs:
         env:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
-          GO_SERVICES_JSON: ${{ steps.gomatrix.outputs.go_services }}
+          GO_SERVICES_JSON: ${{ steps.staging-go-matrix.outputs.go_services }}
           FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' }}
-          FILTER_CODE: ${{ steps.filter.outputs.code == 'true' || steps.fullrequest.outputs.requested == 'true' }}
+          FILTER_CODE: ${{ steps.filter.outputs.code == 'true' || steps.affected_scope.outputs.unresolved == 'true' || steps.fullrequest.outputs.requested == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') }}
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
           STAGING_FORCE_FULL_ROLLOUT: ${{ vars.STAGING_FORCE_FULL_ROLLOUT }}
@@ -156,6 +195,42 @@ jobs:
           FILTER_JSON="$(jq --arg value "$CI_GLOBAL" '.ci_global = $value' <<< "$FILTER_JSON")"
           export FILTER_JSON
           bash scripts/ci/resolve-staging-matrix.sh
+
+  # Advisory comparison only: current jobs and the required gate stay unchanged.
+  affected-check-plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: .github/ci/path-filters.yml
+          predicate-quantifier: some-with-excludes
+      - name: Compare affected checks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          HOSTED_FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 scripts/ci/affected_check_plan.py --event-base --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF" --compare-hosted \
+            > "$RUNNER_TEMP/affected-check-plan.json"
+          cat "$RUNNER_TEMP/affected-check-plan.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: affected-check-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/affected-check-plan.json
+          if-no-files-found: error
+          retention-days: 14
 
   ci-skip-gate:
     needs: changes
@@ -176,7 +251,7 @@ jobs:
       (needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -225,7 +300,7 @@ jobs:
       (needs.changes.outputs.compose == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -272,6 +347,41 @@ jobs:
       - name: Staging image matrix unit tests
         run: bash scripts/ci/resolve-staging-matrix_test.sh
 
+  f13-historical-replay:
+    needs: changes
+    env:
+      VOICE_CONTRACT_PROFILE: current
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      (
+        (github.event_name == 'pull_request' &&
+         (needs.changes.outputs.f13_replay == 'true' || needs.changes.outputs.global == 'true' ||
+          needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.history_audit == 'true')) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true') ||
+        ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install PyYAML==6.0.3
+      - name: Resolve Voice R22 scope base
+        env:
+          VOICE_CI_EVENT_NAME: ${{ github.event_name }}
+          VOICE_CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          VOICE_CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base_sha="$(bash scripts/ci/resolve-voice-r22-base.sh)"
+          echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
+          echo "VOICE_CI_PUSH_BEFORE_SHA=${VOICE_CI_PUSH_BEFORE_SHA}" >> "${GITHUB_ENV}"
+      - name: Replay exact historical F13 proof
+        run: python3 scripts/ci/f13_exact_j_historical_red_test.py
+
   ci-script-tests:
     needs: changes
     if: >-
@@ -281,7 +391,7 @@ jobs:
         needs.changes.outputs.global == 'true' ||
         needs.changes.outputs.ci_global == 'true' ||
         needs.changes.outputs.ci_scripts == 'true' ||
-        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
+        ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')
       )
     runs-on: ubuntu-latest
     strategy:
@@ -356,9 +466,7 @@ jobs:
     if: >-
       !cancelled() &&
       (github.event_name == 'schedule' ||
-       github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
-       (github.event_name == 'pull_request' && needs.changes.outputs.history_audit == 'true'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -395,7 +503,7 @@ jobs:
       (needs.changes.outputs.match_squad_overlay == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -417,7 +525,7 @@ jobs:
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -451,7 +559,7 @@ jobs:
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -507,51 +615,34 @@ jobs:
       - name: Verify complete Flutter file partition
         run: python3 scripts/ci/flutter_test_shards.py verify --plan "$RUNNER_TEMP/flutter-plan/plan.json" --receipts "$RUNNER_TEMP/flutter-receipts"
 
-  flutter:
+  # Shared frontend inputs remain included; four independent browser tests are excluded.
+  flutter-music-proof:
     needs: changes
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
+      (needs.changes.outputs.music_inputs == 'true' ||
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: Install buf CLI
-        run: |
-          go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Install protoc_plugin
-        run: |
-          dart pub global activate protoc_plugin 25.0.0
-          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-      - name: Check Dart protobuf codegen
-        run: make buf-dart-check
-      - name: Prefetch sqlite3mc native assets (host)
-        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
-      - name: Axe web a11y landmark smoke
-        run: make a11y-web-axe
-      - name: Flutter analyze
-        working-directory: src/frontend
-        run: |
-          flutter pub get
-          flutter analyze --no-fatal-infos
-      - name: Set up Node for Music decoder browser check
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
+      - name: Resolve Flutter dependencies
+        working-directory: src/frontend
+        run: flutter pub get
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
       - name: Capture Music inline controls
         working-directory: src/frontend
         env:
@@ -588,13 +679,31 @@ jobs:
           name: music-dependency-lock-${{ github.run_id }}
           path: src/frontend/pubspec.lock
           if-no-files-found: error
-      - name: AppIcon Chrome favicon DOM regression
-        if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
-        working-directory: src/frontend
-        run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
+
+  flutter-help-proof:
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.help_inputs == 'true' || needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Resolve Flutter dependencies
+        working-directory: src/frontend
+        run: flutter pub get
       - name: Help real Chrome external handoff (H/V)
         id: help_browser_handoff
         timeout-minutes: 8
@@ -609,6 +718,43 @@ jobs:
           cd ../..
           node scripts/ci/settings-help-browser-handoff.mjs \
             src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
+      - name: Retain Help comparison evidence
+        if: always() && steps.help_browser_handoff.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: settings-help-browser-${{ github.run_id }}
+          path: ${{ runner.temp }}/settings-help-browser
+          if-no-files-found: error
+          retention-days: 14
+
+  flutter-startup-proof:
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.startup_inputs == 'true' || needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Build the Help launcher fixture for startup
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter build web --release --no-pub --no-web-resources-cdn \
+            --target test/fixtures/settings_help_web_launcher_smoke.dart \
+            --output build/help-launcher-web
       - name: Web startup lifecycle and real browser retry (H/V)
         id: web_startup_browser
         timeout-minutes: 5
@@ -619,7 +765,7 @@ jobs:
           node --test scripts/ci/web-startup.test.mjs
           node scripts/ci/web-startup-browser.mjs \
             src/frontend/build/help-launcher-web "$RUNNER_TEMP/web-startup-browser"
-      - name: Upload Web startup browser evidence
+      - name: Retain startup comparison evidence
         if: always() && steps.web_startup_browser.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
@@ -627,19 +773,73 @@ jobs:
           path: ${{ runner.temp }}/web-startup-browser
           if-no-files-found: error
           retention-days: 14
-      - name: Upload Help real browser handoff evidence
-        if: always() && steps.help_browser_handoff.outcome != 'skipped'
-        uses: actions/upload-artifact@v6
+
+  flutter:
+    needs: changes
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
         with:
-          name: settings-help-browser-${{ github.run_id }}
-          path: ${{ runner.temp }}/settings-help-browser
-          if-no-files-found: error
-          retention-days: 14
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install buf CLI
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install protoc_plugin
+        run: |
+          dart pub global activate protoc_plugin 25.0.0
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - name: Check Dart protobuf codegen
+        run: make buf-dart-check
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Axe web a11y landmark smoke
+        run: make a11y-web-axe
+      - name: Flutter analyze
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+      - name: Run browser-only Flutter tests
+        working-directory: src/frontend
+        run: |
+          set -euo pipefail
+          suites=(test/app_shell_icon_web_test.dart test/chat_draft_browser_storage_test.dart
+                  test/linked_oauth_browser_web_test.dart test/presigned_upload_web_test.dart)
+          flutter test --no-pub --platform chrome --reporter json "${suites[@]}" > "$RUNNER_TEMP/flutter-browser-events.jsonl"
+          args=()
+          for suite in "${suites[@]}"; do args+=(--suite "$PWD/$suite"); done
+          python3 ../../scripts/ci/flutter_test_events.py --events "$RUNNER_TEMP/flutter-browser-events.jsonl" "${args[@]}"
+      - name: Retain browser-only Flutter events
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-browser-events-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-browser-events.jsonl
+          if-no-files-found: warn
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
         id: network_offline_capture
         if: >-
           github.event_name == 'pull_request' ||
-          (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
+          ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')
         timeout-minutes: 5
         working-directory: src/frontend
         env:
@@ -658,7 +858,7 @@ jobs:
           failure() &&
           steps.network_offline_capture.outcome == 'failure' &&
           (github.event_name == 'pull_request' ||
-           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+           ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
         uses: actions/upload-artifact@v6
         with:
           name: network-offline-capture-failure-${{ github.run_id }}
@@ -669,7 +869,7 @@ jobs:
         if: >-
           success() &&
           (github.event_name == 'pull_request' ||
-           (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+           ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
         uses: actions/upload-artifact@v6
         with:
           name: network-offline-banner-reference-${{ github.run_id }}
@@ -914,8 +1114,10 @@ jobs:
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -924,10 +1126,12 @@ jobs:
           cache: true
           cache-dependency-path: src/backend/**/go.sum
       - name: Install golangci-lint
+        env:
+          GOFLAGS: ''
         run: go install ${{ env.GOLANGCI_LINT_MOD }}
       - name: Add GOBIN to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Go mod tidy (affected modules)
+      - name: Resolve Go test dependencies (affected modules)
         run: |
           set -e
           mapfile -t modules < <(echo '${{ needs.changes.outputs.go_services }}' | jq -r '.[]')
@@ -936,8 +1140,8 @@ jobs:
           for m in "${modules[@]}"; do
             [[ -n "${m}" && -z "${seen[$m]:-}" ]] || continue
             seen[$m]=1
-            echo "== tidy ${m} =="
-            (cd "src/backend/${m}" && go mod tidy)
+            echo "== resolve ${m} =="
+            (cd "src/backend/${m}" && go list -test ./... >/dev/null)
           done
       - name: Lint affected Go modules
         run: |
@@ -952,6 +1156,10 @@ jobs:
             (cd "src/backend/${m}" && golangci-lint run ./...)
           done
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   backend-go-pkg:
     needs: changes
     if: >-
@@ -960,19 +1168,25 @@ jobs:
       (needs.changes.outputs.run_pkg == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (pkg)
+      - name: Resolve Go test dependencies (pkg)
         working-directory: src/backend/pkg
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Go test shared pkg
         working-directory: src/backend/pkg
         run: go test ./...
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
 
   nats-hub-config-renderer-image:
     needs: changes
@@ -981,7 +1195,8 @@ jobs:
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
         (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true'))
+       (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true') ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -993,7 +1208,7 @@ jobs:
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - name: Build renderer image (PR verify)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -1065,8 +1280,10 @@ jobs:
       (needs.changes.outputs.run_go == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     permissions:
       actions: write
       contents: read
@@ -1080,9 +1297,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (${{ matrix.service }})
+      - name: Resolve Go test dependencies (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Go test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
@@ -1160,14 +1377,20 @@ jobs:
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   backend-go-integration-pr:
     needs: changes
     if: >-
       !cancelled() &&
-      github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.integration_go_services != '[]'
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -1178,14 +1401,108 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (${{ matrix.service }})
+      - name: Resolve Go test dependencies (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
+      - name: Require Docker for Go integration
+        run: docker info >/dev/null
+      - name: Install File codec tools
+        if: matrix.service == 'file'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg poppler-utils
       - name: Go integration test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
-        run: go test -timeout 20m ./...
+          GIFPROC_REAL_CODEC: '1'
+          SERVICE: ${{ matrix.service }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 20m ./... > "$RUNNER_TEMP/go-integration-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_receipts.py \
+            --events "$RUNNER_TEMP/go-integration-events.jsonl" --exit-code "$result" \
+            --summary "$RUNNER_TEMP/go-integration-summary.json" --service "$SERVICE" \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Install Gateway live test libraries
+        if: matrix.service == 'gateway'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
+      - name: Gateway live leave diagnostic
+        if: matrix.service == 'gateway'
+        working-directory: src/backend/gateway
+        env:
+          CGO_ENABLED: '1'
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=live \
+            -run '^TestComposeSpaceLeaveDiagnosticPreservesStrictStatus$' . \
+            > "$RUNNER_TEMP/gateway-leave-diagnostic-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/gateway_leave_diagnostic_required.json --service gateway \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/gateway-leave-diagnostic-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/gateway-leave-diagnostic-receipt.json" --reject-skips
+      - name: Upload Gateway live diagnostic evidence
+        if: always() && matrix.service == 'gateway'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-leave-diagnostic-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/gateway-leave-diagnostic-events.jsonl
+            ${{ runner.temp }}/gateway-leave-diagnostic-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload Go integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-integration-${{ matrix.service }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/go-integration-events.jsonl
+            ${{ runner.temp }}/go-integration-summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  backend-go-integration-evidence:
+    needs: [changes, backend-go-integration-pr]
+    if: >-
+      !cancelled() && (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.integration_go_services != '[]' &&
+      needs.backend-go-integration-pr.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: go-integration-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-integration-artifacts
+      - name: Verify selected Go integration evidence
+        env:
+          SERVICES: ${{ needs.changes.outputs.integration_go_services }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          python3 scripts/ci/go_integration_matrix.py verify-diagnostics \
+            --inventory scripts/ci/go_integration_required.json --services "$SERVICES" \
+            --exceptions scripts/ci/go_integration_exceptions.json --source-root "$GITHUB_WORKSPACE" \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --directory "$RUNNER_TEMP/go-integration-artifacts"
 
   staging-images-push:
     needs: changes
@@ -1242,11 +1559,13 @@ jobs:
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
   staging-images-promote:
-    needs: [changes, staging-images-push]
+    needs: [changes, staging-images-push, full-validation-aggregation]
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
-      needs.staging-images-push.result != 'failure' &&
+      needs.full-validation-aggregation.result == 'success' &&
+      (needs.staging-images-push.result == 'success' ||
+       (needs.staging-images-push.result == 'skipped' && needs.changes.outputs.build_go_services == '[]')) &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true' &&
@@ -1335,9 +1654,10 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_auth == 'true' ||
        needs.changes.outputs.auth == 'true' ||
+       (github.event_name == 'pull_request' && needs.changes.outputs.auth_test_impact == 'true') ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -1405,13 +1725,14 @@ jobs:
   backend-auth-image:
     needs: changes
     if: >-
-      !cancelled() && github.event_name == 'pull_request' &&
+      !cancelled() && (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_auth == 'true' ||
        needs.changes.outputs.auth == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       needs.changes.outputs.ci_global == 'true')
+       needs.changes.outputs.ci_global == 'true' ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -1438,7 +1759,7 @@ jobs:
        needs.changes.outputs.developer-portal == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -1492,7 +1813,7 @@ jobs:
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build developer-portal image (PR verify)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || needs.changes.outputs.full_validation == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/developer-portal
@@ -1531,7 +1852,7 @@ jobs:
        needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -1559,7 +1880,7 @@ jobs:
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build web image (PR verify)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || needs.changes.outputs.full_validation == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/frontend
@@ -1638,7 +1959,7 @@ jobs:
        needs.changes.outputs.admin == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -1694,7 +2015,7 @@ jobs:
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Build admin image (PR verify)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || needs.changes.outputs.full_validation == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./src/admin
@@ -1792,7 +2113,7 @@ jobs:
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -1847,7 +2168,7 @@ jobs:
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
     strategy:
       fail-fast: false
       matrix:
@@ -1986,18 +2307,36 @@ jobs:
           flutter pub get
           flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0 --dart-define=VOICE_INVITE_SHARE_ORIGIN=$inviteOrigin
 
+  t31-critical:
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      (needs.changes.outputs.t31 == 'true' || needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/t31-session-events-e2e.yml
+
   ci-gate:
     needs:
       - changes
       - ci-skip-gate
       - compose-e2e
+      - t31-critical
       - protobuf
       - compose-config
       - ci-script-tests
+      - f13-historical-replay
+      - local-docker-isolation
       - current-diff-contract
-      - voice-history-audit
       - match-squad-overlay
       - flutter
+      - flutter-music-proof
+      - flutter-help-proof
+      - flutter-startup-proof
       - flutter-unit-tests
       - flutter-unit-receipts
       - flutter-device-driver
@@ -2008,6 +2347,20 @@ jobs:
       - nats-hub-config-renderer-image
       - backend-go
       - backend-go-integration-pr
+      - backend-go-integration-evidence
+      - story-lfp-integration
+      - user-association-integration
+      - notification-quota-integration
+      - role-migration-integration
+      - role-space-receipt-integration
+      - bot-membership-integration
+      - voice-ledger-integration
+      - messaging-threadlist-integration
+      - space-autovacuum-integration
+      - space-native-installer-integration
+      - chat-lifecycle-integration
+      - chat-auth-java-integration
+      - realtime-lifecycle-integration
       - backend-auth
       - backend-auth-image
       - developer-portal
@@ -2028,35 +2381,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Verify affected PR checks
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          NEEDS_JSON: ${{ toJson(needs) }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 scripts/ci/affected_check_plan.py --event-base --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF" --verify-needs
       - name: Verify required jobs ran
         env:
           RUN_GO: ${{ needs.changes.outputs.run_go }}
-          RUN_GO_INTEGRATION: ${{ github.event_name == 'pull_request' && needs.changes.outputs.integration_go_services != '[]' }}
+          RUN_GO_INTEGRATION: ${{ (github.event_name == 'pull_request' || needs.changes.outputs.full_validation == 'true') && needs.changes.outputs.integration_go_services != '[]' }}
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
+          RUN_FLUTTER_MUSIC: ${{ needs.changes.outputs.music_inputs }}
+          RUN_FLUTTER_HELP: ${{ needs.changes.outputs.help_inputs }}
+          RUN_FLUTTER_STARTUP: ${{ needs.changes.outputs.startup_inputs }}
           RUN_WINDOWS_DESKTOP: ${{ (github.event_name == 'pull_request' && needs.changes.outputs.windows_desktop == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true') }}
           RUN_WEB: ${{ needs.changes.outputs.run_web }}
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
           RUN_PORTAL: ${{ needs.changes.outputs.run_developer_portal }}
           FILTER_AUTH: ${{ needs.changes.outputs.auth }}
+          RUN_AUTH_TEST_IMPACT: ${{ github.event_name == 'pull_request' && needs.changes.outputs.auth_test_impact == 'true' }}
           FILTER_ADMIN: ${{ needs.changes.outputs.admin }}
           FILTER_PORTAL: ${{ needs.changes.outputs.developer-portal }}
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
-          GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
+          GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.full_validation == 'true' }}
           RUN_CI_SCRIPTS: ${{ needs.changes.outputs.ci_scripts }}
-          RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
-          RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true') }}
+          RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.full_validation == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
+          RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.full_validation == 'true') }}
           RUN_FLUTTER_ANDROID_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_WEB_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_IOS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
-          RUN_A1_E2E: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true') }}
-          RUN_GRAFANA_ANALYTICS_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.compose == 'true' }}
-          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
+          RUN_A1_E2E: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_multi_account_pr == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && needs.changes.outputs.integration_analytics == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true'))) }}
+          RUN_GRAFANA_ANALYTICS_SMOKE: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.compose == 'true')) }}
+          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
           JOB_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.flutter-key-backup-goldens.result }}
           JOB_FLUTTER_ANDROID_SMOKE: ${{ needs.flutter-android-smoke.result }}
           JOB_FLUTTER_WEB_INTEGRATION: ${{ needs.flutter-web-integration.result }}
@@ -2068,8 +2439,9 @@ jobs:
           JOB_GRAFANA_ANALYTICS_SMOKE: ${{ needs.grafana-analytics-smoke.result }}
           RUN_COMPOSE_E2E: >-
             ${{
+              needs.changes.outputs.full_validation == 'true' ||
               (github.event_name == 'pull_request' &&
-               (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
+               (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.flutter_live_suite == 'true')) ||
               (github.event_name == 'push' &&
                github.ref == 'refs/heads/master' &&
                needs.changes.outputs.code == 'true' &&
@@ -2084,11 +2456,16 @@ jobs:
           JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
-          RUN_HISTORY_AUDIT: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'pull_request' && needs.changes.outputs.history_audit == 'true') }}
+          RUN_F13_HISTORICAL_REPLAY: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.f13_replay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.history_audit == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
+          JOB_F13_HISTORICAL_REPLAY: ${{ needs.f13-historical-replay.result }}
+          RUN_CHAT_AUTH_JAVA: ${{ needs.changes.outputs.code == 'true' && (needs.changes.outputs.full_validation == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.chat_auth_java == 'true') }}
+          JOB_CHAT_AUTH_JAVA_INTEGRATION: ${{ needs.chat-auth-java-integration.result }}
           JOB_CURRENT_DIFF_CONTRACT: ${{ needs.current-diff-contract.result }}
-          JOB_VOICE_HISTORY_AUDIT: ${{ needs.voice-history-audit.result }}
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
+          JOB_FLUTTER_MUSIC_PROOF: ${{ needs.flutter-music-proof.result }}
+          JOB_FLUTTER_HELP_PROOF: ${{ needs.flutter-help-proof.result }}
+          JOB_FLUTTER_STARTUP_PROOF: ${{ needs.flutter-startup-proof.result }}
           JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-receipts.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
@@ -2104,17 +2481,1303 @@ jobs:
           JOB_ADMIN: ${{ needs.admin.result }}
         run: bash .github/ci/verify-required-jobs.sh "${{ github.event_name }}" "${{ needs.changes.outputs.code }}" auto
 
+  story-lfp-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'story')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-lfp-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Story LFP proofs
+        working-directory: src/backend/story
+        env:
+          CGO_ENABLED: '0'
+          LFP_TEST_DATABASE_DSN: postgres://voice:voice-lfp-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -p 1 -timeout 10m ./internal/lfpconsentstore ./internal/lfpconsenttransport > "$RUNNER_TEMP/story-lfp-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/story_lfp_required.json --service story \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/story-lfp-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/story-lfp-receipt.json" --reject-skips
+      - name: Upload Story LFP evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-lfp-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/story-lfp-events.jsonl
+            ${{ runner.temp }}/story-lfp-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  user-association-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'user')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-association-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run User association proofs
+        working-directory: src/backend/user
+        env:
+          CGO_ENABLED: '0'
+          USER_ASSOCIATION_TEST_DSN: postgres://voice:voice-association-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -p 1 -timeout 10m ./internal/identityassociation > "$RUNNER_TEMP/user-association-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/user_association_required.json --service user \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/user-association-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/user-association-receipt.json" --reject-skips
+      - name: Run User capture transport proof
+        working-directory: src/backend/user
+        env:
+          CGO_ENABLED: '0'
+          USER_ASSOCIATION_TEST_DSN: postgres://voice:voice-association-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          USER_ASSOCIATION_TEST_REDIS: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m -run '^TestSpaceCapture(CanonicalProducerNativeCompleteCohort|CanonicalProducerNativeArchiveAndRawErasure|NativeProtectedTransport)$' ./internal/grpcsvc > "$RUNNER_TEMP/user-capture-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/user_capture_required.json --service user \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/user-capture-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/user-capture-receipt.json" --reject-skips
+      - name: Run User profile birth proof
+        working-directory: src/backend/user
+        env:
+          CGO_ENABLED: '0'
+          USER_ASSOCIATION_TEST_DSN: postgres://voice:voice-association-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -p 1 -timeout 10m -run '^Test(Secondary|Primary)ProfileBirthCapture' ./internal/store > "$RUNNER_TEMP/user-birth-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/user_birth_required.json --service user \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/user-birth-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/user-birth-receipt.json" --reject-skips
+      - name: Run User admission proof
+        working-directory: src/backend/user
+        env:
+          CGO_ENABLED: '0'
+          USER_ADMISSION_TEST_DSN: postgres://voice:voice-association-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          USER_ADMISSION_TEST_REDIS_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m -run '^TestAdmissionEligibility_NativeExactPairAndRevisionWriters$' ./internal/grpcsvc > "$RUNNER_TEMP/user-admission-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/user_admission_required.json --service user \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/user-admission-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/user-admission-receipt.json" --reject-skips
+      - name: Upload User association evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-association-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/user-association-events.jsonl
+            ${{ runner.temp }}/user-association-receipt.json
+            ${{ runner.temp }}/user-capture-events.jsonl
+            ${{ runner.temp }}/user-capture-receipt.json
+            ${{ runner.temp }}/user-birth-events.jsonl
+            ${{ runner.temp }}/user-birth-receipt.json
+            ${{ runner.temp }}/user-admission-events.jsonl
+            ${{ runner.temp }}/user-admission-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  notification-quota-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'notification')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Notification quota proofs
+        working-directory: src/backend/notification
+        env:
+          CGO_ENABLED: '0'
+          BE195_REDIS_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m ./internal/chatquota > "$RUNNER_TEMP/notification-quota-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/notification_quota_required.json --service notification \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/notification-quota-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/notification-quota-receipt.json" --reject-skips
+      - name: Upload Notification quota evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notification-quota-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/notification-quota-events.jsonl
+            ${{ runner.temp }}/notification-quota-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  role-space-receipt-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Require Docker for Role Space fixtures
+        run: docker info >/dev/null
+      - name: Run Role Space receipt proofs
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: '0'
+          ROLE_NATIVE_SPACE_SOURCE_ROOT: ${{ github.workspace }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 20m -tags=role_space_native -run '^TestMemberAdmission(PositiveProtectedReceipt|Role25ProtectedReceipt)$' . > "$RUNNER_TEMP/role-space-receipt-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/role_space_receipt_required.json --service role \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/role-space-receipt-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/role-space-receipt-receipt.json" --reject-skips
+      - name: Upload Role Space receipt evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: role-space-receipt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/role-space-receipt-events.jsonl
+            ${{ runner.temp }}/role-space-receipt-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  realtime-lifecycle-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'realtime')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-realtime-lifecycle-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Realtime lifecycle proofs
+        working-directory: src/backend/realtime
+        env:
+          CGO_ENABLED: '0'
+          REALTIME_P3_TEST_DATABASE_URL: postgres://voice:voice-realtime-lifecycle-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=realtimep3integration -run '^Test(ActualHubFanoutFreezeWaitsForEveryRecipientAndRejectsCapturedLateScope|ProtectedRealtimeActualPGReceiptsRequireMTLSExactPrincipalAndReplay)$' . > "$RUNNER_TEMP/realtime-lifecycle-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/realtime_lifecycle_required.json --service realtime \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/realtime-lifecycle-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/realtime-lifecycle-receipt.json" --reject-skips
+      - name: Upload Realtime lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realtime-lifecycle-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/realtime-lifecycle-events.jsonl
+            ${{ runner.temp }}/realtime-lifecycle-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  chat-auth-java-integration:
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.full_validation == 'true' || needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.chat_auth_java == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build candidate Auth fixture
+        working-directory: src/backend/auth
+        run: mvn -B -ntp -Dtest=AuthChatFloorInteropFixtureTest clean test
+      - name: Verify candidate Auth classpath
+        run: >-
+          python3 scripts/ci/auth_candidate_classpath.py
+          --report src/backend/auth/target/surefire-reports/TEST-voice.backend.auth.sessionepoch.AuthChatFloorInteropFixtureTest.xml
+          --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/chat-auth-java-classpath"
+      - name: Run candidate Chat to Auth proof
+        working-directory: src/backend/chat
+        env:
+          GOFLAGS: -mod=readonly
+          BE131_AUTH_CANDIDATE_SHA: ${{ github.sha }}
+          BE131_AUTH_JAVA_SOURCE: ${{ github.sha }}
+          BE131_AUTH_JDBC_URL: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports[5432] }}/test
+          BE131_AUTH_REDIS_HOST: 127.0.0.1
+          BE131_AUTH_REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+          BE131_AUTH_PROOF_DIR: ${{ runner.temp }}/chat-auth-java-proof
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          export BE131_AUTH_JAVA_CLASSPATH="$(cat "$RUNNER_TEMP/chat-auth-java-classpath")"
+          set +e
+          go test -json -count=1 -timeout 5m -run '^TestChatAuthActualJavaInteroperability$' . > "$RUNNER_TEMP/chat-auth-java-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/chat_auth_java_required.json --service chat \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/chat-auth-java-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/chat-auth-java-receipt.json" --reject-skips
+      - name: Upload Chat to Auth proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: chat-auth-java-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/chat-auth-java-events.jsonl
+            ${{ runner.temp }}/chat-auth-java-receipt.json
+            ${{ runner.temp }}/chat-auth-java-proof/
+            src/backend/auth/target/surefire-reports/TEST-voice.backend.auth.sessionepoch.AuthChatFloorInteropFixtureTest.xml
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  chat-lifecycle-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'chat')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-chat-lifecycle-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Chat lifecycle proof
+        working-directory: src/backend/chat
+        env:
+          CGO_ENABLED: '0'
+          REALTIME_P3_TEST_DATABASE_URL: postgres://voice:voice-chat-lifecycle-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=realtimep3integration -run '^TestRealtimeNativeLifecycleReadsOnlyActualChatAndFailsClosedWithoutSchema$' ./internal/store > "$RUNNER_TEMP/chat-lifecycle-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/chat_lifecycle_required.json --service chat \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/chat-lifecycle-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/chat-lifecycle-receipt.json" --reject-skips
+      - name: Upload Chat lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-lifecycle-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/chat-lifecycle-events.jsonl
+            ${{ runner.temp }}/chat-lifecycle-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  local-docker-isolation:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      (needs.changes.outputs.local_docker_isolation == 'true' ||
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
+       ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          # Match the digest-pinned Go image used by the isolated cache proof.
+          go-version: '1.26.10'
+      - name: Test Go session identity
+        working-directory: src/backend/pkg
+        run: go test -count=1 ./cmd/ci-go-session
+      - name: Exercise owned Docker lifecycle
+        env:
+          VOICE_LOCAL_DOCKER_TEST: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='redis@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f'
+          docker pull "$image"
+          docker tag "$image" redis:7-alpine
+          python3 scripts/ci/local_docker_scheduled_integration_test.py
+          python3 scripts/ci/local_docker_owned_cancel_test.py
+          docker pull 'golang@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb'
+          python3 scripts/ci/local_docker_scheduled_exec_integration_test.py
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  space-native-installer-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-native-installer-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql-client
+      - name: Build source-bound Space installer
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+          CGO_ENABLED: '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="voice-ci-native-installer:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker build --build-arg SOURCE_REVISION="$CANDIDATE_SHA" \
+            -f src/backend/space/Dockerfile.native-migrate -t "$image" .
+          container="$(docker create "$image")"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/usr/local/bin/native-migrate" "$RUNNER_TEMP/native-migrate"
+          docker cp "$container:/usr/local/bin/migrate" "$RUNNER_TEMP/native-migrate-driver"
+          chmod 755 "$RUNNER_TEMP/native-migrate" "$RUNNER_TEMP/native-migrate-driver"
+          source_sha="$(cd src/backend && find . -type f -name '*.go' ! -name '*_test.go' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+          driver_sha="$(sha256sum "$RUNNER_TEMP/native-migrate-driver" | cut -d' ' -f1)"
+          cd src/backend/space
+          go test ./internal/nativeinstaller/testdata/evidencefailure
+          go build -p 2 -trimpath \
+            -ldflags="-s -w -X voice/backend/space/internal/nativeinstaller.SourceRevision=$CANDIDATE_SHA -X voice/backend/space/internal/nativeinstaller.BuildSourceSHA256=$source_sha -X voice/backend/space/internal/nativeinstaller.MigrateSHA256=$driver_sha" \
+            -o "$RUNNER_TEMP/native-installer-evidencefailure" ./internal/nativeinstaller/testdata/evidencefailure
+      - name: Run Space native installer proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
+          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
+          NATIVE_INSTALLER_TEST_FAILURE_HELPER: ${{ runner.temp }}/native-installer-evidencefailure
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=integration -run '^(TestProductionFreshChainAndRetainedVerify|TestCommittedPhaseFailureNeverAutoResumes)$' ./internal/nativeinstaller > "$RUNNER_TEMP/space-native-installer-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_native_installer_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-native-installer-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-native-installer-receipt.json" --reject-skips
+      - name: Run Space native45 transition proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_db?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          query="SELECT COALESCE((SELECT oid FROM pg_database WHERE datname='space_db'),0)"
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == 0 ]]
+          set +e
+          "$RUNNER_TEMP/native-installer-evidencefailure" -at migrated45 \
+            -migrations-dir ../migrations/space_db -migrate "$RUNNER_TEMP/native-migrate-driver" \
+            > "$RUNNER_TEMP/space-transition45-provision.jsonl" 2> "$RUNNER_TEMP/space-transition45-provision.stderr"
+          provision_result=$?
+          set -e
+          [[ "$provision_result" -ne 0 ]]
+          grep -Fq 'controlled deployment evidence persistence failure' "$RUNNER_TEMP/space-transition45-provision.stderr"
+          owned_oid="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")"
+          [[ "$owned_oid" =~ ^[1-9][0-9]*$ ]]
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureTrusted45Transition$' ./internal/store \
+            > "$RUNNER_TEMP/space-transition45-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_transition45_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-transition45-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-transition45-receipt.json" --reject-skips
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
+      - name: Run trusted Space native50 catalog proofs
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_db?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          query="SELECT COALESCE((SELECT oid FROM pg_database WHERE datname='space_db'),0)"
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == 0 ]]
+          set +e
+          "$RUNNER_TEMP/native-installer-evidencefailure" -at migrated50 \
+            -migrations-dir ../migrations/space_db -migrate "$RUNNER_TEMP/native-migrate-driver" \
+            > "$RUNNER_TEMP/space-trusted50-provision.jsonl" 2> "$RUNNER_TEMP/space-trusted50-provision.stderr"
+          provision_result=$?
+          set -e
+          [[ "$provision_result" -ne 0 ]]
+          grep -Fq 'controlled deployment evidence persistence failure' "$RUNNER_TEMP/space-trusted50-provision.stderr"
+          owned_oid="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")"
+          [[ "$owned_oid" =~ ^[1-9][0-9]*$ ]]
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNativeObserver50DefinitionAndPreimage$' ./internal/store \
+            > "$RUNNER_TEMP/space-observer50-events.jsonl"
+          observer_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_observer50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-observer50-events.jsonl" --exit-code "$observer_result" \
+            --output "$RUNNER_TEMP/space-observer50-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureTrusted50Transition$' ./internal/store \
+            > "$RUNNER_TEMP/space-transition50-events.jsonl"
+          transition_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_transition50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-transition50-events.jsonl" --exit-code "$transition_result" \
+            --output "$RUNNER_TEMP/space-transition50-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^(TestNativeCatalog50LiteralProjectionAndDrift|TestNative51RawCompositeSessionStability|TestNative51ClassifierRejectsUnclassifiedMissingDatum|TestNative50CreatorBornCurrentSchema|TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory|TestNative51FrameworkUnlockRetainsTransactionFences|TestNative51StaleExpectedParentCannotCommit)$' ./internal/store \
+            > "$RUNNER_TEMP/space-trusted50-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_trusted50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-trusted50-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-trusted50-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNative51FixtureCommitTrusted50$' ./internal/store \
+            > "$RUNNER_TEMP/space-native51-commit-events.jsonl"
+          commit_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_native51_commit_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-native51-commit-events.jsonl" --exit-code "$commit_result" \
+            --output "$RUNNER_TEMP/space-native51-commit-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNative51FreezeRequiresBoundProofAndPreservesMembership$' ./internal/store \
+            > "$RUNNER_TEMP/space-native51-freeze-events.jsonl"
+          freeze_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_native51_freeze_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-native51-freeze-events.jsonl" --exit-code "$freeze_result" \
+            --output "$RUNNER_TEMP/space-native51-freeze-receipt.json" --reject-skips
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
+      - name: Run seeded Space native50 observer proofs
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_db?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          query="SELECT COALESCE((SELECT oid FROM pg_database WHERE datname='space_db'),0)"
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == 0 ]]
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'CREATE DATABASE space_db'
+          owned_oid="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")"
+          [[ "$owned_oid" =~ ^[1-9][0-9]*$ ]]
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 34
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" <<'SQL'
+          INSERT INTO spaces(id,name,owner_profile_id,member_count) VALUES
+            ('30000000-0000-0000-0000-000000000013','native observer fixture','10000000-0000-0000-0000-000000000001',2);
+          INSERT INTO space_members(space_id,profile_id) VALUES
+            ('30000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001'),
+            ('30000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003');
+          INSERT INTO spaces(id,name,owner_profile_id,member_count)
+            SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(n),12,'0'))::uuid,'concurrency fixture',
+                   '10000000-0000-0000-0000-000000000001'::uuid,3 FROM (VALUES (9),(11),(12)) AS v(n);
+          INSERT INTO space_members(space_id,profile_id)
+            SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(s),12,'0'))::uuid,
+                   format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
+            FROM (VALUES (9),(11),(12)) AS spaces(s) CROSS JOIN (VALUES (1),(2),(3)) AS profiles(p);
+          INSERT INTO spaces(id,name,owner_profile_id,member_count) VALUES
+            ('30000000-0000-0000-0000-000000000008','roster fixture','10000000-0000-0000-0000-000000000001',5);
+          INSERT INTO space_members(space_id,profile_id)
+            SELECT '30000000-0000-0000-0000-000000000008'::uuid,
+                   format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
+            FROM (VALUES (1),(2),(3),(6)) AS profiles(p);
+          INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at) VALUES
+            ('30000000-0000-0000-0000-000000000008','40000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000002','native7-fixture-8','20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',1,'active',1,decode(repeat('aa',32),'hex'),now()+interval '1 day');
+          INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at)
+            SELECT '30000000-0000-0000-0000-000000000008'::uuid,
+                   format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid,
+                   'member',ARRAY['membership'],1,1,now()+interval '1 day' FROM (VALUES (2),(5)) AS profiles(p);
+          SQL
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 44
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 45
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureTrusted45Transition$' ./internal/store > "$RUNNER_TEMP/space-seeded45-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_transition45_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded45-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded45-receipt.json" --reject-skips
+          "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 50
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureTrusted50Transition$' ./internal/store > "$RUNNER_TEMP/space-seeded50-transition-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_transition50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded50-transition-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded50-transition-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNativeCatalogConcurrentRowDrift$' ./internal/store > "$RUNNER_TEMP/space-seeded50-drift-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_seeded50_drift_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded50-drift-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded50-drift-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^(TestNativeObserverNoopTupleAndFrame|TestNativeObserverCutPredicateAlgebra|TestNativeObserverPrivateClosureAndLock)$' ./internal/store \
+            > "$RUNNER_TEMP/space-seeded50-observer-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_seeded50_observer_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-seeded50-observer-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-seeded50-observer-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanFixtureConcurrencyEnrollment50$' ./internal/store > "$RUNNER_TEMP/space-concurrency-enrollment-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_concurrency_enrollment_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-concurrency-enrollment-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-concurrency-enrollment-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^(TestAccountBanIntentConcurrency50|TestAccountBanLockWaitExhaustsOriginalBudget50|TestAccountBanLateCaptureCannotCommitOrSplice50)$' ./internal/store \
+            > "$RUNNER_TEMP/space-concurrency-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_concurrency_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-concurrency-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-concurrency-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanGIS50$' ./internal/store > "$RUNNER_TEMP/space-gis50-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_gis50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-gis50-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-gis50-receipt.json" --reject-skips
+          [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
+          psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
+      - name: Run Space clock-sensitive observer proofs
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash scripts/ci/space_native_clock_proof.sh
+      - name: Run Space account-ban capture guard
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_db?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/native-migrate" -mode provision \
+            -migrations-dir ../migrations/space_db -migrate "$RUNNER_TEMP/native-migrate-driver" \
+            > "$RUNNER_TEMP/space-account-ban-provision.jsonl"
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^(TestAccountBanCannotSucceedWithoutCompleteOwnerCapture|TestNative51CreatorBornCurrentSchema|TestAccountBanCatalogRejectsSemanticDrift|TestNative51ProofDiagnosticEnums)$' ./internal/store \
+            > "$RUNNER_TEMP/space-account-ban-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_account_ban_guard_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-account-ban-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-account-ban-receipt.json" --reject-skips
+      - name: Run Space over100 legacy cohort and native Ban proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_over100?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_over100_proof.sh
+      - name: Upload Space native installer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: space-native-installer-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/space-native-installer-events.jsonl
+            ${{ runner.temp }}/space-native-installer-receipt.json
+            ${{ runner.temp }}/space-native51-freeze-events.jsonl
+            ${{ runner.temp }}/space-native51-freeze-receipt.json
+            ${{ runner.temp }}/space-over100-*-events.jsonl
+            ${{ runner.temp }}/space-over100-*-receipt.json
+            ${{ runner.temp }}/space-over100-cleanup.txt
+            ${{ runner.temp }}/space-transition45-provision.jsonl
+            ${{ runner.temp }}/space-transition45-provision.stderr
+            ${{ runner.temp }}/space-transition45-events.jsonl
+            ${{ runner.temp }}/space-transition45-receipt.json
+            ${{ runner.temp }}/space-trusted50-provision.jsonl
+            ${{ runner.temp }}/space-trusted50-provision.stderr
+            ${{ runner.temp }}/space-observer50-events.jsonl
+            ${{ runner.temp }}/space-observer50-receipt.json
+            ${{ runner.temp }}/space-transition50-events.jsonl
+            ${{ runner.temp }}/space-transition50-receipt.json
+            ${{ runner.temp }}/space-trusted50-events.jsonl
+            ${{ runner.temp }}/space-trusted50-receipt.json
+            ${{ runner.temp }}/space-native51-commit-events.jsonl
+            ${{ runner.temp }}/space-native51-commit-receipt.json
+            ${{ runner.temp }}/space-seeded45-events.jsonl
+            ${{ runner.temp }}/space-seeded45-receipt.json
+            ${{ runner.temp }}/space-seeded50-transition-events.jsonl
+            ${{ runner.temp }}/space-seeded50-transition-receipt.json
+            ${{ runner.temp }}/space-seeded50-drift-events.jsonl
+            ${{ runner.temp }}/space-seeded50-drift-receipt.json
+            ${{ runner.temp }}/space-seeded50-observer-events.jsonl
+            ${{ runner.temp }}/space-seeded50-observer-receipt.json
+            ${{ runner.temp }}/space-concurrency-enrollment-events.jsonl
+            ${{ runner.temp }}/space-concurrency-enrollment-receipt.json
+            ${{ runner.temp }}/space-concurrency-events.jsonl
+            ${{ runner.temp }}/space-concurrency-receipt.json
+            ${{ runner.temp }}/space-gis50-events.jsonl
+            ${{ runner.temp }}/space-gis50-receipt.json
+            ${{ runner.temp }}/space-clock-*-events.jsonl
+            ${{ runner.temp }}/space-clock-*-receipt.json
+            ${{ runner.temp }}/space-account-ban-provision.jsonl
+            ${{ runner.temp }}/space-account-ban-events.jsonl
+            ${{ runner.temp }}/space-account-ban-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  space-autovacuum-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-autovacuum-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Configure owned PostgreSQL autovacuum
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql_owned() { docker exec "$PG_CONTAINER" psql -X -qAt -v ON_ERROR_STOP=1 -U voice -d postgres "$@"; }
+          psql_owned -c "ALTER SYSTEM SET autovacuum_naptime = '1s'"
+          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_delay = '100ms'"
+          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1'"
+          [[ "$(psql_owned -c 'SELECT pg_reload_conf()')" == t ]]
+          for attempt in {1..10}; do
+            if [[ "$(psql_owned -c 'SHOW autovacuum_naptime')" == 1s &&
+                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_delay')" == 100ms &&
+                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_limit')" == 1 ]]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'owned PostgreSQL autovacuum settings did not reload' >&2
+          exit 1
+      - name: Run Space real-autovacuum proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_WINDOW_TEST_ADMIN_URL: postgres://voice:voice-autovacuum-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=integration -run '^TestMaintenanceWindowWithRealAutovacuum$' ./internal/nativeinstaller > "$RUNNER_TEMP/space-autovacuum-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_autovacuum_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-autovacuum-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-autovacuum-receipt.json" --reject-skips
+      - name: Upload Space autovacuum evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: space-autovacuum-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/space-autovacuum-events.jsonl
+            ${{ runner.temp }}/space-autovacuum-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  messaging-threadlist-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'messaging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-threadlist-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Messaging thread-list proof
+        working-directory: src/backend/messaging
+        env:
+          CGO_ENABLED: '0'
+          THREADLIST_TEST_DATABASE_URL: postgres://voice:voice-threadlist-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -run '^TestPostgresImmutableNodesAndRollback$' ./internal/threadlist > "$RUNNER_TEMP/messaging-threadlist-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/messaging_threadlist_required.json --service messaging \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/messaging-threadlist-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/messaging-threadlist-receipt.json" --reject-skips
+      - name: Upload Messaging thread-list evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: messaging-threadlist-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/messaging-threadlist-events.jsonl
+            ${{ runner.temp }}/messaging-threadlist-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  voice-ledger-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'voice')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Voice Redis ledger proof
+        working-directory: src/backend/voice
+        env:
+          CGO_ENABLED: '0'
+          VOICE_R18_REDIS_TEST_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -run '^TestRedisLedger_RealServerAtomicity$' ./internal/roomlifecycle > "$RUNNER_TEMP/voice-ledger-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/voice_ledger_required.json --service voice \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/voice-ledger-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/voice-ledger-receipt.json" --reject-skips
+      - name: Upload Voice ledger evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-ledger-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/voice-ledger-events.jsonl
+            ${{ runner.temp }}/voice-ledger-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  bot-membership-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'bot')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-bot-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Bot membership proofs
+        working-directory: src/backend/bot
+        env:
+          CGO_ENABLED: '0'
+          BOT_MEMBERSHIP_TEST_DATABASE_URL: postgres://voice:voice-bot-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -p 1 -timeout 10m -run '^Test(NativeMembershipTypedCleanupLostReplyAndMalformedReceipt|MembershipNativeTransitions)$' ./internal/spacemembership ./internal/store > "$RUNNER_TEMP/bot-membership-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/bot_membership_required.json --service bot \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/bot-membership-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/bot-membership-receipt.json" --reject-skips
+      - name: Upload Bot membership evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-membership-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/bot-membership-events.jsonl
+            ${{ runner.temp }}/bot-membership-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  role-migration-integration:
+    env:
+      GOFLAGS: -mod=readonly
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' || ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')) &&
+      needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-role-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Role migration proofs
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: '0'
+          ROLE_MIGRATION_TEST_DSN: postgres://voice:voice-role-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m -run '^TestRole13' ./internal/store > "$RUNNER_TEMP/role-migration-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/role_migration_required.json --service role \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/role-migration-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/role-migration-receipt.json" --reject-skips
+      - name: Prepare Role version 20 catalog
+        working-directory: src/backend/role
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql_owned() { docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U voice -d postgres; }
+          printf '%s\n' 'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (0, false);' | psql_owned
+          version=0
+          for file in ../migrations/role_db/*.up.sql; do
+            name=${file##*/}
+            number=${name%%_*}
+            [[ "$number" =~ ^[0-9]{6}$ ]] || exit 1
+            next=$((10#$number))
+            (( next <= 20 )) || break
+            (( next == version + 1 )) || exit 1
+            psql_owned < "$file"
+            printf 'UPDATE schema_migrations SET version=%d;\n' "$next" | psql_owned
+            version=$next
+          done
+          (( version == 20 ))
+      - name: Run Role bootstrap proof
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: '0'
+          VOICE_ROLE_BOOTSTRAP_PG_DSN: postgres://voice:voice-role-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          VOICE_ROLE_BOOTSTRAP_REDIS_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m -run '^TestBootstrapActualRole20PG$' . > "$RUNNER_TEMP/role-bootstrap-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/role_bootstrap_required.json --service role \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/role-bootstrap-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/role-bootstrap-receipt.json" --reject-skips
+      - name: Upload Role migration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: role-migration-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/role-migration-events.jsonl
+            ${{ runner.temp }}/role-migration-receipt.json
+            ${{ runner.temp }}/role-bootstrap-events.jsonl
+            ${{ runner.temp }}/role-bootstrap-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   compose-e2e:
     needs: changes
     if: >-
       !cancelled() &&
       (
         github.event_name == 'schedule' ||
-        (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+        ((github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') || needs.changes.outputs.full_validation == 'true') ||
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.flutter_live_suite == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -2259,6 +3922,7 @@ jobs:
         env:
           VOICE_RUN_LIVE_COMPOSE: "true"
           VOICE_API_BASE_URL: http://127.0.0.1:18080
+          VOICE_AFFECTED_PATHS_JSON: ${{ needs.changes.outputs.affected_paths || '[]' }}
         run: |
           bash scripts/ci/compose-e2e-smoke.sh
           cd src/backend/gateway
@@ -2307,11 +3971,11 @@ jobs:
       !cancelled() &&
       (
         github.event_name == 'schedule' ||
-        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+        ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true') ||
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_multi_account_pr == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -2358,12 +4022,13 @@ jobs:
       !cancelled() &&
       (
         github.event_name == 'schedule' ||
-        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+        ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true') ||
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
           (
             needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.ci_global == 'true' ||
             needs.changes.outputs.a1_t106_live == 'true'
           )
         ) ||
@@ -2453,7 +4118,7 @@ jobs:
       !cancelled() &&
       (
         github.event_name == 'schedule' ||
-        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+        ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true') ||
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
@@ -2515,10 +4180,13 @@ jobs:
 
   # --- Tier 3: nightly / manual full parity ---
   backend-go-integration:
+    needs: changes
     if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
+      !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+       needs.changes.outputs.full_validation == 'true')
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -2550,9 +4218,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (${{ matrix.service }})
+      - name: Resolve Go test dependencies (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Go integration test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
@@ -2563,11 +4231,17 @@ jobs:
         working-directory: src/backend/gateway
         run: CGO_ENABLED=1 go test -race ./...
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   analytics-clickhouse-integration:
     needs: changes
     if: >-
-      github.event_name == 'schedule' ||
+      needs.changes.outputs.full_validation == 'true' || github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+      (github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+       needs.changes.outputs.integration_analytics == 'true') ||
       (
         github.event_name == 'push' &&
         github.ref == 'refs/heads/master' &&
@@ -2607,12 +4281,19 @@ jobs:
         env:
           CLICKHOUSE_DSN: clickhouse://default:voice-clickhouse-ci@localhost:9000/voice
           CGO_ENABLED: "0"
-        run: go test -tags=integration ./internal/store/...
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -json -count=1 -tags=integration ./internal/store/... | tee "$RUNNER_TEMP/analytics-go-test.jsonl"
+          python3 ../../../scripts/ci/go_integration_receipts.py \
+            --events "$RUNNER_TEMP/analytics-go-test.jsonl" \
+            --package voice/backend/analytics/internal/store \
+            --test TestClickHouseInsertBatch --exit-code 0
 
   grafana-analytics-smoke:
     needs: changes
     if: >-
-      github.event_name == 'schedule' ||
+      needs.changes.outputs.full_validation == 'true' || github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
       (
         github.event_name == 'push' &&
@@ -2628,10 +4309,13 @@ jobs:
         run: bash scripts/ci/grafana-analytics-dashboard-smoke.sh
 
   local-ci-parity:
+    needs: changes
     if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
+      !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+       needs.changes.outputs.full_validation == 'true')
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
@@ -2650,6 +4334,8 @@ jobs:
           channel: stable
           cache: true
       - name: Install buf CLI and golangci-lint
+        env:
+          GOFLAGS: ''
         run: |
           go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
           go install ${{ env.GOLANGCI_LINT_MOD }}
@@ -2659,11 +4345,11 @@ jobs:
         run: |
           dart pub global activate protoc_plugin 25.0.0
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-      - name: Go mod tidy (all Go modules)
+      - name: Resolve Go test dependencies (all Go modules)
         run: |
           set -e
           for m in pkg analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
-            (cd "src/backend/$m" && go mod tidy)
+            (cd "src/backend/$m" && go list -test ./... >/dev/null)
           done
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
@@ -2671,11 +4357,84 @@ jobs:
         run: make build-all
       - name: make flutter-ci
         run: make flutter-ci
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  # Full validation is fail-closed while required full-profile routing and
+  # integration inventory gaps are being completed. Promotion fails closed
+  # until this exact master run qualifies.
+  full-validation-aggregation:
+    needs:
+      - changes
+      - protobuf
+      - compose-config
+      - ci-script-tests
+      - f13-historical-replay
+      - match-squad-overlay
+      - local-docker-isolation
+      - flutter-unit-plan
+      - flutter-unit-tests
+      - flutter-unit-receipts
+      - flutter
+      - flutter-music-proof
+      - flutter-help-proof
+      - flutter-startup-proof
+      - flutter-device-driver
+      - flutter-key-backup-goldens
+      - flutter-windows
+      - flutter-android-smoke
+      - flutter-web-integration
+      - flutter-ios
+      - golangci
+      - backend-go-pkg
+      - backend-go
+      - backend-go-integration-pr
+      - backend-go-integration-evidence
+      - backend-go-integration
+      - nats-hub-config-renderer-image
+      - story-lfp-integration
+      - user-association-integration
+      - notification-quota-integration
+      - role-migration-integration
+      - role-space-receipt-integration
+      - bot-membership-integration
+      - voice-ledger-integration
+      - messaging-threadlist-integration
+      - space-autovacuum-integration
+      - space-native-installer-integration
+      - chat-lifecycle-integration
+      - chat-auth-java-integration
+      - realtime-lifecycle-integration
+      - backend-auth
+      - backend-auth-image
+      - developer-portal
+      - web
+      - admin
+      - t31-critical
+      - compose-e2e
+      - a1-e2e
+      - a1-flutter-profile-handoff
+      - a1-attachment-restart-proof
+      - analytics-clickhouse-integration
+      - grafana-analytics-smoke
+      - local-ci-parity
+    if: >-
+      always() && needs.changes.outputs.full_validation == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Aggregate full validation
+        env:
+          FULL_PROFILE: ${{ needs.changes.outputs.full_validation == 'true' && 'full' || inputs.profile }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/full_validation_gate.py
 
   deploy-staging:
     needs:
       - changes
       - ci-gate
+      - full-validation-aggregation
       - staging-stack-lock
       - staging-images-push
       - staging-images-promote
@@ -2687,10 +4446,11 @@ jobs:
       always() &&
       needs.changes.result == 'success' &&
       needs.ci-gate.result == 'success' &&
-      needs.staging-images-push.result != 'failure' &&
-      needs.staging-images-push.result != 'cancelled' &&
-      needs.staging-images-promote.result != 'failure' &&
-      needs.staging-images-promote.result != 'cancelled' &&
+      needs.full-validation-aggregation.result == 'success' &&
+      (needs.staging-images-push.result == 'success' ||
+       (needs.staging-images-push.result == 'skipped' && needs.changes.outputs.build_go_services == '[]')) &&
+      (needs.staging-images-promote.result == 'success' ||
+       (needs.staging-images-promote.result == 'skipped' && needs.changes.outputs.promote_services == '[]')) &&
       needs.backend-auth.result != 'failure' &&
       needs.backend-auth.result != 'cancelled' &&
       needs.web.result != 'failure' &&

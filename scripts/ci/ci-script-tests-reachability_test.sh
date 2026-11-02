@@ -134,8 +134,8 @@ echo "${backend_go_block}" | grep -Fq 'fromJSON(needs.changes.outputs.go_service
   || fail "normal backend Go CI must retain its broad Go test matrix"
 grep -Fq "needs.changes.outputs.integration_go_services != '[]'" "${WORKFLOW}" \
   || fail "PR integration matrix must skip when no Go service path changed"
-grep -Fq 'RUN_GO_INTEGRATION: ${{ github.event_name == '\''pull_request'\'' && needs.changes.outputs.integration_go_services != '\''[]'\'' }}' "${WORKFLOW}" \
-  || fail "ci-gate must receive whether the PR integration matrix is scheduled"
+grep -Fq 'RUN_GO_INTEGRATION: ${{ (github.event_name == '\''pull_request'\'' || needs.changes.outputs.full_validation == '\''true'\'') && needs.changes.outputs.integration_go_services != '\''[]'\'' }}' "${WORKFLOW}" \
+  || fail "ci-gate must receive whether the PR or full validation integration matrix is scheduled"
 grep -Fq 'check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr' "${REQUIRED_JOBS}" \
   || fail "ci-gate must require PR integration only when its matrix is nonempty"
 grep -Fq 'if [[ "${svc}" == "controlledgame" ]]; then' "${ROOT}/scripts/ci/resolve-go-matrix.sh" \

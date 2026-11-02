@@ -1,6 +1,7 @@
 """Exercise the public shell CLI; fixtures never execute Go or Flutter."""
 from pathlib import Path
 import os
+import json
 import subprocess
 import tempfile
 import unittest
@@ -13,6 +14,49 @@ SCRIPT = ROOT / 'scripts/ci/e2e-manifest.sh'
 
 
 class ManifestTest(unittest.TestCase):
+    def test_compose_flutter_json_is_not_contaminated_by_dependency_resolution(self):
+        script = (ROOT / 'scripts/ci/compose-e2e-smoke.sh').read_text(encoding='utf-8')
+        self.assertLess(script.index('flutter pub get'), script.index('flutter test --no-pub --reporter json'))
+
+    def test_changed_live_flutter_suites_are_selected_in_manifest_order(self):
+        import e2e_manifest
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / 'features.yml'
+            manifest.write_text('full_flutter: [test/a.dart, test/b.dart, test/c.dart]\na1_flutter_profile_handoff: [test/a1_live_test.dart]\n', encoding='utf-8')
+            self.assertEqual(e2e_manifest.affected_flutter(manifest, [
+                'src/frontend/test/c.dart', 'src/frontend/test/a.dart',
+                'src/frontend/test/unrelated.dart', 'src/frontend/test/c.dart',
+            ]), ['test/a.dart', 'test/c.dart'])
+            self.assertEqual(e2e_manifest.affected_flutter(manifest, ['docs/README.md']), [])
+            self.assertEqual(e2e_manifest.affected_flutter(manifest, ['src/frontend/test/a1_live_test.dart']), [])
+            root = Path(directory)
+            new_suite = root / 'src/frontend/test/new_live_test.dart'
+            new_suite.parent.mkdir(parents=True)
+            new_suite.write_text('void main() {}', encoding='utf-8')
+            with self.assertRaises(ValueError):
+                e2e_manifest.affected_flutter(manifest, ['src/frontend/test/new_live_test.dart'], root)
+            new_suite.unlink()
+            self.assertEqual(e2e_manifest.affected_flutter(manifest, ['src/frontend/test/new_live_test.dart'], root), [])
+            self.assertEqual(e2e_manifest.affected_flutter(manifest, [
+                'src/frontend/test/new_live_test.dart', 'src/frontend/test/c.dart'], root), ['test/c.dart'])
+
+    def test_affected_flutter_cli_rejects_invalid_inputs_without_partial_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / 'features.yml'
+            manifest.write_text('full_flutter: [test/a.dart, test/b.dart]\na1_flutter_profile_handoff: [test/a1_live_test.dart]\n', encoding='utf-8')
+            for value, expected, output in [
+                (json.dumps(['src/frontend/test/b.dart']), 0, 'test/b.dart\n'),
+                ('[]', 0, ''), ('[1]', 1, ''), ('{', 1, ''), ('{}', 1, ''),
+                (json.dumps(['src/frontend/test/accessibility_settings_capture_test.dart']), 0, ''),
+                (json.dumps(['src/frontend/test/search_timeout_e2e_live_test.dart']), 1, ''),
+            ]:
+                env = dict(os.environ, VOICE_AFFECTED_PATHS_JSON=value)
+                result = subprocess.run(['bash', str(SCRIPT), str(manifest), 'affected_flutter'],
+                                        env=env, text=True, capture_output=True, check=False)
+                with self.subTest(value=value):
+                    self.assertEqual(result.returncode, expected, result.stderr)
+                    self.assertEqual(result.stdout, output)
+
     def parse(self, text, section='smoke_gateway'):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'features.yml'

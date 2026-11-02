@@ -13,16 +13,16 @@ ROOT := $(CURDIR)
 
 ifeq ($(OS),Windows_NT)
 BASH ?= "C:/Program Files/Git/bin/bash.exe"
-GO_TEST_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_FLAGS)
-GO_TEST_SHORT_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_SHORT_FLAGS)
+GO_TEST_RUN = set CGO_ENABLED=0&& go test -mod=readonly $(GO_TEST_FLAGS)
+GO_TEST_SHORT_RUN = set CGO_ENABLED=0&& go test -mod=readonly $(GO_TEST_SHORT_FLAGS)
 # Host gcc is often missing on Windows; run -race in Docker (parity with Linux CI).
 GATEWAY_RACE_RUN = docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
-	bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config >/dev/null 2>&1 && CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)"
+	bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config >/dev/null 2>&1 && CGO_ENABLED=1 go test -mod=readonly -race $(GO_TEST_FLAGS)"
 else
 BASH ?= bash
-GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
-GO_TEST_SHORT_RUN = CGO_ENABLED=0 go test $(GO_TEST_SHORT_FLAGS)
-GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
+GO_TEST_RUN = CGO_ENABLED=0 go test -mod=readonly $(GO_TEST_FLAGS)
+GO_TEST_SHORT_RUN = CGO_ENABLED=0 go test -mod=readonly $(GO_TEST_SHORT_FLAGS)
+GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -mod=readonly -race $(GO_TEST_FLAGS)
 endif
 GO_SERVICES := analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
 # Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
@@ -35,7 +35,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync r23-contract-ci r23-p2-generated-parity sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-migrate-voice compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof compose-a1-multi-account-proof compose-a1-flutter-profile-handoff \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
-	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
+	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all go-mod-resolve-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
 	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check complete-match-pki-test
 
@@ -188,9 +188,15 @@ buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf lint && buf format -d --exit-code"
 
-backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci testcontainers-prune
+backend-test-ci: go-mod-resolve-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci
 
-backend-test-ci-short: go-mod-tidy-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci testcontainers-prune
+backend-test-ci-short: go-mod-resolve-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci
+
+go-mod-resolve-all:
+	$(BASH) -c 'set -e; for m in $(GO_MODULES_LINT); do \
+		echo "== resolve $$m without module writes =="; \
+		(cd src/backend/$$m && go list -mod=readonly -test ./... >/dev/null); \
+	done'
 
 go-mod-tidy-all:
 	$(BASH) -c 'for m in $(GO_MODULES_LINT); do \
@@ -200,7 +206,7 @@ go-mod-tidy-all:
 
 backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
 
-# Remove testcontainers leftovers (Ryuk may be disabled on Windows). Does not touch compose stacks.
+# Refuse unscoped Testcontainers cleanup on shared Docker hosts.
 testcontainers-prune:
 	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune.sh"
 
@@ -236,7 +242,7 @@ gateway-test-race-ci:
 	cd "$(ROOT)/src/backend/gateway" && $(GATEWAY_RACE_RUN)
 
 # Full local CI (parity with .github/workflows/ci.yml): check-toolchain, compose+buf in Docker,
-# host go test/mvn/golangci (testcontainers need host Docker), images, testcontainers-prune.
+# host go test/mvn/golangci (testcontainers need host Docker), and images.
 # Requires Go 1.26, Docker daemon, Maven/Java on PATH. Flutter: make flutter-ci
 build-all: check-toolchain compose-config-ci buf-ci backend-test-ci golangci-ci gateway-test-race-ci backend-image-ci
 
@@ -326,7 +332,51 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_cut_test.py"
 	python3 "$(ROOT)/scripts/ci/full_application_request_test.py"
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
+	python3 "$(ROOT)/scripts/ci/affected_check_plan_test.py"
+	python3 "$(ROOT)/scripts/ci/full_validation_gate_test.py"
+	python3 "$(ROOT)/scripts/ci/voice_history_baseline_test.py"
+	python3 "$(ROOT)/scripts/ci/auth_candidate_classpath_test.py"
+	python3 "$(ROOT)/scripts/ci/check_go_modules_clean_test.py"
+	python3 "$(ROOT)/scripts/ci/local_source_snapshot_test.py"
+	python3 "$(ROOT)/scripts/ci/flutter_test_events_test.py"
+	python3 "$(ROOT)/scripts/ci/local_flutter_execution_test.py"
+	python3 "$(ROOT)/scripts/ci/local_process_supervision_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_execution_test.py"
+	python3 "$(ROOT)/scripts/ci/local_chat_private_test.py"
+	python3 "$(ROOT)/scripts/ci/local_chat_orchestration_test.py"
+	python3 "$(ROOT)/scripts/ci/local_auth_private_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_dependencies_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_verify_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_plan_test.py"
+	python3 "$(ROOT)/scripts/ci/local_preflight_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_routing_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_matrix_inventory_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_staging_dispatch_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_staging_network_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_staging_request_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_staging_worker_test.py"
+	python3 "$(ROOT)/scripts/ci/local_ci_staging_execution_test.py"
+	python3 "$(ROOT)/scripts/ci/local_preflight_staging_test.py"
+	python3 "$(ROOT)/scripts/ci/local_nats_hosted_diagnostic_test.py"
+	python3 "$(ROOT)/scripts/ci/local_staging_owned_tmp_test.py"
+	python3 "$(ROOT)/scripts/ci/local_current_diff_test.py"
+	python3 "$(ROOT)/scripts/ci/local_proto_execution_test.py"
+	python3 "$(ROOT)/scripts/ci/local_private_git_test.py"
+	python3 "$(ROOT)/scripts/ci/local_rootless_profile_test.py"
+	python3 "$(ROOT)/scripts/ci/local_image_archive_test.py"
+	python3 "$(ROOT)/scripts/ci/local_docker_scheduled_test.py"
+	python3 "$(ROOT)/scripts/ci/go_integration_receipts_test.py"
+	python3 "$(ROOT)/scripts/ci/space_native_clock_proof_test.py"
+	python3 "$(ROOT)/scripts/ci/space_over100_proof_test.py"
+	python3 "$(ROOT)/scripts/ci/verify_go_verbose_test.py"
+	python3 "$(ROOT)/scripts/ci/t31-session-event-compose-bootstrap_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
+	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune_test.sh"
+	python3 "$(ROOT)/scripts/ci/local_heavy_slots_test.py"
+	python3 "$(ROOT)/scripts/ci/local_compose_audit_test.py"
+	python3 "$(ROOT)/scripts/ci/local_compose_private_test.py"
+	python3 "$(ROOT)/scripts/ci/local_compose_bridge_test.py"
+	python3 "$(ROOT)/scripts/ci/local_docker_owned_test.py"
 	python3 "$(ROOT)/scripts/ci/story-media-cohort-chain-ci_test.py"
 	python3 "$(ROOT)/scripts/ci/gate-latency_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
@@ -335,8 +385,15 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	$(BASH) "$(ROOT)/scripts/ci/minio-mc-image-ci-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/minio-compose-image-override-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
+	python3 "$(ROOT)/scripts/ci/local_auth_full_test.py"
+	python3 "$(ROOT)/scripts/ci/local_auth_full_orchestration_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_full_integration_test.py"
+	python3 "$(ROOT)/scripts/ci/local_chat_full_integration_test.py"
+	python3 "$(ROOT)/scripts/ci/local_golangci_execution_test.py"
+	python3 "$(ROOT)/scripts/ci/local_go_multi_dependencies_test.py"
+	python3 "$(ROOT)/scripts/ci/local_overlay_execution_test.py"
 
-ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
+ci-script-tests-runtime: voice-db-runtime-provisioning-fast-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
 	$(BASH) "$(ROOT)/scripts/ci/story-media-cohort-chain.sh"
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
@@ -435,11 +492,13 @@ staging-app-secrets-test:
 	$(BASH) "$(ROOT)/scripts/staging/restore-nats-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-user-search-projection-secret_test.sh"
 
-.PHONY: voice-db-runtime-provisioning-contract-test
-voice-db-runtime-provisioning-contract-test:
+.PHONY: voice-db-runtime-provisioning-contract-test voice-db-runtime-provisioning-fast-test
+voice-db-runtime-provisioning-contract-test: voice-db-runtime-provisioning-fast-test
+	python3 "$(ROOT)/scripts/ci/f13_exact_j_historical_red_test.py"
+
+voice-db-runtime-provisioning-fast-test:
 	$(BASH) "$(ROOT)/scripts/ci/voice-r22-runtime-scope_test.sh"
 	python3 "$(ROOT)/scripts/ci/f13_guarded_correction_test.py"
-	python3 "$(ROOT)/scripts/ci/f13_exact_j_historical_red_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/apply-migrate-jobs_test.sh"
 

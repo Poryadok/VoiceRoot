@@ -42,6 +42,75 @@ ci_global:
   - '!scripts/ci/t31-startup-diagnostics_test.py'
   - '!scripts/ci/gate-latency.py'
   - '!scripts/ci/gate-latency_test.py'
+  # Local planning stays narrow; the Flutter event parser selects frontend below.
+  - '!scripts/ci/local_source_snapshot.py'
+  - '!scripts/ci/local_source_snapshot_test.py'
+  - '!scripts/ci/local_current_diff.py'
+  - '!scripts/ci/local_current_diff_test.py'
+  - '!scripts/ci/local_ci_routing.py'
+  - '!scripts/ci/local_ci_routing_test.py'
+  - '!scripts/ci/local_ci_matrix_inventory.py'
+  - '!scripts/ci/local_ci_matrix_inventory_test.py'
+  - '!scripts/ci/local_ci_staging_dispatch.py'
+  - '!scripts/ci/local_ci_staging_dispatch_test.py'
+  - '!scripts/ci/local_ci_staging_network.py'
+  - '!scripts/ci/local_ci_staging_network_test.py'
+  - '!scripts/ci/local_ci_staging_request.py'
+  - '!scripts/ci/local_ci_staging_request_test.py'
+  - '!scripts/ci/local_ci_staging_worker.py'
+  - '!scripts/ci/local_ci_staging_worker_test.py'
+  - '!scripts/ci/local_ci_staging_execution.py'
+  - '!scripts/ci/local_ci_staging_execution_test.py'
+  - '!scripts/ci/local_preflight_staging_test.py'
+  - '!scripts/ci/local_nats_hosted_diagnostic.py'
+  - '!scripts/ci/local_nats_hosted_diagnostic_test.py'
+  - '!scripts/ci/local_staging_owned_tmp.py'
+  - '!scripts/ci/local_staging_owned_tmp_test.py'
+  - '!scripts/ci/local_go_execution.py'
+  - '!scripts/ci/local_go_execution_test.py'
+  - '!scripts/ci/local_chat_private.py'
+  - '!scripts/ci/local_chat_private_test.py'
+  - '!scripts/ci/local_chat_orchestration.py'
+  - '!scripts/ci/local_chat_orchestration_test.py'
+  - '!scripts/ci/local_auth_private.py'
+  - '!scripts/ci/local_auth_private_test.py'
+  - '!scripts/ci/local_auth_orchestration.py'
+  - '!scripts/ci/local_go_dependencies.py'
+  - '!scripts/ci/local_go_dependencies_test.py'
+  - '!scripts/ci/local_go_plan.py'
+  - '!scripts/ci/local_go_plan_test.py'
+  - '!scripts/ci/local_flutter_execution.py'
+  - '!scripts/ci/local_flutter_execution_test.py'
+  - '!scripts/ci/local_process_supervision.py'
+  - '!scripts/ci/local_process_supervision_test.py'
+  - '!scripts/ci/flutter_test_events.py'
+  - '!scripts/ci/flutter_test_events_test.py'
+  # These isolated local-Docker helpers do not feed the historical F13 replay.
+  - '!scripts/ci/local_rootless_profile.py'
+  - '!scripts/ci/local_rootless_profile_test.py'
+  - '!scripts/ci/local_image_archive.py'
+  - '!scripts/ci/local_image_archive_test.py'
+  - '!scripts/ci/local_docker_owned.py'
+  - '!scripts/ci/local_docker_owned_test.py'
+  - '!scripts/ci/local_docker_owned_integration_test.py'
+  - '!scripts/ci/local_docker_owned_cancel_test.py'
+  - '!scripts/ci/local_docker_scheduled.py'
+  - '!scripts/ci/local_docker_scheduled_test.py'
+  - '!scripts/ci/local_docker_scheduled_integration_test.py'
+  - '!scripts/ci/local_docker_scheduled_exec_integration_test.py'
+  - '!scripts/ci/local_heavy_slots.py'
+  - '!scripts/ci/local_heavy_slots_test.py'
+  - '!scripts/ci/local_compose_audit.py'
+  - '!scripts/ci/local_compose_audit_test.py'
+  - '!scripts/ci/local_compose_private.py'
+  - '!scripts/ci/local_compose_private_test.py'
+  - '!scripts/ci/local_compose_bridge.py'
+  - '!scripts/ci/local_compose_bridge_test.py'
+  - '!scripts/ci/testcontainers-prune.sh'
+  - '!scripts/ci/testcontainers-prune_test.sh'
+  - '!scripts/ci/auth_candidate_classpath.py'
+  - '!scripts/ci/auth_candidate_classpath_test.py'
+  - '!scripts/ci/chat_auth_java_required.json'
 
 ci_scripts:
   # Complete chain fixture imports plus its actual restore-only SQL inputs.
@@ -55,6 +124,68 @@ ci_scripts:
   - .golangci.yml
   - .github/workflows/**
   - .github/ci/**
+
+chat_auth_java_inputs:
+  - scripts/ci/auth_candidate_classpath.py
+  - scripts/ci/auth_candidate_classpath_test.py
+  - scripts/ci/chat_auth_java_required.json
+
+# Explicit inputs to the local Docker ownership and bounded-slot proofs.
+local_docker_isolation:
+  - scripts/ci/local_ci_staging_dispatch.py
+  - scripts/ci/local_ci_staging_dispatch_test.py
+  - scripts/ci/local_ci_staging_network.py
+  - scripts/ci/local_ci_staging_network_test.py
+  - scripts/ci/local_ci_staging_request.py
+  - scripts/ci/local_ci_staging_request_test.py
+  - scripts/ci/local_ci_staging_worker.py
+  - scripts/ci/local_ci_staging_worker_test.py
+  - scripts/ci/local_ci_staging_execution.py
+  - scripts/ci/local_ci_staging_execution_test.py
+  - scripts/ci/local_preflight_staging_test.py
+  - scripts/ci/local_staging_owned_tmp.py
+  - scripts/ci/local_staging_owned_tmp_test.py
+  - scripts/ci/local_nats_hosted_diagnostic.py
+  - scripts/ci/local_nats_hosted_diagnostic_test.py
+  - scripts/ci/local_image_archive.py
+  - scripts/ci/local_image_archive_test.py
+  - scripts/ci/local_rootless_profile.py
+  - scripts/ci/local_rootless_profile_test.py
+  - scripts/ci/local_source_snapshot.py
+  - scripts/ci/local_go_execution.py
+  - scripts/ci/local_chat_private.py
+  - scripts/ci/local_chat_private_test.py
+  - scripts/ci/local_chat_orchestration.py
+  - scripts/ci/local_chat_orchestration_test.py
+  - scripts/ci/local_auth_private.py
+  - scripts/ci/local_auth_private_test.py
+  - scripts/ci/local_auth_orchestration.py
+  - scripts/ci/local_go_dependencies.py
+  - scripts/ci/local_go_verify.py
+  - scripts/ci/local_go_verify_test.py
+  - scripts/ci/local_go_plan.py
+  - scripts/ci/local_docker_owned.py
+  - scripts/ci/local_docker_owned_test.py
+  - scripts/ci/local_docker_owned_integration_test.py
+  - scripts/ci/local_docker_owned_cancel_test.py
+  - scripts/ci/local_docker_scheduled.py
+  - scripts/ci/local_docker_scheduled_test.py
+  - scripts/ci/local_docker_scheduled_integration_test.py
+  - scripts/ci/local_docker_scheduled_exec_integration_test.py
+  - scripts/ci/local_heavy_slots.py
+  - scripts/ci/local_heavy_slots_test.py
+  - scripts/ci/local_compose_audit.py
+  - scripts/ci/local_compose_private.py
+  - scripts/ci/local_compose_private_test.py
+  - scripts/ci/local_compose_bridge.py
+  - scripts/ci/local_compose_bridge_test.py
+  - scripts/ci/local_compose_audit_test.py
+  - scripts/ci/testcontainers-prune.sh
+  - scripts/ci/testcontainers-prune_test.sh
+  - src/backend/pkg/cmd/ci-go-session/**
+  - src/backend/pkg/cmd/ci-rootless-create/**
+  - src/backend/pkg/go.mod
+  - src/backend/pkg/go.sum
 
 # Every image can consume generated peer modules and shared context rules.
 go_build_shared:
@@ -73,8 +204,24 @@ nats_renderer:
   - src/backend/chat/pb/**
   - .dockerignore
 
-# Changes to the historical validator require its complete fixtures on the PR.
-# The full audit is also mandatory for release branches and master pushes.
+# Exact historical replay inputs and the policy that selects them.
+f13_replay:
+  - scripts/ci/f13*
+  - scripts/ci/testdata/f13-exact-j-547/**
+  - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
+  - scripts/ci/voice-r22-runtime-scope*
+  - scripts/ci/resolve-voice-r22-base.sh
+  - scripts/ci/affected_check_plan*
+  - scripts/ci/fast-gate-routing*
+  - scripts/staging/apply-migrate-jobs*
+  - src/backend/space/internal/grpcsvc/audit.go
+  - .agent/execplans/native-p3-master-source.md
+  - .github/ci/**
+  - .github/workflows/ci.yml
+  - Makefile
+
+# Historical validator changes select the focused F13 regression replay.
+# The full audit runs on schedule and is checked at production deployment.
 history_audit:
   - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
   - scripts/ci/voice-r22-runtime-scope*
@@ -89,9 +236,51 @@ match_squad_overlay:
   - deploy/dev/match-squad-trust-overlay/**
 
 a1_t106_live:
-  # Retain the existing output name; both targeted live test edits require A1.
+  # The four manifest journeys and shared client/test inputs require the proof.
   - src/frontend/test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart
   - src/frontend/test/t106_account_soft_delete_e2e_live_test.dart
+  - src/frontend/test/t107_folders_quick_access_e2e_live_test.dart
+  - src/frontend/test/a1_pending_email_reentry_e2e_live_test.dart
+  - src/frontend/test/support/**
+  - src/frontend/lib/**
+  - src/frontend/assets/**
+  - src/frontend/pubspec.yaml
+  - src/frontend/pubspec.lock
+  - protos/**
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/backend/migrations/auth_db/**
+  - src/backend/migrations/user_db/**
+  - src/backend/migrations/chat_db/**
+  - src/backend/migrations/messaging_db/**
+  - src/backend/migrations/social_db/**
+  - src/backend/migrations/realtime_db/**
+
+flutter_live_suite:
+  - src/frontend/test/**/*live*test.dart
+
+a1_multi_account_pr:
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/backend/migrations/auth_db/**
+  - src/backend/migrations/user_db/**
+  - src/backend/migrations/chat_db/**
+  - src/backend/migrations/messaging_db/**
+  - src/backend/migrations/social_db/**
+  - src/backend/migrations/realtime_db/**
+  - protos/**
 
 a1_e2e:
   - Makefile
@@ -160,6 +349,9 @@ staging_infra:
   - docker/postgres/**
   - docker/clickhouse/**
 
+analytics_integration_inputs:
+  - docker/clickhouse/**
+
 protos:
   - protos/**
   # Auth Maven compiles this checked-in copy; its drift must trigger the protobuf gate too.
@@ -172,6 +364,35 @@ frontend:
   - src/frontend/**
   - design/**
   - scripts/design/**
+  - scripts/ci/flutter_test_events.py
+  - scripts/ci/flutter_test_events_test.py
+
+music_inputs:
+  - src/frontend/**
+  - design/**
+  - scripts/design/**
+  - '!src/frontend/test/app_shell_icon_web_test.dart'
+  - '!src/frontend/test/chat_draft_browser_storage_test.dart'
+  - '!src/frontend/test/linked_oauth_browser_web_test.dart'
+  - '!src/frontend/test/presigned_upload_web_test.dart'
+
+help_inputs:
+  - src/frontend/**
+  - design/**
+  - scripts/design/**
+  - '!src/frontend/test/app_shell_icon_web_test.dart'
+  - '!src/frontend/test/chat_draft_browser_storage_test.dart'
+  - '!src/frontend/test/linked_oauth_browser_web_test.dart'
+  - '!src/frontend/test/presigned_upload_web_test.dart'
+
+startup_inputs:
+  - src/frontend/**
+  - design/**
+  - scripts/design/**
+  - '!src/frontend/test/app_shell_icon_web_test.dart'
+  - '!src/frontend/test/chat_draft_browser_storage_test.dart'
+  - '!src/frontend/test/linked_oauth_browser_web_test.dart'
+  - '!src/frontend/test/presigned_upload_web_test.dart'
 
 # Workflow/publisher contract changes validate and publish the DEV Flutter image.
 dev_web_publish:
@@ -187,6 +408,13 @@ windows_desktop:
 auth:
   - src/backend/auth/**
   - src/backend/migrations/auth_db/**
+
+# Auth consumes Subscription entitlement events; protobuf changes may alter
+# its contracts. This selects tests only, not Auth image deployment.
+auth_test_impact:
+  - src/backend/subscription/**
+  - src/backend/migrations/subscription_db/**
+  - protos/**
 
 developer-portal:
   - src/developer-portal/**
@@ -303,3 +531,34 @@ code:
   - '!*.md'
   - '!.github/workflows/docs-link-check.yml'
   - '!.markdown-link-check.json'
+t31:
+  - '.github/workflows/t31-session-events-e2e.yml'
+  - 'docker-compose.yml'
+  - 'docker-compose.phase0.yml'
+  - 'docker-compose.voice-space-media.yml'
+  - 'docker-compose.t31-session-events-e2e.yml'
+  - 'docs/testing/game-integrations-acceptance.md'
+  - 'docs/testing/game-integrations-exec-plan.md'
+  - 'scripts/ci/t31-session-event-compose-bootstrap.py'
+  - 'scripts/ci/t31-session-event-compose-bootstrap_test.py'
+  - 'scripts/ci/verify_go_verbose.py'
+  - 'scripts/ci/verify_go_verbose_test.py'
+  - 'scripts/ci/t31-startup-diagnostics.py'
+  - 'scripts/dev/generate-phase0-fixture.py'
+  - 'scripts/dev/t31-session-event-gateway.conf'
+  - 'protos/**'
+  - 'src/backend/pkg/**'
+  - 'src/backend/scripts/docker-go-mod-download.sh'
+  - 'src/backend/file/pb/**'
+  - 'src/backend/messaging/pb/**'
+  - 'src/backend/user/pb/**'
+  - 'src/backend/migrations/**'
+  - 'src/backend/auth/**'
+  - 'src/backend/chat/**'
+  - 'src/backend/controlledgame/**'
+  - 'src/backend/gameintegration/**'
+  - 'src/backend/gateway/**'
+  - 'src/backend/migrations/game_integration_db/**'
+  - 'src/backend/role/**'
+  - 'src/backend/voice/**'
+  - 'src/backend/**'

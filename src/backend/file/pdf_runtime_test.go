@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -173,7 +174,19 @@ func TestPDFRuntimeMainUploadsRendersAndRevokesThumbnail(t *testing.T) {
 			command.Env = append(command.Env, key+"="+value)
 		}
 	}
-	command.Env = append(command.Env, "VOICE_PDF_MAIN_PROCESS=1", "DATABASE_URL="+pool.Config().ConnString(), "FILE_GRPC_LISTEN="+grpcAddress, "LISTEN_ADDR="+httpAddress,
+	// pgx ConnString returns the original DSN, not runtime parameters added by
+	// the private-schema fixture. Preserve that schema for the child process.
+	databaseURL := pool.Config().ConnString()
+	if schema := pool.Config().ConnConfig.RuntimeParams["search_path"]; schema != "" {
+		parsed, parseErr := url.Parse(databaseURL)
+		require.NoError(t, parseErr)
+		require.Contains(t, []string{"postgres", "postgresql"}, parsed.Scheme)
+		query := parsed.Query()
+		query.Set("search_path", schema)
+		parsed.RawQuery = query.Encode()
+		databaseURL = parsed.String()
+	}
+	command.Env = append(command.Env, "VOICE_PDF_MAIN_PROCESS=1", "DATABASE_URL="+databaseURL, "FILE_GRPC_LISTEN="+grpcAddress, "LISTEN_ADDR="+httpAddress,
 		"FILE_R2_ENDPOINT="+storage.URL, "FILE_R2_REGION=auto", "FILE_R2_BUCKET=pdf-runtime", "FILE_R2_ACCESS_KEY_ID=test-access", "FILE_R2_SECRET_ACCESS_KEY=test-secret",
 		"CHAT_GRPC_ADDR="+chatAddress, "MESSAGING_GRPC_ADDR="+messagingAddress, "FILE_DOWNLOAD_SIGNING_KEY=0123456789abcdef0123456789abcdef", "FILE_DOWNLOAD_BASE_URL=http://"+httpAddress+"/api/v1/files/download")
 	logPath := filepath.Join(t.TempDir(), "file-main.log")

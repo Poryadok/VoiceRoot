@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
@@ -39,6 +41,61 @@ import (
 )
 
 const authJavaFixturePin = "908ac14261dea22fc570ff114dffdea27dcffb97"
+
+// Wait for the positive control's new transport before starting its RPC deadline.
+// Negative TLS controls must not use this helper because they cannot become ready.
+func waitForChatAuthControlConnection(ctx context.Context, conn *grpc.ClientConn) error {
+	conn.Connect()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown {
+			return fmt.Errorf("Chat/Auth control connection shut down")
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("Chat/Auth control connection did not become ready")
+		}
+	}
+}
+
+// Candidate mode is only meaningful when the CI job builds the classpath from
+// this clean checkout. Legacy component proofs keep their original fixed pin.
+func authJavaCandidateSource(repo, source, classpath string) error {
+	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(source) {
+		return fmt.Errorf("invalid candidate source")
+	}
+	git := func(args ...string) (string, error) {
+		command := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		command.Env = append(os.Environ(), "GIT_NO_REPLACE_OBJECTS=1")
+		out, err := command.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	head, err := git("rev-parse", "HEAD")
+	if err != nil || head != source {
+		return fmt.Errorf("candidate checkout identity differs")
+	}
+	dirty, err := git("status", "--porcelain", "--untracked-files=all")
+	if err != nil || dirty != "" {
+		return fmt.Errorf("candidate inputs are not clean")
+	}
+	entries := strings.Split(classpath, ":")
+	if len(entries) < 2 {
+		return fmt.Errorf("candidate classpath is incomplete")
+	}
+	for i, relative := range []string{"src/backend/auth/target/test-classes", "src/backend/auth/target/classes"} {
+		expected, e1 := filepath.EvalSymlinks(filepath.Join(repo, filepath.FromSlash(relative)))
+		actual, e2 := filepath.EvalSymlinks(entries[i])
+		if e1 != nil || e2 != nil || expected != actual {
+			return fmt.Errorf("candidate classpath does not use checkout output")
+		}
+	}
+	return nil
+}
 
 type authJavaReady struct {
 	Schema   int       `json:"schema_version"`
@@ -69,7 +126,14 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 	if cp == "" {
 		t.Skip("requires owned private Java/PG/Redis orchestration")
 	}
-	require.Equal(t, authJavaFixturePin, os.Getenv("BE131_AUTH_JAVA_SOURCE"))
+	source := authJavaFixturePin
+	if candidate := os.Getenv("BE131_AUTH_CANDIDATE_SHA"); candidate != "" {
+		repo, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+		require.NoError(t, err)
+		require.NoError(t, authJavaCandidateSource(strings.TrimSpace(string(repo)), candidate, cp))
+		source = candidate
+	}
+	require.Equal(t, source, os.Getenv("BE131_AUTH_JAVA_SOURCE"))
 	for _, entry := range strings.Split(cp, ":") {
 		_, err := os.Stat(entry)
 		require.NoError(t, err, "actual compiled classpath entry")
@@ -144,7 +208,10 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 		retained, err = strconv.ParseInt(s, 10, 64)
 		require.NoError(t, err)
 	}
-	values := map[string]string{"RUN_ID": runID, "INPUT_ROOT": root, "AUTH_SOURCE_SHA": authJavaFixturePin, "LAUNCHER_SOURCE_SHA": authJavaFixturePin, "HOST": "localhost", "TLS_SERVER_NAME": "localhost", "CA_FILE": serverCert, "CLIENT_CERT_FILE": clientCert, "CLIENT_KEY_FILE": clientKey, "JDBC_URL": os.Getenv("BE131_AUTH_JDBC_URL"), "JDBC_USERNAME": "test", "JDBC_PASSWORD_FILE": filepath.Join(root, "jdbc-password"), "REDIS_HOST": os.Getenv("BE131_AUTH_REDIS_HOST"), "JWKS_TRUSTSTORE_FILE": trust, "JWKS_TRUSTSTORE_PASSWORD_FILE": filepath.Join(root, "trust-password"), "DURABLE_EPOCH": strconv.FormatInt(durable, 10), "RETAINED_EPOCH": strconv.FormatInt(retained, 10)}
+	values := map[string]string{"RUN_ID": runID, "INPUT_ROOT": root, "AUTH_SOURCE_SHA": source, "LAUNCHER_SOURCE_SHA": source, "HOST": "localhost", "TLS_SERVER_NAME": "localhost", "CA_FILE": serverCert, "CLIENT_CERT_FILE": clientCert, "CLIENT_KEY_FILE": clientKey, "JDBC_URL": os.Getenv("BE131_AUTH_JDBC_URL"), "JDBC_USERNAME": "test", "JDBC_PASSWORD_FILE": filepath.Join(root, "jdbc-password"), "REDIS_HOST": os.Getenv("BE131_AUTH_REDIS_HOST"), "JWKS_TRUSTSTORE_FILE": trust, "JWKS_TRUSTSTORE_PASSWORD_FILE": filepath.Join(root, "trust-password"), "DURABLE_EPOCH": strconv.FormatInt(durable, 10), "RETAINED_EPOCH": strconv.FormatInt(retained, 10)}
+	if port := os.Getenv("BE131_AUTH_REDIS_PORT"); port != "" {
+		values["REDIS_PORT"] = port
+	}
 	logFile, err := os.Create(filepath.Join(root, "java.log"))
 	require.NoError(t, err)
 	child := exec.Command("java", "-cp", cp, "voice.backend.auth.sessionepoch.AuthChatFloorInteropFixture", out, "180")
@@ -206,8 +273,8 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &ready))
 	require.Equal(t, 1, ready.Schema)
 	require.Equal(t, runID, ready.Run)
-	require.Equal(t, authJavaFixturePin, ready.Auth)
-	require.Equal(t, authJavaFixturePin, ready.Launcher)
+	require.Equal(t, source, ready.Auth)
+	require.Equal(t, source, ready.Launcher)
 	require.Equal(t, authv1.AuthService_GetChatSessionEpochFloor_FullMethodName, ready.RPC)
 	require.Equal(t, "localhost", ready.Host)
 	require.Equal(t, "localhost", ready.Name)
@@ -263,9 +330,15 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 		conn, e := grpc.NewClient(fmt.Sprintf("localhost:%d", ready.Port), grpc.WithTransportCredentials(credentials.NewTLS(cfg)))
 		require.NoError(t, e)
 		t.Cleanup(func() { _ = conn.Close() })
+		if withCert {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			require.NoError(t, waitForChatAuthControlConnection(ctx, conn), "Chat/Auth control transport must become ready")
+		}
 		return conn
 	}
-	client := authv1.NewAuthServiceClient(dial(true))
+	controlConnection := dial(true)
+	client := authv1.NewAuthServiceClient(controlConnection)
 	req := &authv1.GetChatSessionEpochFloorRequest{AccountId: ready.Account}
 	signBinding := func(i *principal.Issuer, r *authv1.GetChatSessionEpochFloorRequest, rpc string) context.Context {
 		hash, e := principal.RequestHash(r)
@@ -281,6 +354,9 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 		defer cancel()
 		_, e := client.GetChatSessionEpochFloor(ctx, r)
+		if status.Code(e) == codes.DeadlineExceeded {
+			t.Logf("Chat/Auth control deadline: gRPC state=%s, JWKS fetches=%d", controlConnection.GetState(), fetches.Load())
+		}
 		return e
 	}
 	checkClosed := func() {
