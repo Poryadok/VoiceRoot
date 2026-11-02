@@ -528,7 +528,11 @@ void main() {
       hub.addFrame(
         const RealtimeFrame(
           op: 'message_read',
-          data: {'chat_id': 'chat-1', 'message_id': 'msg-mine'},
+          data: {
+            'chat_id': 'chat-1',
+            'message_id': 'msg-mine',
+            'profile_id': '20000000-0000-4000-8000-000000000002',
+          },
         ),
       );
       await pumpEventQueue();
