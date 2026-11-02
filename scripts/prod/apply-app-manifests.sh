@@ -14,7 +14,22 @@ S3_SIGNING_ENDPOINT="${VOICE_S3_SIGNING_ENDPOINT:-https://${VOICE_STORAGE_INGRES
 # Pure required-input validation precedes scale, get, wait, apply or any child
 # helper with cluster effects. This does not qualify an existing live object.
 release_services="$(mktemp)"
-trap 'rm -f "$release_services"' EXIT
+auth_scale_attempted=false
+auth_previous_replicas=""
+cleanup() {
+  local status=$?
+  trap - EXIT
+  rm -f "$release_services"
+  if [ "$status" -ne 0 ] && [ "$auth_scale_attempted" = true ]; then
+    echo "RECOVERY REQUIRED: Auth scale-down was attempted and the rollout failed; resources may be partially applied." >&2
+    printf 'Inspect deployment/voice-auth and its pods in namespace %q, then reconcile the intended release before resuming.\n' "$NS" >&2
+    printf 'Previous desired replicas: %s. After inspection, the replica reconciliation command is: kubectl scale deployment/voice-auth -n %q --replicas=%s\n' \
+      "$auth_previous_replicas" "$NS" "$auth_previous_replicas" >&2
+    echo "Replica reconciliation does not roll back images, configuration or migrations." >&2
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
 python3 "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring.py" \
   "${VOICE_RELEASE_POLICY_INPUT:-}" "${TAG}" "${NS}" \
   "${MANIFEST_DIR}/services.yaml" > "${release_services}"
@@ -55,11 +70,20 @@ scale_auth_down_if_needed() {
     echo "Skipping auth scale-down (selective deploy without auth change)"
     return 0
   fi
-  if ! kubectl get deployment voice-auth -n "${NS}" >/dev/null 2>&1; then
+  # Only NotFound means bootstrap. API/authorization errors must stop rollout.
+  auth_previous_replicas="$(kubectl get deployment voice-auth -n "${NS}" \
+    --ignore-not-found -o jsonpath='{.spec.replicas}')"
+  if [ -z "$auth_previous_replicas" ]; then
     return 0
   fi
+  if ! [[ "$auth_previous_replicas" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: invalid Auth desired replica count; refusing scale-down" >&2
+    return 1
+  fi
+  # A failed client response can still follow an accepted server-side scale.
+  auth_scale_attempted=true
   kubectl scale deployment/voice-auth -n "${NS}" --replicas=0
-  kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s 2>/dev/null || true
+  kubectl wait --for=delete pod -l app=voice-auth -n "${NS}" --timeout=180s
 }
 
 require_nats_bootstrap() {
@@ -71,10 +95,9 @@ require_nats_bootstrap() {
   done
 }
 
-scale_auth_down_if_needed
-
-bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
+VOICE_K8S_NAMESPACE="${NS}" bash "${ROOT}/scripts/staging/check-social-principal-secrets.sh"
 require_nats_bootstrap
+scale_auth_down_if_needed
 render "${release_services}" | kubectl apply -f -
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-social-privacy-principal.yaml" | kubectl apply -f -
@@ -85,10 +108,6 @@ sed "s|__K_NAMESPACE__|${NS}|g" \
 sed "s|__K_NAMESPACE__|${NS}|g" \
   "${ROOT}/deploy/templates/network-policy-notification-user-presence.yaml" | kubectl apply -f -
 render "${MANIFEST_DIR}/gateway-deployment.yaml" | kubectl apply -f -
-
-if auth_pre_scale_needed; then
-  scale_auth_down_if_needed
-fi
 
 patch_image_pull_secrets
 

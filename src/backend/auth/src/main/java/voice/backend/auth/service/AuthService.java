@@ -726,7 +726,7 @@ public class AuthService {
       }
 
       String passwordHash = passwordHasher.hash(newPassword);
-      long nextEpoch = advancePasswordChangeEpoch(account.id(), account.sessionEpoch());
+      long nextEpoch = advancePasswordChangeEpoch(accounts, sessionEpochFloors, account.id(), account.sessionEpoch());
       accounts.updatePasswordHash(account.id(), passwordHash);
       Instant now = Instant.now(clock);
       refreshTokens.revokeAllForAccount(account.id(), now);
@@ -735,7 +735,9 @@ public class AuthService {
     });
   }
 
-  private long advancePasswordChangeEpoch(UUID accountId, long durableEpoch) {
+  static long advancePasswordChangeEpoch(
+      AccountRepository accounts, SessionEpochFloorStore sessionEpochFloors,
+      UUID accountId, long durableEpoch) {
     long observedFloor;
     try {
       observedFloor = sessionEpochFloors.requireFloor(accountId);

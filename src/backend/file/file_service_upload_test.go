@@ -27,6 +27,7 @@ import (
 	"voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/jobs"
 	"voice/backend/file/internal/r2file"
+	"voice/backend/file/internal/s2s"
 	"voice/backend/file/internal/store"
 	"voice/backend/pkg/integrationtest"
 
@@ -271,6 +272,44 @@ func TestRequestUploadWithChatContextAllowsMembersAndStoresChat(t *testing.T) {
 	_, err = client.GetFileURL(withFileProfile(ctx, uuid.New(), uuid.New()), &filev1.GetFileURLRequest{FileId: fileID})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestChatMembershipPaginationAllowsLaterPageUploadAndRead(t *testing.T) {
+	ctx := context.Background()
+	pool := startFilePostgres(t, ctx)
+	chatID := uuid.New()
+	profileIDs := make([]uuid.UUID, 150)
+	members := make([]*chatv1.ChatMember, len(profileIDs))
+	for i := range profileIDs {
+		profileIDs[i] = uuid.New()
+		members[i] = &chatv1.ChatMember{ProfileId: profileIDs[i].String()}
+	}
+	chat := &pagedChatServiceClient{chatID: chatID, members: members}
+	client := startFileGRPCWired(t, pool, &recordingPresigner{}, s2s.NewGRPCChatGuard(chat), nil)
+	chatType := chatv1.ChatType_CHAT_TYPE_GROUP
+	request := validUploadRequest()
+	request.ContextChat = &chatv1.ChatRef{Id: chatID.String(), Type: &chatType}
+
+	upload, err := client.RequestUpload(withFileProfile(ctx, uuid.New(), profileIDs[123]), request)
+	require.NoError(t, err, "a member on a later ChatService page can upload to the group")
+	require.Equal(t, []string{"", profileIDs[99].String()}, chat.listMemberCursors)
+
+	_, err = client.ConfirmUpload(withFileProfile(ctx, uuid.New(), profileIDs[123]), &filev1.ConfirmUploadRequest{
+		FileId: upload.GetUploadResponse().GetFileId(), Sha256Hash: defaultUploadHash,
+	})
+	require.NoError(t, err)
+
+	_, err = client.GetFileURL(withFileProfile(ctx, uuid.New(), profileIDs[145]), &filev1.GetFileURLRequest{
+		FileId: upload.GetUploadResponse().GetFileId(),
+	})
+	require.NoError(t, err, "a different later-page group member can read the uploaded file")
+	require.Equal(t, []string{"", profileIDs[99].String(), "", profileIDs[99].String()}, chat.listMemberCursors)
+
+	_, err = client.GetFileURL(withFileProfile(ctx, uuid.New(), uuid.New()), &filev1.GetFileURLRequest{
+		FileId: upload.GetUploadResponse().GetFileId(),
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "pagination must preserve Chat-owned membership authority")
+	require.Equal(t, []string{"", profileIDs[99].String(), "", profileIDs[99].String(), "", profileIDs[99].String()}, chat.listMemberCursors)
 }
 
 func TestRequestUploadWithStoryContextStoresStoryID(t *testing.T) {
@@ -844,14 +883,14 @@ func startFileGRPCFull(t *testing.T, pool *pgxpool.Pool, deps grpcsvc.Deps) file
 		deps.Deleter = &recordingDeleter{}
 	}
 	filev1.RegisterFileServiceServer(srv, grpcsvc.New(grpcsvc.Deps{
-		Files:     deps.Files,
-		Presigner: deps.Presigner,
-		Deleter:   deps.Deleter,
-		Clock:     deps.Clock,
-		ChatGuard: deps.ChatGuard,
-		Processor: deps.Processor,
-		Reader:    deps.Reader,
-		Scanner:   deps.Scanner,
+		Files:        deps.Files,
+		Presigner:    deps.Presigner,
+		Deleter:      deps.Deleter,
+		Clock:        deps.Clock,
+		ChatGuard:    deps.ChatGuard,
+		Processor:    deps.Processor,
+		Reader:       deps.Reader,
+		Scanner:      deps.Scanner,
 		Entitlements: deps.Entitlements,
 	}))
 	go func() { _ = srv.Serve(lis) }()
@@ -881,6 +920,53 @@ func (g memberGuard) EnsureMember(_ context.Context, chatID, profileID uuid.UUID
 
 func (g memberGuard) ChatE2EState(_ context.Context, _ uuid.UUID) (string, bool, error) {
 	return "dm", false, nil
+}
+
+type pagedChatServiceClient struct {
+	chatv1.ChatServiceClient
+	chatID            uuid.UUID
+	members           []*chatv1.ChatMember
+	listMemberCursors []string
+}
+
+func (c *pagedChatServiceClient) ListMembers(_ context.Context, req *chatv1.ListMembersRequest, _ ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
+	page := req.GetPage()
+	cursor := page.GetCursor()
+	c.listMemberCursors = append(c.listMemberCursors, cursor)
+	start := 0
+	if cursor != "" {
+		found := false
+		for i, member := range c.members {
+			if member.GetProfileId() == cursor {
+				start, found = i+1, true
+				break
+			}
+		}
+		if !found {
+			return nil, status.Error(codes.InvalidArgument, "invalid page cursor")
+		}
+	}
+	pageSize := int(page.GetPageSize())
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+	end := min(start+pageSize, len(c.members))
+	nextCursor := ""
+	if end < len(c.members) {
+		nextCursor = c.members[end-1].GetProfileId()
+	}
+	return &chatv1.ListMembersResponse{MemberList: &chatv1.MemberList{
+		Members: c.members[start:end], NextCursor: nextCursor,
+	}}, nil
+}
+
+func (c *pagedChatServiceClient) GetChat(_ context.Context, req *chatv1.GetChatRequest, _ ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
+	if req.GetChatId() != c.chatID.String() {
+		return nil, status.Error(codes.NotFound, "chat not found")
+	}
+	return &chatv1.GetChatResponse{Chat: &chatv1.Chat{
+		Id: c.chatID.String(), Type: chatv1.ChatType_CHAT_TYPE_GROUP,
+	}}, nil
 }
 
 func seedFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, fileID, profileID uuid.UUID, r2Key, status string) {
