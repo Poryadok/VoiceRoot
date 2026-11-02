@@ -264,6 +264,37 @@ def report_restore_failure(original):
 
 
 class CompositionTests(unittest.TestCase):
+    def test_actor_password_read_consumes_exact_captured_parent_permit(self):
+        import cohort_hosted_pg,commands,resource_claim,resource_claim_test,space_authority,sys
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='owned-pg'
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        parent={'protected':'fixture'};session.admit(start=True)
+        session.journal.row.update(phase='prerequisites-captured',target_sha256=resource_claim.digest(parent))
+        session.expected_target=resource_claim.digest(parent)
+        module=Mock();module.load_capture.return_value=parent
+        kube=Mock();kube.run.side_effect=adapter.actor_read
+        with patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(commands,'authority_guard',session.check), \
+             patch.object(adapter,'_docker',return_value=b'{"password_sha256":"fixture"}') as docker:
+            self.assertEqual(space_authority._password_observation(kube),{'password_sha256':'fixture'})
+            docker.assert_called_once()
+            self.assertIsNone(session._prerequisite_readonly_permit)
+
+    def test_space_password_observation_routes_only_exact_guarded_command(self):
+        import cohort_hosted_pg,commands,space_authority
+        adapter=object.__new__(cohort_hosted_pg.HostedPostgres);adapter.cid='owned-pg'
+        argv=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging',*space_authority.PASSWORD_ARGS]
+        fallback=Mock(return_value=b'fallback')
+        with patch.object(commands,'authority_guard') as guard,patch.object(adapter,'_docker',return_value=b'{}') as docker:
+            self.assertEqual(adapter.capture(argv,body=b'',fallback=fallback),b'{}')
+            guard.assert_called_once_with(argv)
+            docker.assert_called_once_with('exec','owned-pg',*space_authority.PASSWORD_ARGS[3:])
+            self.assertEqual(adapter.capture(argv+['foreign'],body=b'',fallback=fallback),b'fallback')
+            self.assertEqual(adapter.capture(argv,body=b'foreign',fallback=fallback),b'fallback')
+        with patch.object(commands,'authority_guard',side_effect=RuntimeError('closed')),patch.object(adapter,'_docker') as docker:
+            with self.assertRaisesRegex(RuntimeError,'closed'):adapter.capture(argv,body=b'',fallback=fallback)
+            docker.assert_not_called()
+
     def test_restore_diagnostic_keeps_swallowed_cleanup_location_private(self):
         import contextlib,io,sys
         marker='private-synthetic-password'
@@ -922,7 +953,8 @@ class CompositionTests(unittest.TestCase):
                         'printf "{\\"password_sha256\\":\\"%s\\"}" "$(printf %s "$POSTGRES_PASSWORD" | sha256sum | cut -d" " -f1)"']
                     if args in (list(actor_root.STORY_SCHEMA_ARGS),password):
                         if postgres is not None:return postgres.actor_read(args)
-                        commands.authority_guard(prerequisites.prereq.KUBE_PREFIX+args)
+                        cohort_hosted_pg.authorize_launch(prerequisites.prereq.KUBE_PREFIX+args,
+                            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'})
                         if args==password:return {'password_sha256':hashlib.sha256(cohort_hosted_pg.ADMIN_PASSWORD.encode()).hexdigest()}
                         return {'database':'story_db','username':'voice','version':4,'dirty':False}
                     return actor_original_run(args,body=body,timeout=timeout)
