@@ -16,6 +16,14 @@ import contract_fixture_entry as capture_entry
 
 
 class HostedTransportTests(unittest.TestCase):
+    def test_fixture_command_deadlines_keep_default_and_allow_go_build_budget(self):
+        completed=SimpleNamespace(returncode=0,stdout=b'ok\n',stderr=b'')
+        with patch.object(integration.fixture.subprocess,'run',return_value=completed) as run:
+            self.assertEqual(integration.fixture.call(['docker','info']),'ok')
+            self.assertEqual(run.call_args.kwargs['timeout'],180)
+            self.assertEqual(integration.fixture.call(['go','build'],timeout=600),'ok')
+            self.assertEqual(run.call_args.kwargs['timeout'],600)
+
     @unittest.skipUnless(sys.platform == 'linux', 'Linux custody modules')
     def test_music_probe_only_accepts_success_and_fixed_denial_marker(self):
         sys.path.insert(0, str(Path(__file__).parent.parent/'nats-known-baseline'))
