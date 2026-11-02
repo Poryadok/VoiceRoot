@@ -688,6 +688,9 @@ class PrepareCompositionTests(unittest.TestCase):
                     return transport(prereq.KUBE_PREFIX+args,body=body,**kwargs)
                 if len(args)==3 and args[:2]==['get','--raw']:
                     return transport(prereq.KUBE_PREFIX+args,body=body,**kwargs)
+                if args==['get','services,deployments','-o','json']:
+                    items=[copy.deepcopy(row) for (kind,_),row in live.items() if kind in ('service','deployment')]
+                    return prereq._bytes({'apiVersion':'v1','kind':'List','metadata':{},'items':items})
                 self.assertEqual(len(args),5)
                 self.assertEqual(args[0],'get');self.assertEqual(args[3],'-o')
                 row=copy.deepcopy(live[(args[1].lower(),args[2])])
