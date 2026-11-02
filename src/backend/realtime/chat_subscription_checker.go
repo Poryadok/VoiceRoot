@@ -112,6 +112,14 @@ func (g *grpcChatSubscriptionChecker) authorizeChat(ctx context.Context, account
 	if err != nil {
 		return fmt.Errorf("chat subscription checker requires a valid chat_id")
 	}
+	var membershipCheck *chatMembershipCheck
+	if reg != nil {
+		if g.hub == nil {
+			return fmt.Errorf("chat subscription policy requires a hub")
+		}
+		membershipCheck = g.hub.beginChatMembershipCheck(profileID, chatID)
+		defer g.hub.endChatMembershipCheck(membershipCheck)
+	}
 	ctx, cancel := context.WithTimeout(ctx, chatSubscriptionCheckTimeout)
 	defer cancel()
 	// GetChat validates caller membership from normal user/profile metadata. Do
@@ -137,7 +145,7 @@ func (g *grpcChatSubscriptionChecker) authorizeChat(ctx context.Context, account
 		return fmt.Errorf("chat subscription checker received unexpected chat")
 	}
 	if resp.GetChat().GetType() != chatv1.ChatType_CHAT_TYPE_DM {
-		if reg != nil && !g.hub.addChat(reg, chatID) {
+		if reg != nil && !g.hub.addChat(reg, chatID, membershipCheck) {
 			return status.Error(codes.PermissionDenied, "chat subscription denied")
 		}
 		return nil
@@ -215,7 +223,7 @@ func (g *grpcChatSubscriptionChecker) authorizeChat(ctx context.Context, account
 			return status.Error(codes.PermissionDenied, "DM subscription denied")
 		}
 	}
-	accepted := g.hub.finishDMPairCheck(pair, version, reg, chatID, true)
+	accepted := g.hub.finishDMPairCheck(pair, version, reg, chatID, true, membershipCheck)
 	finished = true
 	if !accepted {
 		return status.Error(codes.PermissionDenied, "DM subscription policy changed")
