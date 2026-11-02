@@ -1554,7 +1554,16 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         } else if (frame.op == 'message_read') {
           final chatId = frame.data?['chat_id'] as String?;
           final messageId = frame.data?['message_id'] as String?;
-          if (chatId == this.chatId && messageId != null) {
+          final readerProfileId = frame.data?['profile_id'] as String?;
+          final activeProfileId = _activeProfileId();
+          // The chat stream also synchronizes our own read cursor across
+          // sessions. Only another reader can acknowledge an outgoing message.
+          if (chatId == this.chatId &&
+              messageId != null &&
+              activeProfileId != null &&
+              readerProfileId != null &&
+              readerProfileId.isNotEmpty &&
+              readerProfileId != activeProfileId) {
             state = state.copyWith(
               deliveredMessageIds: {...state.deliveredMessageIds, messageId},
               readMessageIds: {...state.readMessageIds, messageId},

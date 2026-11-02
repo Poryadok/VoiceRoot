@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fixnum/fixnum.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
@@ -6,8 +11,83 @@ import 'package:voice_frontend/backend/proto_mappers.dart';
 import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_store.dart';
 import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart' as pb;
 import 'package:voice_frontend/ui/chat/message_view_count.dart';
+import 'package:voice_frontend/backend/realtime_client.dart';
+import 'package:voice_frontend/state/chat_providers.dart';
+
+import 'support/auth_test_overrides.dart';
 
 void main() {
+  for (final messageId in ['text-message', 'offline-file-message']) {
+    test(
+      '$messageId stays unread on sender own read synchronization',
+      () async {
+        late _ReceiptHub hub;
+        final container = ProviderContainer(
+          overrides: [
+            ...voiceAppTestOverrides(
+              client: MockClient((_) async => http.Response('{}', 404)),
+            ),
+            realtimeHubProvider.overrideWith((ref) => hub = _ReceiptHub(ref)),
+          ],
+        );
+        addTearDown(container.dispose);
+        final subscription = container.listen(
+          chatRoomControllerProvider('dm'),
+          (_, _) {},
+        );
+        addTearDown(subscription.close);
+        await pumpEventQueue();
+        final controller = container.read(
+          chatRoomControllerProvider('dm').notifier,
+        );
+        controller.state = ChatRoomState(
+          historyProfileId: 'prof-test',
+          messages: [
+            VoiceMessage(
+              id: messageId,
+              chatId: 'dm',
+              senderProfileId: 'prof-test',
+              content: 'outbound',
+              attachments: messageId == 'offline-file-message'
+                  ? const [
+                      MessageAttachment(
+                        fileId: 'file',
+                        type: 'file',
+                        name: 'qa-upload.txt',
+                      ),
+                    ]
+                  : const [],
+            ),
+          ],
+        );
+        void receipt(String? reader) => hub.add(
+          RealtimeFrame(
+            op: 'message_read',
+            data: {
+              'chat_id': 'dm',
+              'message_id': messageId,
+              'profile_id': ?reader,
+            },
+          ),
+        );
+        receipt('prof-test');
+        await pumpEventQueue();
+        expect(
+          controller.state.readMessageIds,
+          isEmpty,
+          reason: 'Sender read synchronization is not a peer receipt',
+        );
+        expect(controller.state.deliveredMessageIds, isEmpty);
+        receipt(null);
+        await pumpEventQueue();
+        expect(controller.state.readMessageIds, isEmpty);
+        receipt('peer-profile');
+        await pumpEventQueue();
+        expect(controller.state.readMessageIds, contains(messageId));
+        expect(controller.state.deliveredMessageIds, contains(messageId));
+      },
+    );
+  }
   testWidgets(
     'failed viewport record retries on reentry and stops after success',
     (tester) async {
@@ -113,4 +193,18 @@ void main() {
     expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
     expect(find.text('42'), findsOneWidget);
   });
+}
+
+class _ReceiptHub extends RealtimeHub {
+  _ReceiptHub(super.ref);
+  final _frames = StreamController<RealtimeFrame>.broadcast();
+  @override
+  Stream<RealtimeFrame> get events => _frames.stream;
+  @override
+  Future<void> ensureConnected() async {}
+  @override
+  void ensureSubscribed(String chatId) {}
+  void add(RealtimeFrame frame) => _frames.add(frame);
+  @override
+  Future<void> dispose() => _frames.close();
 }
