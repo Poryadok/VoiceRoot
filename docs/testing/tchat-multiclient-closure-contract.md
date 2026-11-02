@@ -17,8 +17,9 @@ Compose project. Нельзя подменять ответы сервисов �
 
 До block два WebSocket tab одного profile и socket peer открываются при работающем
 стеке. Runner затем останавливает NATS: публичный `BlockAccount` успешно сохраняет
-block, а проигнорированный `PublishUserBlocked` error гарантирует отсутствие
-revoke event. Те же открытые sockets должны получить generic deny на `typing`,
+block и durable outbox intent, но недоступный broker не принимает revoke event.
+После восстановления NATS worker повторяет публикацию независимо от RPC.
+Те же открытые sockets до доставки должны получить generic deny на `typing`,
 `mark_read`, `delivery_ack`, без peer/same-profile fan-out и durable ack publish.
 
 После реального restart Chat, Messaging и Realtime новый WebSocket сначала

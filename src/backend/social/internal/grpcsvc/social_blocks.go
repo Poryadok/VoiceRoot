@@ -119,9 +119,6 @@ func (s *SocialGRPC) BlockAccount(ctx context.Context, req *socialv1.BlockAccoun
 	err = s.Blocks.BlockAccountAndSeverFriendshipsWithProfile(ctx, blocker, blocked, blockerProfiles, blockedProfiles, selectedProfileID, selectedProfile)
 	switch {
 	case err == nil:
-		if s.Events != nil {
-			_ = s.Events.PublishUserBlocked(ctx, blocker.String(), blocked.String())
-		}
 		return &socialv1.BlockAccountResponse{}, nil
 	case errors.Is(err, store.ErrSelfBlock):
 		return nil, status.Error(codes.InvalidArgument, err.Error())

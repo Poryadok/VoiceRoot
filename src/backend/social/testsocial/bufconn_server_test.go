@@ -115,6 +115,10 @@ func TestNewBufconnClient_BlockAccount_CascadesFixtureProfiles(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(identityMigration))
 	require.NoError(t, err)
+	outboxMigration, err := os.ReadFile(filepath.Join(root, "src", "backend", "migrations", "social_db", "000007_block_event_outbox.up.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(outboxMigration))
+	require.NoError(t, err)
 
 	blockerAccount := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	blockedAccount := uuid.MustParse("22222222-2222-4222-8222-222222222222")
