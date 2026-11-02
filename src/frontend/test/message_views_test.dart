@@ -12,14 +12,25 @@ import 'package:voice_frontend/backend/message_cache/in_memory_message_cache_sto
 import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart' as pb;
 import 'package:voice_frontend/ui/chat/message_view_count.dart';
 import 'package:voice_frontend/backend/realtime_client.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 
 import 'support/auth_test_overrides.dart';
 
 void main() {
-  for (final messageId in ['text-message', 'offline-file-message']) {
+  const senderProfileId = '10000000-0000-4000-8000-000000000001';
+  const peerProfileId = '20000000-0000-4000-8000-000000000002';
+  for (final (messageId, reader) in <(String, Object?)>[
+    ('text-message', senderProfileId),
+    ('offline-file-message', senderProfileId),
+    ('blank-reader', '   '),
+    ('non-string-reader', 42),
+    ('noncanonical-reader', 'not-a-profile'),
+    ('nil-reader', '00000000-0000-0000-0000-000000000000'),
+  ]) {
     test(
-      '$messageId stays unread on sender own read synchronization',
+      '$messageId stays unread without a canonical peer read receipt',
       () async {
         late _ReceiptHub hub;
         final container = ProviderContainer(
@@ -31,6 +42,15 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
+        container.read(authControllerProvider.notifier).state = const AuthState(
+          session: AuthSession(
+            accessToken: 'test-access',
+            refreshToken: 'test-refresh',
+            accountId: 'acc-test',
+            activeProfileId: senderProfileId,
+            expiresInSeconds: 900,
+          ),
+        );
         final subscription = container.listen(
           chatRoomControllerProvider('dm'),
           (_, _) {},
@@ -41,12 +61,12 @@ void main() {
           chatRoomControllerProvider('dm').notifier,
         );
         controller.state = ChatRoomState(
-          historyProfileId: 'prof-test',
+          historyProfileId: senderProfileId,
           messages: [
             VoiceMessage(
               id: messageId,
               chatId: 'dm',
-              senderProfileId: 'prof-test',
+              senderProfileId: senderProfileId,
               content: 'outbound',
               attachments: messageId == 'offline-file-message'
                   ? const [
@@ -60,7 +80,7 @@ void main() {
             ),
           ],
         );
-        void receipt(String? reader) => hub.add(
+        void receipt(Object? reader) => hub.add(
           RealtimeFrame(
             op: 'message_read',
             data: {
@@ -70,18 +90,18 @@ void main() {
             },
           ),
         );
-        receipt('prof-test');
+        receipt(reader);
         await pumpEventQueue();
         expect(
           controller.state.readMessageIds,
           isEmpty,
-          reason: 'Sender read synchronization is not a peer receipt',
+          reason: 'Only a canonical peer read receipt proves peer read',
         );
         expect(controller.state.deliveredMessageIds, isEmpty);
         receipt(null);
         await pumpEventQueue();
         expect(controller.state.readMessageIds, isEmpty);
-        receipt('peer-profile');
+        receipt(peerProfileId);
         await pumpEventQueue();
         expect(controller.state.readMessageIds, contains(messageId));
         expect(controller.state.deliveredMessageIds, contains(messageId));

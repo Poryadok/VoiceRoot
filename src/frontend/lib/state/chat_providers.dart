@@ -1395,6 +1395,10 @@ class _ImmediateSendAttempt {
 }
 
 class ChatRoomController extends StateNotifier<ChatRoomState> {
+  static final _readReceiptProfileIdPattern = RegExp(
+    r'^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$',
+  );
+
   ChatRoomController(this._ref, this.chatId) : super(const ChatRoomState()) {
     _authSub = _ref.listen<AuthState>(authControllerProvider, (previous, next) {
       final previousProfileId = previous?.activeProfileId;
@@ -1554,15 +1558,16 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         } else if (frame.op == 'message_read') {
           final chatId = frame.data?['chat_id'] as String?;
           final messageId = frame.data?['message_id'] as String?;
-          final readerProfileId = frame.data?['profile_id'] as String?;
+          final readerProfileId = frame.data?['profile_id'];
           final activeProfileId = _activeProfileId();
           // The chat stream also synchronizes our own read cursor across
           // sessions. Only another reader can acknowledge an outgoing message.
           if (chatId == this.chatId &&
               messageId != null &&
               activeProfileId != null &&
-              readerProfileId != null &&
-              readerProfileId.isNotEmpty &&
+              readerProfileId is String &&
+              _readReceiptProfileIdPattern.hasMatch(readerProfileId) &&
+              readerProfileId != '00000000-0000-0000-0000-000000000000' &&
               readerProfileId != activeProfileId) {
             state = state.copyWith(
               deliveredMessageIds: {...state.deliveredMessageIds, messageId},
