@@ -62,6 +62,7 @@ import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
 import 'chat_composer_text_field.dart';
 import 'composer_panels.dart';
+import 'composer_error_notice.dart';
 import 'composer_send_menu.dart';
 import 'music_format.dart';
 import 'music_attachment_player.dart';
@@ -1627,11 +1628,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   !textSendOwnsRoomError)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    _roomErrorText(l10n, room.errorMessage!),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                  child: ComposerErrorNotice(
+                    message: _roomErrorText(l10n, room.errorMessage!),
                   ),
                 ),
               if (replyTarget != null)
@@ -1666,83 +1664,59 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 Padding(
                   key: ChatRoomPanel.attachmentUploadFailureKey,
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: VoiceCompactBanner(
-                          key: failure.errorCode == 'file_infected'
-                              ? null
-                              : ChatRoomPanel.attachmentUploadRetryKey,
-                          message: _attachmentFailureMessage(
-                            AppLocalizations.of(context)!,
-                            failure,
-                          ),
-                          icon: Icons.cloud_off_outlined,
-                          actionLabel: failure.errorCode == 'file_infected'
-                              ? AppLocalizations.of(
-                                  context,
-                                )!.chatAttachmentPickAnother
-                              : AppLocalizations.of(context)!.commonRetry,
-                          onAction: failure.errorCode == 'file_infected'
-                              ? _pickAnotherAttachment
-                              : () => unawaited(_retryAttachmentUpload()),
-                          tone: VoiceBannerTone.error,
-                        ),
-                      ),
-                      IconButton(
-                        key: ChatRoomPanel.attachmentUploadCancelKey,
-                        tooltip: AppLocalizations.of(context)!.commonCancel,
-                        onPressed: _cancelPendingAttachmentUpload,
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
+                  child: ComposerErrorNotice(
+                    attachmentName: _pendingAttachmentUpload?.file.name,
+                    actionKey: failure.errorCode == 'file_infected'
+                        ? null
+                        : ChatRoomPanel.attachmentUploadRetryKey,
+                    message: _attachmentFailureMessage(
+                      AppLocalizations.of(context)!,
+                      failure,
+                    ),
+                    actionLabel: failure.errorCode == 'file_infected'
+                        ? AppLocalizations.of(
+                            context,
+                          )!.chatAttachmentPickAnother
+                        : AppLocalizations.of(context)!.commonRetry,
+                    onAction: failure.errorCode == 'file_infected'
+                        ? _pickAnotherAttachment
+                        : () => unawaited(_retryAttachmentUpload()),
+                    dismissKey: ChatRoomPanel.attachmentUploadCancelKey,
+                    dismissLabel: l10n.commonCancel,
+                    onDismiss: _cancelPendingAttachmentUpload,
                   ),
                 ),
               if (_voiceReadFailed)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Semantics(
-                    liveRegion: true,
-                    child: Text(l10n.composerVoiceError),
-                  ),
+                  child: ComposerErrorNotice(message: l10n.composerVoiceError),
                 ),
               if (_pendingVoiceMessage != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _voiceSendError == null
-                              ? _textSendFailureMessage(l10n)
-                              : _roomErrorText(l10n, _voiceSendError!),
-                        ),
-                      ),
-                      TextButton(
-                        key: ChatRoomPanel.voiceSendRetryKey,
-                        onPressed:
-                            room.isSending ||
-                                composerBlocked ||
-                                (_voiceSendGeneration != null &&
-                                    _voiceSendGeneration !=
-                                        ref
-                                            .read(
-                                              chatRoomControllerProvider(
-                                                widget.chatId,
-                                              ).notifier,
-                                            )
-                                            .immediateSendGeneration)
-                            ? null
-                            : () => unawaited(_retryVoiceSend()),
-                        child: Text(l10n.commonRetry),
-                      ),
-                      IconButton(
-                        key: ChatRoomPanel.voiceSendCancelKey,
-                        tooltip: l10n.commonCancel,
-                        onPressed: room.isSending ? null : _cancelVoiceSend,
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
+                  child: ComposerErrorNotice(
+                    message: _voiceSendError == null
+                        ? _textSendFailureMessage(l10n)
+                        : _roomErrorText(l10n, _voiceSendError!),
+                    actionKey: ChatRoomPanel.voiceSendRetryKey,
+                    onAction:
+                        room.isSending ||
+                            composerBlocked ||
+                            (_voiceSendGeneration != null &&
+                                _voiceSendGeneration !=
+                                    ref
+                                        .read(
+                                          chatRoomControllerProvider(
+                                            widget.chatId,
+                                          ).notifier,
+                                        )
+                                        .immediateSendGeneration)
+                        ? null
+                        : () => unawaited(_retryVoiceSend()),
+                    actionLabel: l10n.commonRetry,
+                    dismissKey: ChatRoomPanel.voiceSendCancelKey,
+                    dismissLabel: l10n.commonCancel,
+                    onDismiss: room.isSending ? null : _cancelVoiceSend,
                   ),
                 ),
               SafeArea(
@@ -2365,17 +2339,15 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               children: [
                 if (room.isSending || _scheduledAttemptInFlight)
                   const LinearProgressIndicator(minHeight: 2),
-                VoiceCompactBanner(
-                  key: ChatRoomPanel.scheduledCreateRetryKey,
+                ComposerErrorNotice(
+                  actionKey: ChatRoomPanel.scheduledCreateRetryKey,
                   message: l10n.chatScheduleFailure,
-                  icon: Icons.schedule_send_outlined,
                   actionLabel: room.isSending || _scheduledAttemptInFlight
                       ? null
                       : l10n.chatScheduleRetry,
                   onAction: room.isSending || _scheduledAttemptInFlight
                       ? null
                       : _retryScheduledAttempt,
-                  tone: VoiceBannerTone.error,
                 ),
                 Align(
                   alignment: AlignmentDirectional.centerEnd,
@@ -2555,15 +2527,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             ],
           ),
           if (_scheduledEditInvalidDate)
-            Text(
-              l10n.chatScheduleDateInvalid,
-              style: TextStyle(color: VoiceColors.of(context).error),
-            ),
+            ComposerErrorNotice(message: l10n.chatScheduleDateInvalid),
           if (_scheduledEditInvalidContent)
-            Text(
-              l10n.chatScheduledContentInvalid,
-              style: TextStyle(color: VoiceColors.of(context).error),
-            ),
+            ComposerErrorNotice(message: l10n.chatScheduledContentInvalid),
         ],
       ),
     );
@@ -2701,17 +2667,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _TextSendAttempt attempt,
   ) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 12),
-    child: Row(
-      children: [
-        Expanded(child: Text(_textSendFailureMessage(l10n))),
-        TextButton(
-          key: ChatRoomPanel.sendRetryKey,
-          onPressed: blocked || _textSendInFlight
-              ? null
-              : () => unawaited(_submitTextSend(attempt, retry: true)),
-          child: Text(l10n.commonRetry),
-        ),
-      ],
+    child: ComposerErrorNotice(
+      key: const Key('composer_text_send_error'),
+      message: _textSendFailureMessage(l10n),
+      actionKey: ChatRoomPanel.sendRetryKey,
+      onAction: blocked || _textSendInFlight
+          ? null
+          : () => unawaited(_submitTextSend(attempt, retry: true)),
+      actionLabel: l10n.commonRetry,
     ),
   );
 
@@ -3080,14 +3043,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final generation = _voiceSendGeneration;
     final chatId = widget.chatId;
     final controller = ref.read(chatRoomControllerProvider(chatId).notifier);
-    if (generation != null && generation != controller.immediateSendGeneration) {
+    if (generation != null &&
+        generation != controller.immediateSendGeneration) {
       return;
     }
     final generationBefore = controller.immediateSendGeneration;
     final error = generation == null
         ? await controller.sendMessage('', attachments: [attachment])
         : await controller.retryFailedMessage(expectedGeneration: generation);
-    if (!_isCurrentChat(chatId) || !identical(_pendingVoiceMessage, attachment)) {
+    if (!_isCurrentChat(chatId) ||
+        !identical(_pendingVoiceMessage, attachment)) {
       return;
     }
     setState(() {

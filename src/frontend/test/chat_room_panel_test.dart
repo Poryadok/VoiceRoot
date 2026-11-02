@@ -56,6 +56,20 @@ void main() {
     await tester.tap(find.byKey(const Key('composer_send_silent')));
     await tester.pumpAndSettle();
     expect(harness.bodies, hasLength(1));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('composer_text_send_error')),
+        matching: find.byType(SelectableText),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('composer_text_send_error')),
+        matching: find.byIcon(Icons.content_copy_outlined),
+      ),
+      findsOneWidget,
+    );
     final body = jsonDecode(harness.bodies.single) as Map<String, dynamic>;
     expect(body['send_silent'], true);
     expect(body['content'], 'Silent draft');
