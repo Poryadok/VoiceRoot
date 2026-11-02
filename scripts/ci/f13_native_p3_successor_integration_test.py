@@ -839,6 +839,10 @@ class RealGitSuccessorTest(unittest.TestCase):
         verified=reviewed_v5_source(current)
         reviewed_additions=({name for name in legacy.tree(str(ROOT),verified[0]) if name.startswith(prefix)}-expected
                             if verified is not None else CATALOG_VOICE_PATHS | MULTI_OWNER_INVENTORY_VOICE_PATHS)
+        if verified is not None and subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 USER_CUSTODY_VOICE_SOURCE, current], capture_output=True).returncode == 0:
+            reviewed_additions |= set(USER_CUSTODY_VOICE_ENTRIES)
         self.assertEqual(reviewed_catalog_voice_additions(current,self.record),reviewed_additions)
         unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
         with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
