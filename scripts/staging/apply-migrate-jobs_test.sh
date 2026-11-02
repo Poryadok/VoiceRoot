@@ -161,6 +161,7 @@ trap 'rm -rf "${TEST_TMP}"' EXIT
 
 definitions="$(awk '/^if ! kubectl get secret/{exit} {print}' "${ROOT}/scripts/staging/apply-migrate-jobs.sh")"
 eval "${definitions}"
+PG_PASS=fixture
 
 CALLS="${TEST_TMP}/calls"
 STORED_HASH="${TEST_TMP}/stored-hash"
@@ -170,6 +171,7 @@ WAIT_FAIL="${TEST_TMP}/wait-fail"
 RENDERED_JOB="${TEST_TMP}/rendered-job.yaml"
 CAPTURED_DSN="${TEST_TMP}/captured-dsn"
 DIAGNOSTIC_LOG="${TEST_TMP}/diagnostic-log"
+DB_PROBE_RESULT="${TEST_TMP}/db-probe-result"
 MIGRATIONS="${TEST_TMP}/migrations"
 TEST_BIN="${TEST_TMP}/bin"
 mkdir -p "${MIGRATIONS}"
@@ -206,6 +208,7 @@ readonly EXPECTED_POD_STATUS_REQUEST="kubectl.get.pod.request voice-migrate-voic
 reset_mock() {
   : >"${CALLS}" || return 1
   rm -f "${STORED_HASH}" "${JOB_EXISTS}" "${JOB_SUCCEEDED}" "${WAIT_FAIL}" "${RENDERED_JOB}" "${CAPTURED_DSN}" "${DIAGNOSTIC_LOG}" || return 1
+  rm -f "${DB_PROBE_RESULT}" || return 1
 }
 
 kubectl_apply_configmap() {
@@ -244,6 +247,7 @@ kubectl() {
           ;;
         configmap)
           printf '%s\n' 'configmap.get' >>"${CALLS}"
+          if [[ "$*" == *'.data.POSTGRES_USER'* ]]; then printf voice; return; fi
           [[ -f "${STORED_HASH}" ]] && cat "${STORED_HASH}"
           ;;
         pods)
@@ -258,6 +262,17 @@ kubectl() {
           fi
           ;;
       esac
+      ;;
+    exec)
+      local probe_dsn probe_db
+      IFS= read -r probe_dsn
+      probe_db="${probe_dsn#*5432/}"
+      printf '%s\n' 'db.probe' >>"${CALLS}"
+      if [[ -f "${DB_PROBE_RESULT}" ]]; then
+        cat "${DB_PROBE_RESULT}"
+      else
+        printf '%s|1|f\n' "${probe_db%%\?*}"
+      fi
       ;;
     delete)
       printf '%s\n' 'kubectl.delete.job' >>"${CALLS}"
@@ -665,6 +680,7 @@ run_unchanged_content_case() {
   apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations >/dev/null || return 1
 
   stored_hash_line="$(first_call_line '^configmap\.get$' || true)"
+  grep -Fxq db.probe "${CALLS}" || { echo 'FAIL: retained Job reuse must query the actual database'; return 1; }
   first_mutation_line="$(first_call_line '^(configmap\.apply |configmap\.annotate$)' || true)"
   [[ -n "${stored_hash_line}" ]] || {
     echo 'FAIL: unchanged migration reuse must read the stored ConfigMap hash' >&2
@@ -687,7 +703,7 @@ run_gameintegration_caller_case() {
   ROOT="${TEST_TMP}/gis-root"
   mkdir -p "${ROOT}/src/backend/migrations/game_integration_db" "${ROOT}/deploy/templates"
   printf '%s\n' 'SELECT 1;' >"${ROOT}/src/backend/migrations/game_integration_db/000001_fixture.up.sql"
-  printf '%s\n' 'apiVersion: batch/v1' >"${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml"
+  cp "${original_root}/deploy/templates/migrate-game-integration-db-job.yaml" "${ROOT}/deploy/templates/migrate-game-integration-db-job.yaml"
   expected_hash="$(migration_content_hash "${ROOT}/src/backend/migrations/game_integration_db")" || return 1
 
   provision_gameintegration_runtime_role() {
@@ -726,6 +742,28 @@ run_gameintegration_caller_case() {
       }
   fi
   ROOT="${original_root}"
+}
+
+run_retained_database_hold_cases() {
+  local observed output result
+  for observed in 'voice_db|0|f' 'voice_db|1|t' 'voice_db|2|f' 'other_db|1|f' '' $'voice_db|1|f\nvoice_db|1|f'; do
+    reset_mock || return 1
+    migration_content_hash "${MIGRATIONS}" >"${STORED_HASH}" || return 1
+    : >"${JOB_EXISTS}"
+    printf 1 >"${JOB_SUCCEEDED}"
+    printf '%s' "$observed" >"${DB_PROBE_RESULT}"
+    set +e
+    output="$(apply_migrate voice_db "${MIGRATIONS}" "${TEMPLATE}" voice-migrate-voice-db voice-voice-db-migrations 2>&1)"
+    result=$?
+    set -e
+    [[ $result != 0 ]] && grep -Fq 'HOLD:' <<< "$output" || {
+      echo 'FAIL: invalid actual database state must hold retained Job reuse' >&2; return 1;
+    }
+    grep -Fxq db.probe "${CALLS}" || return 1
+    if grep -Eq '^(configmap\.apply |configmap\.annotate$|kubectl\.(delete|apply\.job|wait\.job))' "${CALLS}"; then
+      echo 'FAIL: retained migration reconciliation hold mutated resources' >&2; return 1
+    fi
+  done
 }
 
 run_secret_leak_case() {
@@ -777,6 +815,7 @@ case "${1:-all}" in
   rerun)
     run_changed_content_case
     run_unchanged_content_case
+    run_retained_database_hold_cases
     ;;
   secret)
     run_secret_leak_case
@@ -788,6 +827,7 @@ case "${1:-all}" in
     run_diagnostics_oracle_self_test || failures=$((failures + 1))
     run_changed_content_case || failures=$((failures + 1))
     run_unchanged_content_case || failures=$((failures + 1))
+    run_retained_database_hold_cases || failures=$((failures + 1))
     run_gameintegration_caller_case fresh || failures=$((failures + 1))
     run_gameintegration_caller_case noop || failures=$((failures + 1))
     run_secret_leak_case || failures=$((failures + 1))
