@@ -685,6 +685,10 @@ class PrepareCompositionTests(unittest.TestCase):
                     return transport(argv,body=body,**kwargs)
                 commands.authority_guard(argv)
                 args=argv[3:]
+                if args==['apply','--dry-run=server','-f','/dev/stdin','-o','json']:
+                    return transport(prereq.KUBE_PREFIX+args,body=body,**kwargs)
+                if len(args)==3 and args[:2]==['get','--raw']:
+                    return transport(prereq.KUBE_PREFIX+args,body=body,**kwargs)
                 self.assertEqual(len(args),5)
                 self.assertEqual(args[0],'get');self.assertEqual(args[3],'-o')
                 row=copy.deepcopy(live[(args[1].lower(),args[2])])
