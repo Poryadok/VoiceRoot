@@ -2180,6 +2180,12 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get commonCancel;
 
+  /// No description provided for @commonDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get commonDiscard;
+
   /// No description provided for @shareLinkAction.
   ///
   /// In en, this message translates to:
@@ -2569,6 +2575,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pinned messages'**
   String get chatPinnedMessagesTitle;
+
+  /// No description provided for @chatPinnedBarPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned message {position} of {count}'**
+  String chatPinnedBarPosition(int position, int count);
 
   /// No description provided for @chatPinnedMessagesOpen.
   ///
@@ -4003,6 +4015,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chat themes'**
   String get settingsChatThemes;
+
+  /// No description provided for @chatThemesIncomingSample.
+  ///
+  /// In en, this message translates to:
+  /// **'A message'**
+  String get chatThemesIncomingSample;
+
+  /// No description provided for @chatThemesOutgoingSample.
+  ///
+  /// In en, this message translates to:
+  /// **'Your message'**
+  String get chatThemesOutgoingSample;
+
+  /// No description provided for @contactProfileCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get contactProfileCall;
+
+  /// No description provided for @settingsTextScale.
+  ///
+  /// In en, this message translates to:
+  /// **'Text scale'**
+  String get settingsTextScale;
+
+  /// No description provided for @settingsUnsavedChangesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard unsaved changes?'**
+  String get settingsUnsavedChangesTitle;
+
+  /// No description provided for @settingsUnsavedChangesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your changes have not been saved.'**
+  String get settingsUnsavedChangesMessage;
 
   /// No description provided for @chatThemesPlusLabel.
   ///

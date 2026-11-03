@@ -1210,6 +1210,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCancel => 'Cancel';
 
   @override
+  String get commonDiscard => 'Discard';
+
+  @override
   String get shareLinkAction => 'Copy link';
 
   @override
@@ -1413,6 +1416,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatPinnedMessagesTitle => 'Pinned messages';
+
+  @override
+  String chatPinnedBarPosition(int position, int count) {
+    return 'Pinned message $position of $count';
+  }
 
   @override
   String get chatPinnedMessagesOpen => 'Open all pinned messages';
@@ -2225,6 +2233,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsChatThemes => 'Chat themes';
+
+  @override
+  String get chatThemesIncomingSample => 'A message';
+
+  @override
+  String get chatThemesOutgoingSample => 'Your message';
+
+  @override
+  String get contactProfileCall => 'Call';
+
+  @override
+  String get settingsTextScale => 'Text scale';
+
+  @override
+  String get settingsUnsavedChangesTitle => 'Discard unsaved changes?';
+
+  @override
+  String get settingsUnsavedChangesMessage =>
+      'Your changes have not been saved.';
 
   @override
   String get chatThemesPlusLabel => 'Voice Plus';
