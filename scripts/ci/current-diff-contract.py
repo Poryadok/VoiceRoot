@@ -76,6 +76,15 @@ REVIEWED_TRANSITIONS = {'src/backend/migrations/auth_db/000009_guest_conversion_
  'src/backend/voice/space_media_runtime.go': (None, '100644 blob beff70aecd2d4dd42cbc21ba88691193caf4ac56')}
 
 
+# Independent Chat21 correction reviewed by Cedar1102-29 at source
+# 62663f9d92e9a4a78da30443dd43c2b11b2ee1e3; not part of the e409 package.
+CHAT21_REVIEWED_TRANSITION = (
+    b'src/backend/migrations/chat_db/000021_chat_deleted_event_outbox.down.sql',
+    b'100644 blob 37d5d9d0b0dd93f708f81b03e7e2484c8be31749',
+    b'100644 blob f552270c91ce84925144712f09bf0c4a3b22fe36',
+)
+
+
 def validate(repo, base, target='HEAD', pr_head=None):
     base = commit(repo, base, 'base')
     event_base = base
@@ -118,6 +127,9 @@ def validate(repo, base, target='HEAD', pr_head=None):
                     old.encode() if old else None, new.encode()):
                 raise Refused("reviewed_transition: " + path)
             reviewed.add(raw)
+    chat_path, chat_old, chat_new = CHAT21_REVIEWED_TRANSITION
+    if (before.get(chat_path), after.get(chat_path)) == (chat_old, chat_new):
+        reviewed.add(chat_path)
     for raw_path in changed:
         if raw_path in reviewed:
             continue
