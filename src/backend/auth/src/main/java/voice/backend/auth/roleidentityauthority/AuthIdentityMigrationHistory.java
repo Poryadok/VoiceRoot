@@ -13,6 +13,7 @@ final class AuthIdentityMigrationHistory {
   private static final JsonNode SUBSCRIPTION_LIFECYCLE = AuthIdentityDdlGateCatalog.json("migration-history-subscription-lifecycle-v1.json");
   private static final JsonNode ACCOUNT_LIFECYCLE = AuthIdentityDdlGateCatalog.json("migration-history-account-lifecycle-v1.json");
   private static final JsonNode TERMINAL_FENCES = AuthIdentityDdlGateCatalog.json("migration-history-terminal-operation-fences-v1.json");
+  private static final JsonNode RAW_ADMISSION = AuthIdentityDdlGateCatalog.json("migration-history-raw-account-admission-v1.json");
   private AuthIdentityMigrationHistory() {}
   static int validate(JdbcTemplate jdbc, AuthIdentityDatabasePolicy.Loader loader) {
     AuthIdentityDdlGateCatalog.require(loader != null);
@@ -31,8 +32,8 @@ final class AuthIdentityMigrationHistory {
     }
   }
   static int validateFlyway(List<Map<String,Object>> rows) {
-    AuthIdentityDdlGateCatalog.require(matchesFlyway(rows,PROFILE) || matchesFlyway(rows,LINKED_OAUTH) || matchesFlyway(rows,SUBSCRIPTION_LIFECYCLE) || matchesFlyway(rows,ACCOUNT_LIFECYCLE) || matchesFlyway(rows,TERMINAL_FENCES));
-    return matchesFlyway(rows,ACCOUNT_LIFECYCLE) || matchesFlyway(rows,TERMINAL_FENCES) ? 2 : 1;
+    AuthIdentityDdlGateCatalog.require(matchesFlyway(rows,PROFILE) || matchesFlyway(rows,LINKED_OAUTH) || matchesFlyway(rows,SUBSCRIPTION_LIFECYCLE) || matchesFlyway(rows,ACCOUNT_LIFECYCLE) || matchesFlyway(rows,TERMINAL_FENCES) || matchesFlyway(rows,RAW_ADMISSION));
+    return matchesFlyway(rows,ACCOUNT_LIFECYCLE) || matchesFlyway(rows,TERMINAL_FENCES) || matchesFlyway(rows,RAW_ADMISSION) ? 2 : 1;
   }
   private static boolean matchesFlyway(List<Map<String,Object>> rows,JsonNode profile) {
     var expected = new HashMap<String,JsonNode>();
@@ -53,12 +54,14 @@ final class AuthIdentityMigrationHistory {
           || ((Number)rows.getFirst().get("version")).longValue() == LINKED_OAUTH.path("canonicalVersion").asLong()
           || ((Number)rows.getFirst().get("version")).longValue() == SUBSCRIPTION_LIFECYCLE.path("canonicalVersion").asLong()
           || ((Number)rows.getFirst().get("version")).longValue() == ACCOUNT_LIFECYCLE.path("canonicalVersion").asLong()
-          || ((Number)rows.getFirst().get("version")).longValue() == TERMINAL_FENCES.path("canonicalVersion").asLong())
+          || ((Number)rows.getFirst().get("version")).longValue() == TERMINAL_FENCES.path("canonicalVersion").asLong()
+          || ((Number)rows.getFirst().get("version")).longValue() == RAW_ADMISSION.path("canonicalVersion").asLong())
         && Boolean.FALSE.equals(rows.getFirst().get("dirty")));
     // A canonical marker is not a checksum or reconstructed Flyway history.
     // Gate and owned V28 object metadata are independently validated in this Tx.
     long version=((Number)rows.getFirst().get("version")).longValue();
     return version == ACCOUNT_LIFECYCLE.path("canonicalVersion").asLong()
-        || version == TERMINAL_FENCES.path("canonicalVersion").asLong() ? 2 : 1;
+        || version == TERMINAL_FENCES.path("canonicalVersion").asLong()
+        || version == RAW_ADMISSION.path("canonicalVersion").asLong() ? 2 : 1;
   }
 }

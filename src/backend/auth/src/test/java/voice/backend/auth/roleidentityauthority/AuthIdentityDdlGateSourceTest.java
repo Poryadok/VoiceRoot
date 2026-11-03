@@ -68,7 +68,7 @@ final class AuthIdentityDdlGateSourceTest {
     deny(() -> AuthIdentityMigrationHistory.validateFlyway(unknown));
     AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",32L,"dirty",false)));
     AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",33L,"dirty",false)));
-    for (long version : new long[]{29,31,37}) deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",version,"dirty",false))));
+    for (long version : new long[]{29,31,38}) deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",version,"dirty",false))));
     deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",32L,"dirty",true))));
     deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of()));
     deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",32L,"dirty",false),Map.of("version",32L,"dirty",false))));
@@ -103,7 +103,7 @@ final class AuthIdentityDdlGateSourceTest {
     AuthIdentityMigrationHistory.validateFlyway(latest);
     AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",34L,"dirty",false)));
     latest.getLast().put("checksum",0);deny(()->AuthIdentityMigrationHistory.validateFlyway(latest));
-    deny(()->AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",37L,"dirty",false))));
+    deny(()->AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",38L,"dirty",false))));
   }
   @Test void accountLifecycleSelectsOnlyItsExactSuccessorCatalog() throws Exception {
     var prior=new ArrayList<Map<String,Object>>();
@@ -153,6 +153,33 @@ final class AuthIdentityDdlGateSourceTest {
     if((int)crc.getValue()!=last.path("checksum").asInt())throw new AssertionError("terminal source checksum drift");
     latest.getLast().put("checksum",0);deny(()->AuthIdentityMigrationHistory.validateFlyway(latest));
     deny(()->AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",36L,"dirty",true))));
+  }
+  @Test void rawAdmissionProfilePreservesItsPredecessorAndSelectsCatalogV2() throws Exception {
+    var prior=AuthIdentityDdlGateCatalog.json("migration-history-terminal-operation-fences-v1.json");
+    var profile=AuthIdentityDdlGateCatalog.json("migration-history-raw-account-admission-v1.json");
+    if(!"raw-account-admission-v1".equals(profile.path("profile").asText())
+        || profile.path("canonicalVersion").asLong()!=37
+        || profile.path("flyway").size()!=prior.path("flyway").size()+1)
+      throw new AssertionError("wrong successor profile");
+    for(int i=0;i<prior.path("flyway").size();i++)
+      if(!prior.path("flyway").get(i).equals(profile.path("flyway").get(i)))
+        throw new AssertionError("terminal fence profile changed historical bytes");
+    var latest=new ArrayList<Map<String,Object>>();
+    for(var row:profile.path("flyway"))
+      latest.add(new HashMap<>(Map.of("version",row.path("version").asText(),"script",row.path("script").asText(),"checksum",row.path("checksum").asInt(),"success",true,"type","SQL")));
+    if(AuthIdentityMigrationHistory.validateFlyway(latest)!=2
+        || AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",37L,"dirty",false)))!=2)
+      throw new AssertionError("terminal fences must retain catalog v2");
+    byte[] sql;
+    try(var input=AuthIdentityDdlGateSourceTest.class.getResourceAsStream("/db/migration/V36__auth_raw_account_admission.sql")) { sql=input.readAllBytes(); }
+    var last=profile.path("flyway").get(profile.path("flyway").size()-1);
+    String hash=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(sql));
+    if(!hash.equals(last.path("sha256").asText()))throw new AssertionError("terminal source hash drift");
+    var crc=new java.util.zip.CRC32();
+    new String(sql,StandardCharsets.UTF_8).lines().forEach(line->crc.update(line.getBytes(StandardCharsets.UTF_8)));
+    if((int)crc.getValue()!=last.path("checksum").asInt())throw new AssertionError("terminal source checksum drift");
+    latest.getLast().put("checksum",0);deny(()->AuthIdentityMigrationHistory.validateFlyway(latest));
+    deny(()->AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",37L,"dirty",true))));
   }
   static final class HistoryJdbc extends JdbcTemplate {
     final boolean exclusive; final List<String> calls=new ArrayList<>();

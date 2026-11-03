@@ -25,6 +25,15 @@ lost response recover the same terminal outcome. Each participant independently
 honors the original deadline; collecting its receipt never delays local erasure.
 Deleting a linked regular account does not delete a separate live SDK principal.
 Pending work must be fenced against later commits that recreate erased data.
+Raw account-owned credentials and workflow rows admit INSERT only at READ COMMITTED
+under the owning account row lock, using fresh database time after acquisition.
+Missing, terminal or deadline-due owners reject the write; a recoverable owner
+strictly before the original deadline remains admissible. The nine guarded stores
+are refresh_tokens, otp_codes, backup_codes, linked_identities, e2e_key_backups,
+guest_conversion_operations, verification_source_sync_targets, linked_oauth_attempts
+and account_deletion_operations. Their account_id is immutable; same-owner UPDATE
+and DELETE retain existing locking behavior. This prevents a delayed writer from
+recreating personal data after physical cleanup.
 Restored backups apply permanent fences before serving. Existing Space-deletion
 proof pseudonymization remains governed by its separately accepted key policy.
 

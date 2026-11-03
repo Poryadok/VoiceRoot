@@ -29,6 +29,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
   private final Map<String,Migration> subscriptionLifecycleFlyway;
   private final Map<String,Migration> accountLifecycleFlyway;
   private final Map<String,Migration> terminalFencesFlyway;
+  private final Map<String,Migration> rawAdmissionFlyway;
   private final Map<String,Migration> historicalFlyway;
   private final DataSource dataSource;
   private final java.util.concurrent.ExecutorService reads=new java.util.concurrent.ThreadPoolExecutor(
@@ -45,6 +46,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
     subscriptionLifecycleFlyway=sourceHistory("migration-history-subscription-lifecycle-v1.json","subscription-lifecycle-capture-v1",34,true,true,false,false);
     accountLifecycleFlyway=sourceHistory("migration-history-account-lifecycle-v1.json","account-lifecycle-source-v1",35,true,true,true,false);
     terminalFencesFlyway=sourceHistory("migration-history-terminal-operation-fences-v1.json","terminal-operation-fences-v1",36,true,true,true,true);
+    rawAdmissionFlyway=sourceHistory("migration-history-raw-account-admission-v1.json","raw-account-admission-v1",37,true,true,true,true);
     var historical=new HashMap<String,Migration>();
     for(int version=1;version<=26;version++) historical.put(Integer.toString(version),currentFlyway.get(Integer.toString(version)));
     historicalFlyway=Map.copyOf(historical);
@@ -63,6 +65,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
       if(subscriptionLifecycle)versions.add("33");
       if(accountLifecycle)versions.add("34");
       if(terminalFences)versions.add("35");
+      if(canonicalVersion==37)versions.add("36");
       var result=new HashMap<String,Migration>();
       for(var migration:profile.path("flyway")) {
         String version=migration.path("version").asText();
@@ -185,7 +188,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
     if(flyway) {
       var actual=new HashMap<String,Migration>();
       try(var query=statement(connection,"SELECT version,script,checksum,success,type FROM public.flyway_schema_history ORDER BY installed_rank",deadline)) {
-        query.setMaxRows(terminalFencesFlyway.size()+1);
+        query.setMaxRows(rawAdmissionFlyway.size()+1);
         try(var result=query.executeQuery()) {
           while(result.next()) {
             budget(deadline);
@@ -196,13 +199,13 @@ public final class AuthAuthorityReader implements AutoCloseable {
           }
         }
       }
-      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway) && !actual.equals(linkedOAuthFlyway) && !actual.equals(subscriptionLifecycleFlyway) && !actual.equals(accountLifecycleFlyway) && !actual.equals(terminalFencesFlyway)) throw unavailable();
+      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway) && !actual.equals(linkedOAuthFlyway) && !actual.equals(subscriptionLifecycleFlyway) && !actual.equals(accountLifecycleFlyway) && !actual.equals(terminalFencesFlyway) && !actual.equals(rawAdmissionFlyway)) throw unavailable();
     } else {
       // Canonical markers are not fabricated Flyway checksums. The exact source
       // catalog checks below still apply to both explicitly supported cuts.
       try(var query=statement(connection,"SELECT version,dirty FROM public.schema_migrations",deadline);var result=query.executeQuery()) {
         if(!result.next() || !(result.getObject("version") instanceof Long version)
-            || (version!=27 && version!=32 && version!=33 && version!=34 && version!=35 && version!=36) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
+            || (version!=27 && version!=32 && version!=33 && version!=34 && version!=35 && version!=36 && version!=37) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
       }
     }
   }
