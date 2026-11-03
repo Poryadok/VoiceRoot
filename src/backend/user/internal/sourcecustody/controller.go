@@ -51,6 +51,7 @@ type Controller struct {
 	activationUsed                 bool
 	activationPrepared             bool
 	authorizedOpen                 bool
+	supervision                    *supervisionSession
 	mu                             sync.Mutex
 	stopped                        bool
 	failed                         bool
@@ -273,7 +274,7 @@ func (c *Controller) AcquireAttested(ctx context.Context, expected Binding) (*Pe
 		return nil, PhysicalSource{}, ErrUnavailable
 	}
 	c.mu.Lock()
-	valid := c.authorizedOpen && !c.stopped && c.parent.Err() == nil
+	valid := c.authorizedOpen && !c.stopped && c.parent.Err() == nil && c.supervision.live()
 	c.mu.Unlock()
 	if !valid {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -475,6 +476,9 @@ func (p *Permit) Check(ctx context.Context) error {
 	if c.stopped || c.parent.Err() != nil || ctx.Err() != nil {
 		return ErrUnavailable
 	}
+	if c.supervision != nil && !c.supervision.live() {
+		return ErrUnavailable
+	}
 	observe, stopObserve := context.WithTimeout(context.Background(), 3*time.Second)
 	defer stopObserve()
 	if c.leader == nil || c.leader.Ping(observe) != nil || p.conn.Ping(observe) != nil {
@@ -552,6 +556,9 @@ func (c *Controller) Shutdown(ctx context.Context) error {
 // operation. It does not claim the durable CLOSED update committed.
 func (c *Controller) poisonLocked() {
 	c.authorizedOpen = false
+	if c.supervision != nil {
+		c.supervision.revoke()
+	}
 	if !c.failed && c.failure != nil {
 		close(c.failure)
 	}

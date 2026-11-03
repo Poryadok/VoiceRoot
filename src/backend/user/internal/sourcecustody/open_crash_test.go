@@ -45,6 +45,7 @@ func TestOpenCrashChild(t *testing.T) {
 	require.NoError(t, control.QueryRow(ctx, `SELECT system_identifier,database_name,database_oid FROM user_custody_physical_source WHERE source_id=$1 AND epoch=$2`, binding.SourceID, binding.Epoch).Scan(&physical.SystemIdentifier, &physical.Database, &physical.DatabaseOID))
 	controller, err := Start(ctx, control, binding)
 	require.NoError(t, err)
+	defer cleanupTestController(controller)
 	challenge, err := controller.ActivationChallenge()
 	require.NoError(t, err)
 	public, private, err := ed25519.GenerateKey(rand.Reader)
@@ -54,6 +55,7 @@ func TestOpenCrashChild(t *testing.T) {
 	payload, err := OpenAttestationPayload(claim)
 	require.NoError(t, err)
 	claim.Signature = ed25519.Sign(private, payload)
+	armSyntheticSupervision(t, controller, claim, public)
 	_, keys := migrationFixture(t)
 	if os.Getenv("VOICE_OPEN_CRASH_PHASE") == "prepare-enabled" {
 		controller.afterPrepareEnabled = func() {
@@ -166,6 +168,7 @@ func runOpeningCrash(t *testing.T, crashPhase string) {
 		restarted, err = Start(ctx, control, claim.Binding)
 		return err == nil
 	}, 10*time.Second, 50*time.Millisecond)
+	t.Cleanup(func() { cleanupTestController(restarted) })
 	require.NoError(t, control.QueryRow(ctx, `SELECT state FROM user_custody_state WHERE singleton`).Scan(&state))
 	require.Equal(t, "CLOSED", state)
 	require.NoError(t, restarted.Shutdown(ctx))
