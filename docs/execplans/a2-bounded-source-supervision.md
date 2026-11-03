@@ -110,6 +110,16 @@ WT64 and WT73 are preserved read-only investigation artifacts.
   is `A2-USER-CAPTURE-INDEPENDENT-FENCE#comment-c11`. Initial draft backend CI
   jobs were skipped, so no genuine hosted CI PASS is claimed. No merge or live
   rollout has occurred; root retains those gates.
+- PR #1119 was then marked ready for genuine CI. Its first selected run exposed
+  errcheck/staticcheck issues in the new transport and fixtures; response-body
+  cleanup, receiver naming and HTTP constants were corrected. Local User
+  `golangci-lint run --timeout=5m` reports zero issues, and focused transport,
+  configuration and early-poll tests pass with `-race` (2.783 seconds).
+- The affected public Space Ban test passed with real User/supervisor processes
+  under `-race -tags spacebanintegration` (120.78 seconds). The companion native
+  test first failed during Space fixture setup before starting User because its
+  existing membership observation expired; that failure is retained separately
+  and only that test is scheduled for an isolated rerun. No deadlines changed.
 - Commands, source hashes, full logs and owned container identities are retained
   under ignored `tmp/source-supervision/` in this checkout. Deployment custody,
   real keys and DEV/STG qualification remain the named consumer's work.

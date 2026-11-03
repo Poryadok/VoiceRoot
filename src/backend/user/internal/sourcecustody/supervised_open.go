@@ -16,7 +16,7 @@ type runningSupervision struct {
 	result  error
 }
 
-func (client *supervisorClient) renew(ctx context.Context, session *supervisionSession) bool {
+func (c *supervisorClient) renew(ctx context.Context, session *supervisionSession) bool {
 	if ctx == nil || ctx.Err() != nil || session == nil {
 		return false
 	}
@@ -36,7 +36,7 @@ func (client *supervisorClient) renew(ctx context.Context, session *supervisionS
 		return false
 	}
 	call, stop := context.WithTimeout(ctx, time.Second)
-	response, err := client.probe(call, challenge)
+	response, err := c.probe(call, challenge)
 	callErr := call.Err()
 	stop()
 	return err == nil && callErr == nil && session.accept(response) == nil

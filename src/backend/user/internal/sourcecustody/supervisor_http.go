@@ -151,7 +151,7 @@ func (c *supervisorClient) probe(ctx context.Context, probe supervisionProbe) (M
 	if err != nil {
 		return response, ErrUnavailable
 	}
-	defer wire.Body.Close()
+	defer func() { _ = wire.Body.Close() }()
 	if wire.StatusCode != http.StatusOK {
 		return response, ErrUnavailable
 	}
