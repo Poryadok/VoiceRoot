@@ -30,6 +30,18 @@ jobs:
           go-version: '1.26'
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends postgresql-client
+      - name: Enable PostgreSQL statement statistics for diagnostics
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          docker exec "$POSTGRES_CONTAINER" psql -U voice -d postgres -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements'"
+          docker restart "$POSTGRES_CONTAINER" >/dev/null
+          for attempt in $(seq 1 30); do
+            if docker exec "$POSTGRES_CONTAINER" pg_isready -U voice -d postgres >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
       - name: Bind source and PostgreSQL image
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

@@ -50,6 +50,8 @@ target_identity="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -
 [[ "$admin_system" =~ ^[0-9]+$ && "$target_identity" == "$admin_system:$owned_oid" ]]
 psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "SELECT 'postgres_server_version_num=' || current_setting('server_version_num')" >> "$RUNNER_TEMP/space-profile50-identities.txt"
 psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "ALTER DATABASE space_profile50 SET track_functions = 'all'"
+psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "ALTER DATABASE space_profile50 SET pg_stat_statements.track = 'all'"
+psql -X -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c 'CREATE SCHEMA diagnostic_jit; CREATE EXTENSION pg_stat_statements WITH SCHEMA diagnostic_jit'
 
 receipt() {
   local name="$1" inventory="$2" test_name="$3" result
@@ -94,10 +96,18 @@ set -e
 if [[ "$result" != 0 ]]; then exit "$result"; fi
 sha256sum "$RUNNER_TEMP/space-profile50.test" >> "$RUNNER_TEMP/space-profile50-identities.txt"
 binary_before="$(sha256sum "$RUNNER_TEMP/space-profile50.test" | cut -d' ' -f1)"
-# Database-wide counters are diagnostic only and are never reset.
+# Verify the PostgreSQL 16 view really exposes all counters used below.
+psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "SELECT count(*), coalesce(sum(jit_functions),0), coalesce(sum(jit_generation_time),0), coalesce(sum(jit_inlining_count),0), coalesce(sum(jit_optimization_count),0) FROM diagnostic_jit.pg_stat_statements WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database())" > "$RUNNER_TEMP/space-profile50-jit-schema.txt"
+# Force one separate query through JIT to check that counters are operational.
+jit_count_sql="SELECT coalesce(sum(jit_functions),0)::bigint FROM diagnostic_jit.pg_stat_statements WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database())"
+jit_canary_before="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "$jit_count_sql")"
+psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "SET jit=on; SET jit_above_cost=0; SELECT sum(i) FROM generate_series(1,1000) i" > /dev/null
+jit_canary_after="$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "$jit_count_sql")"
+[[ "$jit_canary_before" =~ ^[0-9]+$ && "$jit_canary_after" =~ ^[0-9]+$ && "$jit_canary_after" -gt "$jit_canary_before" ]]
+# Database-wide statement counters are diagnostic only and are never reset.
 jit_snapshot() {
   local phase="$1"
-  psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "SELECT json_build_object('phase', '$phase', 'jit', current_setting('jit'), 'jit_above_cost', current_setting('jit_above_cost'), 'jit_functions', jit_functions, 'jit_generation_time', jit_generation_time, 'jit_inlining_count', jit_inlining_count, 'jit_optimization_count', jit_optimization_count) FROM pg_stat_database WHERE datname=current_database()" >> "$RUNNER_TEMP/space-profile50-jit.jsonl"
+  psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "SELECT json_build_object('phase', '$phase', 'jit', current_setting('jit'), 'jit_above_cost', current_setting('jit_above_cost'), 'track', current_setting('pg_stat_statements.track'), 'jit_functions', coalesce(sum(jit_functions),0), 'jit_generation_time', coalesce(sum(jit_generation_time),0), 'jit_inlining_count', coalesce(sum(jit_inlining_count),0), 'jit_optimization_count', coalesce(sum(jit_optimization_count),0)) FROM diagnostic_jit.pg_stat_statements WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database())" >> "$RUNNER_TEMP/space-profile50-jit.jsonl"
 }
 jit_result=0
 jit_snapshot before || jit_result=1
