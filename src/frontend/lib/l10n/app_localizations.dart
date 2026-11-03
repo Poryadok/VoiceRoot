@@ -491,7 +491,7 @@ abstract class AppLocalizations {
   /// No description provided for @backendUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).'**
+  /// **'The service is temporarily unavailable. Please try again.'**
   String get backendUnavailable;
 
   /// No description provided for @socialTabSearch.
@@ -851,7 +851,7 @@ abstract class AppLocalizations {
   /// No description provided for @socialFriendsBackendUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Friends are unavailable. Start the full API stack (docker compose --profile app).'**
+  /// **'The service is temporarily unavailable. Please try again.'**
   String get socialFriendsBackendUnavailable;
 
   /// No description provided for @socialRequestsLoadError.
@@ -1247,7 +1247,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatListBackendUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Chats are unavailable. Start the full API stack (docker compose --profile app).'**
+  /// **'The service is temporarily unavailable. Please try again.'**
   String get chatListBackendUnavailable;
 
   /// No description provided for @chatListDmFallback.
@@ -1621,6 +1621,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to install bot.'**
   String get botInstallActionError;
+
+  /// No description provided for @botWebhookTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interaction webhook'**
+  String get botWebhookTitle;
+
+  /// No description provided for @botWebhookLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the endpoint.'**
+  String get botWebhookLoadError;
+
+  /// No description provided for @botWebhookSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the endpoint. Try again.'**
+  String get botWebhookSaveError;
+
+  /// No description provided for @botWebhookSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint saved'**
+  String get botWebhookSaved;
+
+  /// No description provided for @botWebhookPollingConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to polling?'**
+  String get botWebhookPollingConfirmTitle;
+
+  /// No description provided for @botWebhookPollingConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Outgoing webhook delivery will stop. Your bot can receive interactions by polling.'**
+  String get botWebhookPollingConfirmMessage;
+
+  /// No description provided for @botWebhookKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep webhook'**
+  String get botWebhookKeep;
+
+  /// No description provided for @botWebhookOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the bot owner can configure this endpoint.'**
+  String get botWebhookOwnerOnly;
+
+  /// No description provided for @botWebhookPollingEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Polling enabled'**
+  String get botWebhookPollingEnabled;
+
+  /// No description provided for @botWebhookEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Webhook enabled'**
+  String get botWebhookEnabled;
+
+  /// No description provided for @botWebhookDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice sends interactions to your bot at this endpoint. Use polling for local development.'**
+  String get botWebhookDescription;
+
+  /// No description provided for @botWebhookEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint'**
+  String get botWebhookEndpoint;
+
+  /// No description provided for @botWebhookEndpointHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://your-bot.example/interactions'**
+  String get botWebhookEndpointHint;
+
+  /// No description provided for @botWebhookInvalidEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid HTTPS endpoint.'**
+  String get botWebhookInvalidEndpoint;
+
+  /// No description provided for @botWebhookSavedEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'SAVED ENDPOINT'**
+  String get botWebhookSavedEndpoint;
+
+  /// No description provided for @botWebhookCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint copied'**
+  String get botWebhookCopied;
+
+  /// No description provided for @botWebhookCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy endpoint'**
+  String get botWebhookCopy;
+
+  /// No description provided for @botWebhookSwitchToPolling.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to polling'**
+  String get botWebhookSwitchToPolling;
+
+  /// No description provided for @botWebhookSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get botWebhookSaving;
+
+  /// No description provided for @botWebhookSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save endpoint'**
+  String get botWebhookSave;
+
+  /// No description provided for @botWebhookClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get botWebhookClose;
+
+  /// No description provided for @botWebhookConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get botWebhookConfirm;
 
   /// No description provided for @commonActionFailed.
   ///
@@ -4460,6 +4592,24 @@ abstract class AppLocalizations {
   /// **'Subscription'**
   String get subscriptionSettingsTitle;
 
+  /// No description provided for @subscriptionPlusAnnual.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus · annual'**
+  String get subscriptionPlusAnnual;
+
+  /// No description provided for @subscriptionPlusMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Plus · monthly'**
+  String get subscriptionPlusMonthly;
+
+  /// No description provided for @subscriptionPlusBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'PLUS'**
+  String get subscriptionPlusBadge;
+
   /// No description provided for @subscriptionCurrentPlan.
   ///
   /// In en, this message translates to:
@@ -4867,6 +5017,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Organization verification unavailable'**
   String get verificationOrganizationUnavailable;
+
+  /// No description provided for @verificationProviderLinkUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider linking is unavailable until OAuth return and provider configuration are enabled.'**
+  String get verificationProviderLinkUnavailable;
+
+  /// No description provided for @verificationDomainEligibilityUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain verification is unavailable until organization eligibility and pending DNS details can be read back.'**
+  String get verificationDomainEligibilityUnavailable;
 
   /// No description provided for @verifiedBadgePersonal.
   ///
@@ -5840,6 +6002,60 @@ abstract class AppLocalizations {
   /// **'Waiting for screen video…'**
   String get screenShareWaitingForVideo;
 
+  /// No description provided for @screenShareWatchStream.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch stream'**
+  String get screenShareWatchStream;
+
+  /// No description provided for @screenShareCloseViewer.
+  ///
+  /// In en, this message translates to:
+  /// **'Close viewer'**
+  String get screenShareCloseViewer;
+
+  /// No description provided for @screenShareStreamPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Stream paused'**
+  String get screenShareStreamPaused;
+
+  /// No description provided for @screenSharePausedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get screenSharePausedLabel;
+
+  /// No description provided for @screenSharePanelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen shares'**
+  String get screenSharePanelTitle;
+
+  /// No description provided for @screenShareChooseStream.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a stream'**
+  String get screenShareChooseStream;
+
+  /// No description provided for @screenShareWatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching'**
+  String get screenShareWatching;
+
+  /// No description provided for @screenShareStreamCaption.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} · Screen share'**
+  String screenShareStreamCaption(String name);
+
+  /// No description provided for @screenSharePausedParticipant.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, paused'**
+  String screenSharePausedParticipant(String name);
+
   /// No description provided for @platformWebSystemAudioUnavailable.
   ///
   /// In en, this message translates to:
@@ -6782,6 +6998,36 @@ abstract class AppLocalizations {
   /// **'Highlights'**
   String get storyHighlightsTitle;
 
+  /// No description provided for @storySuggestionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share your match'**
+  String get storySuggestionTitle;
+
+  /// No description provided for @storySuggestionCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Match completed'**
+  String get storySuggestionCompleted;
+
+  /// No description provided for @storySuggestionEditPublish.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit & publish'**
+  String get storySuggestionEditPublish;
+
+  /// No description provided for @storySuggestionDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get storySuggestionDismiss;
+
+  /// No description provided for @storySuggestionDraft.
+  ///
+  /// In en, this message translates to:
+  /// **'Match completed · {game}'**
+  String storySuggestionDraft(String game);
+
   /// No description provided for @storyLfpTitle.
   ///
   /// In en, this message translates to:
@@ -7261,6 +7507,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playing {title}'**
   String contactProfilePlayingGame(String title);
+
+  /// No description provided for @contactProfileAccountDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deleted'**
+  String get contactProfileAccountDeleted;
 
   /// No description provided for @matchSquadOpenChat.
   ///
