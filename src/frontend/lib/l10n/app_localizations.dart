@@ -5597,7 +5597,7 @@ abstract class AppLocalizations {
   /// No description provided for @reportAcceptedMessage.
   ///
   /// In en, this message translates to:
-  /// **'We will review it shortly. You will not receive status updates.'**
+  /// **'We will review it shortly.'**
   String get reportAcceptedMessage;
 
   /// No description provided for @authTotpStepTitle.
@@ -7417,6 +7417,324 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No role preference'**
   String get queueSearchNoRolePreference;
+
+  /// No description provided for @subscriptionCancelConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your paid benefits remain available until the end of the paid period. Cancel your subscription?'**
+  String get subscriptionCancelConfirmation;
+
+  /// No description provided for @subscriptionUpdatePayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Update payment method'**
+  String get subscriptionUpdatePayment;
+
+  /// No description provided for @subscriptionBillingUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Billing details are not available for this subscription.'**
+  String get subscriptionBillingUnavailable;
+
+  /// No description provided for @subscriptionBillingEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No billing activity yet.'**
+  String get subscriptionBillingEmpty;
+
+  /// No description provided for @subscriptionBillingEvent.
+  ///
+  /// In en, this message translates to:
+  /// **'Billing event'**
+  String get subscriptionBillingEvent;
+
+  /// No description provided for @subscriptionPaymentSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment received'**
+  String get subscriptionPaymentSucceeded;
+
+  /// No description provided for @subscriptionPaymentFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment failed'**
+  String get subscriptionPaymentFailed;
+
+  /// No description provided for @subscriptionPlanCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription cancelled'**
+  String get subscriptionPlanCancelled;
+
+  /// No description provided for @subscriptionGraceUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Grace period until {date}'**
+  String subscriptionGraceUntil(String date);
+
+  /// No description provided for @subscriptionBillingHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Billing history'**
+  String get subscriptionBillingHistory;
+
+  /// No description provided for @subscriptionRestorePurchases.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore purchases'**
+  String get subscriptionRestorePurchases;
+
+  /// No description provided for @subscriptionPurchasesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases are not available yet.'**
+  String get subscriptionPurchasesUnavailable;
+
+  /// No description provided for @subscriptionCleanUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean @username'**
+  String get subscriptionCleanUsername;
+
+  /// No description provided for @subscriptionResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume subscription'**
+  String get subscriptionResume;
+
+  /// No description provided for @stickerSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get stickerSettingsTitle;
+
+  /// No description provided for @stickerSettingsInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get stickerSettingsInstalled;
+
+  /// No description provided for @stickerSettingsUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload your pack'**
+  String get stickerSettingsUpload;
+
+  /// No description provided for @stickerSettingsUploadRules.
+  ///
+  /// In en, this message translates to:
+  /// **'PNG or WebP, up to 512×512 and 512 KB per sticker after processing.'**
+  String get stickerSettingsUploadRules;
+
+  /// No description provided for @stickerSettingsUploadUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Pack uploads are currently unavailable. Your installed packs are still available.'**
+  String get stickerSettingsUploadUnavailable;
+
+  /// No description provided for @stickerSettingsSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System pack'**
+  String get stickerSettingsSystem;
+
+  /// No description provided for @stickerSettingsOwn.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pack'**
+  String get stickerSettingsOwn;
+
+  /// No description provided for @stickerSettingsSystemHint.
+  ///
+  /// In en, this message translates to:
+  /// **'System packs cannot be removed.'**
+  String get stickerSettingsSystemHint;
+
+  /// No description provided for @stickerSettingsOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get stickerSettingsOpen;
+
+  /// No description provided for @stickerSettingsClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get stickerSettingsClose;
+
+  /// No description provided for @stickerSettingsRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get stickerSettingsRemove;
+
+  /// No description provided for @stickerSettingsRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this pack?'**
+  String get stickerSettingsRemoveTitle;
+
+  /// No description provided for @stickerSettingsRemoveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'It will no longer appear in your installed packs.'**
+  String get stickerSettingsRemoveHint;
+
+  /// No description provided for @stickerSettingsPreviewUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This sticker preview is unavailable.'**
+  String get stickerSettingsPreviewUnavailable;
+
+  /// No description provided for @stickerSettingsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} stickers'**
+  String stickerSettingsCount(int count);
+
+  /// No description provided for @appealPendingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appeal under review'**
+  String get appealPendingTitle;
+
+  /// No description provided for @appealCaseIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Appeal ID'**
+  String get appealCaseIdLabel;
+
+  /// No description provided for @appealClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close appeal'**
+  String get appealClose;
+
+  /// No description provided for @appealOneSubmissionNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'One appeal per sanction · Review within 7 business days.'**
+  String get appealOneSubmissionNotice;
+
+  /// No description provided for @appIconPreferenceLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Your saved app icon could not be loaded. Retry to keep your device preference.'**
+  String get appIconPreferenceLoadError;
+
+  /// No description provided for @reportReasonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get reportReasonLabel;
+
+  /// No description provided for @reportModerationNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Your report will be sent to the moderation team. The author will not see your name.'**
+  String get reportModerationNotice;
+
+  /// No description provided for @reportSignInRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to send a report.'**
+  String get reportSignInRequired;
+
+  /// No description provided for @storyViewerNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next story'**
+  String get storyViewerNext;
+
+  /// No description provided for @storyViewerPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous story'**
+  String get storyViewerPrevious;
+
+  /// No description provided for @storyViewerProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Story {current} of {total}'**
+  String storyViewerProgress(int current, int total);
+
+  /// No description provided for @storyViewerDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this story?'**
+  String get storyViewerDeleteConfirm;
+
+  /// No description provided for @storyViewerDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Story deleted'**
+  String get storyViewerDeleted;
+
+  /// No description provided for @storyViewerPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause story'**
+  String get storyViewerPause;
+
+  /// No description provided for @storyViewerResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume story'**
+  String get storyViewerResume;
+
+  /// No description provided for @privacyShowLastSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen'**
+  String get privacyShowLastSeen;
+
+  /// No description provided for @privacyBlockedUsers.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked users'**
+  String get privacyBlockedUsers;
+
+  /// No description provided for @privacyBlockedUsersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No blocked users} one{# blocked user} other{# blocked users}}'**
+  String privacyBlockedUsersCount(int count);
+
+  /// No description provided for @commonClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get commonClose;
+
+  /// No description provided for @storyLfpJoinSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Join request sent'**
+  String get storyLfpJoinSent;
+
+  /// No description provided for @storyLfpInviteSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite sent'**
+  String get storyLfpInviteSent;
+
+  /// No description provided for @storyLfpInactive.
+  ///
+  /// In en, this message translates to:
+  /// **'This announcement is no longer active'**
+  String get storyLfpInactive;
+
+  /// No description provided for @privacyApplyAudience.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get privacyApplyAudience;
+
+  /// No description provided for @privacyAudienceSelectedSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected spaces: {count}'**
+  String privacyAudienceSelectedSpaces(int count);
 }
 
 class _AppLocalizationsDelegate
