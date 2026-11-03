@@ -170,6 +170,16 @@ class FastGateRoutingTests(unittest.TestCase):
             values['needs.changes.result'] = 'skipped'
             self.assertTrue(policy.evaluate(condition, values))
 
+    def test_history_validator_changes_require_audit_on_pr(self):
+        for path in ('scripts/ci/f13_native_p3_successor_integration_test.py',
+                     'scripts/ci/f13_role_conditional_successor_test.py',
+                     'scripts/ci/f13_release_source.py'):
+            with self.subTest(path=path):
+                flags = self.filters_for(path)
+                self.assertEqual(flags['history_audit'], 'true')
+                values = policy.context('pull_request', **flags)
+                self.assertTrue(policy.evaluate(policy.job_condition('voice-history-audit'), values))
+
     def test_shards_are_explicit_and_all_required(self):
         block = policy.block('ci-script-tests')
         self.assertIn('fail-fast: false', block)
