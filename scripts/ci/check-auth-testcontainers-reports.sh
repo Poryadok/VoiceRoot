@@ -39,6 +39,8 @@ required_suites=(
   "voice.backend.auth.sdkidentity.SdkAuthorizationJdbcIntegrationTest"
   "voice.backend.auth.sdkidentity.SdkConversionJdbcIntegrationTest"
   "voice.backend.auth.sdkidentity.SdkIdentityJdbcIntegrationTest"
+  "voice.backend.auth.sdkidentity.SdkTerminalFenceJdbcIntegrationTest"
+  "voice.backend.auth.sdkidentity.SdkErasedRegistrationJdbcIntegrationTest"
 )
 
 attribute_value() {
