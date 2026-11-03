@@ -2833,7 +2833,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Settings saved, but quiet hours could not sync';
 
   @override
-  String get notificationGlobalEnabled => 'Notifications enabled';
+  String get notificationGlobalEnabled => 'Chat message notifications';
 
   @override
   String get notificationChatEnabled => 'Notifications for this chat';
@@ -2842,7 +2842,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationEventTypesTitle => 'Event types';
 
   @override
-  String get notificationTypeNewMessage => 'Direct messages';
+  String get notificationTypeNewMessage => 'Chat messages';
 
   @override
   String get notificationTypeMessageRequest => 'Message requests';
@@ -2863,7 +2863,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationTypeMatchFound => 'Match found';
 
   @override
-  String get notificationTypeSystem => 'System';
+  String get notificationTypeSystem => 'System / security';
+
+  @override
+  String get notificationTypeVoiceMemberJoined => 'Someone joins a voice room';
 
   @override
   String get notificationQuietHoursTitle => 'Quiet hours';
@@ -2876,6 +2879,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationQuietHoursEnd => 'End';
+
+  @override
+  String get notificationQuietHoursTimezone => 'Time zone';
 
   @override
   String get notificationQuietHoursOverrideMentions =>
@@ -3076,8 +3082,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportAcceptedTitle => 'Report accepted';
 
   @override
-  String get reportAcceptedMessage =>
-      'We will review it shortly. You will not receive status updates.';
+  String get reportAcceptedMessage => 'We will review it shortly.';
 
   @override
   String get authTotpStepTitle => 'Two-factor code';
@@ -4072,4 +4077,190 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueSearchNoRolePreference => 'No role preference';
+
+  @override
+  String get subscriptionCancelConfirmation =>
+      'Your paid benefits remain available until the end of the paid period. Cancel your subscription?';
+
+  @override
+  String get subscriptionUpdatePayment => 'Update payment method';
+
+  @override
+  String get subscriptionBillingUnavailable =>
+      'Billing details are not available for this subscription.';
+
+  @override
+  String get subscriptionBillingEmpty => 'No billing activity yet.';
+
+  @override
+  String get subscriptionBillingEvent => 'Billing event';
+
+  @override
+  String get subscriptionPaymentSucceeded => 'Payment received';
+
+  @override
+  String get subscriptionPaymentFailed => 'Payment failed';
+
+  @override
+  String get subscriptionPlanCancelled => 'Subscription cancelled';
+
+  @override
+  String subscriptionGraceUntil(String date) {
+    return 'Grace period until $date';
+  }
+
+  @override
+  String get subscriptionBillingHistory => 'Billing history';
+
+  @override
+  String get subscriptionRestorePurchases => 'Restore purchases';
+
+  @override
+  String get subscriptionPurchasesUnavailable =>
+      'Purchases are not available yet.';
+
+  @override
+  String get subscriptionCleanUsername => 'Clean @username';
+
+  @override
+  String get subscriptionResume => 'Resume subscription';
+
+  @override
+  String get stickerSettingsTitle => 'Stickers';
+
+  @override
+  String get stickerSettingsInstalled => 'Installed';
+
+  @override
+  String get stickerSettingsUpload => 'Upload your pack';
+
+  @override
+  String get stickerSettingsUploadRules =>
+      'PNG or WebP, up to 512×512 and 512 KB per sticker after processing.';
+
+  @override
+  String get stickerSettingsUploadUnavailable =>
+      'Pack uploads are currently unavailable. Your installed packs are still available.';
+
+  @override
+  String get stickerSettingsSystem => 'System pack';
+
+  @override
+  String get stickerSettingsOwn => 'Your pack';
+
+  @override
+  String get stickerSettingsSystemHint => 'System packs cannot be removed.';
+
+  @override
+  String get stickerSettingsOpen => 'Open';
+
+  @override
+  String get stickerSettingsClose => 'Close';
+
+  @override
+  String get stickerSettingsRemove => 'Remove';
+
+  @override
+  String get stickerSettingsRemoveTitle => 'Remove this pack?';
+
+  @override
+  String get stickerSettingsRemoveHint =>
+      'It will no longer appear in your installed packs.';
+
+  @override
+  String get stickerSettingsPreviewUnavailable =>
+      'This sticker preview is unavailable.';
+
+  @override
+  String stickerSettingsCount(int count) {
+    return '$count stickers';
+  }
+
+  @override
+  String get appealPendingTitle => 'Appeal under review';
+
+  @override
+  String get appealCaseIdLabel => 'Appeal ID';
+
+  @override
+  String get appealClose => 'Close appeal';
+
+  @override
+  String get appealOneSubmissionNotice =>
+      'One appeal per sanction · Review within 7 business days.';
+
+  @override
+  String get appIconPreferenceLoadError =>
+      'Your saved app icon could not be loaded. Retry to keep your device preference.';
+
+  @override
+  String get reportReasonLabel => 'Reason';
+
+  @override
+  String get reportModerationNotice =>
+      'Your report will be sent to the moderation team. The author will not see your name.';
+
+  @override
+  String get reportSignInRequired => 'Sign in to send a report.';
+
+  @override
+  String get storyViewerNext => 'Next story';
+
+  @override
+  String get storyViewerPrevious => 'Previous story';
+
+  @override
+  String storyViewerProgress(int current, int total) {
+    return 'Story $current of $total';
+  }
+
+  @override
+  String get storyViewerDeleteConfirm => 'Delete this story?';
+
+  @override
+  String get storyViewerDeleted => 'Story deleted';
+
+  @override
+  String get storyViewerPause => 'Pause story';
+
+  @override
+  String get storyViewerResume => 'Resume story';
+
+  @override
+  String get privacyShowLastSeen => 'Last seen';
+
+  @override
+  String get privacyBlockedUsers => 'Blocked users';
+
+  @override
+  String privacyBlockedUsersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# blocked users',
+      one: '# blocked user',
+      zero: 'No blocked users',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get commonClose => 'Close';
+
+  @override
+  String get storyLfpJoinSent => 'Join request sent';
+
+  @override
+  String get storyLfpInviteSent => 'Invite sent';
+
+  @override
+  String get storyLfpInactive => 'This announcement is no longer active';
+
+  @override
+  String get privacyApplyAudience => 'Apply';
+
+  @override
+  String privacyAudienceSelectedSpaces(int count) {
+    return 'Selected spaces: $count';
+  }
 }
