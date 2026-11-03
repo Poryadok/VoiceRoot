@@ -159,7 +159,7 @@ void main() {
     expect(find.text('private add diagnostic'), findsNothing);
     expect(
       find.text(
-        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
+        'The service is temporarily unavailable. Please try again.',
       ),
       findsOneWidget,
     );

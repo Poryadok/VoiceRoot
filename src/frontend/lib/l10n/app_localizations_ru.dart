@@ -239,7 +239,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get backendUnavailable =>
-      'Социальные функции и чаты недоступны. Запустите полный API-стек (docker compose --profile app).';
+      'Сервис временно недоступен. Попробуйте ещё раз.';
 
   @override
   String get socialTabSearch => 'Поиск';
@@ -440,7 +440,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get socialFriendsBackendUnavailable =>
-      'Друзья недоступны. Запустите полный API-стек (docker compose --profile app).';
+      'Сервис временно недоступен. Попробуйте ещё раз.';
 
   @override
   String get socialRequestsLoadError => 'Не удалось загрузить заявки';
@@ -687,7 +687,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatListBackendUnavailable =>
-      'Чаты недоступны. Запустите полный API-стек (docker compose --profile app).';
+      'Сервис временно недоступен. Попробуйте ещё раз.';
 
   @override
   String chatListDmFallback(String id) {
@@ -903,6 +903,76 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get botInstallActionError => 'Не удалось установить бота.';
+
+  @override
+  String get botWebhookTitle => 'Webhook для взаимодействий';
+
+  @override
+  String get botWebhookLoadError => 'Не удалось загрузить endpoint.';
+
+  @override
+  String get botWebhookSaveError =>
+      'Не удалось сохранить endpoint. Повторите попытку.';
+
+  @override
+  String get botWebhookSaved => 'Endpoint сохранён';
+
+  @override
+  String get botWebhookPollingConfirmTitle => 'Переключиться на polling?';
+
+  @override
+  String get botWebhookPollingConfirmMessage =>
+      'Доставка через исходящий webhook прекратится. Бот сможет получать взаимодействия через polling.';
+
+  @override
+  String get botWebhookKeep => 'Оставить webhook';
+
+  @override
+  String get botWebhookOwnerOnly =>
+      'Только владелец бота может настроить этот endpoint.';
+
+  @override
+  String get botWebhookPollingEnabled => 'Polling включён';
+
+  @override
+  String get botWebhookEnabled => 'Webhook включён';
+
+  @override
+  String get botWebhookDescription =>
+      'Voice отправляет взаимодействия вашему боту на этот endpoint. Для локальной разработки используйте polling.';
+
+  @override
+  String get botWebhookEndpoint => 'Endpoint';
+
+  @override
+  String get botWebhookEndpointHint => 'https://your-bot.example/interactions';
+
+  @override
+  String get botWebhookInvalidEndpoint => 'Введите корректный HTTPS endpoint.';
+
+  @override
+  String get botWebhookSavedEndpoint => 'СОХРАНЁННЫЙ ENDPOINT';
+
+  @override
+  String get botWebhookCopied => 'Endpoint скопирован';
+
+  @override
+  String get botWebhookCopy => 'Копировать endpoint';
+
+  @override
+  String get botWebhookSwitchToPolling => 'Переключиться на polling';
+
+  @override
+  String get botWebhookSaving => 'Сохранение…';
+
+  @override
+  String get botWebhookSave => 'Сохранить endpoint';
+
+  @override
+  String get botWebhookClose => 'Закрыть';
+
+  @override
+  String get botWebhookConfirm => 'Подтвердить';
 
   @override
   String get commonActionFailed => 'Не удалось выполнить действие.';
@@ -2496,6 +2566,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subscriptionSettingsTitle => 'Подписка';
 
   @override
+  String get subscriptionPlusAnnual => 'Voice Plus · годовой';
+
+  @override
+  String get subscriptionPlusMonthly => 'Voice Plus · месячный';
+
+  @override
+  String get subscriptionPlusBadge => 'PLUS';
+
+  @override
   String get subscriptionCurrentPlan => 'Текущий план';
 
   @override
@@ -2722,6 +2801,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get verificationOrganizationUnavailable =>
       'Верификация организации недоступна';
+
+  @override
+  String get verificationProviderLinkUnavailable =>
+      'Привязка платформ недоступна, пока не настроены возврат после OAuth и конфигурация провайдера.';
+
+  @override
+  String get verificationDomainEligibilityUnavailable =>
+      'Проверка домена недоступна, пока нельзя подтвердить право организации на верификацию и восстановить текущие DNS-инструкции.';
 
   @override
   String get verifiedBadgePersonal => 'Верифицирован';
@@ -3252,6 +3339,37 @@ class AppLocalizationsRu extends AppLocalizations {
   String get screenShareWaitingForVideo => 'Ожидание видео…';
 
   @override
+  String get screenShareWatchStream => 'Смотреть трансляцию';
+
+  @override
+  String get screenShareCloseViewer => 'Закрыть просмотр';
+
+  @override
+  String get screenShareStreamPaused => 'Трансляция приостановлена';
+
+  @override
+  String get screenSharePausedLabel => 'Пауза';
+
+  @override
+  String get screenSharePanelTitle => 'Демонстрации экрана';
+
+  @override
+  String get screenShareChooseStream => 'Выбрать трансляцию';
+
+  @override
+  String get screenShareWatching => 'Просмотр';
+
+  @override
+  String screenShareStreamCaption(String name) {
+    return '$name · Демонстрация экрана';
+  }
+
+  @override
+  String screenSharePausedParticipant(String name) {
+    return '$name, пауза';
+  }
+
+  @override
   String get platformWebSystemAudioUnavailable =>
       'Захват системного звука недоступен на этой платформе';
 
@@ -3762,6 +3880,23 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyHighlightsTitle => 'Актуальное';
 
   @override
+  String get storySuggestionTitle => 'Поделиться матчем';
+
+  @override
+  String get storySuggestionCompleted => 'Матч завершён';
+
+  @override
+  String get storySuggestionEditPublish => 'Редактировать и опубликовать';
+
+  @override
+  String get storySuggestionDismiss => 'Не сейчас';
+
+  @override
+  String storySuggestionDraft(String game) {
+    return 'Матч завершён · $game';
+  }
+
+  @override
   String get storyLfpTitle => 'Ищу пати';
 
   @override
@@ -4040,6 +4175,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String contactProfilePlayingGame(String title) {
     return 'Играет в $title';
   }
+
+  @override
+  String get contactProfileAccountDeleted => 'Аккаунт удалён';
 
   @override
   String get matchSquadOpenChat => 'Открыть чат';

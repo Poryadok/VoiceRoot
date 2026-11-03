@@ -24,7 +24,7 @@ import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
-const _backendUnavailableSnippet = 'Start the full API stack';
+const _backendUnavailableSnippet = 'temporarily unavailable';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
