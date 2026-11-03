@@ -58,7 +58,7 @@ receipt() {
     -run "^${test_name}$" ./internal/store > "$RUNNER_TEMP/space-profile50-${name}-events.jsonl"
   result=$?
   set -e
-  python3 ../../../scripts/ci/go_integration_matrix.py produce \
+  python3 -B ../../../scripts/ci/go_integration_matrix.py produce \
     --inventory "../../../scripts/ci/${inventory}" --service space \
     --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
     --events "$RUNNER_TEMP/space-profile50-${name}-events.jsonl" --exit-code "$result" \
@@ -100,11 +100,26 @@ go tool test2json -t -p voice/backend/space/internal/store "$RUNNER_TEMP/space-p
 result=$?
 set -e
 source_status=unavailable
+head_status=unavailable
+tracked_status=unavailable
+untracked_status=unavailable
 driver_status=unavailable
 binary_status=unavailable
-if post_head="$(git rev-parse HEAD)" && post_tree="$(git status --porcelain --untracked-files=all)"; then
+if post_head="$(git rev-parse HEAD)"; then
+  head_status=mismatch
+  if [[ "$post_head" == "$CANDIDATE_SHA" ]]; then head_status=verified; fi
+fi
+if post_tracked="$(git status --porcelain --untracked-files=no)"; then
+  tracked_status=mismatch
+  if [[ -z "$post_tracked" ]]; then tracked_status=verified; fi
+fi
+if post_untracked="$(git ls-files --others --exclude-standard)"; then
+  untracked_status=mismatch
+  if [[ -z "$post_untracked" ]]; then untracked_status=verified; fi
+fi
+if post_tree="$(git status --porcelain --untracked-files=all)" && [[ "$head_status" != unavailable ]]; then
   source_status=mismatch
-  if [[ "$post_head" == "$CANDIDATE_SHA" && -z "$post_tree" ]]; then source_status=verified; fi
+  if [[ "$head_status" == verified && -z "$post_tree" ]]; then source_status=verified; fi
 fi
 if post_driver="$(sha256sum "$RUNNER_TEMP/native-migrate-driver" | cut -d' ' -f1)" && [[ "$post_driver" =~ ^[0-9a-f]{64}$ ]]; then
   driver_status=mismatch
@@ -114,15 +129,15 @@ if post_binary="$(sha256sum "$RUNNER_TEMP/space-profile50.test" | cut -d' ' -f1)
   binary_status=mismatch
   if [[ "$post_binary" == "$binary_before" ]]; then binary_status=verified; fi
 fi
-printf 'profile_exit_code=%s\npost_run_source=%s\npost_run_driver=%s\npost_run_binary=%s\nbackend_inventory=endpoint_only\n' \
-  "$result" "$source_status" "$driver_status" "$binary_status" >> "$RUNNER_TEMP/space-profile50-identities.txt"
+printf 'profile_exit_code=%s\npost_run_source=%s\npost_run_head=%s\npost_run_tracked=%s\npost_run_untracked=%s\npost_run_driver=%s\npost_run_binary=%s\nbackend_inventory=endpoint_only\n' \
+  "$result" "$source_status" "$head_status" "$tracked_status" "$untracked_status" "$driver_status" "$binary_status" >> "$RUNNER_TEMP/space-profile50-identities.txt"
 identity_result=1
-if [[ "$source_status" == verified && "$driver_status" == verified && "$binary_status" == verified ]]; then
+if [[ "$source_status" == verified && "$head_status" == verified && "$tracked_status" == verified && "$untracked_status" == verified && "$driver_status" == verified && "$binary_status" == verified ]]; then
   identity_result=0
   printf 'post_run_source_and_binaries=verified\n' >> "$RUNNER_TEMP/space-profile50-identities.txt"
 fi
 validation_result=0
-python3 ../../../scripts/ci/space_profile50_validate.py "$RUNNER_TEMP/space-profile50-diagnostic-events.jsonl" "$result" || validation_result=$?
+python3 -B ../../../scripts/ci/space_profile50_validate.py "$RUNNER_TEMP/space-profile50-diagnostic-events.jsonl" "$result" || validation_result=$?
 printf 'profile_validation_exit_code=%s\n' "$validation_result" >> "$RUNNER_TEMP/space-profile50-identities.txt"
 if [[ "$result" != 0 ]]; then exit "$result"; fi
 if [[ "$identity_result" != 0 ]]; then exit "$identity_result"; fi
