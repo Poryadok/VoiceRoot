@@ -3,6 +3,43 @@
 set -eu
 fixture=${GIS_REV32_FIXTURE:?set GIS_REV32_FIXTURE to the copied fixture directory}
 export PGUSER=postgres PGDATABASE=game_integration_db GAME_INTEGRATION_DB_PASSWORD=fixture-password
+# Exercise the shipped32 clock before forward33 can change any schema or data.
+# This is an intermediate migration proof, not runtime admission at revision32.
+check_runtime_authority() {
+  test "$(psql -X -qAt -v ON_ERROR_STOP=1 -c 'SELECT version::text || chr(124) || dirty::text FROM schema_migrations')" = "$1|false"
+  before=$(psql -X -qAt -v ON_ERROR_STOP=1 -c 'SELECT revision FROM gis_authority_revision WHERE singleton')
+  psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+SET ROLE gameintegration_runtime;
+DO $$ DECLARE previous bigint; actual bigint; BEGIN
+ SELECT revision INTO STRICT previous FROM gis_authority_revision WHERE singleton;
+ INSERT INTO applications(id,owner_account_id,name,status) VALUES
+  ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','fixture','draft');
+ SELECT revision INTO STRICT actual FROM gis_authority_revision WHERE singleton;
+ IF actual IS DISTINCT FROM previous+1 THEN RAISE EXCEPTION 'runtime insert did not advance authority'; END IF;
+ previous := actual;
+ UPDATE applications SET name='updated fixture' WHERE id='11111111-1111-1111-1111-111111111111';
+ SELECT revision INTO STRICT actual FROM gis_authority_revision WHERE singleton;
+ IF actual IS DISTINCT FROM previous+1 THEN RAISE EXCEPTION 'runtime update did not advance authority'; END IF;
+ previous := actual;
+ DELETE FROM applications WHERE id='11111111-1111-1111-1111-111111111111';
+ SELECT revision INTO STRICT actual FROM gis_authority_revision WHERE singleton;
+ IF actual IS DISTINCT FROM previous+1 THEN RAISE EXCEPTION 'runtime delete did not advance authority'; END IF;
+END $$;
+ROLLBACK;
+SQL
+  test "$(psql -X -qAt -v ON_ERROR_STOP=1 -c 'SELECT revision FROM gis_authority_revision WHERE singleton')" = "$before"
+  for mutation in 'DELETE FROM gis_authority_revision' \
+      'UPDATE gis_authority_revision SET revision=revision-1' \
+      'TRUNCATE gis_authority_revision' 'TRUNCATE applications'; do
+    if printf 'BEGIN; SET ROLE gameintegration_runtime; %s; ROLLBACK;\n' "$mutation" |
+         psql -X -q -v ON_ERROR_STOP=1 >/dev/null 2>&1; then
+      printf '%s\n' 'Runtime changed or truncated the authority floor' >&2
+      exit 1
+    fi
+  done
+  printf 'GIS revision %s runtime authority fixture PASS\n' "$1"
+}
 psql -X -q -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE game_integration_db'
 psql -X -q -v ON_ERROR_STOP=1 -f "$fixture/provision.sql" >/dev/null
 for file in "$fixture"/migrations/*.up.sql; do
@@ -12,6 +49,7 @@ done
 psql -X -q -v ON_ERROR_STOP=1 -c 'CREATE TABLE schema_migrations(version bigint PRIMARY KEY, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(31,false)'
 psql -X -q -v ON_ERROR_STOP=1 -f "$fixture/migrations/000032_authority_source_revision.up.sql" >/dev/null
 psql -X -q -v ON_ERROR_STOP=1 -c 'UPDATE schema_migrations SET version=32,dirty=false'
+check_runtime_authority 32
 psql -X -q -v ON_ERROR_STOP=1 -f "$fixture/migrations/000033_restore_session_community_schema.up.sql" >/dev/null
 psql -X -q -v ON_ERROR_STOP=1 -c 'UPDATE schema_migrations SET version=33,dirty=false'
 psql -X -qAt -v ON_ERROR_STOP=1 -f "$fixture/verify.sql" > "$fixture/result.json"
@@ -50,26 +88,5 @@ END $$;
 ROLLBACK;
 SQL
 expect_refusal 'CREATE FUNCTION public.fixture_suppress_floor() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN OLD; END $$; CREATE TRIGGER z_suppress_floor BEFORE UPDATE ON gis_authority_revision FOR EACH ROW EXECUTE FUNCTION public.fixture_suppress_floor();'
-psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
-BEGIN;
-SET ROLE gameintegration_runtime;
-DO $$ DECLARE previous bigint; actual bigint; BEGIN
- SELECT revision INTO previous FROM gis_authority_revision WHERE singleton;
- INSERT INTO applications(id,owner_account_id,name,status) VALUES
-  ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','fixture','draft');
- SELECT revision INTO actual FROM gis_authority_revision WHERE singleton;
- IF actual<>previous+1 THEN RAISE EXCEPTION 'runtime write did not advance authority'; END IF;
-END $$;
-ROLLBACK;
-SQL
-if printf '%s\n' 'SET ROLE gameintegration_runtime; DELETE FROM gis_authority_revision;' |
-     psql -X -q -v ON_ERROR_STOP=1 >/dev/null 2>&1; then
-  printf '%s\n' 'Runtime deleted the authority floor' >&2
-  exit 1
-fi
-if printf '%s\n' 'SET ROLE gameintegration_runtime; UPDATE gis_authority_revision SET revision=revision-1;' |
-     psql -X -q -v ON_ERROR_STOP=1 >/dev/null 2>&1; then
-  printf '%s\n' 'Runtime rewound the authority floor' >&2
-  exit 1
-fi
+check_runtime_authority 33
 printf '%s\n' 'GIS revision 33 verifier fixture PASS'
