@@ -15,7 +15,12 @@ p = pathlib.Path(os.environ['MOCK_STATE'])
 case = os.environ['MOCK_CASE']
 args = ' '.join(sys.argv)
 after = (p / 'after').exists()
-if 'pg_control_system' in args and 'current_database' not in args:
+if 'coalesce(sum(jit_functions),0)::bigint' in args:
+    count = p / 'jit_count'
+    n = int(count.read_text()) + 1 if count.exists() else 0
+    count.write_text(str(n))
+    print(0 if case == 'jit_canary_zero' else n)
+elif 'pg_control_system' in args and 'current_database' not in args:
     print('222' if after and case == 'wrong_cluster' else '111')
 elif 'COALESCE' in args:
     if after and case == 'post_drop_failure' and (p / 'dropped').exists(): sys.exit(1)
@@ -159,6 +164,12 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual((root / 'sha_binary').read_text(), '3')
         self.assertIn('post_run_source_and_binaries=verified', (root / 'space-profile50-identities.txt').read_text())
         self.assertFalse((root / 'python_without_B').exists())
+
+    def test_jit_canary_requires_a_counter_increase(self):
+        result, recovery, root = self.run_case('jit_canary_zero')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('state=removed', recovery)
+        self.assertFalse((root / 'test_executed').exists())
 
     def test_failed_profile_still_records_every_post_use_check(self):
         for case, source in [('test_failure', 'verified'), ('test_failure_source_drift', 'mismatch')]:
