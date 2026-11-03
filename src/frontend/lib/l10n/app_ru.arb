@@ -514,6 +514,7 @@
   },
   "voiceLeaveCurrentDialogConfirm": "Выйти и войти",
   "commonCancel": "Отмена",
+  "commonDiscard": "Сбросить",
   "shareLinkAction": "Копировать ссылку",
   "shareLinkCopied": "Ссылка скопирована",
   "commonEdit": "Изменить",
@@ -587,6 +588,17 @@
   "chatMessageAddReaction": "Добавить реакцию",
   "chatMessagePin": "Закрепить сообщение",
   "chatPinnedMessagesTitle": "Закреплённые сообщения",
+  "chatPinnedBarPosition": "Закреплённое сообщение {position} из {count}",
+  "@chatPinnedBarPosition": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatPinnedMessagesOpen": "Открыть все закреплённые сообщения",
   "chatPinnedMessagesHide": "Скрыть закреплённые сообщения",
   "chatPinnedMessagesRestore": "Показать закреплённые сообщения",
@@ -972,6 +984,12 @@
   "settingsTooltip": "Настройки",
   "settingsAppearance": "Оформление",
   "settingsChatThemes": "Темы чатов",
+  "chatThemesIncomingSample": "Сообщение",
+  "chatThemesOutgoingSample": "Ваше сообщение",
+  "contactProfileCall": "Позвонить",
+  "settingsTextScale": "Масштаб текста",
+  "settingsUnsavedChangesTitle": "Сбросить несохранённые изменения?",
+  "settingsUnsavedChangesMessage": "Изменения ещё не сохранены.",
   "chatThemesPlusLabel": "Voice Plus",
   "chatThemesPlusNotice": "Эксклюзивные темы доступны подписчикам Voice Plus.",
   "chatThemesSelected": "Выбрана",
@@ -1472,7 +1490,7 @@
   "storyViewerVideoPlaceholder": "Воспроизведение видео недоступно в этой сборке",
   "storyReactTooltip": "Реакция",
   "storyReactSent": "Реакция отправлена",
-  "storyHighlightsTitle": "Избранное",
+  "storyHighlightsTitle": "Актуальное",
   "storyLfpTitle": "Ищу пати",
   "storyLfpGame": "Игра",
   "storyCreateVisibilityLabel": "Кто видит сторис",
