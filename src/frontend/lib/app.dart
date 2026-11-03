@@ -345,7 +345,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   }
 
   void _openSettingsSheet() {
-    showVoiceBottomSheet<void>(context: context, child: const SettingsSheet());
+    SettingsSheet.show(context);
   }
 
   void _onEmojiSelected(String emoji) {
