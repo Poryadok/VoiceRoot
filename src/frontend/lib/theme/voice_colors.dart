@@ -26,6 +26,10 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
     required this.overlay,
     required this.focusRing,
     required this.profileAccent,
+    this.callBackground = const Color(0xFF1E1E1E),
+    this.callControl = const Color(0xFF3A3F47),
+    this.callForeground = const Color(0xFFFFFFFF),
+    this.callSecondary = const Color(0xFFC5CDD5),
   });
 
   final Color canvas;
@@ -50,6 +54,10 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
   final Color overlay;
   final Color focusRing;
   final Color profileAccent;
+  final Color callBackground;
+  final Color callControl;
+  final Color callForeground;
+  final Color callSecondary;
 
   static VoiceColors of(BuildContext context) {
     final ext = Theme.of(context).extension<VoiceColors>();
@@ -88,6 +96,12 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
     Color c(String key) => tokens[key]!;
     return VoiceColors(
       canvas: c('color.background.canvas'),
+      callBackground:
+          tokens['color.call.background'] ?? _fallback.callBackground,
+      callControl: tokens['color.call.control'] ?? _fallback.callControl,
+      callForeground:
+          tokens['color.call.foreground'] ?? _fallback.callForeground,
+      callSecondary: tokens['color.call.secondary'] ?? _fallback.callSecondary,
       surface: c('color.background.surface'),
       elevated: c('color.background.elevated'),
       muted: c('color.background.muted'),
@@ -139,6 +153,10 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
   }) {
     return VoiceColors(
       canvas: canvas ?? this.canvas,
+      callBackground: callBackground,
+      callControl: callControl,
+      callForeground: callForeground,
+      callSecondary: callSecondary,
       surface: surface ?? this.surface,
       elevated: elevated ?? this.elevated,
       muted: muted ?? this.muted,
@@ -169,6 +187,10 @@ class VoiceColors extends ThemeExtension<VoiceColors> {
     Color l(Color a, Color b) => Color.lerp(a, b, t)!;
     return VoiceColors(
       canvas: l(canvas, other.canvas),
+      callBackground: l(callBackground, other.callBackground),
+      callControl: l(callControl, other.callControl),
+      callForeground: l(callForeground, other.callForeground),
+      callSecondary: l(callSecondary, other.callSecondary),
       surface: l(surface, other.surface),
       elevated: l(elevated, other.elevated),
       muted: l(muted, other.muted),
