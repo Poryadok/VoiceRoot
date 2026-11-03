@@ -1219,6 +1219,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get commonCancel => 'Отмена';
 
   @override
+  String get commonDiscard => 'Сбросить';
+
+  @override
   String get shareLinkAction => 'Копировать ссылку';
 
   @override
@@ -1425,6 +1428,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatPinnedMessagesTitle => 'Закреплённые сообщения';
+
+  @override
+  String chatPinnedBarPosition(int position, int count) {
+    return 'Закреплённое сообщение $position из $count';
+  }
 
   @override
   String get chatPinnedMessagesOpen => 'Открыть все закреплённые сообщения';
@@ -2242,6 +2250,24 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsChatThemes => 'Темы чатов';
+
+  @override
+  String get chatThemesIncomingSample => 'Сообщение';
+
+  @override
+  String get chatThemesOutgoingSample => 'Ваше сообщение';
+
+  @override
+  String get contactProfileCall => 'Позвонить';
+
+  @override
+  String get settingsTextScale => 'Масштаб текста';
+
+  @override
+  String get settingsUnsavedChangesTitle => 'Сбросить несохранённые изменения?';
+
+  @override
+  String get settingsUnsavedChangesMessage => 'Изменения ещё не сохранены.';
 
   @override
   String get chatThemesPlusLabel => 'Voice Plus';
@@ -3727,7 +3753,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyReactSent => 'Реакция отправлена';
 
   @override
-  String get storyHighlightsTitle => 'Избранное';
+  String get storyHighlightsTitle => 'Актуальное';
 
   @override
   String get storyLfpTitle => 'Ищу пати';
