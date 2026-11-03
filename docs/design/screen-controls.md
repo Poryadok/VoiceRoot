@@ -1857,10 +1857,19 @@ Entry: from settings nav #7 (Appearance → Chat themes) or Chat Info #22.
 | # | Control | Layout | Visible when | Tap action |
 |---|---------|--------|-------------|------------|
 | 1 | Close / Back | H+V | Always | Close panel |
-| 2 | Theme preview grid | H+V | Plus subscriber | Browse exclusive chat themes |
-| 3 | Theme card tap | H+V | Plus subscriber | Preview theme on current chat |
-| 4 | Apply | H+V | Theme selected | Apply theme to chat |
-| 5 | Reset to default | H+V | Custom theme active | Reset to default appearance |
+| 2 | Voice Plus notice | H+V | Always | Show entitlement requirement |
+| 3 | Theme preview grid | H+V | Always; selection/preview is Plus-gated | Show Ocean, Violet, Sunset, and Midnight cards; show the saved card as selected |
+| 4 | Theme card tap | H+V | Plus subscriber with a target chat | Preview locally without saving |
+| 5 | Apply | H+V | Plus subscriber, theme selected, and target chat chosen | Save the local per-device override for this chat |
+| 6 | Reset to default | H+V | A local override exists for the target chat | Remove this chat's override |
+
+Target chat: Chat Info passes its own `chat_id`. From Settings, use the selected
+chat; if there is none, show a chat picker before the theme controls. The four
+theme overrides are per-device and per-chat presentation preferences; they are
+not shared with other members or synchronized through Messaging. A card tap
+changes only the draft preview; Apply persists it and Reset clears it. When Plus
+is absent or expired, keep the saved override and selected-card indication, but
+use the default chat appearance until Plus returns.
 
 ---
 

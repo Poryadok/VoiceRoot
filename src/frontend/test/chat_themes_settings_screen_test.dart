@@ -85,6 +85,7 @@ void main() {
       find.byKey(ChatThemesSettingsScreen.themeKey(ChatTheme.violet)),
       findsOneWidget,
     );
+    expect(find.text('Selected'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(find.byKey(ChatThemesSettingsScreen.applyKey))
@@ -200,6 +201,9 @@ void main() {
           .toString(),
       'Tristate.isTrue',
     );
+    await tester.tap(find.byKey(const Key('chat_themes_back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ChatInfoPanel.chatThemesKey), findsOneWidget);
   });
 
   testWidgets('theme options support keyboard focus and activation', (
@@ -604,8 +608,94 @@ void main() {
           .onPressed,
       isNull,
     );
+    expect(container.read(effectiveChatThemeProvider('chat-a')), isNull);
+    expect(await container.read(chatThemePreferenceProvider.future), {
+      'chat-a': ChatTheme.midnight,
+    });
+  });
+
+  testWidgets(
+    'horizontal and vertical layouts keep the reference two-column grid',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('', 404)),
+          ),
+          subscriptionProvider.overrideWith((ref) async => _activeSubscription),
+        ],
+      );
+      addTearDown(container.dispose);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+      tester.view.devicePixelRatio = 1;
+
+      for (final size in const [Size(1280, 800), Size(390, 844)]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: voiceTestTheme(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const ChatThemesSettingsScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final catalog = tester.widget<GridView>(
+          find.byKey(const Key('chat_themes_catalog')),
+        );
+        expect(
+          (catalog.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+              .crossAxisCount,
+          2,
+        );
+      }
+    },
+  );
+
+  testWidgets('embedded Settings destination uses the shell header', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('', 404)),
+        ),
+        subscriptionProvider.overrideWith((ref) async => _activeSubscription),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(selectedChatIdProvider.notifier).state = 'chat-a';
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const ChatThemesSettingsScreen(embedded: true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatThemesSettingsScreen.screenKey), findsOneWidget);
+    expect(find.byType(Scaffold), findsNothing);
+    expect(find.byKey(const Key('chat_themes_back')), findsNothing);
     expect(
-      find.byKey(const Key('chat_themes_conversation_preview')),
+      tester
+          .getSize(find.byKey(ChatThemesSettingsScreen.embeddedHeaderKey))
+          .height,
+      56,
+    );
+    expect(
+      find.byKey(ChatThemesSettingsScreen.themeKey(ChatTheme.ocean)),
       findsOneWidget,
     );
   });

@@ -10,9 +10,14 @@ import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 
 class ChatThemesSettingsScreen extends ConsumerStatefulWidget {
-  const ChatThemesSettingsScreen({super.key, this.chatId});
+  const ChatThemesSettingsScreen({
+    super.key,
+    this.chatId,
+    this.embedded = false,
+  });
 
   static const Key screenKey = Key('chat_themes_settings_screen');
+  static const Key embeddedHeaderKey = Key('chat_themes_embedded_header');
   static const Key chatPickerKey = Key('chat_themes_chat_picker');
   static const Key applyKey = Key('chat_themes_apply');
   static const Key resetKey = Key('chat_themes_reset');
@@ -20,6 +25,7 @@ class ChatThemesSettingsScreen extends ConsumerStatefulWidget {
   static Key themeKey(ChatTheme theme) => Key('chat_theme_${theme.name}');
 
   final String? chatId;
+  final bool embedded;
 
   @override
   ConsumerState<ChatThemesSettingsScreen> createState() =>
@@ -86,23 +92,17 @@ class _ChatThemesSettingsScreenState
     final selected = _draft ?? saved ?? ChatTheme.ocean;
     final canChange = isPlus && preferences.hasValue && targetChatId != null;
 
-    return Scaffold(
-      key: ChatThemesSettingsScreen.screenKey,
-      backgroundColor: colors.canvas,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        leading: IconButton(
-          key: const Key('chat_themes_back'),
-          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        title: Text(l10n.settingsChatThemes),
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+    final body = SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 600;
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 16 : 20,
+              16,
+              compact ? 16 : 20,
+              compact ? 30 : 28,
+            ),
             child: Align(
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
@@ -120,19 +120,84 @@ class _ChatThemesSettingsScreenState
                         context,
                         l10n: l10n,
                         targetChatId: targetChatId,
-                        saved: saved,
                         selected: selected,
                         subscription: subscription,
-                        isPlus: isPlus,
                         preferences: preferences,
                         canChange: canChange,
-                        columns: constraints.maxWidth < 540 ? 2 : 4,
+                        compact: compact,
                       ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
+    );
+    final actions = targetChatId == null
+        ? null
+        : _ChatThemeActions(
+            compact: MediaQuery.sizeOf(context).width < 600,
+            canApply: canChange && _draft != null && _draft != saved,
+            canReset: preferences.hasValue && saved != null,
+            selected: selected,
+            onApply: () => _apply(targetChatId),
+            onReset: () => _reset(targetChatId),
+          );
+
+    if (widget.embedded) {
+      return ColoredBox(
+        key: ChatThemesSettingsScreen.screenKey,
+        color: colors.canvas,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              key: ChatThemesSettingsScreen.embeddedHeaderKey,
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                border: Border(bottom: BorderSide(color: colors.borderDefault)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.settingsChatThemes,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  _ChatThemesPlusLabel(label: l10n.chatThemesPlusLabel),
+                ],
+              ),
+            ),
+            Expanded(child: body),
+            ?actions,
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      key: ChatThemesSettingsScreen.screenKey,
+      backgroundColor: colors.canvas,
+      appBar: AppBar(
+        backgroundColor: colors.surface,
+        leading: IconButton(
+          key: const Key('chat_themes_back'),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: Text(l10n.settingsChatThemes),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: _ChatThemesPlusLabel(label: l10n.chatThemesPlusLabel),
+          ),
+        ],
+      ),
+      body: body,
+      bottomNavigationBar: actions,
     );
   }
 
@@ -140,24 +205,39 @@ class _ChatThemesSettingsScreenState
     BuildContext context, {
     required AppLocalizations l10n,
     required String targetChatId,
-    required ChatTheme? saved,
     required ChatTheme selected,
     required AsyncValue<dynamic> subscription,
-    required bool isPlus,
     required AsyncValue<Map<String, ChatTheme>> preferences,
     required bool canChange,
-    required int columns,
+    required bool compact,
   }) {
-    final preview = isPlus ? selected : ChatTheme.ocean;
     final subscriptionFailure = subscription.hasError;
     final preferenceFailure = preferences.hasError;
-    final hasDraft = _draft != null;
-    final canApply = canChange && hasDraft && _draft != saved;
-    final canReset = preferences.hasValue && saved != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: VoiceColors.of(context).surface,
+            border: Border.all(color: VoiceColors.of(context).borderDefault),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.star_rounded,
+                size: 18,
+                color: VoiceColors.of(context).textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(l10n.chatThemesPlusNotice)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         if (subscriptionFailure) ...[
           _InlineFailure(
             message: l10n.subscriptionLoadError,
@@ -174,19 +254,6 @@ class _ChatThemesSettingsScreenState
           ),
           const SizedBox(height: 12),
         ],
-        if (!isPlus) ...[
-          Text(
-            l10n.chatThemesPlusLabel,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(l10n.chatThemesPlusNotice),
-          if (saved != null) ...[
-            const SizedBox(height: 8),
-            Text(l10n.chatThemesSelected),
-          ],
-          const SizedBox(height: 16),
-        ],
         if (preferences.isLoading && !preferences.hasValue)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
@@ -195,10 +262,10 @@ class _ChatThemesSettingsScreenState
         else ...[
           GridView.count(
             key: const Key('chat_themes_catalog'),
-            crossAxisCount: columns,
-            mainAxisExtent: 150,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
+            crossAxisCount: 2,
+            mainAxisExtent: 160,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
@@ -208,6 +275,8 @@ class _ChatThemesSettingsScreenState
                   theme: theme,
                   selected: theme == selected,
                   enabled: canChange,
+                  selectedLabel: l10n.chatThemesSelected,
+                  compact: compact,
                   onSelected: () => setState(() {
                     _draft = theme;
                     _actionFailed = false;
@@ -215,8 +284,6 @@ class _ChatThemesSettingsScreenState
                 ),
             ],
           ),
-          const SizedBox(height: 20),
-          _ChatThemeSample(theme: preview),
           if (_actionFailed) ...[
             const SizedBox(height: 12),
             Text(l10n.commonActionFailed),
@@ -228,23 +295,6 @@ class _ChatThemesSettingsScreenState
               ),
             ),
           ],
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              FilledButton(
-                key: ChatThemesSettingsScreen.applyKey,
-                onPressed: canApply ? () => _apply(targetChatId) : null,
-                child: Text(l10n.chatThemesApply(_themeName(selected))),
-              ),
-              OutlinedButton(
-                key: ChatThemesSettingsScreen.resetKey,
-                onPressed: canReset ? () => _reset(targetChatId) : null,
-                child: Text(l10n.chatThemesReset),
-              ),
-            ],
-          ),
         ],
       ],
     );
@@ -288,6 +338,94 @@ class _ChatThemesSettingsScreenState
       if (!mounted || generation != _contextGeneration) return;
       setState(() => _actionFailed = true);
     }
+  }
+}
+
+class _ChatThemeActions extends StatelessWidget {
+  const _ChatThemeActions({
+    required this.compact,
+    required this.canApply,
+    required this.canReset,
+    required this.selected,
+    required this.onApply,
+    required this.onReset,
+  });
+
+  final bool compact;
+  final bool canApply;
+  final bool canReset;
+  final ChatTheme selected;
+  final VoidCallback onApply;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final colors = VoiceColors.of(context);
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.canvas,
+          border: Border(top: BorderSide(color: colors.borderDefault)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 16 : 20,
+            12,
+            compact ? 16 : 20,
+            12,
+          ),
+          child: Align(
+            heightFactor: 1,
+            alignment: Alignment.centerRight,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    key: ChatThemesSettingsScreen.resetKey,
+                    onPressed: canReset ? onReset : null,
+                    child: Text(l10n.chatThemesReset),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    key: ChatThemesSettingsScreen.applyKey,
+                    onPressed: canApply ? onApply : null,
+                    child: Text(l10n.chatThemesApply(_themeName(selected))),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatThemesPlusLabel extends StatelessWidget {
+  const _ChatThemesPlusLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = VoiceColors.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.star_rounded, size: 16, color: colors.textSecondary),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: colors.textSecondary),
+        ),
+      ],
+    );
   }
 }
 
@@ -372,12 +510,16 @@ class _ChatThemeOption extends StatelessWidget {
     required this.theme,
     required this.selected,
     required this.enabled,
+    required this.selectedLabel,
+    required this.compact,
     required this.onSelected,
   });
 
   final ChatTheme theme;
   final bool selected;
   final bool enabled;
+  final String selectedLabel;
+  final bool compact;
   final VoidCallback onSelected;
 
   @override
@@ -418,7 +560,7 @@ class _ChatThemeOption extends StatelessWidget {
           child: InkWell(
             onTap: enabled ? onSelected : null,
             child: Padding(
-              padding: const EdgeInsets.all(10),
+              padding: EdgeInsets.all(compact ? 16 : 11),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -441,6 +583,15 @@ class _ChatThemeOption extends StatelessWidget {
                       ],
                     ],
                   ),
+                  if (selected) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      selectedLabel,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
