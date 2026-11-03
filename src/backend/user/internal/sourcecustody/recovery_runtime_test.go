@@ -18,12 +18,16 @@ import (
 	"voice/backend/pkg/integrationtest"
 )
 
-func recoveryTLSDatabase(t *testing.T, ctx context.Context, label string) (string, *pgxpool.Pool) {
+func recoveryTLSDatabase(t *testing.T, ctx context.Context, label string, extraConfig ...string) (string, *pgxpool.Pool) {
 	t.Helper()
 	dir := t.TempDir()
 	pki := processTLS(t, dir, label)
 	configFile := filepath.Join(dir, "postgres.conf")
-	require.NoError(t, os.WriteFile(configFile, []byte("listen_addresses='*'\nssl=on\nssl_ca_file='/tmp/testcontainers-go/postgres/ca_cert.pem'\nssl_cert_file='/tmp/testcontainers-go/postgres/server.cert'\nssl_key_file='/tmp/testcontainers-go/postgres/server.key'\n"), 0600))
+	configuration := "listen_addresses='*'\nssl=on\nssl_ca_file='/tmp/testcontainers-go/postgres/ca_cert.pem'\nssl_cert_file='/tmp/testcontainers-go/postgres/server.cert'\nssl_key_file='/tmp/testcontainers-go/postgres/server.key'\n"
+	for _, line := range extraConfig {
+		configuration += line + "\n"
+	}
+	require.NoError(t, os.WriteFile(configFile, []byte(configuration), 0600))
 	pg, err := postgres.Run(ctx, "postgres:16-alpine", postgres.BasicWaitStrategies(), postgres.WithDatabase("custody_test"), postgres.WithUsername("fixture"), postgres.WithPassword("fixture_only"), postgres.WithConfigFile(configFile), postgres.WithSSLCert(pki.caFile, pki.serverCert, pki.serverKey))
 	if pg != nil {
 		t.Cleanup(func() {

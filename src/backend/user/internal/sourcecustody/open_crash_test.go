@@ -54,6 +54,7 @@ func TestOpenCrashChild(t *testing.T) {
 	payload, err := OpenAttestationPayload(claim)
 	require.NoError(t, err)
 	claim.Signature = ed25519.Sign(private, payload)
+	armSyntheticSupervision(t, controller, claim, public)
 	_, keys := migrationFixture(t)
 	if os.Getenv("VOICE_OPEN_CRASH_PHASE") == "prepare-enabled" {
 		controller.afterPrepareEnabled = func() {

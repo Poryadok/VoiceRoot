@@ -120,6 +120,7 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	claim := OpenAttestation{Challenge: challenge, ControlSystem: controller.controlSystem, ControlDatabase: controller.controlDatabase, ControlDatabaseOID: controller.controlDatabaseOID, Binding: binding, Physical: physical, WriterRole: "custody_app", SourceEvidenceDigest: [32]byte{3}, WriterManifestDigest: [32]byte{1}, AuthEvidenceDigest: [32]byte{2}, IssuedAtUnix: now.Unix(), ExpiresAtUnix: now.Add(4 * time.Minute).Unix()}
 	claim, err = SignOpenAttestation(claim, private)
 	require.NoError(t, err)
+	armSyntheticSupervision(t, controller, claim, public)
 	require.NoError(t, controller.PrepareOpenSource(ctx, admin, claim, public))
 	require.NoError(t, controller.OpenQualified(ctx, admin, source, keys, claim, public))
 	writerCfg, err := pgxpool.ParseConfig(u.String())
