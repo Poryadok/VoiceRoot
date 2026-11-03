@@ -6,21 +6,30 @@ import 'message_cache_database.dart';
 import 'message_cache_store.dart';
 import 'message_cache_utils.dart';
 
-class DriftMessageCacheStore implements MessageCacheStore {
+class DriftMessageCacheStore implements HistoryCursorMessageCacheStore {
   DriftMessageCacheStore(this._db);
 
   final MessageCacheDatabase _db;
 
   @override
   Future<void> clearAll() async {
-    await _db.delete(_db.cachedMessages).go();
+    await _db.transaction(() async {
+      await _db.delete(_db.cachedMessages).go();
+      await _db.customStatement('DELETE FROM cached_message_history');
+    });
   }
 
   @override
   Future<void> clearProfile(String profileId) async {
-    await (_db.delete(_db.cachedMessages)
-          ..where((row) => row.profileId.equals(profileId)))
-        .go();
+    await _db.transaction(() async {
+      await (_db.delete(
+        _db.cachedMessages,
+      )..where((row) => row.profileId.equals(profileId))).go();
+      await _db.customStatement(
+        'DELETE FROM cached_message_history WHERE profile_id=?',
+        [profileId],
+      );
+    });
   }
 
   @override
@@ -32,8 +41,7 @@ class DriftMessageCacheStore implements MessageCacheStore {
         await (_db.select(_db.cachedMessages)
               ..where(
                 (row) =>
-                    row.profileId.equals(profileId) &
-                    row.chatId.equals(chatId),
+                    row.profileId.equals(profileId) & row.chatId.equals(chatId),
               )
               ..orderBy([
                 (row) => OrderingTerm(
@@ -44,9 +52,7 @@ class DriftMessageCacheStore implements MessageCacheStore {
               ]))
             .get();
     return rows
-        .map(
-          (row) => InMemoryMessageCacheStore.decodePayload(row.payloadJson),
-        )
+        .map((row) => InMemoryMessageCacheStore.decodePayload(row.payloadJson))
         .toList(growable: false);
   }
 
@@ -58,13 +64,18 @@ class DriftMessageCacheStore implements MessageCacheStore {
   }) async {
     final trimmed = trimMessagesToCacheLimit(messages);
     await _db.transaction(() async {
-      await (_db.delete(_db.cachedMessages)
-            ..where(
-              (row) =>
-                  row.profileId.equals(profileId) & row.chatId.equals(chatId),
-            ))
+      await (_db.delete(_db.cachedMessages)..where(
+            (row) =>
+                row.profileId.equals(profileId) & row.chatId.equals(chatId),
+          ))
           .go();
-      if (trimmed.isEmpty) return;
+      if (trimmed.isEmpty) {
+        await _db.customStatement(
+          'DELETE FROM cached_message_history WHERE profile_id=? AND chat_id=?',
+          [profileId, chatId],
+        );
+        return;
+      }
       await _db.batch((batch) {
         batch.insertAll(
           _db.cachedMessages,
@@ -79,6 +90,60 @@ class DriftMessageCacheStore implements MessageCacheStore {
           ),
         );
       });
+    });
+  }
+
+  @override
+  Future<MessageHistoryCursor?> getHistoryCursor({
+    required String profileId,
+    required String chatId,
+  }) async {
+    final row = await _db
+        .customSelect(
+          'SELECT after_message_id,page_cursor FROM cached_message_history WHERE profile_id=? AND chat_id=?',
+          variables: [
+            Variable.withString(profileId),
+            Variable.withString(chatId),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) return null;
+    return MessageHistoryCursor(
+      messageId: row.readNullable<String>('after_message_id'),
+      pageCursor: row.readNullable<String>('page_cursor'),
+    );
+  }
+
+  @override
+  Future<void> replaceChatHistory({
+    required String profileId,
+    required String chatId,
+    required List<VoiceMessage> messages,
+    required MessageHistoryCursor? historyCursor,
+  }) async {
+    await _db.transaction(() async {
+      await replaceChatMessages(
+        profileId: profileId,
+        chatId: chatId,
+        messages: messages,
+      );
+      if (historyCursor == null) {
+        await _db.customStatement(
+          'DELETE FROM cached_message_history WHERE profile_id=? AND chat_id=?',
+          [profileId, chatId],
+        );
+      } else {
+        await _db.customStatement(
+          '''INSERT INTO cached_message_history(profile_id,chat_id,after_message_id,page_cursor)
+VALUES(?,?,?,?) ON CONFLICT(profile_id,chat_id) DO UPDATE SET after_message_id=excluded.after_message_id,page_cursor=excluded.page_cursor''',
+          [
+            profileId,
+            chatId,
+            historyCursor.messageId,
+            historyCursor.pageCursor,
+          ],
+        );
+      }
     });
   }
 

@@ -98,6 +98,30 @@ remain fenced after migration. Gaps from rollback/idempotent retries are harmles
 the reader change; rollback to the old reader before DOWN. DOWN preserves message
 IDs/data but restores the old reader's late-commit limitation.
 
+The selected-chat Flutter controller keeps accepted server-order progress apart
+from display ordering by timestamp/UUID. It drains returned `next_cursor` pages,
+persists a failed page's continuation for retry, and advances its message-ID anchor
+from the final server-ordered response. Local cache schema version 2 stores this
+metadata per `(profile_id, chat_id)` alongside accepted bodies; the existing
+50-message offline body limit does not discard cursor progress. Profile/logout
+cache clearing removes both. Version-1 caches have no trusted history anchor and
+refresh latest history rather than derive a cursor from their sorted bodies.
+
+`GetMessagesResponse.history_reset` is true when a missing/deleted explicit or
+encoded page anchor caused the existing latest-50 fallback. That response is a
+fresh latest snapshot in descending server history order, with a **before** cursor
+for older history if more rows remain; it is never a forward continuation. A
+catch-up client discards that failed forward continuation, reloads latest history
+and seeds its new forward anchor from the first server-ordered message. Empty
+snapshots clear the anchor. The flag defaults to false for ordinary pages.
+
+An online controller restart must restore trusted per-chat progress before
+adopting a new latest anchor. It may refresh latest bodies for presentation, but
+retains and drains the saved forward continuation first, including after a failed
+page. This avoids skipping the gap between a saved page and a newer latest page.
+Roll out Messaging's additive reset metadata before the client that consumes it;
+no cursor decoding or UUID/timestamp ordering is required in the client.
+
 ### Durable message-event publication (BE-188 A1)
 
 Enabled Messaging mutations persist their immutable `MessageStreamEvent` bytes,
