@@ -4116,4 +4116,191 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get queueSearchNoRolePreference => 'Без предпочтения роли';
+
+  @override
+  String get subscriptionCancelConfirmation =>
+      'Оплаченные возможности останутся доступны до конца оплаченного периода. Отменить подписку?';
+
+  @override
+  String get subscriptionUpdatePayment => 'Обновить способ оплаты';
+
+  @override
+  String get subscriptionBillingUnavailable =>
+      'Платёжные данные этой подписки недоступны.';
+
+  @override
+  String get subscriptionBillingEmpty => 'Платёжной активности пока нет.';
+
+  @override
+  String get subscriptionBillingEvent => 'Событие подписки';
+
+  @override
+  String get subscriptionPaymentSucceeded => 'Оплата получена';
+
+  @override
+  String get subscriptionPaymentFailed => 'Оплата не прошла';
+
+  @override
+  String get subscriptionPlanCancelled => 'Подписка отменена';
+
+  @override
+  String subscriptionGraceUntil(String date) {
+    return 'Льготный период до $date';
+  }
+
+  @override
+  String get subscriptionBillingHistory => 'История платежей';
+
+  @override
+  String get subscriptionRestorePurchases => 'Восстановить покупки';
+
+  @override
+  String get subscriptionPurchasesUnavailable => 'Покупки пока недоступны.';
+
+  @override
+  String get subscriptionCleanUsername => 'Чистый @username';
+
+  @override
+  String get subscriptionResume => 'Возобновить подписку';
+
+  @override
+  String get stickerSettingsTitle => 'Стикеры';
+
+  @override
+  String get stickerSettingsInstalled => 'Установленные';
+
+  @override
+  String get stickerSettingsUpload => 'Загрузить свой набор';
+
+  @override
+  String get stickerSettingsUploadRules =>
+      'PNG или WebP, до 512×512 и 512 КБ на стикер после обработки.';
+
+  @override
+  String get stickerSettingsUploadUnavailable =>
+      'Загрузка наборов пока недоступна. Установленные наборы по-прежнему доступны.';
+
+  @override
+  String get stickerSettingsSystem => 'Системный набор';
+
+  @override
+  String get stickerSettingsOwn => 'Ваш набор';
+
+  @override
+  String get stickerSettingsSystemHint => 'Системные наборы нельзя удалить.';
+
+  @override
+  String get stickerSettingsOpen => 'Открыть';
+
+  @override
+  String get stickerSettingsClose => 'Закрыть';
+
+  @override
+  String get stickerSettingsRemove => 'Удалить';
+
+  @override
+  String get stickerSettingsRemoveTitle => 'Удалить этот набор?';
+
+  @override
+  String get stickerSettingsRemoveHint =>
+      'Он больше не будет отображаться в установленных наборах.';
+
+  @override
+  String get stickerSettingsPreviewUnavailable =>
+      'Предпросмотр этого стикера недоступен.';
+
+  @override
+  String stickerSettingsCount(int count) {
+    return 'Стикеров: $count';
+  }
+
+  @override
+  String get appealPendingTitle => 'Апелляция на рассмотрении';
+
+  @override
+  String get appealCaseIdLabel => 'ID апелляции';
+
+  @override
+  String get appealClose => 'Закрыть апелляцию';
+
+  @override
+  String get appealOneSubmissionNotice =>
+      'Одна апелляция на санкцию · Рассмотрение до 7 рабочих дней.';
+
+  @override
+  String get appIconPreferenceLoadError =>
+      'Не удалось загрузить сохранённую иконку приложения. Повторите попытку, чтобы сохранить выбор для этого устройства.';
+
+  @override
+  String get reportReasonLabel => 'Причина';
+
+  @override
+  String get reportModerationNotice =>
+      'Жалоба будет отправлена команде модерации. Автор объекта не увидит ваше имя.';
+
+  @override
+  String get reportSignInRequired => 'Войдите, чтобы отправить жалобу.';
+
+  @override
+  String get storyViewerNext => 'Следующая история';
+
+  @override
+  String get storyViewerPrevious => 'Предыдущая история';
+
+  @override
+  String storyViewerProgress(int current, int total) {
+    return 'История $current из $total';
+  }
+
+  @override
+  String get storyViewerDeleteConfirm => 'Удалить эту историю?';
+
+  @override
+  String get storyViewerDeleted => 'История удалена';
+
+  @override
+  String get storyViewerPause => 'Приостановить историю';
+
+  @override
+  String get storyViewerResume => 'Продолжить историю';
+
+  @override
+  String get privacyShowLastSeen => 'Последний раз в сети';
+
+  @override
+  String get privacyBlockedUsers => 'Заблокированные пользователи';
+
+  @override
+  String privacyBlockedUsersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# заблокированного пользователя',
+      many: '# заблокированных пользователей',
+      few: '# заблокированных пользователя',
+      one: '# заблокированный пользователь',
+      zero: 'Нет заблокированных пользователей',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get commonClose => 'Закрыть';
+
+  @override
+  String get storyLfpJoinSent => 'Запрос на присоединение отправлен';
+
+  @override
+  String get storyLfpInviteSent => 'Приглашение отправлено';
+
+  @override
+  String get storyLfpInactive => 'Объявление больше не актуально';
+
+  @override
+  String get privacyApplyAudience => 'Применить';
+
+  @override
+  String privacyAudienceSelectedSpaces(int count) {
+    return 'Выбранные спейсы: $count';
+  }
 }
