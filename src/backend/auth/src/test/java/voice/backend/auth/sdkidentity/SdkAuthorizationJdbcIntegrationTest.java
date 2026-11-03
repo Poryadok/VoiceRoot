@@ -470,7 +470,9 @@ class SdkAuthorizationJdbcIntegrationTest {
       assertThat(gisCompletionEntered.await(5, TimeUnit.SECONDS)).isTrue();
       var retryIssueFuture = completionWorkers.submit(
           () -> executionPermits.issue(deviceAssertion, messageOperation, messageHash));
-      DatabaseLockWait lockWait = awaitDatabaseLockWait("%sdk_game_message_grants%for update%");
+      // Completion now shares erasure's source-first lock order; duplicate issue
+      // must block on that identity before it can reach the grant or permit rows.
+      DatabaseLockWait lockWait = awaitDatabaseLockWait("%sdk_identities%for update%");
       assertThat(lockWait.waitingPid()).isPositive();
       assertThat(jdbc.queryForObject("SELECT state FROM pg_stat_activity WHERE pid=:pid",
           Map.of("pid", lockWait.blockingPid()), String.class)).isEqualTo("idle in transaction");
