@@ -18,10 +18,164 @@ FALSE_FLAGS = ('runtime_pass', 'activation_authority', 'current_or_future_path_a
 CARRIER_PATHS = release.CARRIER_PATHS | frozenset((
     'scripts/ci/f13_current_source.py', 'scripts/ci/f13_current_source_test.py',
     'scripts/ci/f13_current_source_integration_test.py',
+    'scripts/ci/f13_base_bridge_test.py',
     'scripts/ci/f13_source_dag.py', 'scripts/ci/f13_source_dag_test.py',
     '.github/ci/path-filters.yml', 'scripts/ci/fast-gate-routing_test.py'))
 NATIVE_VERSION = 'NATIVE-P3-SOURCE-v6'
 PRODUCTION_VERSION = 'F13-PRODUCTION-SOURCE-v12'
+
+
+def bridge_event(repo, base, source, target, event, ref, event_sha, before, base_ref,
+                 reviewed_source, record_commit, collection_base):
+    """Bind a real event to the first master merge that introduced this record."""
+    require, git = release.require, release.git
+    base, source, target, reviewed_source, record_commit, collection_base = map(
+        release.legacy.oid, (base, source, target, reviewed_source, record_commit, collection_base))
+    require(git(repo, 'rev-parse', '--is-shallow-repository').strip() == b'false', 'bridge_shallow')
+    require(git(repo, 'rev-parse', 'HEAD').decode().strip() == target, 'bridge_actual_head')
+    require(event_sha == target, 'bridge_event_sha')
+    require((event == 'push' and ref == 'refs/heads/master' and before == base) or
+            (event == 'pull_request' and base_ref == 'master' and
+             re.fullmatch(r'refs/pull/[1-9][0-9]*/merge', ref)), 'bridge_master_event')
+    require(git(repo, 'rev-list', '--parents', '-n', '1', record_commit).decode().split() ==
+            [record_commit, reviewed_source], 'bridge_record_direct_parent')
+    require(git(repo, 'rev-list', '--parents', '-n', '1', target).decode().split() ==
+            [target, base, source], 'bridge_ordered_parents')
+    release.legacy.ancestor(repo, reviewed_source, base)
+    release.legacy.ancestor(repo, base, source)
+    release.legacy.ancestor(repo, record_commit, source)
+    for revision in (base, source):
+        require(collection_base in git(repo, 'rev-list', '--first-parent', revision).decode().splitlines(),
+                'bridge_collection_first_parent')
+    require(git(repo, 'rev-parse', source + '^{tree}') == git(repo, 'rev-parse', target + '^{tree}'),
+            'bridge_result_tree')
+
+    def contains(older, newer):
+        result = subprocess.run(['git', '--no-replace-objects', '-C', str(repo), 'merge-base',
+                                 '--is-ancestor', older, newer], capture_output=True, check=False)
+        require(result.returncode in (0, 1), 'bridge_ancestry')
+        return result.returncode == 0
+
+    if contains(record_commit, base):
+        first_parent = git(repo, 'rev-list', '--first-parent', '--reverse',
+                           reviewed_source + '..' + base).decode().splitlines()
+        require(reviewed_source in git(repo, 'rev-list', '--first-parent', base).decode().splitlines(),
+                'bridge_master_first_parent')
+        first_merge = next((rev for rev in first_parent if contains(record_commit, rev)), None)
+        require(first_merge is not None, 'bridge_first_merge')
+        parents = git(repo, 'rev-list', '--parents', '-n', '1', first_merge).decode().split()
+        require(len(parents) == 3 and not contains(record_commit, parents[1]) and
+                contains(record_commit, parents[2]), 'bridge_first_merge_parents')
+        initial_base, initial_source = parents[1:]
+    else:
+        initial_base, initial_source, first_merge = base, source, target
+    require(initial_base != reviewed_source and not contains(record_commit, initial_base),
+            'bridge_distinct_initial_base')
+    release.legacy.ancestor(repo, reviewed_source, initial_base)
+    release.legacy.ancestor(repo, initial_base, initial_source)
+    require(git(repo, 'rev-parse', initial_source + '^{tree}') ==
+            git(repo, 'rev-parse', first_merge + '^{tree}'), 'bridge_first_result_tree')
+    chain = git(repo, 'rev-list', '--first-parent', '--reverse',
+                record_commit + '..' + initial_source).decode().splitlines()
+    require(record_commit in git(repo, 'rev-list', '--first-parent', initial_source).decode().splitlines(),
+            'bridge_record_first_parent')
+    previous, incorporation = record_commit, None
+    for revision in chain:
+        if contains(initial_base, revision):
+            incorporation = revision
+            break
+        previous = revision
+    carrier = previous
+    require(incorporation is not None and carrier != record_commit, 'bridge_carrier_missing')
+    require(git(repo, 'rev-list', '--parents', '-n', '1', incorporation).decode().split() ==
+            [incorporation, carrier, initial_base], 'bridge_incorporation_parents')
+    return dict(type='PRESERVED-UNIT-BASE-BRIDGE-v1', reviewed_source=reviewed_source,
+        record=record_commit, initial_base=initial_base, carrier=carrier, incorporation=incorporation,
+        initial_source=initial_source, first_merge=first_merge, base=base, source=source, target=target)
+
+
+def bridge_history(repo, binding, units, historical_paths, carrier_paths, archive_path):
+    """Verify the full pre-carrier, base-side and post-carrier Git DAGs."""
+    require, git = release.require, release.git
+    h, r, b0, k, s0, g, b, s, t = (binding[name] for name in
+        ('reviewed_source', 'record', 'initial_base', 'carrier', 'initial_source',
+         'first_merge', 'base', 'source', 'target'))
+    require(h in git(repo, 'rev-list', '--first-parent', b0).decode().splitlines(),
+            'bridge_base_first_parent')
+    baseline = release.documentation.tree_entries(repo, h)
+    recorded = release.documentation.tree_entries(repo, r)
+    carrier = release.documentation.tree_entries(repo, k)
+    base_tree = release.documentation.tree_entries(repo, b0)
+    additions = set(recorded) - set(baseline)
+    carrier_paths = set(carrier_paths)
+    require(not additions & carrier_paths and all(path in carrier for path in carrier_paths),
+            'bridge_carrier_paths')
+    require(not additions & set(base_tree), 'bridge_base_proof_collision')
+    unit_paths = {row['path'] for unit in units.values() for row in unit['entries']}
+    require(not unit_paths & carrier_paths, 'bridge_carrier_unit_overlap')
+    old_paths = set(historical_paths) | {archive_path} | {
+        p for p in baseline if p.startswith(('docs/testing/native-p3-source',
+            'docs/testing/f13-production', 'docs/testing/role-checkpermission',
+            'docs/testing/role-source-v1-evidence/', 'docs/testing/role-source-v2-evidence/'))}
+    require(all(path in baseline for path in old_paths | unit_paths), 'bridge_missing_baseline')
+    directories = {row['directory']: row['entries'] for unit in units.values()
+                   for row in unit['directory_inventories']}
+    voice = {p: value for p, value in baseline.items() if p.startswith('src/backend/voice/')}
+
+    def contains(older, newer):
+        result = subprocess.run(['git', '--no-replace-objects', '-C', str(repo), 'merge-base',
+                                 '--is-ancestor', older, newer], capture_output=True, check=False)
+        require(result.returncode in (0, 1), 'bridge_history_ancestry')
+        return result.returncode == 0
+
+    def common(tree, label):
+        require(all(tree.get(p) == baseline.get(p) for p in unit_paths | old_paths), label + '_entry')
+        actual = release.documentation.immediate_directory_entries(tree)
+        require(all(actual.get(d, {}) == entries for d, entries in directories.items()), label + '_directory')
+        require({p: value for p, value in tree.items() if p.startswith('src/backend/voice/')} == voice,
+                label + '_voice')
+
+    def base_revision(revision):
+        tree = release.documentation.tree_entries(repo, revision)
+        common(tree, 'bridge_base')
+        require(all(tree.get(p) == baseline.get(p) for p in carrier_paths), 'bridge_base_carrier')
+        require(not additions & set(tree), 'bridge_base_proof')
+
+    def post_revision(revision):
+        tree = release.documentation.tree_entries(repo, revision)
+        common(tree, 'bridge_after_carrier')
+        require(all(tree.get(p) == recorded[p] for p in additions), 'bridge_after_carrier_proof')
+        require(all(tree.get(p) == carrier[p] for p in carrier_paths), 'bridge_after_carrier_bytes')
+
+    for revision in git(repo, 'rev-list', '--topo-order', '--reverse', b0, '^' + h).decode().splitlines():
+        base_revision(revision)
+    for revision in git(repo, 'rev-list', '--topo-order', '--reverse', k, '^' + r).decode().splitlines():
+        tree = release.documentation.tree_entries(repo, revision)
+        common(tree, 'bridge_precarrier')
+        if contains(r, revision):
+            require(all(tree.get(p) == recorded[p] for p in additions), 'bridge_precarrier_proof')
+        else:
+            require(not additions & set(tree), 'bridge_precarrier_proof')
+
+    overlay = dict(base_tree)
+    overlay.update({p: recorded[p] for p in additions})
+    overlay.update({p: carrier[p] for p in carrier_paths})
+    require(release.documentation.tree_entries(repo, s0) == overlay, 'bridge_initial_overlay')
+
+    def verify_interval(end, exclude, qualified_base):
+        for revision in git(repo, 'rev-list', '--topo-order', '--reverse', end,
+                            '^' + exclude).decode().splitlines():
+            if contains(k, revision):
+                post_revision(revision)
+            else:
+                require(not contains(r, revision) and contains(revision, qualified_base),
+                        'bridge_unqualified_side_history')
+                base_revision(revision)
+
+    verify_interval(s0, k, b0)
+    verify_interval(s, g, b)
+    for revision in (k, s0, g, s, t):
+        post_revision(revision)
 
 
 def closure(repo, source, raw, inherited_paths, inherited_directories, extra_paths):
@@ -252,32 +406,61 @@ def _check_continuation(repo, foundation, source, units, source_base, record_com
         verify(revision)
 
 
+def _event(repo, base, source, target, event, ref, event_sha, before, base_ref):
+    """Choose the old event contract or the separately typed advanced-base contract."""
+    require, git = release.require, release.git
+    if base == SOURCE:
+        return release.check_event(repo, base, source, target, event, ref, event_sha, before,
+                                   base_ref, SOURCE, RECORD_COMMIT)
+    result = subprocess.run(['git', '--no-replace-objects', '-C', str(repo), 'merge-base',
+        '--is-ancestor', RECORD_COMMIT, base], capture_output=True, check=False)
+    require(result.returncode in (0, 1), 'current_event_ancestry')
+    if result.returncode == 0:
+        for revision in git(repo, 'rev-list', '--first-parent', '--reverse',
+                            SOURCE + '..' + base).decode().splitlines():
+            ancestor = subprocess.run(['git', '--no-replace-objects', '-C', str(repo), 'merge-base',
+                '--is-ancestor', RECORD_COMMIT, revision], capture_output=True, check=False)
+            require(ancestor.returncode in (0, 1), 'current_event_ancestry')
+            if ancestor.returncode == 0:
+                parents = git(repo, 'rev-list', '--parents', '-n', '1', revision).decode().split()
+                if len(parents) == 3 and parents[1] == SOURCE:
+                    return release.check_event(repo, base, source, target, event, ref, event_sha,
+                                               before, base_ref, SOURCE, RECORD_COMMIT)
+                break
+    return bridge_event(repo, base, source, target, event, ref, event_sha, before, base_ref,
+                        SOURCE, RECORD_COMMIT, release.COLLECTION_BASE)
+
+
 def _native_qualify(repo, base, source, target, event, ref, event_sha, before, base_ref, bundle):
     require, git = release.require, release.git
     require(Path(repo).resolve() == release.ROOT.resolve(), 'current_actual_root')
     require(git(repo, 'rev-parse', 'HEAD').decode().strip() == target, 'current_actual_head')
     record, units, old, _ = bundle
-    foundation = release.check_event(repo, base, source, target, event, ref, event_sha, before,
-                                     base_ref, SOURCE, RECORD_COMMIT)
-    _check_carrier(repo, foundation['source'])
+    foundation = _event(repo, base, source, target, event, ref, event_sha, before, base_ref)
+    bridged = foundation.get('type') == 'PRESERVED-UNIT-BASE-BRIDGE-v1'
+    _check_carrier(repo, foundation['carrier'] if bridged else foundation['source'])
     old_record_tree = release.documentation.tree_entries(repo, release.RECORD_COMMIT)
     old_foundation_tree = release.documentation.tree_entries(repo, release.FOUNDATION_BASE)
-    _check_continuation(repo, foundation, source, units, SOURCE, RECORD_COMMIT,
-                        set(old_record_tree) - set(old_foundation_tree))
+    historical_paths = set(old_record_tree) - set(old_foundation_tree)
+    if bridged:
+        import f13_production_source as production
+        bridge_history(repo, foundation, units, historical_paths, CARRIER_PATHS, production.ARCHIVE_PATH)
+    else:
+        _check_continuation(repo, foundation, source, units, SOURCE, RECORD_COMMIT, historical_paths)
     return dict(version=NATIVE_VERSION, consumer='MASTER-SOURCE-v1', base=base, source=source,
         target=target, content_base=old['base'], snapshot=SOURCE, record=RECORD_COMMIT,
         record_sha256=RECORD_SHA256, paths=[x['path'] for x in old['projection']],
         retain_guarded_and_runtime_history=True, collection_base=release.COLLECTION_BASE,
-        foundation=foundation, qualification='REVIEWED_CURRENT_SOURCE',
+        foundation=foundation, qualification=('PRESERVED_UNIT_BASE_BRIDGE' if bridged else 'REVIEWED_CURRENT_SOURCE'),
         event_delta_sha256=release.sha(git(repo, 'diff', '--raw', '--no-abbrev', '--no-renames', base, source)))
 
 
 def native_qualify(repo, base, source, target, event, ref, event_sha, before, base_ref):
     release.require(Path(repo).resolve() == release.ROOT.resolve(), 'current_actual_root')
     release.require(release.git(repo, 'rev-parse', 'HEAD').decode().strip() == target, 'current_actual_head')
-    foundation = release.check_event(repo, base, source, target, event, ref, event_sha, before,
-                                     base_ref, SOURCE, RECORD_COMMIT)
-    _check_carrier(repo, foundation['source'])
+    foundation = _event(repo, base, source, target, event, ref, event_sha, before, base_ref)
+    _check_carrier(repo, foundation['carrier'] if foundation.get('type') ==
+                   'PRESERVED-UNIT-BASE-BRIDGE-v1' else foundation['source'])
     return _native_qualify(repo, base, source, target, event, ref, event_sha, before, base_ref,
                            _load_bundle(repo))
 

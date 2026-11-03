@@ -10,6 +10,8 @@ from pathlib import Path
 import f13_current_source as current
 
 ROOT = Path(__file__).resolve().parents[2]
+FIXTURE_BASE = 'f7fe4f0b1521633b04fbcdf1990636301f7c0537'
+PR1091_SOURCE = '79bfb9ba3d31626f83079eebeb5c4fd20948ca6e'
 
 
 class CurrentSourceRealGitTest(unittest.TestCase):
@@ -30,9 +32,12 @@ class CurrentSourceRealGitTest(unittest.TestCase):
             shutil.copyfile(ROOT / name, destination)
         cls.git('add', '--', *sorted(current.CARRIER_PATHS))
         cls.git('commit', '-qm', 'Fixture carrier')
+        cls.git('merge', '--no-ff', '-qm', 'Fixture merge PR1091 source', PR1091_SOURCE)
         cls.carrier = cls.git('rev-parse', 'HEAD')
-        cls.git('checkout', '-qb', 'fixture-event', current.SOURCE)
-        cls.git('merge', '--no-ff', '-qm', 'Fixture merge', cls.carrier)
+        cls.git('merge', '--no-ff', '-qm', 'Fixture incorporate actual base', FIXTURE_BASE)
+        cls.source = cls.git('rev-parse', 'HEAD')
+        cls.git('checkout', '-qb', 'fixture-event', FIXTURE_BASE)
+        cls.git('merge', '--no-ff', '-qm', 'Fixture merge', cls.source)
         cls.target = cls.git('rev-parse', 'HEAD')
 
     @classmethod
@@ -43,23 +48,41 @@ class CurrentSourceRealGitTest(unittest.TestCase):
     def run_fixture(self, program):
         env = os.environ.copy()
         env.update(GITHUB_EVENT_NAME='push', GITHUB_REF='refs/heads/master', GITHUB_SHA=self.target,
-                   VOICE_CI_PUSH_BEFORE_SHA=current.SOURCE, GITHUB_BASE_REF='')
-        result = subprocess.run([sys.executable, '-c', program, current.SOURCE, self.carrier, self.target],
+                   VOICE_CI_PUSH_BEFORE_SHA=FIXTURE_BASE, GITHUB_BASE_REF='')
+        result = subprocess.run([sys.executable, '-c', program, FIXTURE_BASE, self.source, self.target, self.carrier],
                                 cwd=self.repo, env=env, text=True, capture_output=True, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_public_consumers_against_real_git(self):
         self.run_fixture('''
-import hashlib,json,sys,zipfile
+import hashlib,json,os,pathlib,subprocess,sys,tempfile,zipfile
 sys.path.insert(0,'scripts/ci')
 import f13_native_p3_authority as native
 import f13_current_source as current
 import f13_production_source as production
 import f13_role_conditional as role
 import f13_f54_history as history
-base,source,target=sys.argv[1:]
+base,source,target,carrier=sys.argv[1:]
 b=native.qualify('.',base,source,target,'push','refs/heads/master',target,base,'')
 assert b['version']==current.NATIVE_VERSION
+assert b['qualification']=='PRESERVED_UNIT_BASE_BRIDGE'
+assert b['foundation']['initial_base']==base and b['foundation']['carrier']==carrier
+with tempfile.TemporaryDirectory() as directory:
+    binding=pathlib.Path(directory)/'native-binding.json'
+    binding.write_text(json.dumps(b),encoding='utf-8')
+    output=subprocess.check_output([sys.executable,'scripts/ci/f13_release_source.py',
+                                    'collection-base','.',str(binding)],text=True).strip()
+    forged=dict(b,record_sha256='0'*64)
+    binding.write_text(json.dumps(forged),encoding='utf-8')
+    denied=subprocess.run([sys.executable,'scripts/ci/f13_release_source.py',
+                           'collection-base','.',str(binding)],capture_output=True,text=True,check=False)
+    assert denied.returncode != 0 and 'current_native_binding' in denied.stderr,denied.stderr
+    binding.write_text(json.dumps(b),encoding='utf-8')
+    bad_event=dict(os.environ,VOICE_CI_PUSH_BEFORE_SHA='0'*40)
+    denied=subprocess.run([sys.executable,'scripts/ci/f13_release_source.py',
+                           'collection-base','.',str(binding)],env=bad_event,capture_output=True,text=True,check=False)
+    assert denied.returncode != 0 and 'bridge_master_event' in denied.stderr,denied.stderr
+assert output==current.release.COLLECTION_BASE
 v,r=native.verified_record('.',b)
 assert v is current and r['source']==current.SOURCE
 p=production.qualify('.')
@@ -87,19 +110,19 @@ assert result['runtime_pass'] is False and result['admission'] is False
 import pathlib,sys
 sys.path.insert(0,'scripts/ci')
 import f13_current_source as c
-base,source,target=sys.argv[1:]
+base,source,target,carrier=sys.argv[1:]
 def rejects(action, reason):
     try: action()
     except ValueError as exc: assert reason in str(exc),str(exc)
     else: raise AssertionError('accepted '+reason)
 rejects(lambda:c.native_qualify('.',base,source,target,'push','refs/heads/master',target,'0'*40,''),
-        'release_master_event')
+        'bridge_master_event')
 rejects(lambda:c.native_qualify('.',base,source,source,'push','refs/heads/master',source,base,''),
         'current_actual_head')
 path=pathlib.Path('scripts/ci/f13_source_dag.py'); original=path.read_bytes()
 try:
     path.write_bytes(original+b'\\n# fixture byte drift\\n')
-    rejects(lambda:c._check_carrier('.',source),'current_executed_carrier')
+    rejects(lambda:c._check_carrier('.',carrier),'current_executed_carrier')
 finally: path.write_bytes(original)
 ''')
 

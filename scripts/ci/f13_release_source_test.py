@@ -740,7 +740,7 @@ class StandaloneSuiteLifecycleTest(unittest.TestCase):
     """Execute the real shell launcher with small disposable suite programs."""
     names = ['f13_space_audit_test.py', 'f13_production_source_test.py',
              'f13_release_source_test.py', 'f13_current_source_test.py', 'f13_source_dag_test.py',
-             'f13_current_source_integration_test.py',
+             'f13_current_source_integration_test.py', 'f13_base_bridge_test.py',
              'f13_native_p3_documentation_test.py']
 
     def setUp(self):

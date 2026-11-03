@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,6 +60,15 @@ class SourceClosureTest(unittest.TestCase):
         self.assertFalse(current.applicable(self.repo))
         with self.assertRaisesRegex(ValueError, 'current_source_lookup'):
             current.applicable(self.repo / 'missing')
+
+    def test_collection_cli_routes_v6_and_rejects_missing_record(self):
+        binding = self.repo / 'binding.json'
+        binding.write_text(json.dumps({'version': current.NATIVE_VERSION}), encoding='utf-8')
+        script = Path(__file__).with_name('f13_release_source.py')
+        result = subprocess.run([sys.executable, str(script), 'collection-base', str(self.repo), str(binding)],
+                                capture_output=True, text=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('git_rev-list', result.stderr)
 
     def test_intermediate_change_and_restore_is_rejected(self):
         archive = self.repo / production.ARCHIVE_PATH

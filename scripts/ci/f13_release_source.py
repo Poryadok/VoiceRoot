@@ -645,7 +645,11 @@ def main():
     args = parser.parse_args()
     try:
         binding = read_json(Path(args.binding).read_bytes())
-        print(collection_base(args.repo, binding))
+        if binding.get('version') == 'NATIVE-P3-SOURCE-v6':
+            import f13_current_source as current
+            print(current.collection_base(args.repo, binding))
+        else:
+            print(collection_base(args.repo, binding))
     except (Rejected, ValueError, KeyError, TypeError, OSError) as error:
         print('Release source rejected: '+str(error), file=sys.stderr)
         return 1
