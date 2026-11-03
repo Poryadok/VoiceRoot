@@ -1877,7 +1877,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     super.dispose();
   }
 
-  Future<void> loadInitial({bool resetHistoryCursor = false}) async {
+  Future<void> loadInitial() => _loadInitialHistory();
+
+  Future<void> _loadInitialHistory({bool resetHistoryCursor = false}) async {
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     if (auth == null || profileId == null) return;
@@ -2147,7 +2149,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
             return;
           }
           if (data.historyReset) {
-            await loadInitial(resetHistoryCursor: true);
+            await _loadInitialHistory(resetHistoryCursor: true);
             return;
           }
           if (data.hasMore &&
