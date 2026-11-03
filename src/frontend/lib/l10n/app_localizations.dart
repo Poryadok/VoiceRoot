@@ -5450,6 +5450,18 @@ abstract class AppLocalizations {
   /// **'You are not a member of any spaces'**
   String get privacyAudienceSpacesEmpty;
 
+  /// No description provided for @privacyDiscardChangesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes?'**
+  String get privacyDiscardChangesTitle;
+
+  /// No description provided for @privacyDiscardChangesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your privacy changes have not been saved.'**
+  String get privacyDiscardChangesMessage;
+
   /// No description provided for @privacyActionsTitle.
   ///
   /// In en, this message translates to:

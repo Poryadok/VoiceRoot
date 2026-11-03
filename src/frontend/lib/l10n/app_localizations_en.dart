@@ -3007,6 +3007,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyAudienceSpacesEmpty => 'You are not a member of any spaces';
 
   @override
+  String get privacyDiscardChangesTitle => 'Discard changes?';
+
+  @override
+  String get privacyDiscardChangesMessage =>
+      'Your privacy changes have not been saved.';
+
+  @override
   String get privacyActionsTitle => 'Actions';
 
   @override
