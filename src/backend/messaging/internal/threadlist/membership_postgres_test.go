@@ -37,7 +37,7 @@ func membershipDB(t *testing.T) *pgxpool.Pool {
 	})
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	for _, migration := range []string{"000032_thread_list_nodes.up.sql", "000039_thread_list_membership.up.sql"} {
+	for _, migration := range []string{"000032_thread_list_nodes.up.sql", "000039_thread_list_membership.up.sql", "000040_thread_membership_baselines.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../migrations/messaging_db", migration))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(raw))

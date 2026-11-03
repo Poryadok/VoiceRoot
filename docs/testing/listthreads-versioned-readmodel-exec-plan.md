@@ -82,6 +82,43 @@ quarantine after a partially consumed prefix, bounded replay and migration
 down/up. Use the existing owned `THREADLIST_TEST_DATABASE_URL` fixture and
 `go test -race ./internal/threadlist`; no shared environment or host port is needed.
 
+### BE-184 sealed membership baseline checkpoint
+
+The next named consumer is the Messaging generation builder. The shared
+`pkg/effectivemembership` intake validates complete paged Chat exports: exact
+scope/incarnation/generation/pin/Q binding, explicit terminal completion, unique
+profiles, complete source coordinates, canonical content digest and a final
+authoritative seal validation. It returns a private validated capability only
+after every page and the final validation succeed. Its `SourceReader` remains
+a trusted adapter boundary; protected network APIs and their runtime wiring are
+still required. The historical source cut does not grant live page admission.
+
+`MembershipInbox.ReceiveBaseline` captures the local head before remote intake.
+`InstallBaseline` accepts that combined pool-bound capability, checks the full
+captured head under lock, and atomically persists the receipt, complete pair
+state, baseline Q and incarnation/lineage retirement fences. Migration
+`000040_thread_membership_baselines` owns this state in `messaging_db`. Exact
+historical retries retain their receipt without rolling back newer progress.
+Omitted known members become negative facts. Buffered and late covered events
+retain revocation evidence; a snapshot cannot erase a remove/rejoin or reuse a
+retired lineage. Conflicting identities and impossible source transitions
+quarantine the scope. Pin expiry before commit rolls back even quarantine paths.
+
+The capability is deliberately not a durable builder reservation: restart or a
+different pool requires fresh intake. A future durable builder must persist an
+equivalent reservation and keep its owner retention pin alive. This checkpoint
+does not provide the owner source APIs, Chat reconciliation, protected transport,
+Messaging journal J, zero-lag READY, visibility fan-out or reachability GC.
+BE-184 remains in progress and the public `ListThreads` guard remains unchanged.
+
+Validation includes real PostgreSQL rollback/migration tests, stale-worker CAS,
+incarnation reset and retirement, late/buffered revocation and ABA, expired pins
+through replay and collision quarantine, bounded replay restart and immutable
+historical receipts. The changed membership/baseline/Postgres suite passes with
+the race detector; shared intake tests pass with the race detector. Independent
+review of the owned checkout is clear after the pin-expiry and covered-event
+continuity fixes. Final module checks and hosted CI are recorded with the PR.
+
 ## Detailed Steps
 
 1. Add Messaging-owned schema, no cross-DB FK: `thread_list_viewers`, ordered `thread_list_changes`, immutable activity/id AVL nodes, `thread_list_cursor_states`, and deduplicating membership inbox. Add migrations and rollback/retention notes.
