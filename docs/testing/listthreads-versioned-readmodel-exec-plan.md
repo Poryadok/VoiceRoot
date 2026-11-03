@@ -50,6 +50,38 @@ APIs/outboxes, Q/J journals, durable roots/build/GC, all visibility projectors a
 complete admission remain subsequent BE-184/185 work before activation. Do not
 mark the full successor or task complete from this primitive's checks.
 
+### BE-184 durable membership inbox checkpoint
+
+Migration `000039_thread_list_membership` and `internal/threadlist.MembershipInbox`
+persist received Chat records, a serialized consumed prefix `Q`, per-pair
+BUILDING/REVOKED state and retired lineages in `messaging_db`. The named consumer
+is the subsequent BE-184 generation/baseline builder; these records alone cannot
+authorize a page, publish READY or enable the RPC.
+
+`Track` registers an explicitly reconciled Chat incarnation at origin `Q=0`;
+it cannot reset an existing incarnation or quarantine. `Apply` commits inbox,
+pair state and contiguous prefix together. Records bind event/offset/pair revision,
+lineage and canonical owner/scope/incarnation/revision/revocation coordinates.
+An exact repeat is idempotent; conflicting retained identities quarantine the
+scope durably, including malformed repeats. Invalid novel input does not commit.
+The bridge must independently prove signed caller/request binding and complete
+source coverage; structural coordinate validation is not that proof.
+
+Replay is bounded to 256 records per transaction. `Replay` resumes persisted
+work without another broker event; its completion flag covers received events
+only, never an unseen authoritative tail. `Pair` refuses a quarantined scope,
+wrong incarnation, insufficient required `Q` or any received pending tail. Its
+snapshot result does not replace the final transactional admission/Q/lineage CAS.
+Sealed snapshot installation, retained export pins, source recovery, builder,
+local journal `J`, visibility projection and GC remain subsequent implementation.
+
+Acceptance: real PostgreSQL tests cover reordered delivery, exact retry,
+event/offset/pair/source collisions, malformed replay, concurrent exact and
+conflicting delivery, transaction rollback, retired-lineage/barrier denial,
+quarantine after a partially consumed prefix, bounded replay and migration
+down/up. Use the existing owned `THREADLIST_TEST_DATABASE_URL` fixture and
+`go test -race ./internal/threadlist`; no shared environment or host port is needed.
+
 ## Detailed Steps
 
 1. Add Messaging-owned schema, no cross-DB FK: `thread_list_viewers`, ordered `thread_list_changes`, immutable activity/id AVL nodes, `thread_list_cursor_states`, and deduplicating membership inbox. Add migrations and rollback/retention notes.
