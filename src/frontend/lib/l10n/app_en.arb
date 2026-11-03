@@ -1306,6 +1306,8 @@
   "privacyAudienceIncludeGuests": "Guest accounts",
   "privacyAudienceSpacesTitle": "Spaces",
   "privacyAudienceSpacesEmpty": "You are not a member of any spaces",
+  "privacyDiscardChangesTitle": "Discard changes?",
+  "privacyDiscardChangesMessage": "Your privacy changes have not been saved.",
   "privacyActionsTitle": "Actions",
   "privacyAllowPhoneSearch": "Phone number search",
   "privacyAllowCalls": "Calls",
