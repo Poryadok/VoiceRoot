@@ -94,11 +94,19 @@ set -e
 if [[ "$result" != 0 ]]; then exit "$result"; fi
 sha256sum "$RUNNER_TEMP/space-profile50.test" >> "$RUNNER_TEMP/space-profile50-identities.txt"
 binary_before="$(sha256sum "$RUNNER_TEMP/space-profile50.test" | cut -d' ' -f1)"
+# Database-wide counters are diagnostic only and are never reset.
+jit_snapshot() {
+  local phase="$1"
+  psql -XAt -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" -c "SELECT json_build_object('phase', '$phase', 'jit', current_setting('jit'), 'jit_above_cost', current_setting('jit_above_cost'), 'jit_functions', jit_functions, 'jit_generation_time', jit_generation_time, 'jit_inlining_count', jit_inlining_count, 'jit_optimization_count', jit_optimization_count) FROM pg_stat_database WHERE datname=current_database()" >> "$RUNNER_TEMP/space-profile50-jit.jsonl"
+}
+jit_result=0
+jit_snapshot before || jit_result=1
 set +e
 go tool test2json -t -p voice/backend/space/internal/store "$RUNNER_TEMP/space-profile50.test" \
   -test.v -test.count=1 -test.timeout=5m -test.run '^TestNative50Over100ProfileCatalog$' > "$RUNNER_TEMP/space-profile50-diagnostic-events.jsonl"
 result=$?
 set -e
+jit_snapshot after || jit_result=1
 source_status=unavailable
 head_status=unavailable
 tracked_status=unavailable
@@ -141,4 +149,5 @@ python3 -B ../../../scripts/ci/space_profile50_validate.py "$RUNNER_TEMP/space-p
 printf 'profile_validation_exit_code=%s\n' "$validation_result" >> "$RUNNER_TEMP/space-profile50-identities.txt"
 if [[ "$result" != 0 ]]; then exit "$result"; fi
 if [[ "$identity_result" != 0 ]]; then exit "$identity_result"; fi
+if [[ "$jit_result" != 0 ]]; then exit "$jit_result"; fi
 exit "$validation_result"
