@@ -102,19 +102,46 @@ class ReviewedCurrentCompiledFixtureTest(unittest.TestCase):
 class ReleaseRoleFixtureTest(unittest.TestCase):
     """Production boundary is mocked; target tree and raw rows use real Git."""
     def test_current_v3_rejection_does_not_fall_back_to_successful_v1(self):
+        import f13_current_source as current_source
         import f13_release_source as release
         target='a'*40
         args=['role','--repo',str(ROOT),'--target',target,'--prior-row','prior','--incoming-row','incoming']
+        def historical_git(command, **kwargs):
+            source_lookup=['git','--no-replace-objects','-C',str(ROOT),'rev-parse',
+                           '--verify','--quiet',current_source.SOURCE+'^{commit}']
+            if command == source_lookup:
+                return SimpleNamespace(returncode=1,stdout=b'',stderr=b'')
+            self.assertEqual(command,['git','--no-replace-objects','-C',str(ROOT),
+                                     'merge-base','--is-ancestor','b'*40,target])
+            return SimpleNamespace(returncode=0,stdout=b'',stderr=b'')
         with patch.object(sys,'argv',args),patch.multiple(release,ROOT=ROOT,FOUNDATION_BASE='b'*40), \
              patch.object(legacy,'git',return_value=(target+'\n').encode()), \
-             patch.object(successor.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
+             patch.object(successor.subprocess,'run',side_effect=historical_git), \
              patch.object(legacy,'qualify',return_value={'legacy_success':True}) as old, \
              patch.object(successor,'qualify_release',side_effect=release.Rejected('wrong_event')) as current, \
              redirect_stderr(io.StringIO()) as stderr:
             self.assertEqual(successor.main(),1)
-            self.assertIn('wrong_event',stderr.getvalue())
+            self.assertEqual(stderr.getvalue(),'Conditional Role successor rejected: wrong_event\n')
             current.assert_called_once()
             old.assert_not_called()
+
+    def test_current_v6_rejection_does_not_fall_back(self):
+        import f13_current_source as current_source
+        target=subprocess.check_output(['git','--no-replace-objects','-C',str(ROOT),
+                                        'rev-parse','HEAD']).decode().strip()
+        self.assertTrue(current_source.applicable(ROOT,target))
+        args=['role','--repo',str(ROOT),'--target',target,'--prior-row','prior','--incoming-row','incoming']
+        for error in ('wrong_event','unrelated_error'):
+            with self.subTest(error=error),patch.object(sys,'argv',args), \
+                 patch.object(current_source,'role_qualify',side_effect=current_source.release.Rejected(error)) as current, \
+                 patch.object(successor,'qualify_release',return_value={'v3_success':True}) as v3, \
+                 patch.object(legacy,'qualify',return_value={'v1_success':True}) as old, \
+                 redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(successor.main(),1)
+                self.assertEqual(stderr.getvalue(),'Conditional Role successor rejected: '+error+'\n')
+                current.assert_called_once_with(str(ROOT),target,'prior','incoming')
+                v3.assert_not_called()
+                old.assert_not_called()
 
     def test_current_target_entries_and_both_runtime_flags_are_retained(self):
         import f13_release_source as release
