@@ -63,7 +63,7 @@ class AuthMigrationCatalogJdbcIntegrationTest {
         JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
         LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
         WHERE n.nspname='public' AND c.relkind='r'
-          AND (c.relname LIKE 'sdk_%' OR c.relname='linked_oauth_attempts' OR c.relname='refresh_tokens' AND a.attname='profile_id')
+          AND (c.relname LIKE 'sdk_%' OR c.relname IN ('linked_oauth_attempts','auth_terminal_operation_fences') OR c.relname='refresh_tokens' AND a.attname='profile_id')
         """, String.class);
   }
 
@@ -73,13 +73,13 @@ class AuthMigrationCatalogJdbcIntegrationTest {
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();
       var loader = flyway(postgres, "classpath:db/migration");
-      assertThat(loader.migrate().migrationsExecuted).isEqualTo(31);
+      assertThat(loader.migrate().migrationsExecuted).isEqualTo(32);
       assertThat(java.util.Arrays.stream(loader.info().applied())
           .map(migration -> migration.getVersion().getVersion()).toList())
           .containsExactlyElementsOf(java.util.stream.Stream.concat(
               java.util.stream.IntStream.rangeClosed(1, 26).mapToObj(version -> Integer.toString(version)),
-              java.util.stream.Stream.of("28", "31", "32", "33", "34")).toList());
-      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("34");
+              java.util.stream.Stream.of("28", "31", "32", "33", "34", "35")).toList());
+      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("35");
       flywayCatalog = authorizationCatalog(jdbc(postgres));
       assertThat(loader.migrate().migrationsExecuted).isZero();
     }
@@ -87,7 +87,7 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       postgres.start();
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       var database = jdbc(postgres);
-      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(35);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(36);
       assertThat(authorizationCatalog(database)).isEqualTo(flywayCatalog);
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       try(var reader=new voice.backend.auth.authoritysource.AuthAuthorityReader(
