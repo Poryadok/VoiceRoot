@@ -112,7 +112,7 @@ def capture_public_realtime(stage,kube,live,card):
 
 def capture_public_baseline(stage,kube,live):
     """Capture synthetic pre-P2 workloads from one canonical inventory."""
-    import actor_root,gis_first_install,uuid
+    import actor_root,gis_first_install,re,uuid
     # The publisher is created by C1 and admitted by capture_final_stage.
     for name in sorted(gis_first_install.baseline_workload_names(include_hub=False)-{'voice-user','voice-realtime','voice-p3-principal-jwks'}):
         row=copy.deepcopy(kube.objects[('Deployment',name)])
@@ -120,6 +120,16 @@ def capture_public_baseline(stage,kube,live):
         row['metadata']['generation']=1
         spec=row['spec']['template']['spec']
         role=name.removeprefix('voice-')
+        # These applications are synthetic Kubernetes boundaries. Give their
+        # canonical fixture tags stable synthetic content identities before
+        # capture, matching C1's immutable baseline contract. Story below keeps
+        # its separately reviewed real image used by the PostgreSQL proof.
+        for container in spec.get('initContainers',[])+spec['containers']:
+            image=container['image']
+            if re.fullmatch(r'registry/[a-z0-9-]+:[a-f0-9]{40}',image):
+                repository=image.split('/',1)[1].split(':',1)[0]
+                container['image']=bridge_root.source_authority.REGISTRY+'/'+repository+'@sha256:'+hashlib.sha256(
+                    ('synthetic-public-baseline:'+image).encode()).hexdigest()
         if role in actor_root.ROLES:
             next(v for v in spec['volumes'] if v['name']=='nats-service-creds')['secret']['secretName']='voice-nats-service-credentials-'+stage.expected['generation']
         if role=='story':
@@ -410,6 +420,11 @@ class CompositionTests(unittest.TestCase):
         preexisting=names-{'voice-p3-principal-jwks'}
         self.assertEqual(set(stage.snapshots),preexisting)
         self.assertEqual(set(stage.expected['deployment_uids']),preexisting)
+        # The actual C1 plan accepts immutable references for every captured
+        # baseline container, including synthetic application boundaries.
+        for key,image in stage.old_images.items():
+            with self.subTest(image_key=key):
+                self.assertRegex(image,r'^[^\s@]+@sha256:[a-f0-9]{64}$')
         for name in preexisting-{'voice-user','voice-realtime'}:
             self.assertEqual(stage.snapshots[name],live[('deployment',name)])
             self.assertEqual(stage.snapshots[name],kube.objects[('Deployment',name)])
