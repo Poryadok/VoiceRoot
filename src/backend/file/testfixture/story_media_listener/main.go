@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -25,7 +26,7 @@ func main() {
 	}
 }
 
-func run() error {
+func run() (err error) {
 	var input struct {
 		DSN    string
 		Config principalruntime.Config
@@ -46,7 +47,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer runtime.Close()
+	defer func() { err = errors.Join(err, runtime.Close()) }()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err
