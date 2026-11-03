@@ -44,6 +44,17 @@ class ProfileRouteTest(unittest.TestCase):
         binding = next(s for s in reusable["jobs"]["profile"]["steps"] if s.get("name") == "Bind source and PostgreSQL image")
         self.assertIn('test "$(git rev-parse HEAD)" = "$GITHUB_SHA"', binding["run"])
 
+    def test_profile_binds_post_restart_service_port(self):
+        steps = workflow("space-m50-profile.yml")["jobs"]["profile"]["steps"]
+        setup = next(s for s in steps if s.get("name") == "Enable PostgreSQL statement statistics for diagnostics")
+        self.assertLess(setup["run"].index('docker restart'), setup["run"].index('docker inspect'))
+        self.assertIn('space_profile50_port.py', setup["run"])
+        check = next(s for s in steps if s.get("name") == "Verify restarted service port binding")
+        self.assertIn('pg_isready -h 127.0.0.1 -p "$SPACE_M50_PG_PORT"', check["run"])
+        fixture = next(s for s in steps if s.get("name") == "Run separate M50 diagnostic fixture")
+        for key in ("SPACE_NATIVE_ADMIN_URL", "SPACE_BAN_TEST_DATABASE_URL"):
+            self.assertIn('${{ env.SPACE_M50_PG_PORT }}', fixture["env"][key])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,10 +38,15 @@ jobs:
           docker exec "$POSTGRES_CONTAINER" psql -U voice -d postgres -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements'"
           docker restart "$POSTGRES_CONTAINER" >/dev/null
           for attempt in $(seq 1 30); do
-            if docker exec "$POSTGRES_CONTAINER" pg_isready -U voice -d postgres >/dev/null; then exit 0; fi
+            if docker exec "$POSTGRES_CONTAINER" pg_isready -U voice -d postgres >/dev/null; then break; fi
             sleep 1
           done
-          exit 1
+          docker inspect "$POSTGRES_CONTAINER" | python3 -B scripts/ci/space_profile50_port.py "$POSTGRES_CONTAINER" >> "$GITHUB_ENV"
+      - name: Verify restarted service port binding
+        run: |
+          set -euo pipefail
+          python3 -B scripts/ci/space_profile50_port_test.py
+          pg_isready -h 127.0.0.1 -p "$SPACE_M50_PG_PORT" -U voice -d postgres
       - name: Bind source and PostgreSQL image
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -86,8 +91,8 @@ jobs:
           CGO_ENABLED: '0'
           GOFLAGS: -mod=readonly
           CANDIDATE_SHA: ${{ github.sha }}
-          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-m50-diagnostic@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
-          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-m50-diagnostic@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_profile50?sslmode=disable
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-m50-diagnostic@127.0.0.1:${{ env.SPACE_M50_PG_PORT }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-m50-diagnostic@127.0.0.1:${{ env.SPACE_M50_PG_PORT }}/space_profile50?sslmode=disable
         run: bash ../../../scripts/ci/space_profile50_diagnostic.sh
       - name: Upload diagnostic evidence
         if: always()
