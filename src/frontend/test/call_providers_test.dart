@@ -25,7 +25,12 @@ import 'package:voice_frontend/state/space_leave.dart';
 import 'support/gateway_test_client.dart';
 
 class _FakeLiveKitRoom
-    implements OrdinaryVoicePresentationRoom, VoiceCallPresentationRoom {
+    implements
+        OrdinaryVoicePresentationRoom,
+        VoiceCallPresentationRoom,
+        InitialMicrophoneStateRoom {
+  @override
+  bool initialMicrophoneMuted = false;
   @override
   void Function()? onParticipantsChanged;
   @override
@@ -60,6 +65,7 @@ class _FakeLiveKitRoom
     required bool video,
   }) async {
     connectCalls++;
+    initialVideo = video;
     lastUrl = url;
     connectStarted?.complete();
     await connectWait;
@@ -79,6 +85,8 @@ class _FakeLiveKitRoom
 
   bool? lastSetMuted;
   bool? lastSetVideoEnabled;
+  bool ignoreVideoUntilConnected = false;
+  bool? initialVideo;
 
   @override
   Future<void> setMuted(bool muted) async {
@@ -100,6 +108,7 @@ class _FakeLiveKitRoom
 
   @override
   Future<void> setVideoEnabled(bool enabled) async {
+    if (ignoreVideoUntilConnected && !connected) return;
     lastSetVideoEnabled = enabled;
   }
 
@@ -805,6 +814,211 @@ void main() {
     );
     await first;
     expect(container.read(callControllerProvider).phase, CallPhase.outgoing);
+  });
+
+  test(
+    'pending video admission preserves microphone and camera choices',
+    () async {
+      final admission = Completer<http.Response>();
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final container = _callTestContainer(
+        client: MockClient(
+          (request) async => request.url.path == '/api/v1/voice/calls'
+              ? admission.future
+              : http.Response('{}', 200),
+        ),
+        realtime: realtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      final controller = container.read(callControllerProvider.notifier);
+      final pending = controller.startCall(
+        chatId: 'chat-1',
+        calleeProfileId: 'peer',
+        mediaKind: VoiceCallMediaKind.video,
+      );
+      await drainMicrotasks();
+      expect(controller.state.isVideoEnabled, isTrue);
+      await controller.setMuted(true);
+      await controller.setVideoEnabled(false);
+      admission.complete(
+        http.Response(
+          jsonEncode({
+            'call_session': {
+              ..._sessionJson(
+                roomId: 'room-1',
+                initiator: 'prof-test',
+                callee: 'peer',
+              ),
+              'media_kind': 'CALL_MEDIA_KIND_VIDEO',
+            },
+          }),
+          200,
+        ),
+      );
+      await pending;
+      expect(controller.state.isMuted, isTrue);
+      expect(controller.state.isVideoEnabled, isFalse);
+    },
+  );
+
+  test(
+    'cancel pending admission closes late session without restoring ringing',
+    () async {
+      final admission = Completer<http.Response>();
+      final ended = <String>[];
+      final realtime = StreamController<RealtimeFrame>.broadcast();
+      final container = _callTestContainer(
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/voice/calls') {
+            return admission.future;
+          }
+          ended.add(request.url.path);
+          return http.Response('{}', 200);
+        }),
+        realtime: realtime,
+        fakeRoom: _FakeLiveKitRoom(),
+        activeProfileId: 'prof-test',
+      );
+      addTearDown(container.dispose);
+      addTearDown(realtime.close);
+      final controller = container.read(callControllerProvider.notifier);
+      final pending = controller.startCall(
+        chatId: 'chat-1',
+        calleeProfileId: 'peer',
+      );
+      await drainMicrotasks();
+      await controller.hangUp();
+      admission.complete(
+        http.Response(
+          jsonEncode({
+            'call_session': _sessionJson(
+              roomId: 'late-room',
+              initiator: 'prof-test',
+              callee: 'peer',
+            ),
+          }),
+          200,
+        ),
+      );
+      await pending;
+      expect(controller.state.phase, CallPhase.idle);
+      expect(controller.state.session, isNull);
+      expect(ended, contains('/api/v1/voice/calls/late-room/end'));
+    },
+  );
+
+  test('outgoing camera-off reaches initial LiveKit publication', () async {
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final boundRealtime =
+        StreamController<ProfileBoundRealtimeFrame>.broadcast();
+    final room = _FakeLiveKitRoom();
+    final container = _callTestContainer(
+      client: MockClient(
+        (request) async => http.Response(
+          jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://livekit:7880'}),
+          200,
+        ),
+      ),
+      realtime: realtime,
+      boundRealtime: boundRealtime,
+      fakeRoom: room,
+      activeProfileId: 'prof-test',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+    addTearDown(boundRealtime.close);
+    const session = VoiceCallSession(
+      roomId: 'room-1',
+      livekitRoomName: 'voice-dm-room-1',
+      chatId: 'chat-1',
+      initiatorProfileId: 'prof-test',
+      calleeProfileId: 'peer',
+      mediaKind: VoiceCallMediaKind.video,
+      status: VoiceCallStatus.ringing,
+    );
+    container.read(callControllerProvider.notifier).state = const CallState(
+      phase: CallPhase.outgoing,
+      session: session,
+      isMuted: true,
+      isVideoEnabled: false,
+    );
+    await _acceptBoundCall(
+      container: container,
+      rawRealtime: realtime,
+      boundRealtime: boundRealtime,
+      session: session,
+      fakeRoom: room,
+    );
+    expect(room.initialVideo, isFalse);
+    expect(room.initialMicrophoneMuted, isTrue);
+    expect(room.lastSetMuted, isTrue);
+    expect(container.read(callControllerProvider).isVideoEnabled, isFalse);
+  });
+
+  test('camera change during connection reaches the connected room', () async {
+    final realtime = StreamController<RealtimeFrame>.broadcast();
+    final boundRealtime =
+        StreamController<ProfileBoundRealtimeFrame>.broadcast();
+    final connected = Completer<void>();
+    final room = _FakeLiveKitRoom()
+      ..connectWait = connected.future
+      ..connectStarted = Completer<void>()
+      ..ignoreVideoUntilConnected = true;
+    final container = _callTestContainer(
+      client: MockClient(
+        (request) async => http.Response(
+          jsonEncode({'jwt': 'jwt', 'livekit_url': 'ws://livekit:7880'}),
+          200,
+        ),
+      ),
+      realtime: realtime,
+      boundRealtime: boundRealtime,
+      fakeRoom: room,
+      activeProfileId: 'prof-test',
+    );
+    addTearDown(container.dispose);
+    addTearDown(realtime.close);
+    addTearDown(boundRealtime.close);
+    const session = VoiceCallSession(
+      roomId: 'room-1',
+      livekitRoomName: 'voice-dm-room-1',
+      chatId: 'chat-1',
+      initiatorProfileId: 'prof-test',
+      calleeProfileId: 'peer',
+      mediaKind: VoiceCallMediaKind.video,
+      status: VoiceCallStatus.ringing,
+    );
+    final controller = container.read(callControllerProvider.notifier);
+    controller.state = const CallState(
+      phase: CallPhase.outgoing,
+      session: session,
+      isVideoEnabled: true,
+    );
+    final binding = RealtimeHelloBinding(
+      generation: 1,
+      bindingGeneration: 1,
+      profileId: 'prof-test',
+      authorization: 'Bearer test-access',
+    );
+    container.read(realtimeHelloBindingProvider.notifier).state = binding;
+    boundRealtime.add(
+      ProfileBoundRealtimeFrame(
+        frame: RealtimeFrame(op: 'call_accepted', data: {'room_id': 'room-1'}),
+        binding: binding,
+      ),
+    );
+    await room.connectStarted!.future;
+    expect(room.initialVideo, isTrue);
+    await controller.setVideoEnabled(false);
+    expect(room.lastSetVideoEnabled, isNull);
+    connected.complete();
+    await drainMicrotasks();
+    expect(controller.state.phase, CallPhase.active);
+    expect(controller.state.isVideoEnabled, isFalse);
+    expect(room.lastSetVideoEnabled, isFalse);
   });
 
   test('call_accepted on WS does not reconnect callee', () async {
@@ -1814,6 +2028,7 @@ void main() {
     expect(container.read(callControllerProvider).phase, CallPhase.active);
 
     await notifier.setPttHeld(false);
+    expect(fakeRoom.initialMicrophoneMuted, isTrue);
     expect(container.read(callControllerProvider).isMuted, isFalse);
     expect(container.read(callControllerProvider).isPttHeld, isFalse);
     expect(fakeRoom.lastSetMuted, isTrue);
