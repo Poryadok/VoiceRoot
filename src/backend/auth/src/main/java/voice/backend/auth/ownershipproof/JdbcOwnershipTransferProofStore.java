@@ -40,9 +40,25 @@ public final class JdbcOwnershipTransferProofStore implements OwnershipTransferP
 
   @Override public Optional<StoredProof> findConsumed(UUID operationId) {
     // Suspend any caller transaction so its own uncommitted consume cannot become recovery authority.
-    return receiptReads.execute(status -> jdbc.query(
-        "SELECT * FROM ownership_transfer_proofs WHERE operation_id=:operation AND consumed_at IS NOT NULL",
-        Map.of("operation", operationId), PROOF_ROW).stream().findFirst());
+    return receiptReads.execute(status -> read(operationId, true));
+  }
+
+  private Optional<StoredProof> read(UUID operationId, boolean consumedOnly) {
+    // One READ COMMITTED statement linearizes fence and receipt visibility.
+    // A fence wins even if a damaged/partially restored database still has raw data.
+    return jdbc.query("""
+        SELECT p.*, f.operation_id IS NOT NULL AS erased
+        FROM (SELECT CAST(:operation AS uuid) AS operation_id) requested
+        LEFT JOIN auth_terminal_operation_fences f
+          ON f.family='ownership_transfer' AND f.operation_id=requested.operation_id
+        LEFT JOIN ownership_transfer_proofs p
+          ON p.operation_id=requested.operation_id AND f.operation_id IS NULL
+        WHERE f.operation_id IS NOT NULL OR
+          (p.operation_id IS NOT NULL AND (:consumedOnly=FALSE OR p.consumed_at IS NOT NULL))
+        """, Map.of("operation", operationId, "consumedOnly", consumedOnly), (rs, index) -> {
+          if (rs.getBoolean("erased")) throw new ProofErasedException();
+          return PROOF_ROW.mapRow(rs, index);
+        }).stream().findFirst();
   }
   @Override public <T> T withAccount(UUID id, Function<Session, T> action) {
     try {
@@ -73,9 +89,7 @@ public final class JdbcOwnershipTransferProofStore implements OwnershipTransferP
     }
 
     @Override public Optional<StoredProof> find(UUID operation) {
-      return jdbc.query("SELECT * FROM ownership_transfer_proofs WHERE operation_id=:operation",
-          Map.of("operation", operation), PROOF_ROW)
-          .stream().findFirst();
+      return read(operation, false);
     }
 
     @Override public void insert(StoredProof proof) {

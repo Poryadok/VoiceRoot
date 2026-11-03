@@ -684,6 +684,8 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
       T result = call.execute();
       observer.onNext(result);
       observer.onCompleted();
+    } catch (voice.backend.auth.ownershipproof.ProofErasedException erased) {
+      observer.onError(Status.FAILED_PRECONDITION.withDescription("operation_erased").asRuntimeException());
     } catch (voice.backend.auth.ownershipproof.ProofDeniedException denied) {
       observer.onError(Status.PERMISSION_DENIED.withDescription("ownership proof denied").asRuntimeException());
     } catch (io.grpc.StatusRuntimeException status) {
@@ -729,7 +731,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     return switch (ex.getMessage()) {
       case "capability_unavailable" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
       case "validation_failed" -> Status.INVALID_ARGUMENT.withDescription(ex.getMessage());
-      case "registration_conflict" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
+      case "registration_conflict", "operation_erased" -> Status.FAILED_PRECONDITION.withDescription(ex.getMessage());
       case "guest_reminder_already_shown", "totp_already_enabled" -> Status.ALREADY_EXISTS.withDescription(ex.getMessage());
       case "auth_unavailable" -> Status.UNAVAILABLE.withDescription(ex.getMessage());
       case "not_found" -> Status.NOT_FOUND.withDescription(ex.getMessage());
