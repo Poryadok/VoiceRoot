@@ -356,7 +356,17 @@ def _validate_full_go_inputs(plan, inputs):
     return selected
 
 
-def _validate_full_go_report(result, service, source, inputs, output):
+def _validate_go_admission_evidence(result, admission_mode):
+    if (admission_mode not in ('resource-claim', 'count') or not isinstance(result, dict) or
+            result.get('admission_mode') != admission_mode or
+            not isinstance(result.get('cleanup_evidence'), dict) or
+            result['cleanup_evidence'].get('capacity_reservation_released', object()) is not
+            (True if admission_mode == 'resource-claim' else None)):
+        raise ValueError('Go admission mode or reservation evidence differs')
+
+
+def _validate_full_go_report(result, service, source, inputs, output, admission_mode='resource-claim'):
+    _validate_go_admission_evidence(result, admission_mode)
     expected = {tag: item['image_id'] for tag, item in inputs['archives'].items()}
     expected_inputs = {'helper_sha256': inputs['helper_sha256'],
                        'archives': {tag: {'archive_sha256': item['archive_sha256'], 'image_id': item['image_id']}
@@ -417,7 +427,10 @@ def _validate_full_go_report(result, service, source, inputs, output):
 def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf', chat_inputs=None,
         auth_inputs=None, compose_inputs=None, staging_assets=None, runtime_images=None, full_auth_inputs=None,
         full_go_inputs=None, lint_inputs=None, overlay_inputs=None, policy_component_assets=None,
-        protobuf_component=False, flutter_driver_component=False, golangci_component=False):
+        protobuf_component=False, flutter_driver_component=False, golangci_component=False,
+        go_admission_mode='resource-claim'):
+    if go_admission_mode not in ('resource-claim', 'count') or (go_admission_mode == 'count' and full_go_inputs is None):
+        raise ValueError('count admission requires Go integration inputs')
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -478,12 +491,15 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             service_output = output / 'go-full' / service
             diagnostic = local_go_full_integration.run_supervised(plan, service, root, service_output,
                 values['helper'], values['helper_sha256'], values['archives'], go_binary, base=base, head_ref=head_ref,
-                resource_limits=values['resource_limits'])
-            _validate_full_go_report(diagnostic, service, plan['source'], values, service_output)
+                resource_limits=values['resource_limits'],
+                **({'admission_mode':'count'} if go_admission_mode == 'count' else {}))
+            _validate_full_go_report(diagnostic, service, plan['source'], values, service_output, go_admission_mode)
             if local_source_snapshot.capture(root, head) != plan['source']:
                 raise ValueError('source changed during full Go diagnostic')
             report.setdefault('go_full_reports', {})[service] = {
                 'report': 'go-full/' + service + '/diagnostic.json', 'skipped': diagnostic['tests']['skipped']}
+            if go_admission_mode == 'count':
+                report['go_full_reports'][service]['admission_mode'] = 'count'
         if full_auth_inputs is not None:
             if 'backend-auth' not in plan['checks']:
                 raise ValueError('full Auth diagnostic requires a planner-selected Auth check')
@@ -756,6 +772,8 @@ def main():
     parser.add_argument('--golangci-component', action='store_true', help='execute selected host lint component with module cleanliness verification')
     parser.add_argument('--ci-runtime-images', help='JSON mapping of three pinned runtime-shard image archives')
     parser.add_argument('--go-integration-inputs', help='JSON file mapping every selected supported Go integration service to helper and exact image archives')
+    parser.add_argument('--go-admission-mode', choices=('resource-claim', 'count'), default='resource-claim',
+                        help='count admits by two shared slots only; it does not reserve resource capacity')
     for name in ('go', 'go-sha256', 'lint', 'lint-sha256'):
         parser.add_argument('--golangci-' + name, help='opt-in source-bound Go lint tool input')
     parser.add_argument('--overlay-image-id', help='pinned Linux Python image ID for overlay diagnostic')
@@ -778,7 +796,9 @@ def main():
                    'ci_script_tests_proofs', 'proofs_bash', 'proofs_make', 'proofs_cpu_rate',
                    'proofs_job_memory_bytes', 'proofs_active_process_limit',
                    'overlay_image_id', 'overlay_kubectl',
-                   'protobuf_component', 'flutter_driver_component', 'golangci_component'}
+                   'protobuf_component', 'flutter_driver_component', 'golangci_component', 'go_admission_mode'}
+        if args.go_admission_mode != 'resource-claim':
+            parser.error('--go-admission-mode count cannot be used with --handoff')
         if args.protobuf_component or args.flutter_driver_component or args.golangci_component or any(value is not None for key, value in vars(args).items() if key not in allowed):
             parser.error('diagnostic inputs cannot be combined with --handoff')
         proofs_resource_values = (args.proofs_cpu_rate, args.proofs_job_memory_bytes,
@@ -846,7 +866,8 @@ def main():
                  full_auth if any(value is not None for value in full_auth.values()) else None, full_go_inputs,
                  lint_inputs if any(value is not None for value in lint_inputs.values()) else None,
                  overlay_inputs if any(value is not None for value in overlay_inputs.values()) else None,
-                 policy_component_assets, args.protobuf_component, args.flutter_driver_component, args.golangci_component)
+                 policy_component_assets, args.protobuf_component, args.flutter_driver_component, args.golangci_component,
+                 args.go_admission_mode)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

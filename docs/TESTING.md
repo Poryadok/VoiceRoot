@@ -865,6 +865,14 @@ The budget is persisted for the scheduler directory and must remain identical
 for later runs. This cooperative accounting is not a host-wide resource
 guarantee.
 
+`--go-admission-mode count` explicitly selects the same two-slot count-only
+admission used by the Auth and Compose diagnostics. The default remains
+`resource-claim`. Count mode reserves no aggregate CPU, memory, or PID budget;
+it cannot overlap a resource-claim reservation, and the operator must assess
+host headroom. The Go worker's existing Job and container limits still apply,
+but they do not bound nested workloads. The resulting report records
+`admission_mode: count` and does not claim a capacity reservation was released.
+
 Chat requires `postgres:16-bookworm`,
 `redis:7.4-alpine`, and `migrate/migrate:v4.18.1`; Bot requires
 `postgres:16-bookworm` and `nats:2.10-alpine`; Search requires

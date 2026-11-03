@@ -119,10 +119,25 @@ def _resource_claim(limits, measured):
                           limits['host_job']['active_process_limit']}
 
 
+def _admission_options(mode, claim, capacity_budget):
+    if mode == 'resource-claim':
+        return {'resource_claim': claim, 'capacity_budget': capacity_budget}
+    if mode == 'count':
+        return {}
+    raise ValueError('invalid Go admission mode')
+
+
+def _worker_admission_matches(report, saved, source, mode):
+    return (isinstance(report, dict) and report == saved and report.get('status') == 'incomplete' and
+            report.get('source') == source and report.get('admission_mode') == mode)
+
+
 def run_selected(plan, service, root, output, helper, helper_digest, archives, go_binary='go', *, base, head_ref,
-                 resource_limits=None, owner_id=None, ownership_journal=None, slot=None):
+                 resource_limits=None, owner_id=None, ownership_journal=None, slot=None,
+                 admission_mode='resource-claim'):
     """Require the caller's affected plan to select this service before work."""
     profile(service)
+    _admission_options(admission_mode, None, None)
     auth_broker._require_worker_job()
     if not isinstance(plan, dict):
         raise ValueError('invalid affected plan')
@@ -143,6 +158,7 @@ def run_selected(plan, service, root, output, helper, helper_digest, archives, g
                  ownership_journal=ownership_journal, slot=slot)
     if not isinstance(result, dict) or result.get('status') != 'incomplete' or result.get('source') != source:
         raise ValueError('Go integration diagnostic does not match planned source')
+    result['admission_mode'] = admission_mode
     return result
 
 
@@ -363,13 +379,14 @@ def _worker_command():
 
 
 def run_supervised(plan, service, root, output, helper, helper_digest, archives, go_binary='go', *, base, head_ref,
-                   resource_limits):
+                   resource_limits, admission_mode='resource-claim'):
     """Fence the selected executor before source acquisition or owned resources."""
     profile(service)
     limits = _validate_resource_limits(resource_limits)
     measured = heavy_slots.measured_host_capacity()
     capacity_budget = heavy_slots._validate_capacity_budget(limits['capacity_budget'])
     claim = _resource_claim(limits, measured)
+    admission_options = _admission_options(admission_mode, claim, capacity_budget)
     if any(claim[key] > capacity_budget[key] for key in claim):
         raise ValueError('single Go run exceeds the operator capacity budget')
     root = Path(root).resolve(strict=True)
@@ -391,8 +408,8 @@ def run_supervised(plan, service, root, output, helper, helper_digest, archives,
     engine = DockerCLI()
     checkout = output / 'run'
     checkout.mkdir(exist_ok=False)
-    scheduled = ScheduledRun.start_host(checkout, engine, 300, resource_claim=claim,
-        capacity_budget=capacity_budget, host_job=host_job, resource_limits=limits, run_id=run_id)
+    scheduled = ScheduledRun.start_host(checkout, engine, 300, **admission_options,
+        host_job=host_job, resource_limits=limits, run_id=run_id)
     try:
         chat.publish_owner(scheduled, output)
     except BaseException:
@@ -403,7 +420,7 @@ def run_supervised(plan, service, root, output, helper, helper_digest, archives,
                'helper': str(helper), 'helper_digest': helper_digest, 'archives': archives,
                'go_binary': str(go_binary), 'base': base, 'head_ref': head_ref,
                'resource_limits': limits, 'owner_id': run_id,
-               'ownership_journal': owner_journal, 'slot': scheduled.slot}
+               'ownership_journal': owner_journal, 'slot': scheduled.slot, 'admission_mode': admission_mode}
     raw = json.dumps(request, allow_nan=False, separators=(',', ':')).encode('utf-8')
     if len(raw) > 1024 * 1024:
         scheduled.close()
@@ -440,7 +457,7 @@ def run_supervised(plan, service, root, output, helper, helper_digest, archives,
     try:
         report = json.loads(completed.stdout, object_pairs_hook=chat._unique)
         saved = json.loads((Path(output) / 'diagnostic.json').read_text(encoding='utf-8'), object_pairs_hook=chat._unique)
-        if report != saved or report.get('status') != 'incomplete' or report.get('source') != plan['source']:
+        if not _worker_admission_matches(report, saved, plan['source'], admission_mode):
             raise ValueError()
     except (OSError, ValueError, TypeError, KeyError, UnicodeError):
         raise ValueError('full Go worker returned invalid diagnostic') from None
@@ -462,7 +479,7 @@ def run_supervised(plan, service, root, output, helper, helper_digest, archives,
     report['cleanup_evidence'] = {'completed': True, 'named_job_absent': True,
         'owned_resources_remaining': close_evidence['owned_resources_remaining'],
         'slot_released': slot_release['marker_idle'],
-        'capacity_reservation_released': slot_release['reservation_released'],
+        'capacity_reservation_released': (slot_release['reservation_released'] if admission_mode == 'resource-claim' else None),
         'daemon_id': close_evidence['daemon_id'], 'slot': slot_release['slot'],
         'owner_id': slot_release['owner_id']}
     _write_diagnostic_atomic(output, report)
@@ -479,7 +496,7 @@ def main():
     request = json.loads(raw, object_pairs_hook=chat._unique)
     keys = {'plan', 'service', 'root', 'output', 'helper', 'helper_digest', 'archives', 'go_binary', 'base', 'head_ref',
             'resource_limits', 'owner_id', 'ownership_journal', 'slot'}
-    if not isinstance(request, dict) or set(request) != keys:
+    if not isinstance(request, dict) or set(request) not in (keys, keys | {'admission_mode'}):
         raise ValueError('invalid Go worker request')
     _validate_resource_limits(request['resource_limits'])
     if (not isinstance(request['owner_id'], str) or not re.fullmatch(r'voiceci-[0-9a-f]{32}', request['owner_id']) or

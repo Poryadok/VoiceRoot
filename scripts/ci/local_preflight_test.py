@@ -400,6 +400,7 @@ class LocalPreflightTests(unittest.TestCase):
         plan = {'base': 'c' * 40, 'source': self.source, 'checks': {'backend-go-integration-pr': ['bot']},
                 'components': {'go_integration': ['bot']}}
         result = {'schema': 'voice-local-bot-full-integration-v1', 'status': 'incomplete', 'source': self.source,
+                  'admission_mode': 'resource-claim',
                   'exit_code': 0, 'tests': {'passed': 3, 'skipped': [['voice/backend/bot', 'TestOptional']],
                                              'packages': ['voice/backend/bot']},
                   'inventory': {'packages_with_tests': ['voice/backend/bot'], 'packages_without_tests': []},
