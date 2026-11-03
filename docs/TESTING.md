@@ -178,6 +178,18 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
   Required CI executes this same test in the `backend-go` Space matrix entry
   with an owned digest-pinned PostgreSQL 16 container and unconditional cleanup.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
+- Story/File media admission: from `src/backend/story`, run
+  `go test -run '^TestStoryMediaClientRealProtectedFile$' -count=1 -v`.
+  This builds the File-module `testfixture/story_media_listener` subprocess and
+  exercises the actual configured Story signer/client against File's protected
+  mTLS/JWKS/replay runtime, strict interceptor and PostgreSQL-backed handler.
+  Disposable PostgreSQL applies File migrations 1–3; HTTPS JWKS requires a client
+  certificate and miniredis supplies isolated replay storage. Trusted admission,
+  ownership/lifecycle denial, missing/untrusted certificates, unsigned requests,
+  changed body/request ID and a different verified issuer are checked without
+  injecting a verified principal. The test skips under `-short`; use the Docker
+  socket when running inside Linux Docker. This does not prove Story publication,
+  reference activation, physical deletion or shared-environment acceptance.
 - Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
   затем `go test ./internal/roomlifecycle -count=1`, `go test -race
   ./internal/roomlifecycle -count=1`, `go test ./... -count=1`, `go vet ./...`
