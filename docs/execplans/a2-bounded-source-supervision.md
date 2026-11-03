@@ -31,8 +31,8 @@ WT64 and WT73 are preserved read-only investigation artifacts.
 - [x] Add direct mTLS signed supervision and all production admission gates.
 - [x] Add a separately runnable supervisor with actual source/control health.
 - [x] Verify separate processes, loss, stale responses and recovery/HOLD.
-- [ ] Reconcile docs; run affected checks, graph refresh and independent review.
-- [ ] Commit/push and create draft PR; root owns rollout and final acceptance.
+- [x] Reconcile docs; run affected checks, graph refresh and independent review.
+- [x] Commit/push and create draft PR; root owns rollout and final acceptance.
 
 ## Detailed Steps
 
@@ -103,6 +103,13 @@ WT64 and WT73 are preserved read-only investigation artifacts.
 - Synced `origin/master` by fast-forward to `f7fe4f0b1521`; upstream changes
   were outside User. Root's independent review has no confirmed blocking finding,
   with final clearance tied to the final source fingerprint.
+- Implementation commit `cb1ff09a8b12ae2104d741e269549f198b9fd68d`, tree
+  `0be375504af1ae1a21575d834d74c235972ba0d3`, pushed with hooks and published
+  as [draft PR #1119](https://github.com/Poryadok/VoiceRoot/pull/1119). Root
+  independently reviewed that exact source and returned CLEAR. Tracker evidence
+  is `A2-USER-CAPTURE-INDEPENDENT-FENCE#comment-c11`. Initial draft backend CI
+  jobs were skipped, so no genuine hosted CI PASS is claimed. No merge or live
+  rollout has occurred; root retains those gates.
 - Commands, source hashes, full logs and owned container identities are retained
   under ignored `tmp/source-supervision/` in this checkout. Deployment custody,
   real keys and DEV/STG qualification remain the named consumer's work.
