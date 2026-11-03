@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"voice/backend/pkg/integrationtest"
 )
@@ -28,7 +29,15 @@ func recoveryTLSDatabase(t *testing.T, ctx context.Context, label string, extraC
 		configuration += line + "\n"
 	}
 	require.NoError(t, os.WriteFile(configFile, []byte(configuration), 0600))
-	pg, err := postgres.Run(ctx, "postgres:16-alpine", postgres.BasicWaitStrategies(), postgres.WithDatabase("custody_test"), postgres.WithUsername("fixture"), postgres.WithPassword("fixture_only"), postgres.WithConfigFile(configFile), postgres.WithSSLCert(pki.caFile, pki.serverCert, pki.serverKey))
+	// Preserve TLS key ownership while letting PostgreSQL receive Docker's stop signal.
+	// The module's non-exec TLS wrapper otherwise waits for forced termination.
+	tlsProcess := testcontainers.CustomizeRequestOption(func(req *testcontainers.GenericContainerRequest) error {
+		req.Entrypoint = []string{"sh", "-c", `set -eu
+chown postgres:postgres /tmp/testcontainers-go/postgres/ca_cert.pem /tmp/testcontainers-go/postgres/server.cert /tmp/testcontainers-go/postgres/server.key
+exec /usr/local/bin/docker-entrypoint.sh "$@"`, "source-custody-postgres"}
+		return nil
+	})
+	pg, err := postgres.Run(ctx, "postgres:16-alpine", postgres.BasicWaitStrategies(), postgres.WithDatabase("custody_test"), postgres.WithUsername("fixture"), postgres.WithPassword("fixture_only"), postgres.WithConfigFile(configFile), postgres.WithSSLCert(pki.caFile, pki.serverCert, pki.serverKey), tlsProcess)
 	if pg != nil {
 		t.Cleanup(func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
@@ -37,6 +46,9 @@ func recoveryTLSDatabase(t *testing.T, ctx context.Context, label string, extraC
 		})
 	}
 	require.NoError(t, err)
+	status, _, err := pg.Exec(ctx, []string{"sh", "-c", `test "$(cat /proc/1/comm)" = postgres`})
+	require.NoError(t, err)
+	require.Zero(t, status, "the PostgreSQL process must own PID 1 and receive container stop signals")
 	raw, err := pg.ConnectionString(ctx)
 	require.NoError(t, err)
 	u, err := url.Parse(raw)

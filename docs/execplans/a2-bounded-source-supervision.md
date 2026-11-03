@@ -140,3 +140,40 @@ WT64 and WT73 are preserved read-only investigation artifacts.
   requires separately held keys/credentials, complete writer inventory, exact
   source continuity and actual deployed Ban/recovery checks.
 - Root owns independent review, CI/source records and DEV then STG qualification.
+
+## Final Native Failure Triage
+
+- The complete Windows-native custody attempt failed at its 20-minute package
+  deadline: 164 tests passed, zero skipped, ten failed; the seven mandatory
+  production runtime scenarios were not reached in that attempt. This is partial
+  failing evidence, not a full package PASS.
+- Six failures occurred during Bootstrap/ActivateGuards setup, and one during
+  the positive non-superuser physical capture. These paths retain the existing
+  two-second catalog/shape/identity-lock budget. Three synthetic stream cases
+  failed before their intended permit/pre-read observations; their existing
+  real-clock 500ms client and 100ms heartbeat deadlines remain unchanged.
+- The terminal Creation test was waiting for a child go build at line 67 when
+  the global package deadline expired. The stack does not prove a Pool.Close
+  cleanup hang, and no Creation cleanup fix is claimed.
+- Source inspection separately found five fatal assertion paths without an
+  immediate Controller cleanup fallback. Checked-source, crash-child/restart
+  and writer-recovery tests now register that fallback; explicit shutdown and
+  recovery assertions remain intact. This defensive fixture correction does
+  not explain or erase the complete-run timeout or the ten failures.
+- The existing final-fixture lint attempt exited 4 while go/packages loading
+  exceeded its context deadline; no issue analysis completed and no zero-issues
+  result is claimed for that snapshot. The approved focused ten-case rerun will
+  use Windows-native Go with existing caches, serial execution and real clocks;
+  no owned Linux harness has been established for this worker.
+
+- The focused Windows-native ten-case attempt completed with FAIL: seven passed,
+  three failed, zero skipped (270.743 seconds of test execution). PreReadAndCancels
+  reached its first successful capture, then failed before the later commit gate
+  with source custody unavailable; CommitWaits reported COMMIT not observed; the
+  positive non-superuser physical capture returned identity association evidence
+  incomplete. These remain unresolved verification failures, not cleanup fixes.
+- Focused receipt source SHA256: `dace5e2e09aab3eaeb7adaa8204c8dbaf0fedd24958c7a4818856de39ab593ca`;
+  `final-focused-native10.receipt.json` records the exact command and exit 1.
+  Its log retains every disposable container identity and teardown. No repeat or
+  timeout increase was performed. Independent review cleared the test-only cleanup
+  bytes; exact-commit hosted CI remains required before merge.
