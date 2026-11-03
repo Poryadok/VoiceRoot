@@ -241,7 +241,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backendUnavailable =>
-      'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).';
+      'The service is temporarily unavailable. Please try again.';
 
   @override
   String get socialTabSearch => 'Search';
@@ -440,7 +440,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get socialFriendsBackendUnavailable =>
-      'Friends are unavailable. Start the full API stack (docker compose --profile app).';
+      'The service is temporarily unavailable. Please try again.';
 
   @override
   String get socialRequestsLoadError => 'Could not load requests';
@@ -682,7 +682,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatListBackendUnavailable =>
-      'Chats are unavailable. Start the full API stack (docker compose --profile app).';
+      'The service is temporarily unavailable. Please try again.';
 
   @override
   String chatListDmFallback(String id) {
@@ -897,6 +897,75 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get botInstallActionError => 'Unable to install bot.';
+
+  @override
+  String get botWebhookTitle => 'Interaction webhook';
+
+  @override
+  String get botWebhookLoadError => 'Could not load the endpoint.';
+
+  @override
+  String get botWebhookSaveError => 'Could not save the endpoint. Try again.';
+
+  @override
+  String get botWebhookSaved => 'Endpoint saved';
+
+  @override
+  String get botWebhookPollingConfirmTitle => 'Switch to polling?';
+
+  @override
+  String get botWebhookPollingConfirmMessage =>
+      'Outgoing webhook delivery will stop. Your bot can receive interactions by polling.';
+
+  @override
+  String get botWebhookKeep => 'Keep webhook';
+
+  @override
+  String get botWebhookOwnerOnly =>
+      'Only the bot owner can configure this endpoint.';
+
+  @override
+  String get botWebhookPollingEnabled => 'Polling enabled';
+
+  @override
+  String get botWebhookEnabled => 'Webhook enabled';
+
+  @override
+  String get botWebhookDescription =>
+      'Voice sends interactions to your bot at this endpoint. Use polling for local development.';
+
+  @override
+  String get botWebhookEndpoint => 'Endpoint';
+
+  @override
+  String get botWebhookEndpointHint => 'https://your-bot.example/interactions';
+
+  @override
+  String get botWebhookInvalidEndpoint => 'Enter a valid HTTPS endpoint.';
+
+  @override
+  String get botWebhookSavedEndpoint => 'SAVED ENDPOINT';
+
+  @override
+  String get botWebhookCopied => 'Endpoint copied';
+
+  @override
+  String get botWebhookCopy => 'Copy endpoint';
+
+  @override
+  String get botWebhookSwitchToPolling => 'Switch to polling';
+
+  @override
+  String get botWebhookSaving => 'Saving…';
+
+  @override
+  String get botWebhookSave => 'Save endpoint';
+
+  @override
+  String get botWebhookClose => 'Close';
+
+  @override
+  String get botWebhookConfirm => 'Confirm';
 
   @override
   String get commonActionFailed => 'Could not complete this action.';
@@ -2476,6 +2545,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionSettingsTitle => 'Subscription';
 
   @override
+  String get subscriptionPlusAnnual => 'Voice Plus · annual';
+
+  @override
+  String get subscriptionPlusMonthly => 'Voice Plus · monthly';
+
+  @override
+  String get subscriptionPlusBadge => 'PLUS';
+
+  @override
   String get subscriptionCurrentPlan => 'Current plan';
 
   @override
@@ -2701,6 +2779,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get verificationOrganizationUnavailable =>
       'Organization verification unavailable';
+
+  @override
+  String get verificationProviderLinkUnavailable =>
+      'Provider linking is unavailable until OAuth return and provider configuration are enabled.';
+
+  @override
+  String get verificationDomainEligibilityUnavailable =>
+      'Domain verification is unavailable until organization eligibility and pending DNS details can be read back.';
 
   @override
   String get verifiedBadgePersonal => 'Verified';
@@ -3208,6 +3294,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get screenShareWaitingForVideo => 'Waiting for screen video…';
+
+  @override
+  String get screenShareWatchStream => 'Watch stream';
+
+  @override
+  String get screenShareCloseViewer => 'Close viewer';
+
+  @override
+  String get screenShareStreamPaused => 'Stream paused';
+
+  @override
+  String get screenSharePausedLabel => 'Paused';
+
+  @override
+  String get screenSharePanelTitle => 'Screen shares';
+
+  @override
+  String get screenShareChooseStream => 'Choose a stream';
+
+  @override
+  String get screenShareWatching => 'Watching';
+
+  @override
+  String screenShareStreamCaption(String name) {
+    return '$name · Screen share';
+  }
+
+  @override
+  String screenSharePausedParticipant(String name) {
+    return '$name, paused';
+  }
 
   @override
   String get platformWebSystemAudioUnavailable =>
@@ -3719,6 +3836,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storyHighlightsTitle => 'Highlights';
 
   @override
+  String get storySuggestionTitle => 'Share your match';
+
+  @override
+  String get storySuggestionCompleted => 'Match completed';
+
+  @override
+  String get storySuggestionEditPublish => 'Edit & publish';
+
+  @override
+  String get storySuggestionDismiss => 'Dismiss';
+
+  @override
+  String storySuggestionDraft(String game) {
+    return 'Match completed · $game';
+  }
+
+  @override
   String get storyLfpTitle => 'Looking for party';
 
   @override
@@ -3992,6 +4126,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String contactProfilePlayingGame(String title) {
     return 'Playing $title';
   }
+
+  @override
+  String get contactProfileAccountDeleted => 'Account deleted';
 
   @override
   String get matchSquadOpenChat => 'Open chat';
