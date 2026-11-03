@@ -104,6 +104,10 @@
   },
   "themes": {
     "light": {
+      "color.call.background": "#1E1E1E",
+      "color.call.control": "#3A3F47",
+      "color.call.foreground": "#FFFFFF",
+      "color.call.secondary": "#C5CDD5",
       "color.background.canvas": "#FFFFFF",
       "color.background.surface": "#F5F5F5",
       "color.background.elevated": "#EEEEEE",
@@ -132,6 +136,10 @@
       "color.focus.ring": "#7EC8E3"
     },
     "dark": {
+      "color.call.background": "#1E1E1E",
+      "color.call.control": "#3A3F47",
+      "color.call.foreground": "#FFFFFF",
+      "color.call.secondary": "#C5CDD5",
       "color.background.canvas": "#1E1E1E",
       "color.background.surface": "#2B2B2B",
       "color.background.elevated": "#333333",
@@ -160,6 +168,10 @@
       "color.focus.ring": "#7EC8E3"
     },
     "highContrast": {
+      "color.call.background": "#1E1E1E",
+      "color.call.control": "#3A3F47",
+      "color.call.foreground": "#FFFFFF",
+      "color.call.secondary": "#C5CDD5",
       "color.background.canvas": "#000000",
       "color.background.surface": "#0D0D0D",
       "color.background.elevated": "#1A1A1A",
