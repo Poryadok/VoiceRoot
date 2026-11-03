@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,15 +11,19 @@ import '../../state/chat_providers.dart';
 import '../../state/stories_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../api_error_messages.dart';
+import 'story_game_tag_chip.dart';
 
 /// Looking-for-party story card with join/write actions.
-class LfpStoryCard extends StatelessWidget {
+class LfpStoryCard extends StatefulWidget {
   const LfpStoryCard({
     super.key,
     required this.story,
     this.onJoin,
     this.onInvite,
     this.onWrite,
+    this.isAuthor = false,
+    this.embedded = false,
+    this.now = DateTime.now,
   });
 
   static const Key cardKey = Key('lfp_story_card');
@@ -30,85 +35,197 @@ class LfpStoryCard extends StatelessWidget {
   final VoidCallback? onJoin;
   final VoidCallback? onInvite;
   final VoidCallback? onWrite;
+  final bool isAuthor;
+  final bool embedded;
+  final DateTime Function() now;
+
+  @override
+  State<LfpStoryCard> createState() => _LfpStoryCardState();
+}
+
+class _LfpStoryCardState extends State<LfpStoryCard> {
+  Timer? _expiryTimer;
+  StoryData get story => widget.story;
+  bool get embedded => widget.embedded;
+  bool get isAuthor => widget.isAuthor;
+  bool get _expired =>
+      story.expiresAt != null &&
+      !story.expiresAt!.isAfter(widget.now().toUtc());
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleExpiry();
+  }
+
+  @override
+  void didUpdateWidget(LfpStoryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.story.expiresAt != story.expiresAt ||
+        oldWidget.now != widget.now) {
+      _scheduleExpiry();
+    }
+  }
+
+  void _scheduleExpiry() {
+    _expiryTimer?.cancel();
+    final expiresAt = story.expiresAt;
+    if (expiresAt == null || _expired) return;
+    _expiryTimer = Timer(expiresAt.difference(widget.now().toUtc()), () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _respond(bool invite) {
+    if (_expired || isAuthor) {
+      setState(() {});
+      return;
+    }
+    final action = invite ? widget.onInvite : widget.onJoin;
+    if (action != null) {
+      action();
+      return;
+    }
+    if (invite) {
+      LfpStoryActions.invite(context, story);
+    } else {
+      LfpStoryActions.join(context, story);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final voice = VoiceColors.of(context);
+    final baseVoice = VoiceColors.of(context);
+    final voice = embedded
+        ? baseVoice.copyWith(
+            textPrimary: Colors.white,
+            textSecondary: Colors.white,
+          )
+        : baseVoice;
     final criteria = _parseCriteria(story.lfpCriteriaJson);
+    final expired = _expired;
 
     return Card(
       key: LfpStoryCard.cardKey,
-      color: voice.elevated,
+      color: embedded ? Colors.transparent : voice.elevated,
+      elevation: embedded ? 0 : null,
+      margin: embedded ? EdgeInsets.zero : null,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: embedded ? EdgeInsets.zero : const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Icon(Icons.groups_outlined, color: voice.profileAccent),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.storyLfpTitle,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(color: voice.textPrimary),
+            if (!embedded)
+              Row(
+                children: [
+                  Icon(Icons.groups_outlined, color: voice.profileAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.storyLfpTitle,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: voice.textPrimary,
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             if (story.gameTag != null && story.gameTag!.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _InfoRow(label: l10n.storyLfpGame, value: story.gameTag!),
+              if (embedded)
+                StoryGameTagChip(gameTag: story.gameTag!)
+              else
+                _InfoRow(
+                  label: l10n.storyLfpGame,
+                  value: story.gameTag!,
+                  color: voice.textPrimary,
+                ),
             ],
-            if (criteria.isNotEmpty) ...[
+            if (!embedded && criteria.isNotEmpty) ...[
               const SizedBox(height: 8),
               ...criteria.entries.map(
-                (e) => _InfoRow(label: e.key, value: '${e.value}'),
+                (e) => _InfoRow(
+                  label: e.key,
+                  value: '${e.value}',
+                  color: voice.textPrimary,
+                ),
               ),
             ],
+            if (embedded)
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final key in ['mode', 'region'])
+                    if (criteria[key] case final String value)
+                      Text(value, style: TextStyle(color: voice.textSecondary)),
+                ],
+              ),
             if (story.textContent != null && story.textContent!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
                 story.textContent!,
-                style: TextStyle(color: voice.textSecondary),
+                style: embedded
+                    ? Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: voice.textPrimary,
+                        fontSize: 20,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                      )
+                    : TextStyle(color: voice.textSecondary),
               ),
             ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
+            SizedBox(height: embedded ? 0 : 16),
+            if (expired) ...[
+              Text(
+                l10n.storyLfpInactive,
+                style: TextStyle(color: voice.textSecondary),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (!isAuthor)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
                     key: LfpStoryCard.joinKey,
-                    onPressed:
-                        onJoin ?? () => LfpStoryActions.join(context, story),
+                    onPressed: expired ? null : () => _respond(false),
                     child: Text(l10n.storyLfpJoin),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.tonal(
+                  FilledButton.tonal(
                     key: LfpStoryCard.inviteKey,
-                    onPressed:
-                        onInvite ??
-                        () => LfpStoryActions.invite(context, story),
+                    style: embedded
+                        ? FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black87,
+                          )
+                        : null,
+                    onPressed: expired ? null : () => _respond(true),
                     child: Text(l10n.storyLfpInvite),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
+                  OutlinedButton(
                     key: LfpStoryCard.writeKey,
+                    style: embedded
+                        ? OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white),
+                          )
+                        : null,
                     onPressed:
-                        onWrite ?? () => LfpStoryActions.write(context, story),
+                        widget.onWrite ??
+                        () => LfpStoryActions.write(context, story),
                     child: Text(l10n.storyLfpWrite),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
@@ -125,7 +242,7 @@ class LfpStoryCard extends StatelessWidget {
   }
 }
 
-/// Navigation stubs for LFP story actions (matchmaking + DM).
+/// Existing Story discovery requests and private DM navigation.
 abstract final class LfpStoryActions {
   static Future<void> join(BuildContext context, StoryData story) async {
     ProviderContainer? container;
@@ -157,9 +274,9 @@ abstract final class LfpStoryActions {
       );
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Join request sent')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.storyLfpJoinSent)),
+    );
   }
 
   static Future<void> invite(BuildContext context, StoryData story) async {
@@ -192,9 +309,9 @@ abstract final class LfpStoryActions {
       );
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Invite sent')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.storyLfpInviteSent)),
+    );
   }
 
   static Future<void> write(BuildContext context, StoryData story) async {
@@ -228,14 +345,18 @@ class _RefReader {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String label;
   final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final voice = VoiceColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -243,13 +364,10 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             '$label: ',
-            style: TextStyle(
-              color: voice.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: color, fontWeight: FontWeight.w600),
           ),
           Expanded(
-            child: Text(value, style: TextStyle(color: voice.textPrimary)),
+            child: Text(value, style: TextStyle(color: color)),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:voice_frontend/backend/api_result.dart';
 import 'package:voice_frontend/backend/gateway_api_error.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
@@ -36,6 +38,9 @@ class StoryData {
     this.visibility = 'friends',
     this.viewCount = 0,
     this.isLookingForParty = false,
+    this.createdAt,
+    this.expiresAt,
+    this.mentionProfileIds = const [],
   });
 
   final String id;
@@ -49,11 +54,31 @@ class StoryData {
   final String visibility;
   final int viewCount;
   final bool isLookingForParty;
+  final DateTime? createdAt;
+  final DateTime? expiresAt;
+  final List<String> mentionProfileIds;
+
+  static DateTime? _timestamp(Object? value) =>
+      value is String ? DateTime.tryParse(value)?.toUtc() : null;
+
+  static List<String> _mentions(Object? value) {
+    if (value is! String || value.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is List && decoded.every((id) => id is String)) {
+        return List<String>.unmodifiable(decoded.cast<String>());
+      }
+    } on FormatException {
+      // An invalid producer payload must never imply that the viewer is mentioned.
+    }
+    return const [];
+  }
 
   factory StoryData.fromJson(Map<String, dynamic> json) {
     return StoryData(
       id: json['id'] as String? ?? '',
-      authorProfileId: json['authorProfileId'] as String? ??
+      authorProfileId:
+          json['authorProfileId'] as String? ??
           json['author_profile_id'] as String? ??
           '',
       type: json['type'] as String? ?? '',
@@ -61,16 +86,24 @@ class StoryData {
           json['textContent'] as String? ?? json['text_content'] as String?,
       mediaFileId:
           json['mediaFileId'] as String? ?? json['media_file_id'] as String?,
-      textStyleJson: json['textStyleJson'] as String? ??
+      textStyleJson:
+          json['textStyleJson'] as String? ??
           json['text_style_json'] as String?,
       gameTag: json['gameTag'] as String? ?? json['game_tag'] as String?,
-      lfpCriteriaJson: json['lfpCriteriaJson'] as String? ??
+      lfpCriteriaJson:
+          json['lfpCriteriaJson'] as String? ??
           json['lfp_criteria_json'] as String?,
       visibility: json['visibility'] as String? ?? 'friends',
       viewCount: json['viewCount'] as int? ?? json['view_count'] as int? ?? 0,
-      isLookingForParty: json['isLookingForParty'] as bool? ??
+      isLookingForParty:
+          json['isLookingForParty'] as bool? ??
           json['is_looking_for_party'] as bool? ??
           false,
+      createdAt: _timestamp(json['createdAt'] ?? json['created_at']),
+      expiresAt: _timestamp(json['expiresAt'] ?? json['expires_at']),
+      mentionProfileIds: _mentions(
+        json['mentionProfileIdsJson'] ?? json['mention_profile_ids_json'],
+      ),
     );
   }
 }
