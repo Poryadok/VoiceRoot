@@ -618,7 +618,12 @@ void main() {
     await tester.enterText(find.byKey(InChatSearch.searchFieldKey), 'needle');
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
-    expect(find.textContaining('loaded local secret needle'), findsOneWidget);
+    // Mobile searches navigate the timeline from the header, without a results list.
+    expect(find.text('1 / 1'), findsOneWidget);
+    expect(find.byKey(InChatSearch.prevHitKey), findsOneWidget);
+    expect(find.byKey(InChatSearch.nextHitKey), findsOneWidget);
+    expect(find.byKey(InChatSearch.resultsOverlayKey), findsNothing);
+    expect(find.byKey(ChatRoomPanel.messagesKey), findsOneWidget);
     await _captureSearchState(tester, 'chat-info-search-v.png');
   });
 
