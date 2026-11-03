@@ -72,7 +72,9 @@ jobs:
 
   owned-enrollment:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The previous PG/CMS/C1 attempt hit the aggregate one-hour cap.
+    # Keep a bounded budget for qualified setup and all three scenarios.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -157,7 +159,7 @@ jobs:
             env \
             PYTHONDONTWRITEBYTECODE=1 VOICE_COHORT_DOCKER=1 VOICE_QUALIFIED_BINARIES="$work/qualified" \
             VOICE_COHORT_RETAINED_ROOT="$work/runtime" TMPDIR="$work/runtime" \
-            PYTHONPATH="$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest \
+            PYTHONPATH="$work/source/scripts/staging/nats-rollout-preservation:$work/source/scripts/staging/nats-known-baseline:$work/source/scripts/dev" "$(command -v python)" -m unittest -v \
             staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_prepare_to_qualified_continuation_with_external_boundaries \
             staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_qualified_continuation_reaches_c1_final_prepare \
             staging_cohort_preservation_restore_test.RestoreTransportTests.test_public_c1_continuation_issues_typed_final_admission
