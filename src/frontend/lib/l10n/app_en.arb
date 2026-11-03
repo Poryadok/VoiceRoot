@@ -551,6 +551,7 @@
   },
   "voiceLeaveCurrentDialogConfirm": "Leave and join",
   "commonCancel": "Cancel",
+  "commonDiscard": "Discard",
   "shareLinkAction": "Copy link",
   "shareLinkCopied": "Link copied to clipboard",
   "commonEdit": "Edit",
@@ -624,6 +625,17 @@
   "chatMessageAddReaction": "Add reaction",
   "chatMessagePin": "Pin message",
   "chatPinnedMessagesTitle": "Pinned messages",
+  "chatPinnedBarPosition": "Pinned message {position} of {count}",
+  "@chatPinnedBarPosition": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatPinnedMessagesOpen": "Open all pinned messages",
   "chatPinnedMessagesHide": "Hide pinned messages",
   "chatPinnedMessagesRestore": "Show pinned messages",
@@ -1033,6 +1045,12 @@
   "settingsTooltip": "Settings",
   "settingsAppearance": "Appearance",
   "settingsChatThemes": "Chat themes",
+  "chatThemesIncomingSample": "A message",
+  "chatThemesOutgoingSample": "Your message",
+  "contactProfileCall": "Call",
+  "settingsTextScale": "Text scale",
+  "settingsUnsavedChangesTitle": "Discard unsaved changes?",
+  "settingsUnsavedChangesMessage": "Your changes have not been saved.",
   "chatThemesPlusLabel": "Voice Plus",
   "chatThemesPlusNotice": "Exclusive themes are available to Voice Plus subscribers.",
   "chatThemesSelected": "Selected",
