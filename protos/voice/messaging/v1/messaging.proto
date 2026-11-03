@@ -648,6 +648,9 @@ message GetMessagesResponse {
   MessageList message_list = 1;
   // Response-level state only: never materialize account deletion as a Message row.
   optional DmPeerState dm_peer_state = 2;
+  // A missing/deleted anchor reset this reply to latest history (descending),
+  // whose next_cursor, if present, loads older history rather than catch-up.
+  bool history_reset = 3;
 }
 message GetMessageResponse {
   Message message = 1;
