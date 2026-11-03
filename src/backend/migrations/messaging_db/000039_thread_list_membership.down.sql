@@ -1,0 +1,4 @@
+DROP TABLE thread_list_retired_lineages;
+DROP TABLE thread_list_membership_pairs;
+DROP TABLE thread_list_membership_inbox;
+DROP TABLE thread_list_membership_heads;

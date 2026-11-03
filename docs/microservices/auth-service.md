@@ -17,6 +17,21 @@ returns its existing unavailable/error result immediately.
 > history uses the existing Flyway/canonical mode without synthetic rows. See
 > [source ExecPlan](../testing/auth-identity-current444-source-plan.md).
 
+## Account lifecycle decision time
+
+A committed restore decision is authorized by one fresh database-time cut after
+the owning account and lifetime row locks, strictly before the original
+`purge_at`. The fact and its intent become durable only if that transaction
+commits. Later journal serialization, WAL flush and response completion may
+finish at or after the deadline. These completion times do not redefine the
+serialized decision cut. A restore reaching the owning locks at or after the
+deadline is denied; rollback publishes no decision or intent. Same-account
+expiry cannot overtake the account/lifetime locks held by that restore.
+
+This defines the deadline boundary for the private exact-cycle source component.
+Protected observation, hint transport and activation remain separate work; see
+the [source plan](../testing/auth-account-lifecycle-producer-exec-plan.md).
+
 ## User parent identity protected registration
 
 `AuthIdentityAuthorityGrpcServer` registers the real store-backed
