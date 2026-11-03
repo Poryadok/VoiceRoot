@@ -29,7 +29,7 @@ func (c *Controller) OpenQualified(ctx context.Context, maintenance, source *pgx
 	defer cancel()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.stopped || c.leader == nil || c.parent.Err() != nil || !c.activationUsed || !c.activationPrepared || c.verifyOpenAttestation(claim, custodianKey, time.Now()) != nil {
+	if c.stopped || c.leader == nil || c.parent.Err() != nil || !c.activationUsed || !c.activationPrepared || !c.supervision.liveFor(claim) || c.verifyOpenAttestation(claim, custodianKey, time.Now()) != nil {
 		return ErrUnavailable
 	}
 	c.activationPrepared = false
@@ -134,13 +134,13 @@ func (c *Controller) OpenQualified(ctx context.Context, maintenance, source *pgx
 	}
 	// Hold c.mu until both commits complete: no new permit can be issued in the
 	// interval where control says OPEN but the dormant role is not yet enabled.
-	if control.Commit(ctx) != nil {
+	if !c.supervision.liveFor(claim) || control.Commit(ctx) != nil {
 		return ErrUnavailable
 	}
-	if c.parent.Err() != nil || ctx.Err() != nil || identity.Commit(ctx) != nil {
+	if c.parent.Err() != nil || ctx.Err() != nil || !c.supervision.liveFor(claim) || identity.Commit(ctx) != nil {
 		return ErrUnavailable
 	}
-	if c.parent.Err() != nil || ctx.Err() != nil {
+	if c.parent.Err() != nil || ctx.Err() != nil || !c.supervision.liveFor(claim) {
 		return ErrUnavailable
 	}
 	c.authorizedOpen = true
