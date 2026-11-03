@@ -2262,11 +2262,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatThemesReset => 'Сбросить';
 
   @override
-  String get appIconTitle => 'Значок приложения';
+  String get appIconTitle => 'Иконка приложения';
 
   @override
-  String get appIconDeviceNotice =>
-      'Этот выбор применяется только на этом устройстве.';
+  String get appIconDeviceNotice => 'Иконка меняется на этом устройстве.';
 
   @override
   String get appIconPlusRequired =>
@@ -2301,7 +2300,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get appIconSelected => 'Выбран';
+  String get appIconSelected => 'Выбрана';
 
   @override
   String get settingsTheme => 'Тема';
@@ -3033,6 +3032,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get privacyAudienceSpacesEmpty => 'Вы не состоите ни в одном спейсе';
+
+  @override
+  String get privacyDiscardChangesTitle => 'Отменить изменения?';
+
+  @override
+  String get privacyDiscardChangesMessage =>
+      'Изменения настроек конфиденциальности не сохранены.';
 
   @override
   String get privacyActionsTitle => 'Действия';
