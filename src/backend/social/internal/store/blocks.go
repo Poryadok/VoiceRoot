@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"voice/backend/social/internal/socialevents"
 )
 
 // BlockStore persists account-level blocks in social_db.blocks.
@@ -81,6 +83,13 @@ WHERE (
 		}
 	}
 
+	eventID, payload, err := socialevents.NewBlockOutboxEvent(blockerAccountID, blockedAccountID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO block_event_outbox (event_id, payload) VALUES ($1, $2)`, eventID, payload); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 

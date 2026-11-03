@@ -150,6 +150,27 @@ friend_request_outbox (migration 000006)
 
 `SendFriendInvitation` commits the pending friendship and its request-outbox row in one `social_db` transaction. A Social worker retries `social.friend_request` publication independently of the caller RPC. `FriendRequest.request_id` is the persisted friendship row ID; `SocialStreamEvent.event_id` and the JetStream `Nats-Msg-Id` come from the outbox row and stay stable across retries. The `social_events` stream deduplicates that message identity within its configured 24-hour duplicate window; delivery is at-least-once, and retries outside the window may be stored again. Re-sending a pending or declined request keeps its request ID and creates a new event ID for that explicit send. Accepting or declining cancels a request event that has not started dispatch. A publish already acknowledged by JetStream cannot be retracted if the Social process or database commit fails before marking the outbox row delivered; clients must reconcile notifications against the authoritative request list. Deploy migration 000006 and the updated `social_events` stream config before the updated Social service; rollback requires draining the request outbox first.
 
+`BlockAccount` commits its account block, friendship cleanup and immutable
+`social.user_blocked` envelope in one transaction. Migration `000007` adds
+`block_event_outbox(event_id, payload, created_at, delivered_at)`. Its worker
+starts independently of the request publisher and retries after broker outage
+or Social restart without another client request. Exact protobuf bytes,
+`SocialStreamEvent.event_id` and `Nats-Msg-Id` stay unchanged across retries.
+Only a positive `social_events` JetStream PubAck marks delivery. A publish or
+commit with uncertain outcome retains the intent for at-least-once replay;
+PubAck confirms broker persistence, not application by a Realtime instance.
+Realtime retains per-instance consumers and idempotent DM subscription revoke;
+authoritative Social reads remain necessary for authorization during event loss
+or delay. Unblocking does not delete pending historical revocations. Each
+successful explicit block call retains a fresh intent, including idempotent
+repeated block calls, matching the existing event publication behavior.
+
+Apply migration `000007` before the updated binary. The previous binary remains
+schema-compatible but does not produce durable block events. For binary rollback
+first let updated workers drain the pending outbox; stop the updated binary
+before any down migration. Dropping this table loses undelivered revocations.
+Existing blocks are not backfilled as new block operations.
+
 Индексы v1:
 - `UNIQUE INDEX friendships_pair_uq ON friendships(requester_profile_id, target_profile_id)`
 - `INDEX friendships_target_status_idx (target_profile_id, status, created_at DESC)` для входящих заявок
