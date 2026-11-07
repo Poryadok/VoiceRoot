@@ -824,3 +824,45 @@ snapshot, not an atomic permit, Auth account-eligibility proof, generation lease
 zero-lag cross-service deletion barrier. Consumers must combine fresh authority with
 their own durable generation gates. UNKNOWN denies admission and never authorizes
 permanent purge or restore. No profile-deleted event is introduced.
+## Auth profile reference authority (BE-019 prerequisite)
+
+The separate `AuthProfileAuthorityService` exposes only
+`MatchAuthProfileReferences` and `ResolveAuthOwnershipTarget` under capability
+`auth-profile-authority`: issuer/subject `auth`/`service:auth`, audience `user`,
+mTLS, exact RPC/request ID/hash binding and shared Redis replay protection.
+It adds no methods to existing Social, Role, SDK or admission grants.
+
+Matching accepts a canonical sorted unique finite roster of 1..256 profile UUIDs
+from Auth's own local inventory. Request ID, inventory ID/revision, account,
+opaque owner and deletion cycle bind the exact response and request digest.
+The digest is SHA-256 over the request's full protobuf message name in UTF-8,
+one NUL byte and deterministic protobuf request bytes.
+Owner/cycle are echoed Auth context, never User lifecycle authority. Retired
+associations can MATCH without a live profile row. DIFFERENT_ACCOUNT requires
+positive complete canonical account-selector evidence; missing history or a
+retained-key alias yields INCOMPLETE. `all_requested_resolved` covers only the
+supplied roster. No foreign raw account identifier or selector is returned.
+
+The target resolver returns a current private account/profile tuple with revision
+and eligibility flags, a canonical terminal receipt without a raw account tuple,
+or INCOMPLETE. Its observation is **not** an admission grant: Auth must admit the
+target under its local account/lifetime locks; independent User retirement needs
+its own fence protocol. The source cut includes generation/keyset/history/head,
+retained floor and unresolved-erasure counters; issued and covered counters
+must be equal for every accepted response, including INCOMPLETE. The response window is
+`[observed_at, observed_at + 2 seconds)`; clients also reject observations more
+than one second ahead of their clock. An optional expected source pin must match
+exactly. Neither a pin nor a cut establishes independent source custody.
+
+The read holds a qualified source permit through its identity transaction and
+commit, validates the physical database and guarded catalog, and never captures,
+backfills or repairs missing facts. Missing source policy or lost custody denies
+the response. Configure the opt-in listener with prefix
+`USER_AUTH_PROFILE_PRINCIPAL_`: `GRPC_LISTEN` (default `:9104`),
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_CLIENT_CERT_FILE`,
+`JWKS_CLIENT_KEY_FILE`, `REPLAY_REDIS_ADDR`, optional `REPLAY_REDIS_PASSWORD`
+and `JWKS_CA_FILE`, plus existing `S2S_JWKS_URLS_JSON` Auth issuer settings.
+All existing qualified guarded User source runtime configuration and the
+Space capture listener must already be enabled; this reader reuses source
+custody, not Space authorization. Partial settings fail startup. No deployment
+or P30D erasure activation is implied by this prerequisite.
