@@ -851,6 +851,8 @@ func (s *MessagesStore) listMessagesFiltered(ctx context.Context, chatID, viewer
 		argN++
 	}
 
+	// Resolve public UUID anchors to insertion order. UUID allocation happens
+	// before the transaction and therefore cannot safely order committed history.
 	var rows pgx.Rows
 	var err error
 	switch mode {
@@ -864,33 +866,35 @@ WHERE chat_id = $1 AND deleted_at IS NULL`+threadClause+`
     SELECT 1 FROM message_hides h
     WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+1)+`
   )
-ORDER BY id DESC
+ORDER BY history_position DESC
 LIMIT $`+itoa(argN)+`
 `, args...)
 	case ListBeforeID:
 		args := append(append([]any{}, argsBase...), *refID, fetch, viewerProfileID)
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
-WHERE chat_id = $1 AND deleted_at IS NULL AND id < $`+itoa(argN)+`::uuid`+threadClause+`
+WHERE chat_id = $1 AND deleted_at IS NULL
+  AND history_position < (SELECT history_position FROM messages anchor WHERE anchor.chat_id=$1 AND anchor.id=$`+itoa(argN)+`::uuid)`+threadClause+`
   AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $`+itoa(argN+2)+`)
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
     WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+2)+`
   )
-ORDER BY id DESC
+ORDER BY history_position DESC
 LIMIT $`+itoa(argN+1)+`
 `, args...)
 	case ListAfterID:
 		args := append(append([]any{}, argsBase...), *refID, fetch, viewerProfileID)
 		rows, err = s.Pool.Query(ctx, messageSelectSQL+`
 FROM messages
-WHERE chat_id = $1 AND deleted_at IS NULL AND id > $`+itoa(argN)+`::uuid`+threadClause+`
+WHERE chat_id = $1 AND deleted_at IS NULL
+  AND history_position > (SELECT history_position FROM messages anchor WHERE anchor.chat_id=$1 AND anchor.id=$`+itoa(argN)+`::uuid)`+threadClause+`
   AND (NOT COALESCE(ghost_only, false) OR sender_profile_id = $`+itoa(argN+2)+`)
   AND NOT EXISTS (
     SELECT 1 FROM message_hides h
     WHERE h.message_id = messages.id AND h.profile_id = $`+itoa(argN+2)+`
   )
-ORDER BY id ASC
+ORDER BY history_position ASC
 LIMIT $`+itoa(argN+1)+`
 `, args...)
 	default:

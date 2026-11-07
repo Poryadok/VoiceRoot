@@ -9,6 +9,20 @@ from unittest.mock import Mock
 sys.path.insert(0,str(Path(__file__).parents[1]/'nats-known-baseline'))
 
 class RecordProofTests(unittest.TestCase):
+    def test_uncertain_create_retains_mounted_store_for_reconciliation(self):
+        with TemporaryDirectory() as folder:
+            class Runtime:
+                base=Path(folder);owned={};unresolved_effect=False
+                def restore(self,archive,target,manifest):target.mkdir()
+                def start_broker(self,label,target):
+                    self.unresolved_effect=True
+                    raise TimeoutError('create result unknown')
+            runtime=Runtime()
+            with patch('native_store.verify_archive',return_value=True):
+                with self.assertRaisesRegex(ValueError,'cohort_native_reconciliation_required'):
+                    expired_proof.observe_copy(runtime,Path(folder)/'archive',{},'copy',lambda:None)
+            self.assertEqual(len(list(Path(folder).glob('copy-*/store'))),1)
+
     def test_native_continuity_rejects_changed_missing_messages_and_complete_pending_state(self):
         from preserve import native_message_files
         manifest={'dirs':['jetstream/account/streams/events/msgs'],

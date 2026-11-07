@@ -30,6 +30,7 @@ type ActivationOperatorConfig struct {
 	Address, CertFile, KeyFile, ClientCAFile, CustodianKeyFile string
 	AdminURL, SourceURL, KeyManifest, KeysDir                  string
 	ClientCertSHA256                                           [32]byte
+	Supervisor                                                 *SupervisorClientConfig
 }
 
 func loadActivationOperatorConfig(lookup func(string) (string, bool)) (*ActivationOperatorConfig, error) {
@@ -66,7 +67,11 @@ func loadActivationOperatorConfig(lookup func(string) (string, bool)) (*Activati
 	if clientPin == [32]byte{} || !validServerAddress(values[0], false) || !validControlURL(values[6]) || !validControlURL(values[7]) {
 		return nil, ErrUnavailable
 	}
-	return &ActivationOperatorConfig{Address: values[0], CertFile: values[1], KeyFile: values[2], ClientCAFile: values[3], ClientCertSHA256: clientPin, CustodianKeyFile: values[5], AdminURL: values[6], SourceURL: values[7], KeyManifest: values[8], KeysDir: values[9]}, nil
+	supervisor, err := loadSupervisorClientConfig(lookup)
+	if err != nil {
+		return nil, err
+	}
+	return &ActivationOperatorConfig{Address: values[0], CertFile: values[1], KeyFile: values[2], ClientCAFile: values[3], ClientCertSHA256: clientPin, CustodianKeyFile: values[5], AdminURL: values[6], SourceURL: values[7], KeyManifest: values[8], KeysDir: values[9], Supervisor: supervisor}, nil
 }
 
 func validOperatorPeer(state tls.ConnectionState, expected [32]byte) bool {
@@ -91,6 +96,8 @@ type activationHandler struct {
 	signer        ed25519.PublicKey
 	mu            sync.Mutex
 	opened        *OpenAttestation
+	supervisor    *supervisorClient
+	supervised    *runningSupervision
 }
 
 func (h *activationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -145,16 +152,23 @@ func (h *activationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer h.mu.Unlock()
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
+	if h.beginSupervision(ctx, claim) != nil {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	if h.controller.PrepareOpenSource(ctx, h.admin, claim, h.signer) != nil {
+		h.supervised.cancel()
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if claim.GuardCutover && h.controller.ActivateQualifiedGuards(ctx, h.admin, h.source, h.keys, claim, h.signer) != nil {
+		h.supervised.cancel()
 		h.cancelPrepared(claim)
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if h.controller.OpenQualified(ctx, h.admin, h.source, h.keys, claim, h.signer) != nil {
+		h.supervised.cancel()
 		h.cancelPrepared(claim)
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
@@ -166,6 +180,13 @@ func (h *activationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // fenceOpenedLocked is shared by the authenticated close endpoint and orderly
 // server cleanup. The caller holds h.mu until the transition is complete.
 func (h *activationHandler) fenceOpenedLocked() error {
+	if h.supervised != nil {
+		if err := h.supervised.stop(); err != nil {
+			return err
+		}
+		h.opened = nil
+		return nil
+	}
 	if h.opened == nil {
 		return ErrUnavailable
 	}
@@ -235,6 +256,7 @@ type activationOperatorMaterials struct {
 	clientRoots *x509.CertPool
 	signer      ed25519.PublicKey
 	keys        *identityassociation.Keyset
+	supervisor  *supervisorClient
 }
 
 // Load all local operator material before performing any recovery mutation.
@@ -278,7 +300,11 @@ func loadActivationOperatorMaterials(cfg *ActivationOperatorConfig) (*activation
 	if err != nil {
 		return nil, ErrUnavailable
 	}
-	return &activationOperatorMaterials{certificate: cert, clientRoots: roots, signer: append(ed25519.PublicKey(nil), key...), keys: keys}, nil
+	supervisor, err := newSupervisorClient(cfg.Supervisor, key)
+	if err != nil {
+		return nil, err
+	}
+	return &activationOperatorMaterials{certificate: cert, clientRoots: roots, signer: append(ed25519.PublicKey(nil), key...), keys: keys, supervisor: supervisor}, nil
 }
 
 func startActivationOperator(ctx context.Context, cfg *ActivationOperatorConfig, materials *activationOperatorMaterials, controller *Controller) (*activationOperator, error) {
@@ -300,7 +326,7 @@ func startActivationOperator(ctx context.Context, cfg *ActivationOperatorConfig,
 		source.Close()
 		return nil, ErrUnavailable
 	}
-	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: materials.keys, signer: materials.signer}
+	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: materials.keys, signer: materials.signer, supervisor: materials.supervisor}
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 65 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
 	op := &activationOperator{server: server, admin: admin, source: source, done: make(chan error, 1)}
 	clientPin := cfg.ClientCertSHA256
@@ -332,14 +358,24 @@ func (op *activationOperator) close() error {
 		fenceErr = ErrUnavailable
 	} else {
 		handler.mu.Lock()
+		if handler.supervised != nil {
+			fenceErr = handler.supervised.stop()
+			handler.opened = nil
+		}
 		if handler.opened != nil {
 			fenceErr = handler.fenceOpenedLocked()
 		}
 		handler.mu.Unlock()
+		if handler.supervisor != nil {
+			handler.supervisor.client.CloseIdleConnections()
+		}
 	}
 	op.admin.Close()
 	op.source.Close()
-	if err != nil || fenceErr != nil {
+	if fenceErr != nil {
+		return fenceErr
+	}
+	if err != nil {
 		return ErrUnavailable
 	}
 	return nil

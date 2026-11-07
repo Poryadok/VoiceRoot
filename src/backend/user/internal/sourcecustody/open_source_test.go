@@ -27,6 +27,11 @@ func openSourceFixtureOptions(t *testing.T, guardsActive bool, tracers ...pgx.Qu
 func openSourceFixtureWithParent(t *testing.T, guardsActive bool, lifetime func(context.Context) context.Context, tracers ...pgx.QueryTracer) (context.Context, *pgxpool.Pool, *pgxpool.Pool, *pgxpool.Pool, *identityassociation.Keyset, *Controller, OpenAttestation, ed25519.PublicKey, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	ctx, control, admin, request := creationFixture(t)
+	return openSourceFixtureDatabases(t, ctx, control, admin, request, guardsActive, lifetime, true, tracers...)
+}
+
+func openSourceFixtureDatabases(t *testing.T, ctx context.Context, control, admin *pgxpool.Pool, request CreationRequest, guardsActive bool, lifetime func(context.Context) context.Context, synthetic bool, tracers ...pgx.QueryTracer) (context.Context, *pgxpool.Pool, *pgxpool.Pool, *pgxpool.Pool, *identityassociation.Keyset, *Controller, OpenAttestation, ed25519.PublicKey, uuid.UUID, uuid.UUID) {
+	t.Helper()
 	physical, err := CreateClosedSource(ctx, control, admin, request)
 	require.NoError(t, err)
 	dir, keys := migrationFixture(t)
@@ -89,6 +94,9 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	payload, err := OpenAttestationPayload(claim)
 	require.NoError(t, err)
 	claim.Signature = ed25519.Sign(private, payload)
+	if synthetic {
+		armSyntheticSupervision(t, controller, claim, public)
+	}
 	return ctx, control, admin, source, keys, controller, claim, public, profile, account
 }
 

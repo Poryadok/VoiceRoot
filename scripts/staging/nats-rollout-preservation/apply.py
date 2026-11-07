@@ -43,9 +43,9 @@ def paused_documents(documents,receipt):
         meta.pop('resourceVersion',None)
     return result
 
-def _main():
+def _main(*,installation=None):
     receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
-    guard.validate(receipt,os.environ['VOICE_IMAGE_REGISTRY'],os.environ['VOICE_IMAGE_TAG'],os.environ['DEPLOY_MODE'],[s for s in os.environ.get('CHANGED_SERVICES','').split(',') if s],guard.source_root())
+    guard.validate(receipt,os.environ['VOICE_IMAGE_REGISTRY'],os.environ['VOICE_IMAGE_TAG'],os.environ['DEPLOY_MODE'],[s for s in os.environ.get('CHANGED_SERVICES','').split(',') if s],guard.source_root(),installation=installation)
     rv=os.environ['VOICE_NATS_ROLLOUT_CLAIM_RV'];guard.anchor(receipt,'rollout-applying',rv)
     path=Path(os.environ['VOICE_NATS_PRESERVATION_RECEIPT']).parent/'apply-manifests.json'
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
@@ -74,8 +74,8 @@ def main():
     from root_cli import code_binding
     receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
     # Direct execution has the same mandatory boundary as runner.main.
-    with resource_claim.runner_scope(receipt,guard.ROOT,code_binding(Path(__file__).resolve().parents[1])):
-        return _main()
+    with resource_claim.runner_scope(receipt,guard.ROOT,code_binding(Path(__file__).resolve().parents[1])) as session:
+        return _main(installation=session.installation)
 
 if __name__=='__main__':
     try:main()

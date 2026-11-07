@@ -231,7 +231,13 @@ class ContinuationTests(unittest.TestCase):
         state.update(repair_adoption='approved',kernel_sha256='b'*64,contract={'scripts':[]},migrations=[],migration_secret_metadata={},
             nonnats={'checks':[]},nonnats_binding={},provenance={},bootstrap_enrollment={},
             nats_contract={'plan':'original'},nats_contract_binding={'binding':'original'},nats_target_scripts={'scripts':'original'})
-        current={'plan':state['nats_contract'],'binding':state['nats_contract_binding'],'scripts':state['nats_target_scripts']}
+        import nats_root_plan
+        from resource_claim import production_installation
+        state['nats_contract_binding']={'plan_sha256':'a'*64,'server_image':nats_root_plan.NATS_IMAGE,
+            'enrollment_sha256':'b'*64,'sources':{'source':'c'*64}}
+        current={'plan':state['nats_contract'],'binding':dict(state['nats_contract_binding'],
+            schema='voice-nats-root-plan-binding-v2',installation_sha256=production_installation().sha256),
+            'scripts':state['nats_target_scripts']}
         if failure in current:current[failure]={'unapproved':'drift'}
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);stage=Mock();stage.final_path=base/'store';runtime=Mock()

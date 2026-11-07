@@ -25,6 +25,75 @@ class Kube:
         return {'password_sha256':hashlib.sha256(b'fixture-password').hexdigest()}
 
 class AuthorityTests(unittest.TestCase):
+    def test_password_permit_denies_modified_launch_or_observer_before_spawn(self):
+        import commands,resource_claim,resource_claim_test,sys
+        from unittest.mock import Mock,patch
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        parent={'protected':'fixture'};session.admit(start=True)
+        session.journal.row.update(phase='prerequisites-captured',target_sha256=resource_claim.digest(parent),cohort_preservation_sha256='c'*64)
+        session.expected_target=resource_claim.digest(parent);session._cohort_lineage='c'*64
+        prefix=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'];module=Mock();module.load_capture.return_value=parent
+        for fault in ('script','pod','body','timeout','env','fds','phase','target','lineage','observer_guard','observer_fence'):
+            with self.subTest(fault=fault):
+                session.journal.row.update(status='active',phase='prerequisites-captured',target_sha256=resource_claim.digest(parent),cohort_preservation_sha256='c'*64)
+                def run(args):
+                    argv=prefix+args;kwargs={'body':b'','timeout':30,'limit':2<<20,
+                        'env':{'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'},'pass_fds':()}
+                    if fault=='script':argv[-1]+='; true'
+                    elif fault=='pod':argv[5]='other-pod'
+                    elif fault=='body':kwargs['body']=b'changed'
+                    elif fault=='timeout':kwargs['timeout']=31
+                    elif fault=='env':kwargs['env']={'PATH':'/bin'}
+                    elif fault=='fds':kwargs['pass_fds']=(0,)
+                    return commands.capture(argv,**kwargs)
+                kube=Kube();kube.run=run
+                def load(_):
+                    if fault=='phase':session.journal.row['phase']='prerequisites'
+                    elif fault=='target':session.journal.row['target_sha256']='e'*64
+                    elif fault=='lineage':session.journal.row['cohort_preservation_sha256']='e'*64
+                    return parent
+                module.load_capture.side_effect=load
+                def observer(action,status):
+                    if fault=='observer_guard':commands.authority_guard=lambda _argv:None
+                    elif fault=='observer_fence':session.journal.row['status']='uncertain'
+                with patch.dict(sys.modules,{'staging_prerequisites':module}), \
+                     patch.object(commands,'authority_guard',session.check), \
+                     patch.object(commands,'diagnostic_observer',side_effect=observer), \
+                     patch.object(commands.subprocess,'Popen') as spawn:
+                    with self.assertRaises((RuntimeError,authority.AuthorityError)):authority._password_observation(kube)
+                    spawn.assert_not_called()
+                self.assertIsNone(session._prerequisite_readonly_permit)
+                self.assertFalse(session._prerequisite_readonly_busy)
+
+    def test_captured_password_read_requires_exact_one_shot_parent_bound_permit(self):
+        import commands,resource_claim,resource_claim_test,sys
+        from unittest.mock import Mock,patch
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        parent={'protected':'fixture'};session.admit(start=True)
+        session.journal.row.update(phase='prerequisites-captured',target_sha256=resource_claim.digest(parent))
+        session.expected_target=resource_claim.digest(parent)
+        prefix=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']
+        env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'};calls=[]
+        def run(args):
+            argv=prefix+args
+            launch=commands.launch_snapshot(argv,b'',30,2<<20,env,())
+            session.check(argv,launch=launch);session.readonly_current();calls.append(argv)
+            return {'password_sha256':'a'*64}
+        kube=Kube();kube.run=run;module=Mock();module.load_capture.return_value=parent
+        with patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(commands,'authority_guard',session.check):
+            self.assertEqual(authority._password_observation(kube),{'password_sha256':'a'*64})
+            self.assertEqual(calls,[prefix+list(authority.PASSWORD_ARGS)])
+            self.assertIsNone(session._prerequisite_readonly_permit)
+            with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(calls[0])
+            kube.run=lambda args:run(args+['unexpected'])
+            with self.assertRaisesRegex(RuntimeError,'readonly_launch_changed'):authority._password_observation(kube)
+            self.assertIsNone(session._prerequisite_readonly_permit)
+            kube.run=lambda args:(_ for _ in ()).throw(RuntimeError('lost'))
+            with self.assertRaisesRegex(RuntimeError,'lost'):authority._password_observation(kube)
+            self.assertFalse(session._prerequisite_readonly_busy)
+
     def test_binds_physical_database_and_secret_without_private_values(self):
         kube=Kube();binding=authority.capture(kube)
         self.assertEqual(binding['pod'],metadata(3));self.assertEqual(binding['claim'],metadata(4))

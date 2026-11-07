@@ -2461,6 +2461,7 @@ const GetMessagesResponse$json = {
       '10': 'dmPeerState',
       '17': true
     },
+    {'1': 'history_reset', '3': 3, '4': 1, '5': 8, '10': 'historyReset'},
   ],
   '8': [
     {'1': '_dm_peer_state'},
@@ -2471,8 +2472,8 @@ const GetMessagesResponse$json = {
 final $typed_data.Uint8List getMessagesResponseDescriptor = $convert.base64Decode(
     'ChNHZXRNZXNzYWdlc1Jlc3BvbnNlEkIKDG1lc3NhZ2VfbGlzdBgBIAEoCzIfLnZvaWNlLm1lc3'
     'NhZ2luZy52MS5NZXNzYWdlTGlzdFILbWVzc2FnZUxpc3QSSAoNZG1fcGVlcl9zdGF0ZRgCIAEo'
-    'DjIfLnZvaWNlLm1lc3NhZ2luZy52MS5EbVBlZXJTdGF0ZUgAUgtkbVBlZXJTdGF0ZYgBAUIQCg'
-    '5fZG1fcGVlcl9zdGF0ZQ==');
+    'DjIfLnZvaWNlLm1lc3NhZ2luZy52MS5EbVBlZXJTdGF0ZUgAUgtkbVBlZXJTdGF0ZYgBARIjCg'
+    '1oaXN0b3J5X3Jlc2V0GAMgASgIUgxoaXN0b3J5UmVzZXRCEAoOX2RtX3BlZXJfc3RhdGU=');
 
 @$core.Deprecated('Use getMessageResponseDescriptor instead')
 const GetMessageResponse$json = {

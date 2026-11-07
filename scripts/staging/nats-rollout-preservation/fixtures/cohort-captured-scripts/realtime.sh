@@ -1,0 +1,91 @@
+#!/bin/sh
+set -eu
+
+nats_url="${NATS_URL:?NATS_URL is required}"
+nats() {
+  if [ -n "${NATS_CREDS:-}" ]; then command nats --creds "$NATS_CREDS" --inbox-prefix _INBOX.voice.bootstrap.reply "$@"; else command nats "$@"; fi
+}
+stream() {
+  name="$1"; shift
+  stream_with_max_age "$name" 604800000000000 "$@"
+}
+max_age_to_cli() {
+  max_age="$1"
+  case "$max_age" in
+    0) printf '0s' ;;
+    ''|*[!0-9]*) return 1 ;;
+    *) printf '%ss' "$((max_age / 1000000000))" ;;
+  esac
+}
+
+stream_with_max_age() {
+  name="$1"; max_age="$2"; shift 2
+  subjects="$(IFS=,; echo "$*")"
+  expected="$(printf '%s\n' "$@" | jq -R . | jq -sc 'sort')"
+  if info="$(nats --server "$nats_url" req --raw "\$JS.API.STREAM.INFO.$name" "" 2>&1)"; then
+    if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+      printf '%s' "$info" | jq -r '.error.description' | grep -qi 'stream not found' || { echo "$info" >&2; exit 1; }
+    else
+      actual="$(printf '%s' "$info" | jq -c '[(.config.subjects | sort), .config.storage, .config.retention, .config.max_age]')"
+      expected_config="$(jq -cn --argjson subjects "$expected" --argjson max_age "$max_age" '[ $subjects, "file", "limits", $max_age ]')"
+      [ "$actual" = "$expected_config" ] || { echo "incompatible configuration for stream $name" >&2; exit 1; }
+      return
+    fi
+  else
+    echo "$info" >&2; exit 1
+  fi
+  max_age_cli="$(max_age_to_cli "$max_age")"
+  nats --server "$nats_url" stream add "$name" --subjects "$subjects" --storage file --retention limits --max-age "$max_age_cli" --defaults
+}
+consumer() {
+  stream_name="$1"; durable="$2"; filter="$3"; target="$4"
+  echo "bootstrap consumer INFO $stream_name/$durable" >&2
+  if info="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.INFO.$stream_name.$durable" "" 2>&1)"; then
+    if printf '%s' "$info" | jq -e '.error' >/dev/null; then
+      printf '%s' "$info" | jq -r '.error.description' | grep -qi 'consumer not found' || { echo "$info" >&2; exit 1; }
+    else
+      actual="$(printf '%s' "$info" | jq -c '[.config.filter_subject, .config.deliver_subject, .config.ack_policy, .config.deliver_policy]')"
+      expected="$(jq -cn --arg filter "$filter" --arg target "$target" '[ $filter, $target, "explicit", "new" ]')"
+      [ "$actual" = "$expected" ] || { echo "incompatible consumer $stream_name/$durable" >&2; exit 1; }
+      return
+    fi
+  else
+    echo "$info" >&2; exit 1
+  fi
+  payload="$(jq -cn --arg stream "$stream_name" --arg durable "$durable" --arg filter "$filter" --arg target "$target" '{stream_name: $stream, action: "create", config: {name: $durable, durable_name: $durable, filter_subject: $filter, deliver_subject: $target, deliver_policy: "new", ack_policy: "explicit"}}')"
+  echo "bootstrap consumer CREATE $stream_name/$durable" >&2
+  if result="$(nats --server "$nats_url" req --raw "\$JS.API.CONSUMER.CREATE.$stream_name.$durable" "$payload" 2>&1)"; then
+    echo "bootstrap consumer CREATE response bytes ${#result} $stream_name/$durable" >&2
+  else
+    status=$?
+    echo "bootstrap consumer CREATE failed status=$status response_bytes=${#result} $stream_name/$durable" >&2
+    [ -z "$result" ] || echo "$result" >&2
+    exit "$status"
+  fi
+  printf '%s' "$result" | jq -e --arg durable "$durable" '(.error | not) and .config.durable_name == $durable' >/dev/null || { echo "$result" >&2; exit 1; }
+  echo "bootstrap consumer ready $stream_name/$durable" >&2
+}
+stream message_events message.sent message.edited message.deleted message.read message.read_receipt_revoked message.reaction_added message.reaction_removed message.mention_added message.pinned message.unpinned message.forwarded message.delivery_ack
+stream chat_events chat.created chat.member_changed chat.dm_peer_deleted space.tree_changed space.created voice.room_created voice.room_deleted space.invite_created space.member_joined space.member_left space.updated space.deleted
+stream file_events file.uploaded file.processed file.scan_infected file.expired file.downloaded
+stream moderation_events moderation.report_created moderation.sanction_applied moderation.appeal_submitted
+stream bot_events bot.registered bot.command_executed bot.webhook_delivered bot.webhook_failed
+stream subscription_events subscription.plan_started subscription.plan_cancelled subscription.plan_expired subscription.downgrade subscription.payment_success subscription.payment_failed subscription.space_pro_started subscription.space_pro_expired subscription.grace_reminder subscription.entitlement_changed
+stream_with_max_age subscription_auth_quarantine 34560000000000000 subscription.auth_quarantined
+stream story_events story.created story.viewed story.reacted story.expired story.highlight_created story.lfp_created story.lfp_response
+stream user_events user.account_deleted user.account_restored user.guest_converted user.profile_created user.profile_updated user.profile_switched user.verified user.presence_changed user.game_detected user.settings_changed
+stream social_events social.friend_request social.friend_accepted social.friend_removed social.user_blocked social.contacts_synced
+stream role_events role.created role.updated role.deleted role.assigned role.revoked role.chat_override_set role.chat_override_removed role.voice_override_set role.voice_override_removed
+stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined
+stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
+stream analytics_events 'analytics.>'
+stream_with_max_age user_profile_projection 0 user.search_profile_projection
+echo 'bootstrap realtime streams ready' >&2
+consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message
+consumer chat_events rt_realtime1_chat 'chat.>' _INBOX.voice.realtime1.chat
+consumer user_events rt_realtime1_user user.presence_changed _INBOX.voice.realtime1.user
+consumer social_events rt_realtime1_social social.user_blocked _INBOX.voice.realtime1.social
+consumer social_events rt_realtime1_friend_request social.friend_request _INBOX.voice.realtime1.friend_request
+consumer role_events rt_realtime1_role 'role.>' _INBOX.voice.realtime1.role
+consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice
+consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking
