@@ -1,0 +1,9 @@
+{
+  "artifacts": [
+    {
+      "path": "docs/testing/f13-current-source-v1/runtime-evidence.zip",
+      "sha256": "b5d7f69aefc7c7b74ae68373cb795099ca2e37ac1f74e892145e6ec6b80c1935"
+    }
+  ],
+  "source": "ffad84570c38455ec77f387ad9ec04fd94411004"
+}

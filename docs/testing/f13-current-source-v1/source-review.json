@@ -1,0 +1,32 @@
+{
+  "type": "F13-CURRENT-SOURCE-REVIEW-v1",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "reviewer": "ci_review_gpt6_1_sol_high; gpt-6.1-sol/high; independent read-only auditor",
+  "source": "ffad84570c38455ec77f387ad9ec04fd94411004",
+  "source_tree": "b5c476db56c880310853ac1ec47b3220120b8b76",
+  "predecessor_record": "b12a122e9a656afb3894b86c065b4992ad81653e",
+  "dag_sha256": "afe2c9c80dafe772f55c5032bf55ab2be169b147c90558f35ed5e73f4cc26529",
+  "native_raw_sha256": "c7d639c6107282a48b6113cebc1db8ed381a49b281f309a0bdc31098e2087cde",
+  "native_closure_sha256": "da9d5889993859e0e34d6224cf2a3ea1641bd8f3cce23ad0f75deb5090301dd2",
+  "role_raw_sha256": "14c91a25fe7e0f43af6570d51d222de49e219d4c3873ea5df5bc1ae6922f3f4b",
+  "role_closure_sha256": "0e19f19ab5a179be2d7fb26ab190bdeb381ffdb3f51ac246faf0688e1d4c2c66",
+  "runtime_evidence_sha256": "76cdb6db588e517ea2545d984733e6393305ca9438d705a97f90b6227569dc04",
+  "limitations": [
+    "Source applicability only for this exact source/tree and complete reviewed Native/Role units. No deployment, activation, environment acceptance or full historical producer PASS is granted.",
+    "Independently recomputed the complete all-parent foundation-to-source DAG: 196 commits, 44 merges, 241 parent edges; exact 562527-byte raw history matches dag_sha256. First-parent-only or endpoint-only substitution is not accepted.",
+    "Semantically inspected all expanded product-unit transitions: Native 22 transitions across 8 edges and 7 paths; Role 10 transitions across 2 edges and 5 paths. Native intermediate Makefile and Space-service-document variants are pre-foundation side-branch states restored by merges; their complete reviewed foundation blobs remain at the source.",
+    "Historical artifact/carrier changes remain in the bound raw DAG: 181 artifact transitions across 24 paths and 112 carrier transitions across 12 paths. All 13 artifact modifications occur at historical carrier 1bd0f239 versus its df45 draft parent. This review inventories and classifies those historical transitions; it does not independently re-review every historical carrier code hunk or waive any original producer gate.",
+    "All 599 inherited Native projection/context/compiled entries match the foundation by complete tree metadata. All 225 immutable predecessor record/evidence/archive paths match the pinned predecessor record at the reviewed source. Native literal A1-A4/B1-B4 applicability reuses their original inspected immutable proof boundaries; historical logs are not relabeled as current execution.",
+    "Fresh raw Go discovery independently reconstructs Native 489 Go paths, 628 complete entries, 89 directories and 25 manifests, and Role 269 Go paths, 283 complete entries, 24 directories and 13 manifests. No inherited Go path is removed. The 16 inherited Native go.mod entries remain conserved through the complete closure rather than being misclassified as removed Go sources.",
+    "Native adds four generated User/Voice files and the canonical custody proto. Generated pairs are byte-identical. Independently decoded descriptor SHA256 de7c67f7d2ae975f22dc61aca4536e61b1b84c980129fdf22aeb86fef1cd6c6c matches canonical field numbers/types, enum values and RPC streaming shape. No Voice custody client construction or service registration outside generated code was found. No generator reproducibility or custody runtime activation is claimed.",
+    "Role's five changed inputs implement the exact request-bound service:space global MEMBER_BAN decision, deny that decision on the ordinary listener, retain current-membership/effective-mask evaluation, and recheck cancellation/credential expiry. Historical creation/nickname correction inputs and branches remain intact.",
+    "Preserve Role historical_runtime_gap verbatim: Old9dc composition unconditionally rechecked nickname after accepted creation;144c69 HOLD. Original author/runtime evidence and taint stay historical. No executed historical cross-merge success is invented.",
+    "Inspected native Linux Role race/short evidence: exit 0, 611 test/subtest PASS, 66 SKIP, zero FAIL, all three packages terminal PASS. Ban principal checks and real creation/nickname listener matrices pass; skipped database integrations are not reported as executed.",
+    "Initial native Linux Voice race/short evidence remains exit 1 with 678 PASS, 222 SKIP and four FAIL events caused by omitted external migration files. The corrected affected roomlifecycle rerun is exit 0 with 143 PASS, 98 SKIP, zero FAIL and package PASS; all four previously failing events pass. This scoped correction does not relabel the initial full run as successful.",
+    "Runtime manifest binds ZIP SHA256 b5d7f69aefc7c7b74ae68373cb795099ca2e37ac1f74e892145e6ec6b80c1935. Independently verified all archived output digests and receipt sources. The base source archive exactly matches Git archive of its declared tracked module set; supplemental migration archive exactly matches Git archive of this source's src/backend/migrations/voice_db, SHA256 ab39b70db02208bb6f60f00da05b672c11f1cd6408e826ec6273731d61ea3186.",
+    "The auditor inspected retained execution evidence and did not execute those runtime tests. Optional duplicate recursive predecessor-loader validation was cancelled without a result; no PASS is claimed for it. Actual recursive pinned-record validation, exact event/ordered parents/result parity, later executed-carrier identity, complete producer ownership/best-base/runtime-taint predicates, independent final-carrier review and full historical replay remain mandatory."
+  ],
+  "runtime_pass": false,
+  "activation_authority": false,
+  "current_or_future_path_authority": false
+}

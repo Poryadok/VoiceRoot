@@ -414,7 +414,7 @@ def load_role(repo):
     return dict(r, closure=closure, release_record=r)
 
 
-def production_record(repo):
+def production_record(repo, *, include_units=False):
     import f13_production_source as production
     production.load_bootstrap_fix(repo)  # Recursively revalidate v1-v10.
     preserve_predecessor(repo, production.BOOTSTRAP_RECORD_COMMIT, FOUNDATION_BASE, production.ARCHIVE_PATH)
@@ -451,7 +451,7 @@ def production_record(repo):
         all(p in names for p in r['review']), 'release_production_review')
     role = load_role(repo)
     _record_delta(repo, native['release_record'], r, role['release_record'])
-    return r
+    return (r, native, role) if include_units else r
 
 
 def applicable(repo, revision='HEAD'):
@@ -559,6 +559,11 @@ def collection_base(repo, binding):
 def audit_map(repo, binding, map_path, history_path):
     """Retain the original row predicates and use the distinct collection base."""
     record = verified_record(repo, binding)
+    return audit_map_record(repo, binding, map_path, history_path, record)
+
+
+def audit_map_record(repo, binding, map_path, history_path, record):
+    """Apply the original row predicates to an independently verified record."""
     expected = {row['path']: row['after'] for row in record['projection']}
     historical = {}
     for line in Path(history_path).read_text().splitlines():
@@ -640,7 +645,11 @@ def main():
     args = parser.parse_args()
     try:
         binding = read_json(Path(args.binding).read_bytes())
-        print(collection_base(args.repo, binding))
+        if binding.get('version') == 'NATIVE-P3-SOURCE-v6':
+            import f13_current_source as current
+            print(current.collection_base(args.repo, binding))
+        else:
+            print(collection_base(args.repo, binding))
     except (Rejected, ValueError, KeyError, TypeError, OSError) as error:
         print('Release source rejected: '+str(error), file=sys.stderr)
         return 1
