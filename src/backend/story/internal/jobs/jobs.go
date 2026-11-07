@@ -101,14 +101,24 @@ func deleteFileWithinDeadline(ctx context.Context, deleter FileDeleter, storyID,
 		return errArchivePurgeFileBusy
 	}
 	result := make(chan error, 1)
+	released := make(chan struct{})
 	go func() {
-		defer func() { <-gate }()
+		defer func() {
+			<-gate
+			close(released)
+		}()
 		result <- deleter.ReleaseStoryMedia(fileCtx, storyID, fileID)
 	}()
 	select {
 	case err := <-result:
+		// Wait for the semaphore to be released before returning so a
+		// subsequent synchronous call cannot observe the gate as still
+		// occupied due to goroutine scheduling.
+		<-released
 		return err
 	case <-fileCtx.Done():
+		// On timeout the underlying File call may still be running; keep the
+		// gate held until it finishes so busy detection keeps working.
 		return fileCtx.Err()
 	}
 }
