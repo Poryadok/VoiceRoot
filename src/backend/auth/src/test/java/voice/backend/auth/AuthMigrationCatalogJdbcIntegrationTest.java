@@ -67,19 +67,26 @@ class AuthMigrationCatalogJdbcIntegrationTest {
         """, String.class);
   }
 
+  private static void rawAdmissionInstalled(JdbcTemplate database) {
+    assertThat(database.queryForObject("SELECT count(*) FROM pg_trigger WHERE tgname='auth_raw_account_admission' AND tgenabled='O' AND NOT tgisinternal", Integer.class)).isEqualTo(9);
+    assertThatThrownBy(() -> database.update("INSERT INTO otp_codes(account_id,code,type,expires_at) VALUES(?,decode('01','hex'),'password_reset',clock_timestamp())", UUID.randomUUID()))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class).hasMessageContaining("raw_account_unavailable");
+  }
+
   @Test
   void freshFlywayAndPinnedGolangMigrateLoadTheEntireSdkCatalog() throws Exception {
     String flywayCatalog;
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();
       var loader = flyway(postgres, "classpath:db/migration");
-      assertThat(loader.migrate().migrationsExecuted).isEqualTo(32);
+      assertThat(loader.migrate().migrationsExecuted).isEqualTo(33);
       assertThat(java.util.Arrays.stream(loader.info().applied())
           .map(migration -> migration.getVersion().getVersion()).toList())
           .containsExactlyElementsOf(java.util.stream.Stream.concat(
               java.util.stream.IntStream.rangeClosed(1, 26).mapToObj(version -> Integer.toString(version)),
-              java.util.stream.Stream.of("28", "31", "32", "33", "34", "35")).toList());
-      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("35");
+              java.util.stream.Stream.of("28", "31", "32", "33", "34", "35", "36")).toList());
+      assertThat(loader.info().current().getVersion().getVersion()).isEqualTo("36");
+      rawAdmissionInstalled(jdbc(postgres));
       flywayCatalog = authorizationCatalog(jdbc(postgres));
       assertThat(loader.migrate().migrationsExecuted).isZero();
     }
@@ -87,7 +94,8 @@ class AuthMigrationCatalogJdbcIntegrationTest {
       postgres.start();
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       var database = jdbc(postgres);
-      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(36);
+      assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE NOT dirty", Long.class)).isEqualTo(37);
+      rawAdmissionInstalled(database);
       assertThat(authorizationCatalog(database)).isEqualTo(flywayCatalog);
       migrate(postgres, network, AuthMigrationCatalogContractTest.golangDirectory(), "up");
       try(var reader=new voice.backend.auth.authoritysource.AuthAuthorityReader(
@@ -95,7 +103,10 @@ class AuthMigrationCatalogJdbcIntegrationTest {
         reader.checkSchema();
         // V28's zero-row accounts UPDATE advances V26's statement-level clock.
         assertThat(reader.snapshot(java.util.List.of()).revision()).isEqualTo(2);
-        database.execute("UPDATE schema_migrations SET dirty=true");
+        assertThatThrownBy(() -> migrate(postgres,network,AuthMigrationCatalogContractTest.golangDirectory(),"down","1"))
+            .isInstanceOf(org.testcontainers.containers.ContainerLaunchException.class);
+        assertThat(database.queryForObject("SELECT version FROM schema_migrations WHERE dirty",Long.class)).isEqualTo(36);
+        rawAdmissionInstalled(database);
         assertThatThrownBy(reader::checkSchema).isInstanceOf(IllegalStateException.class);
       }
     }
