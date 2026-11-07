@@ -175,6 +175,7 @@ class FullGoTests(unittest.TestCase):
             evidence = []
             engine = FakeEngine()
             report = {'status': 'incomplete', 'source': plan['source'],
+                      'admission_mode': 'resource-claim',
                       'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
                                          'resource_limits': limits},
                       'resource_limit_readback': {'limits': {'client': limits['client'], 'daemon': limits['daemon']},
@@ -300,6 +301,7 @@ class FullGoTests(unittest.TestCase):
                         'container_ids': {'client': '1' * 64, 'daemon': '2' * 64},
                         'daemon_id': 'daemon-a'}
             report = {'status': 'incomplete', 'source': source,
+                      'admission_mode': 'resource-claim',
                       'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
                                          'resource_limits': limits},
                        'resource_limit_readback': readback,
@@ -470,6 +472,7 @@ class FullGoTests(unittest.TestCase):
             engine = FakeEngine()
             resources, owner_ids = [], []
             report = {'status': 'incomplete', 'source': changed_source,
+                      'admission_mode': 'resource-claim',
                       'input_identity': {'helper_sha256': 'c' * 64, 'archives': {},
                                          'resource_limits': limits},
                       'resource_limit_readback': {'client': limits['client'], 'daemon': limits['daemon']}}
@@ -522,6 +525,7 @@ class FullGoTests(unittest.TestCase):
                 'kind': 'volume', 'labels': {'owner': 'foreign'}}
             owned_ids = []
             report = {'status': 'incomplete', 'source': source,
+                'admission_mode': 'resource-claim',
                 'input_identity': {'helper_sha256': 'c' * 64, 'archives': {}, 'resource_limits': limits},
                 'resource_limit_readback': {'client': limits['client'], 'daemon': limits['daemon']}}
 
@@ -1027,7 +1031,7 @@ class FullGoTests(unittest.TestCase):
              mock.patch.object(subject, 'run', return_value={'status': 'incomplete', 'source': source}) as run:
             self.assertEqual(subject.run_selected(plan, 'bot', Path('.'), Path('out'), 'helper', 'b' * 64, {},
                                                   base='c' * 40, head_ref='codex/example'),
-                             {'status': 'incomplete', 'source': source})
+                             {'status': 'incomplete', 'source': source, 'admission_mode': 'resource-claim'})
         planner.assert_called_once_with(Path('.').resolve(), 'c' * 40, source['head'], 'codex/example')
         run.assert_called_once_with('bot', Path('.'), source['head'], Path('out'), 'helper', 'b' * 64, {}, 'go',
                                     resource_limits=None, owner_id=None, ownership_journal=None, slot=None)
