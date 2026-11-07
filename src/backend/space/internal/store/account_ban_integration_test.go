@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	spacev1 "voice.app/voice/space/v1"
 )
 
 // This suite requires a fresh, owned database migrated with the real driver.
@@ -21,18 +22,33 @@ func TestAccountBanCannotSucceedWithoutCompleteOwnerCapture(t *testing.T) {
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
-	space, owner, actor, account := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	_, err = pool.Exec(ctx, `INSERT INTO spaces(id,name,owner_profile_id) VALUES($1,'complete capture required',$2)`, space, owner)
+	facts, err := (&SpaceStore{Pool: pool}).InspectNativeInstallerSource(ctx, 51)
 	require.NoError(t, err)
+	require.NotNil(t, facts)
+	require.EqualValues(t, 51, facts.Version)
+	serving := projectionServingLogin(t, ctx, pool)
+	st := &SpaceStore{Pool: serving}
+	create, _, actor := signedProjectionCreator(t, st, &spacev1.CreateSpaceRequest{Name: "complete capture required", Visibility: "private"})
+	row, err := create()
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	space, account := row.ID, uuid.New()
 	// A missing User capture dependency must never be interpreted as a complete
 	// empty cohort, even when the account currently has no selected profile hint.
-	err = (&SpaceStore{Pool: pool}).BanMember(ctx, space, account, actor, nil, nil)
-	require.Error(t, err, "unqualified owner/cohort cannot authorize an account ban")
-	var bans, audit int
+	authorized := false
+	err = nativeBanExecute(t, st, space, account, actor, uuid.New(), nil, func(context.Context) error {
+		authorized = true
+		return nil
+	})
+	require.ErrorIs(t, err, ErrAccountBanUnavailable, "missing User capture must fail closed")
+	require.False(t, authorized, "missing capture is rejected before authorization and intent claim")
+	var bans, audit, operations int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_bans WHERE space_id=$1`, space).Scan(&bans))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE space_id=$1 AND action='member_banned'`, space).Scan(&audit))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM space_account_ban_operations WHERE space_id=$1`, space).Scan(&operations))
 	require.Zero(t, bans)
 	require.Zero(t, audit)
+	require.Zero(t, operations)
 }
 
 func TestAccountBanFixtureTrusted45Transition(t *testing.T) {

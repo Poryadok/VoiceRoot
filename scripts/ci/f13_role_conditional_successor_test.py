@@ -290,7 +290,16 @@ class RoleSuccessorTest(unittest.TestCase):
             'src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go',
             'src/backend/file/pb/voice/file/v1/file.pb.go',
             'src/backend/file/pb/voice/file/v1/file_grpc.pb.go',
+            'src/backend/pkg/go.mod',
             'src/backend/pkg/integrationtest/migrations.go'})
+        pkg_mod = 'src/backend/pkg/go.mod'
+        pkg_source = '2c279b1e733e62b8af653294a421b3a20f2266ba'
+        pkg_entry = {'mode':'100644','type':'blob',
+                     'oid':'60bc3002aa7ebd5e952d2c988166e93c618cb697'}
+        self.assertEqual(legacy.entry(ROOT,pkg_source,pkg_mod),pkg_entry)
+        self.assertEqual(legacy.entry(ROOT,self.actual_head,pkg_mod),pkg_entry)
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        pkg_source,self.actual_head]).returncode,0)
         story_file_grpc = 'src/backend/file/pb/voice/file/v1/file_grpc.pb.go'
         reviewed_story_source = 'f38e45008308e5309e0a371a411afb4c7bace6ae'
         reviewed_entry = {'mode':'100644','type':'blob',

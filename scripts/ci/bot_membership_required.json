@@ -1,0 +1,6 @@
+{
+  "bot": [
+    ["voice/backend/bot/internal/spacemembership", "TestNativeMembershipTypedCleanupLostReplyAndMalformedReceipt"],
+    ["voice/backend/bot/internal/store", "TestMembershipNativeTransitions"]
+  ]
+}

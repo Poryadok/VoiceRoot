@@ -70,7 +70,11 @@ class RequestTest(unittest.TestCase):
         changes = workflow.split('  changes:\n', 1)[1].split('  ci-skip-gate:\n', 1)[0]
         deploy = workflow.split('  deploy-staging:\n', 1)[1]
         self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.filter.outputs.full_application_request == 'true'", changes)
-        self.assertEqual(changes.count("|| steps.fullrequest.outputs.requested == 'true' }}"), 4)
+        for output in ('code:', 'FORCE_FULL:', 'FILTER_CODE:'):
+            lines = [line for line in changes.splitlines() if line.strip().startswith(output)]
+            self.assertEqual(len(lines), 3 if output == 'FORCE_FULL:' else 1)
+            for line in lines:
+                self.assertIn("steps.fullrequest.outputs.requested == 'true'", line)
         self.assertIn("needs.changes.outputs.full_application_request != 'true'", deploy)
         self.assertIn("vars.STAGING_DEPLOY_ENABLED == 'true'", deploy)
 

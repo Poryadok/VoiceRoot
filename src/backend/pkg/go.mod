@@ -13,6 +13,7 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
 	github.com/redis/go-redis/v9 v9.7.0
+	github.com/shirou/gopsutil/v3 v3.23.12
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.35.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0
@@ -22,8 +23,9 @@ require (
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v3 v3.0.1
 	voice.app/voice/analytics v0.0.0
-	voice.app/voice/events v0.0.0
 	voice.app/voice/chat v0.0.0
+	voice.app/voice/common v0.0.0
+	voice.app/voice/events v0.0.0
 	voice.app/voice/user v0.0.0
 )
 
@@ -70,7 +72,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
-	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
@@ -85,7 +86,6 @@ require (
 	golang.org/x/net v0.32.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	voice.app/voice/common v0.0.0 // indirect
 )
 
 replace voice.app/voice/user => ../user/pb/voice/user

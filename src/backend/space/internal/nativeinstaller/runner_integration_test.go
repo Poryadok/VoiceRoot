@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -196,30 +195,18 @@ func createRuntimeFixtureSpace(t *testing.T, ctx context.Context, st *store.Spac
 	return result.(*store.SpaceRow), profile, nil
 }
 
-type failedEvidenceWriter struct {
-	at    string
-	saved bytes.Buffer
-}
-
-func (w *failedEvidenceWriter) Write(p []byte) (int, error) {
-	var e event
-	if err := json.Unmarshal(p, &e); err != nil {
-		return 0, err
-	}
-	if e.Event == w.at {
-		return 0, errors.New("controlled deployment evidence persistence failure")
-	}
-	return w.saved.Write(p)
-}
-
 // The natural evidence-writer boundary injects loss of the owning deployment
 // window before/after every real committed migration and transition. There is
 // no production fault flag, fake migrate engine, marker force or epoch update.
 func TestCommittedPhaseFailureNeverAutoResumes(t *testing.T) {
 	adminURL := os.Getenv("NATIVE_INSTALLER_TEST_ADMIN_URL")
 	driver := os.Getenv("NATIVE_INSTALLER_TEST_MIGRATE")
+	binary := os.Getenv("NATIVE_INSTALLER_TEST_BINARY")
+	helper := os.Getenv("NATIVE_INSTALLER_TEST_FAILURE_HELPER")
 	require.NotEmpty(t, adminURL)
 	require.NotEmpty(t, driver)
+	require.NotEmpty(t, binary, "source-bound production binary required")
+	require.NotEmpty(t, helper, "source-bound evidence failure helper required")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	admin, err := pgx.Connect(ctx, adminURL)
@@ -234,9 +221,13 @@ func TestCommittedPhaseFailureNeverAutoResumes(t *testing.T) {
 	}{{"created", 0}, {"migrated44", 44}, {"trusted44", 44}, {"migrated45", 45}, {"trusted45", 45}, {"migrated50", 50}, {"trusted50", 50}, {"trusted51", 51}, {"complete", 51}}
 	for _, test := range cases {
 		t.Run(test.event, func(t *testing.T) {
-			w := &failedEvidenceWriter{at: test.event}
-			c := Config{AdminURL: adminURL, MigratePath: driver, MigrationsDir: "../../../migrations/space_db", Mode: "provision", Output: w}
-			require.ErrorContains(t, Run(ctx, c), "evidence persistence failure")
+			migrations := "../../../migrations/space_db"
+			injected := exec.CommandContext(ctx, helper, "-at", test.event, "-migrate", driver, "-migrations-dir", migrations)
+			injected.Env = append(os.Environ(), "SPACE_NATIVE_ADMIN_URL="+adminURL)
+			partial, err := injected.Output()
+			var failure *exec.ExitError
+			require.ErrorAs(t, err, &failure)
+			require.Contains(t, string(failure.Stderr), "controlled deployment evidence persistence failure")
 			var ownedOID uint32
 			require.NoError(t, admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&ownedOID))
 			require.NotZero(t, ownedOID)
@@ -257,9 +248,12 @@ func TestCommittedPhaseFailureNeverAutoResumes(t *testing.T) {
 				require.False(t, dirty)
 			}
 			require.NoError(t, target.Close(ctx))
-			c.Output = &bytes.Buffer{}
-			require.ErrorContains(t, Run(ctx, c), "HOLD: existing database")
-			_, err = ReadReceipt(bytes.NewReader(w.saved.Bytes()))
+			retry := exec.CommandContext(ctx, binary, "-mode", "provision", "-migrate", driver, "-migrations-dir", migrations)
+			retry.Env = append(os.Environ(), "SPACE_NATIVE_ADMIN_URL="+adminURL)
+			retryOutput, err := retry.CombinedOutput()
+			require.Error(t, err)
+			require.Contains(t, string(retryOutput), "HOLD: existing database")
+			_, err = ReadReceipt(bytes.NewReader(partial))
 			require.Error(t, err, "partial events never become completed provenance")
 			var sameOID uint32
 			require.NoError(t, admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&sameOID))
