@@ -201,18 +201,6 @@ def main():
     args=parser.parse_args()
     try:
         try:
-            import f13_current_source as current
-        except ModuleNotFoundError as error:
-            if error.name != 'f13_current_source': raise
-            current = None
-        if current is not None and Path(args.repo).resolve() == current.release.ROOT.resolve() and \
-                legacy.git(args.repo, 'rev-parse', 'HEAD').decode().strip() == args.target and \
-                current.applicable(args.repo, args.target):
-            try: result = current.role_qualify(args.repo, args.target, args.prior_row, args.incoming_row)
-            except current.release.Rejected as error: raise legacy.Rejected(str(error)) from error
-            print(json.dumps(result, sort_keys=True))
-            return 0
-        try:
             import f13_release_source as release
         except ModuleNotFoundError as error:
             if error.name != 'f13_release_source': raise
