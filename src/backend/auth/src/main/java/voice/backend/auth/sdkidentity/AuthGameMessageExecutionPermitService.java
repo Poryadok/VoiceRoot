@@ -41,11 +41,15 @@ public final class AuthGameMessageExecutionPermitService {
 
   public Permit issue(String assertion, UUID operationId, String requestSha256) {
     if (operationId == null || requestSha256 == null || !requestSha256.matches("[0-9a-f]{64}")) throw denied();
+    // The private adapter authenticates Messaging before inspecting an old assertion.
+    SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
     AuthUserPrincipalIssuer.VerifiedDeviceStatus device = issuer.verifyDeviceStatusAssertion(assertion);
     return transactions.execute(status -> {
+      SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
       // Keep the shared identity/device serialization fence ahead of grant,
       // session and key locks, matching device-authority issuance and revoke.
-      lockIdentityAndDevice(device.accountId(), device.deviceId());
+      lockIdentityAndDevice(device.accountId(), device.deviceId(), operationId);
+      SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
       Instant now = clock.instant();
       var authRows = jdbc.queryForList("""
           SELECT request_id,game_binding_status FROM sdk_authorizations
@@ -122,17 +126,24 @@ public final class AuthGameMessageExecutionPermitService {
   public Completion complete(UUID permitJti, UUID operationId, String outcome) {
     if (permitJti == null || operationId == null || !Set.of("committed", "aborted").contains(outcome)) throw denied();
     return transactions.execute(status -> {
-      // Issue and completion both serialize grant -> permit. The initial lookup
-      // is deliberately unlocked because grant_id is immutable; after taking
-      // the grant lock, re-read and lock the permit row in that same order.
+      SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
+      // Match erasure's source identity -> grant -> permit order. The initial
+      // immutable ownership lookup is revalidated after the shared source lock.
       var ownership = jdbc.queryForList("""
-          SELECT grant_id FROM sdk_game_message_execution_permits WHERE permit_jti=:jti
+          SELECT p.grant_id,a.source_account_id FROM sdk_game_message_execution_permits p
+          JOIN sdk_game_message_grants g ON g.grant_id=p.grant_id
+          JOIN sdk_authorizations a ON a.request_id=g.authorization_request_id WHERE p.permit_jti=:jti
           """, Map.of("jti", permitJti));
+      SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
       if (ownership.size() != 1) throw denied();
       UUID grantId = (UUID) ownership.getFirst().get("grant_id");
+      jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
+          Map.of("id", ownership.getFirst().get("source_account_id")), rs -> { });
+      SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
       var grants = jdbc.queryForList("""
           SELECT status FROM sdk_game_message_grants WHERE grant_id=:grant FOR UPDATE
           """, Map.of("grant", grantId));
+      SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
       if (grants.size() != 1) throw denied();
       var rows = jdbc.queryForList("""
           SELECT * FROM sdk_game_message_execution_permits
@@ -235,9 +246,10 @@ public final class AuthGameMessageExecutionPermitService {
     return jdbc.queryForObject(sql, Map.of("id", request), UUID.class);
   }
 
-  private void lockIdentityAndDevice(UUID accountId, UUID deviceId) {
+  private void lockIdentityAndDevice(UUID accountId, UUID deviceId, UUID operationId) {
     jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
         Map.of("id", accountId), rs -> { });
+    SdkTerminalFences.requireLive(jdbc, "sdk_execution", operationId);
     Integer found = jdbc.query("SELECT device_id FROM sdk_devices WHERE device_id=:id AND account_id=:account FOR UPDATE",
         Map.of("id", deviceId, "account", accountId), rs -> rs.next() ? 1 : 0);
     if (found == null || found != 1) throw denied();
