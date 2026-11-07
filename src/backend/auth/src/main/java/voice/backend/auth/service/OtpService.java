@@ -6,6 +6,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.mail.MailSender;
 import voice.backend.auth.repository.Account;
 import voice.backend.auth.repository.AccountRepository;
@@ -45,6 +49,24 @@ public class OtpService {
   private final GuestConversionOtpAcceptance guestConversionAcceptance;
   private final GuestConversionPendingUserWorker pendingUserWorker;
   private final SecureRandom random = new SecureRandom();
+  private TransactionTemplate securityTransactions;
+  private voice.backend.auth.sessionepoch.SessionEpochFloorStore sessionEpochFloors;
+
+  @Autowired
+  public void configureSessionEpochFloors(voice.backend.auth.sessionepoch.SessionEpochFloorStore floors) {
+    this.sessionEpochFloors = Objects.requireNonNull(floors, "floors");
+  }
+
+  @Autowired(required = false)
+  public void configureSecurityTransactions(
+      @Qualifier("authSecurityTransactionTemplate") TransactionTemplate transactions) {
+    this.securityTransactions = Objects.requireNonNull(transactions, "transactions");
+  }
+
+  private <T> T securityTransaction(Supplier<T> operation) {
+    if (securityTransactions != null) return securityTransactions.execute(status -> operation.get());
+    synchronized (accounts) { return operation.get(); }
+  }
 
   public OtpService(
       AccountRepository accounts,
@@ -166,17 +188,28 @@ public class OtpService {
     ensureActive(account);
     String throttleKey = account.id() + ":password_reset";
     throttle.admitVerify(throttleKey);
-    Instant now = Instant.now(clock);
-    OtpCodeRecord record =
-        otpCodes
-            .findLatestValid(account.id(), "password_reset", now)
-            .orElseThrow(() -> new AuthException("invalid_otp"));
-    if (!codec.hash(command.code().trim()).equals(record.codeHash())) {
-      throw new AuthException("invalid_otp");
-    }
-    otpCodes.markUsed(record.id(), now);
-    accounts.updatePasswordHash(account.id(), passwordHasher.hash(command.newPassword()));
-    refreshTokens.revokeAllForAccount(account.id(), now);
+    String passwordHash = passwordHasher.hash(command.newPassword());
+    securityTransaction(() -> {
+      accounts.lockForSecurityMutation(account.id());
+      Account current = accounts.findById(account.id().toString())
+          .orElseThrow(() -> new AuthException("invalid_credentials"));
+      ensureActive(current);
+      Instant now = Instant.now(clock);
+      OtpCodeRecord record = otpCodes.findLatestValid(account.id(), "password_reset", now)
+          .orElseThrow(() -> new AuthException("invalid_otp"));
+      if (!codec.hash(command.code().trim()).equals(record.codeHash())) throw new AuthException("invalid_otp");
+      otpCodes.markUsed(record.id(), now);
+      accounts.updatePasswordHash(account.id(), passwordHash);
+      // The same account-row mutex guards both phases of legacy refresh issuance.
+      if (sessionEpochFloors == null) {
+        // Directly constructed memory fixtures have no external floor authority.
+        accounts.incrementSessionEpoch(account.id());
+      } else {
+        AuthService.advancePasswordChangeEpoch(accounts, sessionEpochFloors, account.id(), current.sessionEpoch());
+      }
+      refreshTokens.revokeAllForAccount(account.id(), now);
+      return null;
+    });
   }
 
   private Account resolveAccount(
