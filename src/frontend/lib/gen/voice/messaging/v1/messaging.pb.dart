@@ -6403,10 +6403,12 @@ class GetMessagesResponse extends $pb.GeneratedMessage {
   factory GetMessagesResponse({
     MessageList? messageList,
     DmPeerState? dmPeerState,
+    $core.bool? historyReset,
   }) {
     final result = create();
     if (messageList != null) result.messageList = messageList;
     if (dmPeerState != null) result.dmPeerState = dmPeerState;
+    if (historyReset != null) result.historyReset = historyReset;
     return result;
   }
 
@@ -6428,6 +6430,7 @@ class GetMessagesResponse extends $pb.GeneratedMessage {
         subBuilder: MessageList.create)
     ..aE<DmPeerState>(2, _omitFieldNames ? '' : 'dmPeerState',
         enumValues: DmPeerState.values)
+    ..aOB(3, _omitFieldNames ? '' : 'historyReset')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -6469,6 +6472,17 @@ class GetMessagesResponse extends $pb.GeneratedMessage {
   $core.bool hasDmPeerState() => $_has(1);
   @$pb.TagNumber(2)
   void clearDmPeerState() => $_clearField(2);
+
+  /// A missing/deleted anchor reset this reply to latest history (descending),
+  /// whose next_cursor, if present, loads older history rather than catch-up.
+  @$pb.TagNumber(3)
+  $core.bool get historyReset => $_getBF(2);
+  @$pb.TagNumber(3)
+  set historyReset($core.bool value) => $_setBool(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasHistoryReset() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearHistoryReset() => $_clearField(3);
 }
 
 class GetMessageResponse extends $pb.GeneratedMessage {

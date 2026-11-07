@@ -1141,6 +1141,7 @@ class ChatRoomState {
     this.isOfflineCache = false,
     this.isDmPeerDeleted = false,
     this.historyProfileId,
+    this.historyCursor,
   });
 
   final List<VoiceMessage> messages;
@@ -1175,6 +1176,7 @@ class ChatRoomState {
   /// This remains intact across a profile switch so controller lifecycle code
   /// can reject stale events without discarding a useful snapshot.
   final String? historyProfileId;
+  final MessageHistoryCursor? historyCursor;
 
   String? get lastMessageId => messages.isEmpty ? null : messages.last.id;
 
@@ -1210,6 +1212,8 @@ class ChatRoomState {
     bool? isOfflineCache,
     bool? isDmPeerDeleted,
     String? historyProfileId,
+    MessageHistoryCursor? historyCursor,
+    bool clearHistoryCursor = false,
   }) {
     return ChatRoomState(
       messages: messages ?? this.messages,
@@ -1258,6 +1262,9 @@ class ChatRoomState {
       isOfflineCache: isOfflineCache ?? this.isOfflineCache,
       isDmPeerDeleted: isDmPeerDeleted ?? this.isDmPeerDeleted,
       historyProfileId: historyProfileId ?? this.historyProfileId,
+      historyCursor: clearHistoryCursor
+          ? null
+          : (historyCursor ?? this.historyCursor),
     );
   }
 }
@@ -1392,6 +1399,23 @@ class _ImmediateSendAttempt {
   final String? threadParentId;
   final bool isE2e;
   final bool sendSilent;
+}
+
+class _HistoryCatchUp {
+  _HistoryCatchUp(
+    this.profileId,
+    this.authorization,
+    this.generation,
+    this.authGeneration,
+    this.sessionInstallGeneration,
+  );
+  final String profileId;
+  final String authorization;
+  final int generation;
+  final int authGeneration;
+  final int sessionInstallGeneration;
+  bool again = false;
+  late Future<void> future;
 }
 
 class ChatRoomController extends StateNotifier<ChatRoomState> {
@@ -1788,6 +1812,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
 
   String? _loadedHistoryProfileId;
   var _historyGeneration = 0;
+  _HistoryCatchUp? _historyCatchUp;
   var _loadGeneration = 0;
   var _pinnedMessagesGeneration = 0;
   var _olderPageGeneration = 0;
@@ -1838,7 +1863,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     super.dispose();
   }
 
-  Future<void> loadInitial() async {
+  Future<void> loadInitial() => _loadInitialHistory();
+
+  Future<void> _loadInitialHistory({bool resetHistoryCursor = false}) async {
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     if (auth == null || profileId == null) return;
@@ -1847,6 +1874,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     final hadLoadedHistory =
         previousHistoryProfileId == profileId && state.messages.isNotEmpty;
     final historyGeneration = ++_historyGeneration;
+    MessageHistoryCursor? resumeCursor = !resetHistoryCursor && hadLoadedHistory
+        ? state.historyCursor
+        : null;
     _loadedHistoryProfileId = null;
     if (previousHistoryProfileId != profileId) {
       state = state.copyWith(isDmPeerDeleted: false);
@@ -1863,6 +1893,22 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         historyGeneration: historyGeneration,
       );
       if (served) return;
+    } else if (!resetHistoryCursor && resumeCursor == null) {
+      final restored = await _serveCachedMessages(
+        profileId: profileId,
+        authorization: auth,
+        historyGeneration: historyGeneration,
+        requireHistoryCursor: true,
+      );
+      if (!_isCurrentInitialLoad(
+            profileId: profileId,
+            authorization: auth,
+            generation: loadGeneration,
+          ) ||
+          _historyGeneration != historyGeneration) {
+        return;
+      }
+      if (restored) resumeCursor = state.historyCursor;
     }
     final result = await _ref
         .read(voiceMessagesClientProvider)
@@ -1908,9 +1954,23 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           clearNextCursor: data.nextCursor == null,
           hasMore: data.hasMore && data.nextCursor != null,
           historyProfileId: profileId,
+          historyCursor:
+              resumeCursor ??
+              (data.messages.isEmpty
+                  ? null
+                  : MessageHistoryCursor(messageId: data.messages.first.id)),
+          clearHistoryCursor: resumeCursor == null && data.messages.isEmpty,
           clearError: true,
         );
         await _writeCache(sorted, profileId: profileId);
+        if (resumeCursor != null &&
+            _isCurrentInitialLoad(
+              profileId: profileId,
+              authorization: auth,
+              generation: loadGeneration,
+            )) {
+          await _fetchDelta(reconnect: true);
+        }
         unawaited(_markLatestRead());
         unawaited(
           _refreshPinnedMessages(
@@ -1984,76 +2044,141 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   }
 
   Future<void> _catchUpAfterReconnect() async {
-    final lastId = state.lastMessageId;
-    if (lastId == null) {
-      await loadInitial();
-      return;
-    }
-    await _fetchDelta(lastMessageId: lastId);
+    await _fetchDelta(reconnect: true);
   }
 
   Future<void> _catchUpAfterEvent() async {
-    final lastId = state.lastMessageId;
-    if (lastId == null) {
-      await loadInitial();
-      return;
-    }
-    await _fetchDelta(afterMessageId: lastId);
+    await _fetchDelta(reconnect: false);
   }
 
-  Future<void> _fetchDelta({
-    String? afterMessageId,
-    String? lastMessageId,
-  }) async {
+  Future<void> _fetchDelta({required bool reconnect}) async {
     final auth = _ref.read(authorizationHeaderProvider);
     final profileId = _activeProfileId();
     final historyGeneration = _historyGeneration;
     if (auth == null || profileId == null) return;
-    final result = await _ref
-        .read(voiceMessagesClientProvider)
-        .getMessages(
-          authorization: auth,
-          chatId: chatId,
-          afterMessageId: afterMessageId,
-          lastMessageId: lastMessageId,
-        );
-    if (result case MessagesApiOk(:final data)) {
-      if (!_isCurrentHistory(
-        profileId: profileId,
-        authorization: auth,
-        generation: historyGeneration,
-      )) {
-        return;
-      }
-      _applyDmPeerState(data.dmPeerState);
-      if (data.dmPeerState == messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
-        return;
-      }
-      if (data.messages.isEmpty) return;
-      final merged = [...state.messages];
-      for (final m in data.messages) {
-        if (!merged.any((x) => x.id == m.id)) {
-          merged.add(m);
+    if (state.historyProfileId != profileId || state.historyCursor == null) {
+      await loadInitial();
+      return;
+    }
+    final previous = _historyCatchUp;
+    final sessionInstallGeneration = _ref
+        .read(authControllerProvider.notifier)
+        .sessionInstallGeneration;
+    if (previous != null &&
+        previous.generation == historyGeneration &&
+        previous.authGeneration == _authGeneration &&
+        previous.sessionInstallGeneration == sessionInstallGeneration &&
+        previous.authorization == auth &&
+        previous.profileId == profileId) {
+      previous.again = true;
+      return previous.future;
+    }
+    final run = _HistoryCatchUp(
+      profileId,
+      auth,
+      historyGeneration,
+      _authGeneration,
+      sessionInstallGeneration,
+    );
+    _historyCatchUp = run;
+    run.future = Future<void>.microtask(
+      () => _drainHistory(run, reconnect: reconnect),
+    );
+    return run.future;
+  }
+
+  Future<void> _drainHistory(
+    _HistoryCatchUp run, {
+    required bool reconnect,
+  }) async {
+    bool current() =>
+        mounted &&
+        identical(_historyCatchUp, run) &&
+        run.authGeneration == _authGeneration &&
+        run.sessionInstallGeneration ==
+            _ref
+                .read(authControllerProvider.notifier)
+                .sessionInstallGeneration &&
+        _isCurrentHistory(
+          profileId: run.profileId,
+          authorization: run.authorization,
+          generation: run.generation,
+        ) &&
+        state.historyProfileId == run.profileId;
+    try {
+      do {
+        run.again = false;
+        final seenCursors = <String>{};
+        while (current()) {
+          final position = state.historyCursor;
+          if (position == null) return;
+          final pageCursor = position.pageCursor;
+          if (pageCursor != null) seenCursors.add(pageCursor);
+          final result = await _ref
+              .read(voiceMessagesClientProvider)
+              .getMessages(
+                authorization: run.authorization,
+                chatId: chatId,
+                cursor: pageCursor,
+                afterMessageId: pageCursor == null && !reconnect
+                    ? position.messageId
+                    : null,
+                lastMessageId: pageCursor == null && reconnect
+                    ? position.messageId
+                    : null,
+              );
+          if (!current() || result is! MessagesApiOk<MessageListData>) return;
+          final data = result.data;
+          _applyDmPeerState(data.dmPeerState);
+          if (data.dmPeerState ==
+              messaging_pb.DmPeerState.DM_PEER_STATE_DELETED) {
+            return;
+          }
+          if (data.historyReset) {
+            await _loadInitialHistory(resetHistoryCursor: true);
+            return;
+          }
+          if (data.hasMore &&
+              (data.nextCursor == null ||
+                  data.nextCursor!.isEmpty ||
+                  !seenCursors.add(data.nextCursor!))) {
+            return;
+          }
+          final merged = <String, VoiceMessage>{
+            for (final m in state.messages) m.id: m,
+          };
+          for (final m in data.messages) {
+            merged.putIfAbsent(m.id, () => m);
+          }
+          final sorted = await _finalizeMessages(
+            _sortMessages(
+              _visibleForCurrentBlockPolicy(merged.values.toList()),
+            ),
+          );
+          if (!current()) return;
+          state = state.copyWith(
+            messages: sorted,
+            clearError: true,
+            isOfflineCache: false,
+            historyCursor: MessageHistoryCursor(
+              messageId: data.messages.isEmpty
+                  ? position.messageId
+                  : data.messages.last.id,
+              pageCursor: data.hasMore
+                  ? data.nextCursor
+                  : (data.messages.isEmpty ? pageCursor : null),
+            ),
+          );
+          await _writeCache(sorted, profileId: run.profileId);
+          if (data.messages.isNotEmpty) {
+            unawaited(_markLatestRead());
+            _invalidateChatLists(_ref);
+          }
+          if (!data.hasMore) break;
         }
-      }
-      final sorted = await _finalizeMessages(
-        _sortMessages(_visibleForCurrentBlockPolicy(merged)),
-      );
-      if (!_isCurrentHistory(
-        profileId: profileId,
-        authorization: auth,
-        generation: historyGeneration,
-      )) {
-        return;
-      }
-      state = state.copyWith(
-        messages: sorted,
-        clearError: true,
-        isOfflineCache: false,
-      );
-      unawaited(_writeCache(sorted, profileId: profileId));
-      unawaited(_markLatestRead());
-      _invalidateChatLists(_ref);
+      } while (run.again && current());
+    } finally {
+      if (identical(_historyCatchUp, run)) _historyCatchUp = null;
     }
   }
 
@@ -2930,6 +3055,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     required String profileId,
     required String authorization,
     required int historyGeneration,
+    bool requireHistoryCursor = false,
   }) async {
     final barrier = _ref.read(socialBlockVisibilityBarrierProvider);
     if (_ref.read(socialBlockMutationPendingProvider)) return false;
@@ -2939,9 +3065,20 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     if (barrier.revision > 0 && filteredRevision != barrier.revision) {
       return false;
     }
-    final cached = await _ref
-        .read(messageCacheStoreProvider)
-        .getMessages(profileId: profileId, chatId: chatId);
+    late List<VoiceMessage> cached;
+    MessageHistoryCursor? historyCursor;
+    await _enqueueCacheMutation((store) async {
+      if (store is HistoryCursorMessageCacheStore) {
+        historyCursor = await store.getHistoryCursor(
+          profileId: profileId,
+          chatId: chatId,
+        );
+      }
+      cached = requireHistoryCursor && historyCursor == null
+          ? const []
+          : await store.getMessages(profileId: profileId, chatId: chatId);
+    });
+    if (requireHistoryCursor && historyCursor == null) return false;
     if (!_isCurrentInitialLoad(
           profileId: profileId,
           authorization: authorization,
@@ -2974,6 +3111,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       hasMore: false,
       clearNextCursor: true,
       historyProfileId: profileId,
+      historyCursor: historyCursor,
+      clearHistoryCursor: historyCursor == null,
     );
     return true;
   }
@@ -3001,6 +3140,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     profileId ??= _activeProfileId();
     if (profileId == null) return;
     final targetProfileId = profileId;
+    final historyCursor = state.historyProfileId == targetProfileId
+        ? state.historyCursor
+        : null;
     final sourceVisibilityRevision = _ref
         .read(socialBlockVisibilityBarrierProvider)
         .revision;
@@ -3017,13 +3159,24 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           barrier.revision != sourceVisibilityRevision ||
           (barrier.revision > 0 &&
               filteredRevision != sourceVisibilityRevision);
-      await store.replaceChatMessages(
-        profileId: targetProfileId,
-        chatId: chatId,
-        messages: isStaleHistory
-            ? const []
-            : _visibleForCurrentBlockPolicy(messages),
-      );
+      if (store is HistoryCursorMessageCacheStore) {
+        await store.replaceChatHistory(
+          profileId: targetProfileId,
+          chatId: chatId,
+          messages: isStaleHistory
+              ? const []
+              : _visibleForCurrentBlockPolicy(messages),
+          historyCursor: isStaleHistory ? null : historyCursor,
+        );
+      } else {
+        await store.replaceChatMessages(
+          profileId: targetProfileId,
+          chatId: chatId,
+          messages: isStaleHistory
+              ? const []
+              : _visibleForCurrentBlockPolicy(messages),
+        );
+      }
     });
   }
 

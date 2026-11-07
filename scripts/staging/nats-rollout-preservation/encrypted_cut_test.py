@@ -7,10 +7,49 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+import sys
+from unittest.mock import Mock, patch
 import encrypted_cut
 
 
 class EncryptedCutTest(unittest.TestCase):
+    def test_fixed_cohort_capsule_is_authenticated_and_restored_without_exposing_key(self):
+        import copy,guard,resource_claim,resource_claim_test
+        root=self.base;base=root/('rollout-'+'a'*12);base.mkdir(mode=0o700)
+        for name in ('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json'):
+            shutil.copyfile(root/name,base/name);(base/name).chmod(0o600)
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        session.admit(start=True)
+        values={'cohort-before.tar':b'synthetic-ciphertext',
+                'cohort-before-manifest.json':b'{"fixture":true}',
+                'cohort-before.key':b'K'*32}
+        for name,raw in values.items():
+            path=base/name;path.write_bytes(raw);path.chmod(0o600)
+        descriptors={name:{'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()} for name,raw in values.items()}
+        adapter=Mock();adapter.capsule_members.return_value=descriptors
+        def qualify(_session,recovered):
+            self.assertEqual({name:(recovered/name).read_bytes() for name in values},values)
+            return {'schema':'synthetic-restore-proof'}
+        adapter.qualify_decrypted.side_effect=qualify
+        installed=root/'installed';installed.mkdir(mode=0o700)
+        fixed_keys=installed/'recovery';shutil.copytree(self.keys,fixed_keys)
+        with patch.object(guard,'ROOT',root),patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
+            with self.assertRaisesRegex(encrypted_cut.CryptoError,'backup_cohort_recipient_invalid'):
+                encrypted_cut.encrypt_cut(base,self.keys,cohort_session=session)
+            binding=encrypted_cut.encrypt_cut(base,fixed_keys,cohort_session=session)
+            self.assertEqual(binding['cohort_members'],descriptors)
+            self.assertNotIn(values['cohort-before.key'],(base/'rollout-backup.cms').read_bytes())
+            with self.assertRaisesRegex(encrypted_cut.CryptoError,'backup_cohort_recipient_invalid'):
+                encrypted_cut.decrypt_verify(base,self.keys,binding,lambda _:None,cohort_session=session)
+            proof=encrypted_cut.decrypt_verify(base,fixed_keys,binding,lambda _: {'native':'fixture'},cohort_session=session)
+            self.assertEqual(proof['cohort_readback'],{'schema':'synthetic-restore-proof'})
+            self.assertNotIn('cohort-before.key',proof['members'])
+            adapter.qualify_decrypted.assert_called_once()
+            (base/'cohort-before.tar').write_bytes(b'altered')
+            with self.assertRaisesRegex(encrypted_cut.CryptoError,'backup_cohort_changed'):
+                encrypted_cut.decrypt_verify(base,fixed_keys,binding,lambda _:None,cohort_session=session)
+
     def test_operation_restore_decrypts_bound_cipher_and_checks_every_payload_member(self):
         binding=encrypted_cut.encrypt_cut(self.base,self.keys)
         seen=[]

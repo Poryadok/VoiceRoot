@@ -110,7 +110,7 @@ func ServeClosed(ctx context.Context, cfg ServerConfig, ready func(string)) (res
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if controller.Shutdown(cleanup) != nil {
+		if controller.Shutdown(cleanup) != nil && result == nil {
 			result = ErrUnavailable
 		}
 	}()
@@ -183,8 +183,8 @@ func ServeClosed(ctx context.Context, cfg ServerConfig, ready func(string)) (res
 		}
 		operatorDone = op.done
 		defer func() {
-			if op.close() != nil {
-				result = ErrUnavailable
+			if closeErr := op.close(); closeErr != nil {
+				result = closeErr
 			}
 		}()
 	}

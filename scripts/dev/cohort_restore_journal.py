@@ -10,6 +10,7 @@ import cohort_readback as readback
 import cohort_upload_phase as upload
 import story_media_backup_cohort as cohort
 import story_media_backup_cohort_restore as restore
+import cohort_backup_phases as phases
 
 
 class RestoreError(RuntimeError): pass
@@ -81,10 +82,82 @@ class RestoreJournal:
         readback._poison(self.phase); raise RestoreError('restore resource uncertain')
 
 
-def run(phase, key, destination, manifest, metadata, source_root, postgres_image, migrate_image, drain):
+def verify_go_role(phase, metadata_phase, token, database):
+    """Verify the completed source-bound clone migration for one Go login."""
+    try:
+        import full_cohort_backup_metadata as metadata_source
+        if type(phase) is not phases.CohortPhases or type(metadata_phase) is not metadata_source.BackupMetadataPhase:
+            raise ValueError()
+        p=phase.phases
+        phase._guard(); row, revision=p.fence.ledger.read(); row=copy.deepcopy(row)
+        snapshot=copy.deepcopy(readback._snapshot(phase,row))
+        binding, _, marker, _ = snapshot
+        if 'full_catalog' not in binding: raise ValueError()
+        source=metadata_source.verify_completed(metadata_phase,token)
+        changed=[db for db in binding['databases'] if restore.classify_plan(db,source['metadata']['migrations'][db],True)=='migrate']
+        roles=restore._qualified_roles(metadata_phase,token,phase.catalog_phase,binding,binding['databases'],source['metadata'],changed)
+        if (database not in roles or metadata_phase.fence.context!=p.fence.context or metadata_phase.lock!=p.lock
+                or metadata_phase.namespace_uid!=p.namespace_uid or metadata_phase.fence.ledger.read()!=(row,revision)):
+            raise ValueError()
+        done=row.get('cohort_restore');local=p.journal.state['steps'].get('cohort-restore')
+        if not isinstance(done,dict) or done!=local or set(done)!={'status','intent','receipt'} or done['status']!='done':
+            raise ValueError()
+        readback_done=row.get('cohort_readback')
+        if (not isinstance(readback_done,dict) or readback_done!=p.journal.state['steps'].get('cohort-readback')
+                or readback_done.get('status')!='done' or readback_done.get('intent',{}).get('manifest_sha256')!=marker['manifest_sha256']
+                or readback_done.get('receipt',{}).get('artifact_id')!=done['intent'].get('artifact_id')):
+            raise ValueError()
+        intent=done['intent'];receipt=done['receipt']
+        role_digest=hashlib.sha256(json.dumps(roles,sort_keys=True,separators=(',', ':'),ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
+        expected={db:{'role':roles[db]['role'],'from':source['metadata']['migrations'][db]['from'],
+                      'to':source['metadata']['migrations'][db]['to']} for db in changed}
+        resources=row.get('cohort_restore_resources')
+        local_resources={name.removeprefix('cohort-restore-resource-'):value for name,value in p.journal.state['steps'].items()
+                         if name.startswith('cohort-restore-resource-')}
+        if (set(intent)!={'status','operation_id','snapshot_id','invocation_nonce','manifest_sha256','artifact_id','migration_roles_sha256'}
+                or intent.get('status')!='pending'
+                or intent.get('operation_id')!=binding['operation_id'] or intent.get('snapshot_id')!=binding['snapshot_id']
+                or intent.get('invocation_nonce')!=p.invocation or intent.get('manifest_sha256')!=marker['manifest_sha256']
+                or intent.get('migration_roles_sha256')!=role_digest or receipt.get('operation_id')!=binding['operation_id']
+                or receipt.get('snapshot_id')!=binding['snapshot_id'] or receipt.get('source_sha')!=binding['source_sha']
+                or receipt.get('manifest_sha256')!=marker['manifest_sha256'] or receipt.get('cleanup')!='verified'
+                or receipt.get('databases',{}).get(database)!={'mode':'migrate','from':expected[database]['from'],'to':expected[database]['to']}
+                or receipt.get('migration_logins')!=expected or not isinstance(resources,dict)
+                or set(resources)!={'postgres','migrate'} or resources!=local_resources):
+            raise ValueError()
+        for resource in resources.values():
+            name=resource.get('name')
+            if (set(resource)!={'status','nonce','name','labels','operation_id','invocation_nonce','container_id'}
+                    or resource['status']!='removed' or resource['operation_id']!=binding['operation_id']
+                    or resource['invocation_nonce']!=p.invocation or not isinstance(name,str)
+                    or not re.fullmatch(r'voice-media-restore-[0-9a-f]{32}',name)
+                    or resource['labels']!={'voice.test.owner':name}
+                    or not isinstance(resource['nonce'],str) or not re.fullmatch(r'[0-9a-f]{32}',resource['nonce'])
+                    or not isinstance(resource['container_id'],str) or not re.fullmatch(r'[0-9a-f]{64}',resource['container_id'])):
+                raise ValueError()
+        if any(len({resource[key] for resource in resources.values()})!=2 for key in ('nonce','name','container_id')):
+            raise ValueError()
+        verified_done=copy.deepcopy(done);verified_readback=copy.deepcopy(readback_done);verified_resources=copy.deepcopy(local_resources)
+        phase._guard()
+        if (p.fence.ledger.read()!=(row,revision) or metadata_phase.fence.ledger.read()!=(row,revision)
+                or readback._snapshot(phase,row)!=snapshot
+                or p.journal.state['steps'].get('cohort-restore')!=verified_done
+                or p.journal.state['steps'].get('cohort-readback')!=verified_readback
+                or {name.removeprefix('cohort-restore-resource-'):value for name,value in p.journal.state['steps'].items()
+                    if name.startswith('cohort-restore-resource-')}!=verified_resources): raise ValueError()
+        return {'database':database,**expected[database],'source_sha':binding['source_sha'],
+                'snapshot_id':binding['snapshot_id'],'manifest_sha256':marker['manifest_sha256'],
+                'migration_roles_sha256':role_digest,'scope':'isolated-clone-migration-login-only'}
+    except Exception:
+        raise RestoreError('clone migration login qualification unavailable') from None
+
+
+def run(phase, key, destination, manifest, metadata, source_root, postgres_image, migrate_image, drain,
+        metadata_phase=None, metadata_token=None):
     """One actual isolated restore; caller owns source authority and drain."""
     pending = False; p = phase.phases
     try:
+        if 'full_catalog' in phase.binding and type(phase) is not phases.CohortPhases: raise ValueError()
         readback._guard(phase,drain); row, revision = p.fence.ledger.read()
         snapshot = readback._snapshot(phase,row); binding, planned, marker, _ = snapshot
         done = p.journal.state['steps'].get('cohort-readback')
@@ -106,8 +179,22 @@ def run(phase, key, destination, manifest, metadata, source_root, postgres_image
         digest = hashlib.sha256(json.dumps(manifest,sort_keys=True,separators=(',', ':'),ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
         if digest != marker['manifest_sha256']: raise ValueError()
         cohort.verify(destination,key,binding,binding['databases'],manifest)
+        changed = ([db for db in binding['databases']
+                    if restore.classify_plan(db,metadata['migrations'][db], True) == 'migrate']
+                   if 'full_catalog' in binding else [])
+        qualified = None
+        if 'full_catalog' in binding and changed:
+            qualified = restore._qualified_roles(metadata_phase,metadata_token,phase.catalog_phase,binding,
+                                                  binding['databases'],metadata,changed)
+            if (metadata_phase.fence.context != p.fence.context or metadata_phase.lock != p.lock
+                    or metadata_phase.namespace_uid != p.namespace_uid
+                    or metadata_phase.fence.ledger.read() != p.fence.ledger.read()): raise ValueError()
+        elif metadata_phase is not None or metadata_token is not None: raise ValueError()
         intent = {'status':'pending','operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
                   'invocation_nonce':p.invocation,'manifest_sha256':digest,'artifact_id':done['receipt']['artifact_id']}
+        if qualified is not None:
+            intent['migration_roles_sha256'] = hashlib.sha256(json.dumps(qualified,sort_keys=True,separators=(',', ':'),
+                                                       ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
         readback._guard(phase,drain); pending = True
         p.journal.state['steps']['cohort-restore'] = copy.deepcopy(intent); p.journal.save()
         current, rev = p.fence.ledger.read()
@@ -115,12 +202,19 @@ def run(phase, key, destination, manifest, metadata, source_root, postgres_image
         current['cohort_restore'] = copy.deepcopy(intent); current['step'] = 'cohort-restore-pending'; p.fence.ledger.write(rev,current)
         readback._guard(phase,drain); reserved, _ = p.fence.ledger.read()
         journal = RestoreJournal(phase,drain,snapshot,done,intent); journal._check(reserved)
+        catalog_args = ({'catalog_phase':phase.catalog_phase,'catalog_token':phase.catalog_token}
+                        if 'full_catalog' in binding else {})
+        if qualified is not None:
+            catalog_args.update(metadata_phase=metadata_phase, metadata_token=metadata_token)
         receipt = restore.qualify(destination,key,binding,binding['databases'],manifest,metadata,source_root,
-                                  postgres_image,migrate_image,journal)
+                                  postgres_image,migrate_image,journal,**catalog_args)
         if (not isinstance(receipt,dict) or receipt.get('operation_id') != binding['operation_id']
                 or receipt.get('snapshot_id') != binding['snapshot_id'] or receipt.get('source_sha') != binding['source_sha']
                 or receipt.get('manifest_sha256') != digest or receipt.get('cleanup') != 'verified'
                 or set(receipt.get('databases',{})) != set(binding['databases'])): raise ValueError()
+        if qualified is not None and receipt.get('migration_logins') != {
+                db:{'role':qualified[db]['role'],'from':metadata['migrations'][db]['from'],
+                    'to':metadata['migrations'][db]['to']} for db in changed}: raise ValueError()
         readback._guard(phase,drain); current, rev = p.fence.ledger.read(); journal._check(current)
         records = current.get('cohort_restore_resources',{})
         if not records or any(v.get('status') != 'removed' for v in records.values()): raise ValueError()

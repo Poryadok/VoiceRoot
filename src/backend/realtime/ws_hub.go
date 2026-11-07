@@ -51,6 +51,7 @@ type wsHub struct {
 	mu                  sync.RWMutex
 	byChat              map[string]map[*connReg]struct{}
 	byProfile           map[string]map[*connReg]struct{}
+	membershipChecks    map[chatMembershipKey]map[*chatMembershipCheck]struct{}
 	memberInboxLister   chatMemberInboxLister
 	notificationRouter  messageNotificationRouter
 	subscriptionChecker chatSubscriptionChecker
@@ -63,6 +64,41 @@ type wsHub struct {
 
 type presencePrivacyFanoutCoordinator struct {
 	sem chan struct{}
+}
+
+type chatMembershipKey struct {
+	profileID string
+	chatID    string
+}
+
+// Only in-flight authority reads are retained. Revocation invalidates their
+// snapshots; it does not create a permanent membership deny cache.
+type chatMembershipCheck struct {
+	key     chatMembershipKey
+	revoked bool // guarded by wsHub.mu
+}
+
+func (h *wsHub) beginChatMembershipCheck(profileID, chatID string) *chatMembershipCheck {
+	check := &chatMembershipCheck{key: chatMembershipKey{canonicalUUID(profileID), canonicalChatID(chatID)}}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.membershipChecks == nil {
+		h.membershipChecks = make(map[chatMembershipKey]map[*chatMembershipCheck]struct{})
+	}
+	if h.membershipChecks[check.key] == nil {
+		h.membershipChecks[check.key] = make(map[*chatMembershipCheck]struct{})
+	}
+	h.membershipChecks[check.key][check] = struct{}{}
+	return check
+}
+
+func (h *wsHub) endChatMembershipCheck(check *chatMembershipCheck) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.membershipChecks[check.key], check)
+	if len(h.membershipChecks[check.key]) == 0 {
+		delete(h.membershipChecks, check.key)
+	}
 }
 
 type dmAccountPair struct {
@@ -145,10 +181,12 @@ func (h *wsHub) authorizeAndAddChat(ctx context.Context, reg *connReg, accountID
 	if registrar, ok := checker.(chatSubscriptionRegistrar); ok {
 		return registrar.AuthorizeAndAddChat(ctx, accountID, profileID, chatID, reg)
 	}
+	check := h.beginChatMembershipCheck(profileID, chatID)
+	defer h.endChatMembershipCheck(check)
 	if err := checker.AuthorizeChat(ctx, accountID, profileID, chatID); err != nil {
 		return err
 	}
-	if !h.addChat(reg, chatID) {
+	if !h.addChat(reg, chatID, check) {
 		return fmt.Errorf("chat subscription denied")
 	}
 	return nil
@@ -177,6 +215,9 @@ func (h *wsHub) revokeProfileChat(profileID, chatID string) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	for check := range h.membershipChecks[chatMembershipKey{canonicalUUID(profileID), chatID}] {
+		check.revoked = true
+	}
 	for reg := range h.byProfile[profileID] {
 		if members := h.byChat[chatID]; members != nil {
 			delete(members, reg)
@@ -216,7 +257,7 @@ func (h *wsHub) beginDMPairCheck(pair dmAccountPair) uint64 {
 	return entry.version
 }
 
-func (h *wsHub) finishDMPairCheck(pair dmAccountPair, version uint64, reg *connReg, chatID string, allow bool) bool {
+func (h *wsHub) finishDMPairCheck(pair dmAccountPair, version uint64, reg *connReg, chatID string, allow bool, checks ...*chatMembershipCheck) bool {
 	chatID = canonicalChatID(chatID)
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -226,6 +267,9 @@ func (h *wsHub) finishDMPairCheck(pair dmAccountPair, version uint64, reg *connR
 	}
 	entry.inFlight--
 	accepted := allow && entry.version == version
+	for _, check := range checks {
+		accepted = accepted && (check == nil || !check.revoked)
+	}
 	if accepted && reg != nil {
 		if existing, ok := h.dmPairByChat[chatID]; ok && existing != pair {
 			accepted = false
@@ -440,13 +484,18 @@ func (h *wsHub) viewer() presenceViewer {
 	return h.presenceViewer
 }
 
-func (h *wsHub) addChat(reg *connReg, chatID string) bool {
+func (h *wsHub) addChat(reg *connReg, chatID string, checks ...*chatMembershipCheck) bool {
 	chatID = canonicalChatID(chatID)
 	if reg == nil || chatID == "" {
 		return false
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	for _, check := range checks {
+		if check != nil && check.revoked {
+			return false
+		}
+	}
 	h.addChatLocked(reg, chatID)
 	return true
 }

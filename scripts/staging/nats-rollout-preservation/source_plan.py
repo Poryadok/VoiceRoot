@@ -467,6 +467,110 @@ def _application(builder, *, images_only=False):
         if keys: builder.secret('principal-secrets', name, keys)
 
 
+def preservation_projection(source, parameters, decoder, kube):
+    """Read-only, source-rendered store comparison before the writer cut.
+
+    The returned record is private evidence, not authority by itself. Its caller
+    must bind it to the protected source, session and current storage identities.
+    """
+    try:
+        p=dict(parameters)
+        if p.get('mode') not in ('full','app-only'):_fail('preservation_projection_mode_invalid')
+        b=_Source(source,p,decoder,kube);_configuration(b)
+        app=b.get('Secret','voice-app-secrets')
+        credentials=b.secret('minio-credentials','voice-minio-credentials',('MINIO_ROOT_USER','MINIO_ROOT_PASSWORD'))
+        selected_keys=('USER_R2_ENDPOINT','USER_R2_REGION','USER_R2_BUCKET','USER_R2_PUBLIC_BASE_URL',
+                       'FILE_R2_ENDPOINT','FILE_R2_REGION','FILE_R2_BUCKET','CLICKHOUSE_DSN','CLICKHOUSE_PASSWORD')
+        if any(key not in app.get('data',{}) for key in selected_keys):_fail('preservation_store_secret_missing')
+        b.read('scripts/staging/ensure-minio-credentials.sh','minio-credentials')
+        b.read('scripts/storage/apply-minio-cors.sh','minio-cors')
+        minio=b.documents('deploy/staging/minio.yaml','minio-cors')
+        minio_ids=[(obj['kind'],obj['metadata']['name']) for obj in minio]
+        expected_minio={('StatefulSet','voice-minio'),('Service','voice-minio'),('Job','voice-minio-create-avatars-bucket'),('Job','voice-minio-create-files-bucket')}
+        if set(minio_ids)!=expected_minio or len(minio_ids)!=len(expected_minio):_fail('preservation_minio_source_invalid')
+        states=[obj for obj in minio if obj['kind']=='StatefulSet' and obj['metadata']['name']=='voice-minio']
+        if len(states)!=1:_fail('preservation_minio_source_invalid')
+        b.add('minio-cors',states[0],action=True);_preserve_claims(b,states[0])
+        if p['mode']=='full':
+            private={'__LIVEKIT_API_KEY__':_value(app,'LIVEKIT_API_KEY'),'__LIVEKIT_API_SECRET__':_value(app,'LIVEKIT_API_SECRET')}
+            infra=b.documents('deploy/staging/infra.yaml','infra',private,skip_nats=True)
+            wanted={('Service','voice-redis'),('Deployment','voice-redis'),('Service','voice-clickhouse'),('StatefulSet','voice-clickhouse')}
+            selected=[obj for obj in infra if (obj['kind'],obj['metadata']['name']) in wanted]
+            if {(obj['kind'],obj['metadata']['name']) for obj in selected}!=wanted or len(selected)!=len(wanted):_fail('preservation_infra_source_invalid')
+            for obj in selected:
+                b.add('infra',obj)
+                if obj['kind']=='StatefulSet':_preserve_claims(b,obj)
+            b.read('scripts/staging/apply-clickhouse-init.sh','db-init')
+            ddl=b.read('docker/clickhouse/init/001_events.sql','db-init')
+            cm={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'voice-clickhouse-init','namespace':NS},'data':{'001_events.sql':ddl}}
+            b.add('db-init',cm)
+            b.get('Pod','voice-clickhouse-0')
+            _verify_clickhouse(kube,app,_clickhouse_statements(ddl))
+            for obj in minio:
+                if obj['kind']=='Job':
+                    observed=b.get('Job',obj['metadata']['name'])
+                    if observed.get('status',{}).get('succeeded')!=1 or observed.get('status',{}).get('active',0):_fail('canonical_minio_bucket_job_incomplete')
+                    desired=copy.deepcopy(obj['spec']['template']);actual=copy.deepcopy(observed['spec']['template'])
+                    actual.setdefault('metadata',{}).setdefault('labels',{})
+                    for key in ('controller-uid','job-name','batch.kubernetes.io/controller-uid','batch.kubernetes.io/job-name'):actual['metadata']['labels'].pop(key,None)
+                    if not actual['metadata']['labels']:actual['metadata'].pop('labels',None)
+                    if not actual['metadata']:actual.pop('metadata',None)
+                    if actual!=desired:_fail('unsupported_minio_bucket_job_change')
+                    desired_spec=obj['spec'];actual_spec=observed['spec']
+                    defaults={'parallelism':1,'completions':1,'backoffLimit':6,'completionMode':'NonIndexed',
+                              'suspend':False,'manualSelector':False}
+                    allowed=set(desired_spec)|set(defaults)|{'selector'}
+                    if not set(actual_spec)<=allowed:_fail('unsupported_minio_bucket_job_change')
+                    for key in set(desired_spec)-{'template'}:
+                        if actual_spec.get(key)!=desired_spec[key]:_fail('unsupported_minio_bucket_job_change')
+                    for key,value in defaults.items():
+                        if key not in desired_spec and key in actual_spec and actual_spec[key]!=value:_fail('unsupported_minio_bucket_job_change')
+                    if 'selector' in actual_spec and 'selector' not in desired_spec:
+                        selector=actual_spec['selector'];labels=selector.get('matchLabels',{}) if type(selector) is dict else {}
+                        uid=observed['metadata'].get('uid')
+                        if (set(selector)!={'matchLabels'} or len(labels)!=1 or not uid
+                            or next(iter(labels)) not in ('controller-uid','batch.kubernetes.io/controller-uid')
+                            or next(iter(labels.values()))!=uid):_fail('unsupported_minio_bucket_job_change')
+                elif obj['kind']=='Service':b.add('infra',obj)
+                elif obj['kind']!='StatefulSet':_fail('preservation_minio_source_invalid')
+        services=b.documents('deploy/staging/services.yaml','migrations');r2_envs={}
+        for name in ('user','file'):
+            docs=[obj for obj in services if obj.get('kind')=='Deployment' and obj['metadata']['name']=='voice-'+name]
+            if len(docs)!=1:_fail('preservation_r2_source_invalid')
+            def env(obj):
+                containers=[c for c in obj['spec']['template']['spec']['containers'] if c['name']==name]
+                if len(containers)!=1:_fail('preservation_r2_container_invalid')
+                values=[entry for entry in containers[0].get('env',[]) if entry.get('name','').startswith(name.upper()+'_R2_')]
+                if len({entry['name'] for entry in values})!=len(values):_fail('preservation_r2_environment_invalid')
+                return sorted(values,key=lambda item:item['name'])
+            expected={name.upper()+'_R2_'+suffix for suffix in ('ENDPOINT','SIGNING_ENDPOINT','REGION','ACCESS_KEY_ID','SECRET_ACCESS_KEY','BUCKET')}
+            if name=='user':expected.add('USER_R2_PUBLIC_BASE_URL')
+            desired_env=env(docs[0])
+            if {entry['name'] for entry in desired_env}!=expected:_fail('preservation_r2_source_invalid')
+            if desired_env!=env(b.get('Deployment','voice-'+name)):_fail('unsupported_r2_configuration_change_'+name)
+            r2_envs['voice-'+name]=desired_env
+        config=b.documents('deploy/staging/configmap-app.yaml','domains')[0]
+        current=b.get('ConfigMap',config['metadata']['name'])
+        redis_addr=config.get('data',{}).get('REDIS_ADDR')
+        if not isinstance(redis_addr,str) or not redis_addr or redis_addr!=current.get('data',{}).get('REDIS_ADDR'):_fail('unsupported_redis_configuration_change')
+        identities=[]
+        for (kind,name),obj in sorted(b.live.items()):
+            meta=obj.get('metadata',{})
+            if not meta.get('uid') or not meta.get('resourceVersion'):_fail('preservation_store_identity_invalid')
+            semantic=guard.semantic(obj)
+            if kind=='Secret':
+                keys=selected_keys if name=='voice-app-secrets' else ('MINIO_ROOT_USER','MINIO_ROOT_PASSWORD')
+                semantic={'data':{key:obj['data'][key] for key in keys}}
+            elif kind=='Deployment' and name in r2_envs:semantic={'r2_env':r2_envs[name]}
+            elif kind=='ConfigMap' and name==config['metadata']['name']:semantic={'REDIS_ADDR':redis_addr}
+            identities.append({'kind':kind,'name':name,'uid':meta['uid'],'resourceVersion':meta['resourceVersion'],'semantic_sha256':guard.digest(semantic)})
+        sources=sorted({(entry['path'],entry['sha256']) for row in b.rows.values() for entry in row['sources']})
+        return {'schema':'voice-staging-store-projection-v1','mode':p['mode'],'sources':[{'path':path,'sha256':sha} for path,sha in sources],
+                'identities':identities}
+    except PlanError:raise
+    except Exception:_fail('preservation_store_projection_invalid')
+
+
 def compile_plan(source, parameters, decoder, kube):
     """Return a canonical plan, with specific unsupported-change vetoes."""
     try:
@@ -693,6 +797,31 @@ def _normalized_ddl(statement):
     return re.sub(r'\s+', '', statement).rstrip(';')
 
 
+CLICKHOUSE_READ_ARGS=('exec','voice-clickhouse-0','-c','clickhouse','--','sh','-ceu',
+    'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$CLICKHOUSE_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; clickhouse-client --host voice-clickhouse --user default --password "$CLICKHOUSE_PASSWORD" --query "$1"; printf "}"',
+    '--',CH_SQL)
+POSTGRES_READ_SCRIPT='printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$POSTGRES_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; PGPASSWORD="$POSTGRES_PASSWORD" PGOPTIONS="-c default_transaction_read_only=on -c search_path=pg_catalog,public,pg_temp" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$1" -Atqc "$2"; printf "}"'
+
+
+def postgres_read_args(database):
+    if database not in ('postgres','gateway_db'):_fail('canonical_postgres_database_invalid')
+    sql=PG_SQL if database=='postgres' else GATEWAY_SQL
+    return ['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',POSTGRES_READ_SCRIPT,'--',database,sql]
+
+
+def _verify_clickhouse(kube, secret, ddl):
+    result = kube.run(list(CLICKHOUSE_READ_ARGS))
+    if result['password_sha256'] != hashlib.sha256(_value(secret, 'CLICKHOUSE_PASSWORD').encode()).hexdigest():
+        _fail('unsupported_clickhouse_authority_sync')
+    tables = {row['name']: row for row in result['catalog']['data']}
+    expected = {'events': 'MergeTree', 'events_logical': 'View', 'dau_mv': 'AggregatingMergeTree',
+        'dau_mv_mv': 'MaterializedView', 'events_by_type_mv': 'SummingMergeTree', 'events_by_type_mv_mv': 'MaterializedView'}
+    if any(name not in tables or tables[name]['engine'] != engine for name, engine in expected.items()):
+        _fail('canonical_clickhouse_schema_init_missing')
+    if set(ddl) != set(expected) or any(_normalized_ddl(tables[name]['create_table_query']) != ddl[name] for name in expected):
+        _fail('canonical_clickhouse_ddl_incompatible')
+
+
 def verify_db_init(kube, plan):
     """Repeat fixed read-only catalog/auth checks, with no source execution."""
     if plan['mode'] != 'full':
@@ -702,8 +831,14 @@ def verify_db_init(kube, plan):
         for pod, password, user, database, sql in (
             ('voice-postgres-0', 'POSTGRES_PASSWORD', 'POSTGRES_USER', 'postgres', PG_SQL),
             ('voice-postgres-0', 'POSTGRES_PASSWORD', 'POSTGRES_USER', 'gateway_db', GATEWAY_SQL)):
-            script = 'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$POSTGRES_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h voice-postgres -U "$POSTGRES_USER" -d "$1" -Atqc "$2"; printf "}"'
-            result = kube.run(['exec', pod, '--', 'sh', '-ceu', script, '--', database, sql])
+            import commands,resource_claim
+            session=getattr(commands.authority_guard,'__self__',None)
+            guarded=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+            if guarded:
+                import staging_cohort_preservation
+                before=staging_cohort_preservation.guard_postgres(session)
+            result = kube.run(postgres_read_args(database))
+            if guarded and staging_cohort_preservation.guard_postgres(session)!=before:_fail('cohort_postgres_changed')
             if result['password_sha256'] != hashlib.sha256(_value(secret, password).encode()).hexdigest():
                 _fail('unsupported_postgres_authority_sync')
             catalog = result['catalog']
@@ -716,19 +851,8 @@ def verify_db_init(kube, plan):
                     ['shorebird_patch', 'integer', 'YES'], ['updated_at', 'timestamp with time zone', 'YES']]
                 if catalog['columns'] != expected or catalog['primary_key'] != ['platform'] or catalog['windows_seed'] is not True:
                     _fail('canonical_gateway_schema_init_missing')
-        script = 'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$CLICKHOUSE_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; clickhouse-client --host voice-clickhouse --user default --password "$CLICKHOUSE_PASSWORD" --query "$1"; printf "}"'
-        result = kube.run(['exec', 'voice-clickhouse-0', '--', 'sh', '-ceu', script, '--', CH_SQL])
-        if result['password_sha256'] != hashlib.sha256(_value(secret, 'CLICKHOUSE_PASSWORD').encode()).hexdigest():
-            _fail('unsupported_clickhouse_authority_sync')
-        tables = {row['name']: row for row in result['catalog']['data']}
-        expected = {'events': 'MergeTree', 'events_logical': 'View', 'dau_mv': 'AggregatingMergeTree',
-            'dau_mv_mv': 'MaterializedView', 'events_by_type_mv': 'SummingMergeTree', 'events_by_type_mv_mv': 'MaterializedView'}
-        if any(name not in tables or tables[name]['engine'] != engine for name, engine in expected.items()):
-            _fail('canonical_clickhouse_schema_init_missing')
         row = next(row for row in plan['checks'] if row['id'] == 'db-init')
-        ddl = row['evidence']['clickhouse_ddl']
-        if set(ddl) != set(expected) or any(_normalized_ddl(tables[name]['create_table_query']) != ddl[name] for name in expected):
-            _fail('canonical_clickhouse_ddl_incompatible')
+        _verify_clickhouse(kube,secret,row['evidence']['clickhouse_ddl'])
         return {'verified': True}
     except PlanError:
         raise

@@ -55,4 +55,7 @@ func ApplySQLFile(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repoRoo
 	if MigrationSuffixMatches(relPath, "messaging_db/000015_scheduled_messages.up.sql") {
 		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000038_scheduled_lifecycle.up.sql"))
 	}
+	if MigrationSuffixMatches(relPath, "messaging_db/000038_scheduled_lifecycle.up.sql") {
+		ApplySQLFile(t, ctx, pool, repoRoot, filepath.Join("src", "backend", "migrations", "messaging_db", "000041_history_commit_order.up.sql"))
+	}
 }

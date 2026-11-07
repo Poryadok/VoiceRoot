@@ -20,6 +20,25 @@ V5_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-boot
 V6_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-bootstrap.yaml'):sha for path,sha in V6_SOURCE_HASHES.items()}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 
+def binding_matches(current,retained,*,installation=None):
+    """Compare immutable checkpoint intent using its original binding version."""
+    from resource_claim import require_installation,require_production
+    try:
+        installation=require_installation(installation)
+        fields={'plan_sha256','server_image','enrollment_sha256','sources'}
+        if not isinstance(current,dict) or not isinstance(retained,dict):return False
+        if 'live_auth_sha256' in current:fields.add('live_auth_sha256')
+        if (set(current)!=fields|{'schema','installation_sha256'} or
+            current['schema']!='voice-nats-root-plan-binding-v2' or
+            current['installation_sha256']!=installation.sha256):return False
+        if 'schema' in retained or 'installation_sha256' in retained:
+            return current==retained
+        # Historical records predate installation identity and are valid only
+        # in the fixed original production realm. Never rewrite their bytes.
+        require_production(installation)
+        return set(retained)==fields and {key:current[key] for key in fields}==retained
+    except (ValueError,RuntimeError):return False
+
 _LEGACY_AUTH_KEYS={'verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256'}
 _V3_AUTH_KEYS=_LEGACY_AUTH_KEYS|{'normalized_consumers','normalized_consumers_sha256'}
 _V4_AUTH_KEYS=_V3_AUTH_KEYS|{'schema'}
@@ -81,23 +100,31 @@ def monitor(kube):
     tree=kube.run(['get','--raw',url])
     if kube.get('deployment',HUB)!=hub:fail()
     return tree
-def preflight(kube,source,enrollment,contract,decoder):
-    return _from_tree(kube,source,enrollment,contract,decoder,monitor(kube))
+def preflight(kube,source,enrollment,contract,decoder,*,installation=None):
+    from resource_claim import require_installation
+    installation=require_installation(installation)
+    select(kube,enrollment,installation.generation,installation=installation)
+    return _from_tree(kube,source,enrollment,contract,decoder,monitor(kube),installation=installation)
 
-def closed_copy_preflight(kube,source,enrollment,contract,decoder,runtime,broker,tree):
+def closed_copy_preflight(kube,source,enrollment,contract,decoder,runtime,broker,tree,*,installation=None):
     """Root recovery callback: actual owned restored broker snapshot only."""
+    from resource_claim import require_installation
+    installation=require_installation(installation)
+    select(kube,enrollment,installation.generation,installation=installation)
     owned=runtime.inspect(broker)
     if (owned['Config']['Image']!=NATS_IMAGE or owned['HostConfig']['NetworkMode']!='none'
         or runtime.owned[broker]['id']!=owned['Id']):fail()
     generation=enrollment['binding']['generation']
     account=secret_bytes(kube.get('secret','voice-nats-operator-'+generation),'account.public').decode().strip()
     if runtime.account_id()!=account:fail()
-    result=_from_tree(kube,source,enrollment,contract,decoder,tree)
+    result=_from_tree(kube,source,enrollment,contract,decoder,tree,installation=installation)
     if runtime.inspect(broker)['Id']!=owned['Id']:fail()
     return result
 
-def _from_tree(kube,source,enrollment,contract,decoder,tree):
-    generation=enrollment['binding']['generation'];select(kube,enrollment,generation)
+def _from_tree(kube,source,enrollment,contract,decoder,tree,*,installation=None):
+    from resource_claim import require_installation
+    installation=require_installation(installation)
+    generation=installation.generation;select(kube,enrollment,generation,installation=installation)
     actual={}
     for role in TARGET_FILES:
         path=Path(source)/('deploy/templates/nats-'+role+'-bootstrap.yaml')
@@ -124,9 +151,9 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
             if key in current:fail()
             current[key]=consumer
     from bootstrap_auth import prove
-    def unchanged():select(kube,enrollment,generation)
+    def unchanged():select(kube,enrollment,generation,installation=installation)
     live_auth=prove(secret_bytes(kube.get('secret',enrollment['secret']['name']),'bootstrap.creds'),kube.get('secret','voice-nats-operator-'+generation),unchanged,
-        **({'version':'voice-bootstrap-auth-v5'} if version==V6_SCHEMA else {}))
+        installation=installation,**({'version':'voice-bootstrap-auth-v5'} if version==V6_SCHEMA else {}))
     normalized=_validated_normalized_consumers(live_auth,enrollment['auth_proof'],version=version)
     plan=compile_plan(source,streams,current,normalized,version=version)
     selected=V6_TARGET_FILES if version==V6_SCHEMA else V5_TARGET_FILES if version==SCHEMA else TARGET_FILES
@@ -146,4 +173,5 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
         script=cm['data']['bootstrap.sh'];scripts[part]={'sha256':hashlib.sha256(script.encode()).hexdigest(),'script':script}
     binding={'plan_sha256':digest(plan),'server_image':NATS_IMAGE,'enrollment_sha256':digest(enrollment),'sources':plan['sources']}
     if version==V6_SCHEMA:binding['live_auth_sha256']=digest(live_auth)
+    binding.update(schema='voice-nats-root-plan-binding-v2',installation_sha256=installation.sha256)
     return {'plan':plan,'binding':binding,'scripts':scripts,'live_census_sha256':digest(row)}

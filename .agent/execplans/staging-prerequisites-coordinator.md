@@ -34,7 +34,7 @@ current STAGING anchors rather than trusting a supplied success flag.
   any effect; current issuer/source/node and baseline are rechecked.
 - [ ] Capture and historical loaders bind the complete operation to subsequent
   Realtime and rollout targets and protected PASS ancestry.
-- [ ] Joined parent/children/real Session fixture and independent final review.
+- [x] Joined parent/children/real Session fixture and independent scoped C1/C2 review.
 
 Tests run in an owned native Linux container with synthetic Kubernetes/TT wire
 responses. They are not a live STAGING qualification. Ordinary test-first work
@@ -70,6 +70,27 @@ under root's shared-resource instruction until the named main refresh finishes.
   Parent-to-Realtime Secret extension and the full caller/candidate/renderer
   qualification remain separate outstanding integration evidence. Independent
   review of this successor, including C2, remains required; no live claim.
+- Reviewed P3 routing checks 363b358 integrated; the affected P3 and parent
+  composition rerun passes 18 tests. A further parent test passes for actual
+  capture revalidation after a modeled protected Realtime COMPLETE: PENDING,
+  before UID/RV, unrelated Secret data and authority changes are rejected.
+  It executes the real local receipt/source/Secret validators, not SQL effects;
+  the actual Realtime producer join remains outstanding.
+- Independent C1 review of c246/current production bytes closed the trust P1;
+  C2 static review found no new concrete issue and requested discriminating
+  evidence. Two focused C2 tests pass: same/new candidate policy paths, lost
+  current claim, a changed hash-qualified publisher source, and a foreign origin
+  with all local digest links re-sealed. The new candidate creates only its
+  policy ConfigMap and root policy; GIS/P3 remain preserved. Candidate selection
+  is still an external fixture boundary, not a CI/image eligibility claim.
+  An opt-in test fixture now includes actual Realtime helper/source bytes before
+  Session admission; its cold parent smoke passes for the caller owner's join.
+- Independent reviewer qualified C1 on c246 and C2 on e36ca61d79f9 with no
+  remaining concrete parent finding. Production module is unchanged between
+  these snapshots (SHA256 3af62505340c1022d6bbf976b9b563f9ebe77362fb64d3c23d2fa8c13dcb480b).
+  Review includes source inspection and author native test evidence; reviewer
+  did not independently rerun the suite. Actual caller-to-SQL, full renderer,
+  installed package cohort and live eligibility remain explicitly excluded.
 
 ## Risks
 
