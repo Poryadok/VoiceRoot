@@ -27,12 +27,12 @@ func TestSupervisorTransportEarlyPollDoesNotRevokeOrIssueAnotherProbe(t *testing
 		requests.Add(1)
 		var probe supervisionProbe
 		if json.NewDecoder(r.Body).Decode(&probe) != nil || responder.observe(probe) != nil {
-			http.Error(w, "unavailable", 503)
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		response, err := responder.respond(probe)
 		if err != nil {
-			http.Error(w, "unavailable", 503)
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(response)

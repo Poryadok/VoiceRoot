@@ -91,13 +91,17 @@ func watchActivation(parent context.Context, cfg WriterConfig, ready func(), aft
 		// backend start time so a recycled PID cannot identify a new process.
 		var leaderPID int32
 		var leaderStarted time.Time
-		if err = owner.QueryRow(parent, `SELECT a.pid,a.backend_start FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted`, leaderKey).Scan(&leaderPID, &leaderStarted); err != nil {
+		bindCtx, bindCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err = owner.QueryRow(bindCtx, `SELECT a.pid,a.backend_start FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND l.classid=($1::bigint >> 32)::oid AND l.objid=($1::bigint & 4294967295)::oid AND l.objsubid=1 AND l.mode='ExclusiveLock' AND l.granted`, leaderKey).Scan(&leaderPID, &leaderStarted); err != nil {
+			bindCancel()
 			// The leader may have disappeared after verification. If its lock
 			// is now ours, fence rather than exiting without a monitor.
 			if probe() != nil || !locked {
 				return ErrUnavailable
 			}
 			goto fence
+		} else {
+			bindCancel()
 		}
 		ready()
 		ticker := time.NewTicker(100 * time.Millisecond)

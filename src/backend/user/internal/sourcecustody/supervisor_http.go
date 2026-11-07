@@ -133,31 +133,31 @@ func newSupervisorClient(cfg *SupervisorClientConfig, custodian ed25519.PublicKe
 	return &supervisorClient{client: &http.Client{Transport: transport, Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrUnavailable }}, key: key, endpoint: strings.TrimSuffix(cfg.URL, "/") + "/probe"}, nil
 }
 
-func (c *supervisorClient) probe(ctx context.Context, probe supervisionProbe) (MonitorResponse, error) {
+func (client *supervisorClient) probe(ctx context.Context, probe supervisionProbe) (MonitorResponse, error) {
 	var response MonitorResponse
-	if c == nil || c.client == nil || !validProbe(probe) {
+	if client == nil || client.client == nil || !validProbe(probe) {
 		return response, ErrUnavailable
 	}
 	body, err := json.Marshal(probe)
 	if err != nil {
 		return response, ErrUnavailable
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return response, ErrUnavailable
 	}
 	request.Header.Set("Content-Type", "application/json")
-	wire, err := c.client.Do(request)
+	wire, err := client.client.Do(request)
 	if err != nil {
 		return response, ErrUnavailable
 	}
-	defer wire.Body.Close()
+	defer func() { _ = wire.Body.Close() }()
 	if wire.StatusCode != http.StatusOK {
 		return response, ErrUnavailable
 	}
 	decoder := json.NewDecoder(io.LimitReader(wire.Body, 4097))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&response) != nil || decoder.Decode(new(any)) != io.EOF || VerifyMonitorResponse(response, c.key) != nil {
+	if decoder.Decode(&response) != nil || decoder.Decode(new(any)) != io.EOF || VerifyMonitorResponse(response, client.key) != nil {
 		return MonitorResponse{}, ErrUnavailable
 	}
 	return response, nil

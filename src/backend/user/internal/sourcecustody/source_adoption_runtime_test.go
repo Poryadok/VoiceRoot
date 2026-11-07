@@ -106,7 +106,15 @@ func TestAdoptionCommandReturnsClosedAndRetryHoldOverTLS(t *testing.T) {
 	// Those tests otherwise skip without USER_ASSOCIATION_TEST_DSN. Their
 	// independently created databases are dropped by the existing test fixture.
 	native := exec.CommandContext(ctx, "go", "test", "-race", "../identityassociation", "-run", "TestNativeFreshBootstrap|TestPristineProvisioning", "-count=1", "-v", "-timeout=90s")
-	native.Env = append(os.Environ(), "USER_ASSOCIATION_TEST_DSN="+adminURL)
+	var nativeEnv []string
+	for _, item := range os.Environ() {
+		name, _, _ := strings.Cut(item, "=")
+		if strings.EqualFold(name, "CGO_ENABLED") {
+			continue
+		}
+		nativeEnv = append(nativeEnv, item)
+	}
+	native.Env = append(nativeEnv, "CGO_ENABLED=1", "USER_ASSOCIATION_TEST_DSN="+adminURL)
 	output, err = native.CombinedOutput()
 	require.NoError(t, err, "%s", output)
 	require.NotContains(t, string(output), "SKIP", "native helper regressions must execute")

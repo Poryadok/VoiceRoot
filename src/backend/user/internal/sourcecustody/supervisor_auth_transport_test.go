@@ -50,7 +50,7 @@ func TestSupervisorTransportRequiresPinnedMutualTLSAndIndependentSigner(t *testi
 		}
 		response, err := SignMonitorResponse(MonitorResponse{Challenge: probe.Challenge, DecisionDigest: probe.DecisionDigest, Incarnation: incarnation, Sequence: probe.Sequence, Nonce: probe.Nonce, Kind: MonitorArmed}, private)
 		if err != nil {
-			http.Error(w, "unavailable", 503)
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(response)
