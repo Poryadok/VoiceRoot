@@ -127,7 +127,7 @@ func TestHistoryPositionMigrationBackfillAndRollbackPreserveMessages(t *testing.
 	_, err = pool.Exec(ctx, insert, a, chat, sender)
 	require.NoError(t, err)
 	apply := func(suffix string) {
-		sql, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/messaging_db/000039_history_commit_order."+suffix+".sql"))
+		sql, err := os.ReadFile(filepath.Join(repoRoot(t), "src/backend/migrations/messaging_db/000040_history_commit_order."+suffix+".sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(sql))
 		require.NoError(t, err)
@@ -156,7 +156,7 @@ func TestHistoryPositionMigrationPreservesFrozenSpaceFence(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgresForStoreTest(t, ctx)
 	seedMessagingSchema(t, ctx, pool)
-	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000039_history_commit_order.down.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000040_history_commit_order.down.sql")
 	space, operation, chat := uuid.New(), uuid.New(), uuid.New()
 	manifest := &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ItemCount: 1}
 	manifest.ManifestSha256 = messagingChatManifestSHA(space, operation, 7, []uuid.UUID{chat})
@@ -176,7 +176,7 @@ func TestHistoryPositionMigrationPreservesFrozenSpaceFence(t *testing.T) {
 		RequestBytes: []byte("freeze"), RequestSHA256: make([]byte, 32), ReceiptBytes: []byte("freeze-receipt"),
 	})
 	require.NoError(t, err)
-	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000039_history_commit_order.up.sql")
+	applySQLFile(t, ctx, pool, "src/backend/migrations/messaging_db/000040_history_commit_order.up.sql")
 	var content string
 	var position int64
 	require.NoError(t, pool.QueryRow(ctx, `SELECT content,history_position FROM messages WHERE id=$1`, id).Scan(&content, &position))
