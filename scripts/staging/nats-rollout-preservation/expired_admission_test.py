@@ -97,22 +97,39 @@ class AdmissionTests(unittest.TestCase):
         from unittest.mock import Mock
         import bridge_root
         from preserved_upload import OPERATION
-        for drift in (False,True):
+        for drift in (False,True,'binding','installation','plan','scripts'):
             with self.subTest(drift=drift),TemporaryDirectory() as folder:
                 base=Path(folder)/('rollout-'+OPERATION);base.mkdir(mode=0o700)
                 checkpoint=base/'checkpoint.json';checkpoint.write_bytes(b'original-checkpoint');checkpoint.chmod(0o600)
                 actions=object.__new__(bridge_root.Actions);actions.code=Path(folder)/'code';actions.binding={}
+                from resource_claim import production_installation
+                import nats_root_plan
+                actions._installation=production_installation()
                 state={'operation':OPERATION,'target':{'tag':'a'*40},'bootstrap_enrollment':{},
                     'contract':{},'nats_contract':{},'nats_contract_binding':{},'nats_target_scripts':{}}
+                state['nats_contract_binding']={'plan_sha256':'a'*64,'server_image':nats_root_plan.NATS_IMAGE,
+                    'enrollment_sha256':'b'*64,'sources':{'source':'c'*64}}
+                authority={'plan':state['nats_contract'],'scripts':state['nats_target_scripts'],
+                    'binding':dict(state['nats_contract_binding'],schema='voice-nats-root-plan-binding-v2',
+                        installation_sha256=actions.installation.sha256)}
+                if drift=='binding':authority['binding']['plan_sha256']='f'*64
+                elif drift=='installation':authority['binding']['installation_sha256']='f'*64
+                elif drift in ('plan','scripts'):authority[drift]={'changed':True}
                 stage=Mock();execution={'dispatcher_run_id':123,'head_sha':'b'*40}
                 current={'verified':True,'source_files':{}};admission_row={'input_hashes':{},'target':{'bound':'original target'}}
                 def fresh():
-                    if drift:checkpoint.write_bytes(b'changed-checkpoint')
+                    if drift is True:checkpoint.write_bytes(b'changed-checkpoint')
                 observation={'schema':'fixture','native_messages':{'messages':6}}
+                def produce(*args):
+                    # Exercise the actual root recovery callback with the newer
+                    # producer and an unchanged historical retained binding.
+                    args[-1](Mock(),'broker',{}, {}, {}, {})
+                    return observation
                 with patch.object(actions,'_expired_source_admission',return_value=
                     (base,state,stage,execution,current,admission_row,fresh)),\
                      patch('expired_recovery.repair_inputs',return_value={'verified':True}),\
-                     patch('expired_proof.produce',return_value=observation),\
+                     patch('expired_proof.produce',side_effect=produce),\
+                     patch('nats_root_plan.closed_copy_preflight',return_value=authority),\
                      patch('docker_runtime.DockerRuntime'),\
                      patch('encrypted_cut.encrypt_cut',return_value={'cipher_sha256':'c'*64,'cipher_bytes':123}),\
                      patch('preserved_upload.private_json',return_value={}):

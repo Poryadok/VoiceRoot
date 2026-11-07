@@ -42,9 +42,9 @@ class AuthMigrationCatalogContractTest {
   @Test
   void flywayHasOneSourcePerVersionAndKeepsCanonicalRefreshAt15() throws Exception {
     var sources = catalog(flywayDirectory(), Pattern.compile("V(\\d+)__.*\\.sql"));
-    assertThat(sources).hasSize(29);
+    assertThat(sources).hasSize(33);
     for (int version = 1; version <= 26; version++) assertThat(sources).containsKey(version);
-    assertThat(sources).containsKeys(28,31,32).doesNotContainKeys(27,29,30);
+    assertThat(sources).containsKeys(28,31,32,33,34,35,36).doesNotContainKeys(27,29,30);
     assertThat(sources.get(15).getFileName().toString()).isEqualTo("V15__refresh_tokens_profile_id.sql");
   }
 
@@ -52,11 +52,11 @@ class AuthMigrationCatalogContractTest {
   void golangHasOneUpAndDownPerVersionAndKeepsCanonicalRefreshAt16() throws Exception {
     var up = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.up\\.sql"));
     var down = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.down\\.sql"));
-    assertThat(up).hasSize(30);
-    assertThat(down).hasSize(30);
+    assertThat(up).hasSize(34);
+    assertThat(down).hasSize(34);
     var versions = new java.util.ArrayList<Integer>();
     for (int version = 1; version <= 27; version++) versions.add(version);
-    versions.addAll(java.util.List.of(29,32,33));
+    versions.addAll(java.util.List.of(29,32,33,34,35,36,37));
     assertThat(up).doesNotContainKeys(28,30,31);
     for (int version : versions) {
       assertThat(up).containsKey(version);
@@ -101,6 +101,25 @@ class AuthMigrationCatalogContractTest {
     assertThat(Files.readString(golangDirectory().resolve("000033_linked_oauth_transport.down.sql")))
         .contains("ERRCODE='55000'").doesNotContain("DROP TABLE","DELETE FROM");
   }
+  @Test void subscriptionLifecyclePairPreservesAtomicCaptureAndRetainedFacts() throws Exception {
+    String ddl=Files.readString(flywayDirectory().resolve("V33__subscription_lifecycle_capture.sql")).replace("\r\n","\n");
+    assertThat(Files.readString(golangDirectory().resolve("000034_subscription_lifecycle_capture.up.sql")).replace("\r\n","\n"))
+        .isEqualTo("BEGIN;\n"+ddl+"COMMIT;\n");
+    assertThat(ddl.indexOf("LOCK TABLE ONLY public.auth_identity_ddl_barrier"))
+        .isLessThan(ddl.indexOf("CREATE TABLE"));
+    assertThat(Files.readString(golangDirectory().resolve("000034_subscription_lifecycle_capture.down.sql")))
+        .contains("ERRCODE='55000'").doesNotContain("DROP TABLE","DELETE FROM");
+  }
+
+  @Test void accountLifecyclePairPreservesAtomicSourceAndForwardOnlyHistory() throws Exception {
+    String ddl=Files.readString(flywayDirectory().resolve("V34__account_lifecycle_source.sql")).replace("\r\n","\n");
+    assertThat(Files.readString(golangDirectory().resolve("000035_account_lifecycle_source.up.sql")).replace("\r\n","\n"))
+        .isEqualTo("BEGIN;\n"+ddl+"COMMIT;\n");
+    assertThat(ddl.indexOf("LOCK TABLE ONLY public.auth_identity_ddl_barrier"))
+        .isLessThan(ddl.indexOf("CREATE TABLE"));
+    assertThat(Files.readString(golangDirectory().resolve("000035_account_lifecycle_source.down.sql")))
+        .contains("ERRCODE='55000'").doesNotContain("DROP TABLE","DELETE FROM");
+  }
 
   public static void main(String[] args) throws Exception {
     if (!System.getProperty("os.name").equals("Linux")) throw new AssertionError("Linux required");
@@ -110,6 +129,25 @@ class AuthMigrationCatalogContractTest {
     suite.bothSupportedCatalogsContainTheSameEntireOrderedSdkDdl();
     suite.identityPairsPreserveOwnedBytesAndCanonicalTransactionEnvelope();
     suite.linkedOAuthPairHasIdenticalAtomicDdlAndRetainedStateDowngrade();
-    System.out.println("PASS 5 migration source-catalog contracts; no loader or SQL execution");
+    suite.subscriptionLifecyclePairPreservesAtomicCaptureAndRetainedFacts();
+    System.out.println("PASS 6 migration source-catalog contracts; no loader or SQL execution");
   }
+
+  @Test void terminalFencePairPreservesAtomicAndForwardOnlyHistory() throws Exception {
+    String ddl=Files.readString(flywayDirectory().resolve("V35__auth_terminal_operation_fences.sql")).replace("\r\n","\n");
+    assertThat(Files.readString(golangDirectory().resolve("000036_auth_terminal_operation_fences.up.sql")).replace("\r\n","\n"))
+        .isEqualTo("BEGIN;\n"+ddl+"COMMIT;\n");
+    assertThat(ddl.indexOf("LOCK TABLE ONLY public.auth_identity_ddl_barrier"))
+        .isLessThan(ddl.indexOf("CREATE TABLE"));
+    assertThat(Files.readString(golangDirectory().resolve("000036_auth_terminal_operation_fences.down.sql")))
+        .contains("ERRCODE='55000'").doesNotContain("DROP TABLE","DELETE FROM");
+  }
+  @Test void rawAccountAdmissionPairPreservesAtomicAndForwardOnlyHistory() throws Exception {
+    String ddl=Files.readString(flywayDirectory().resolve("V36__auth_raw_account_admission.sql")).replace("\r\n","\n");
+    assertThat(Files.readString(golangDirectory().resolve("000037_auth_raw_account_admission.up.sql")).replace("\r\n","\n"))
+        .isEqualTo("BEGIN;\n"+ddl+"COMMIT;\n");
+    assertThat(Files.readString(golangDirectory().resolve("000037_auth_raw_account_admission.down.sql")))
+        .contains("ERRCODE='55000'").doesNotContain("DROP TRIGGER","DROP FUNCTION","DELETE FROM");
+  }
+
 }

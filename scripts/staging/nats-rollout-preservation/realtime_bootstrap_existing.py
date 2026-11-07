@@ -117,7 +117,7 @@ def _private(path, limit=2 << 20):
     return raw, json.loads(raw)
 
 
-def _rollout(operation):
+def _rollout(operation,*,installation=None):
     import guard
     import resource_claim
     if not isinstance(operation, str) or not re.fullmatch(r'[a-f0-9]{12}', operation):
@@ -126,25 +126,32 @@ def _rollout(operation):
     if (type(state) is not dict or state.get('status') != 'PASS' or state.get('operation') != operation
             or state.get('phase') != 'POST_RESTART' or state.get('fence_status') != 'RELEASED'):
         raise Blocked('realtime_existing_anchor_invalid')
-    binding = resource_claim.historical_binding(state)
+    binding = resource_claim.historical_binding(state,installation=installation)
     receipt = state.get('realtime_bootstrap')
+    scoped = binding['schema']=='voice-staging-resource-fence-v2'
+    scoped_schemas = ('voice-staging-realtime-bootstrap-receipt-v2', 'voice-staging-realtime-bootstrap-existing-v3', 'voice-staging-realtime-bootstrap-existing-v4')
+    legacy_schemas = ('voice-staging-realtime-bootstrap-receipt-v1', 'voice-staging-realtime-bootstrap-existing-v1', 'voice-staging-realtime-bootstrap-existing-v2')
+    if type(receipt) is not dict or receipt.get('schema') not in (scoped_schemas if scoped else legacy_schemas):
+        raise Blocked('realtime_existing_anchor_invalid')
     if (type(receipt) is not dict or state['target'].get('realtime_bootstrap_sha256') != digest(receipt)
             or binding['operation'] != operation):
         raise Blocked('realtime_existing_anchor_invalid')
     return state, receipt, binding, hashlib.sha256(raw).hexdigest()
 
 
-def _anchor():
+def _anchor(*,installation=None):
     """Follow protected active PASS and, for successors, its original C1 anchor."""
     import guard
     import realtime_bootstrap as c1
+    import resource_claim
+    installation=resource_claim.require_installation(installation)
     _, active = _private(guard.ROOT / 'installed' / 'active-release.json')
-    if type(active) is not dict: raise Blocked('realtime_existing_anchor_invalid')
+    resource_claim.validate_active_release(active,installation=installation)
     operation = active.get('operation')
-    state, receipt, binding, checkpoint_sha = _rollout(operation)
-    if receipt.get('schema')=='voice-staging-realtime-bootstrap-existing-v2':
+    state, receipt, binding, checkpoint_sha = _rollout(operation,installation=installation)
+    if receipt.get('schema') in ('voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v4'):
         import staging_prerequisites
-        historical=staging_prerequisites.validate_historical_capture(operation)
+        historical=staging_prerequisites.validate_historical_capture(operation,installation=installation)
         if digest(historical)!=receipt.get('prerequisites_sha256'):
             raise Blocked('realtime_existing_anchor_changed')
     expected = state['context']['expected']
@@ -152,26 +159,26 @@ def _anchor():
             or active.get('pvc_uid') != expected['source_claim_uid']
             or active.get('target_sha256') != state['target']['manifest_sha256']):
         raise Blocked('realtime_existing_anchor_invalid')
-    if receipt.get('schema') == 'voice-staging-realtime-bootstrap-receipt-v1':
+    if receipt.get('schema') in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2'):
         anchor = {'operation': operation, 'receipt_sha256': digest(receipt)}
         original_state, original_receipt = state, receipt
-    elif receipt.get('schema') in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2'):
-        _validate_record(receipt)
+    elif receipt.get('schema') in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v3','voice-staging-realtime-bootstrap-existing-v4'):
+        _validate_record(receipt,installation=installation)
         if (receipt['operation'] != operation or receipt['context'] != binding['context']
                 or receipt['helper_sha256'] != binding['helper_sha256']):
             raise Blocked('realtime_existing_anchor_invalid')
         _, saved = _private(guard.ROOT / 'installed' / 'realtime-bootstrap' / operation / 'existing.json')
         if saved != receipt: raise Blocked('realtime_existing_anchor_invalid')
         anchor = receipt['anchor']
-        original_state, original_receipt, _, _ = _rollout(anchor['operation'])
-        if (original_receipt.get('schema') != 'voice-staging-realtime-bootstrap-receipt-v1'
+        original_state, original_receipt, _, _ = _rollout(anchor['operation'],installation=installation)
+        if (original_receipt.get('schema') not in ('voice-staging-realtime-bootstrap-receipt-v1','voice-staging-realtime-bootstrap-receipt-v2')
                 or digest(original_receipt) != anchor['receipt_sha256']):
             raise Blocked('realtime_existing_anchor_invalid')
     else:
         raise Blocked('realtime_existing_anchor_invalid')
     original_dir = guard.ROOT / 'installed' / 'realtime-bootstrap' / anchor['operation']
     _, checkpoint = _private(original_dir / 'checkpoint.json')
-    plan, validated_receipt = c1.validate_historical_checkpoint(checkpoint, original_state)
+    plan, validated_receipt = c1.validate_historical_checkpoint(checkpoint, original_state,installation=installation)
     if (validated_receipt != original_receipt or plan['namespace_uid'] != active['namespace_uid']
             or original_state['context']['expected']['namespace_uid'] != plan['namespace_uid']):
         raise Blocked('realtime_existing_anchor_invalid')
@@ -179,19 +186,45 @@ def _anchor():
             'checkpoint_sha256': checkpoint_sha}}, plan, validated_receipt, original_dir
 
 
-def _original_credential(directory, plan, receipt):
+def _validate_original_provenance(plan,provenance,*,installation=None):
+    import resource_claim
+    try:
+        installation=resource_claim.require_installation(installation)
+        schema=plan['schema']
+        if schema in ('voice-staging-realtime-bootstrap-v1','voice-staging-realtime-bootstrap-v2'):
+            resource_claim.require_production(installation)
+            if 'installation_sha256' in plan:raise ValueError()
+            source_schema='voice-staging-source-capture-v1'
+        elif schema in ('voice-staging-realtime-bootstrap-v3','voice-staging-realtime-bootstrap-v4'):
+            if plan.get('installation_sha256')!=installation.sha256:raise ValueError()
+            source_schema='voice-staging-source-capture-v2'
+        else:raise ValueError()
+        resource_claim.validate_source_capture(provenance,installation=installation)
+        expected={'schema':source_schema,'operation':plan['operation'],'context':plan['context'],
+                  'helper_sha256':plan['helper_sha256'],'approved_sha256':plan['source_authority_sha256'],
+                  'execution_sha256':plan['execution_sha256']}
+        if source_schema=='voice-staging-source-capture-v2':expected['installation_sha256']=installation.sha256
+        if provenance!=expected:raise ValueError()
+    except (ValueError,RuntimeError,TypeError,KeyError,AttributeError):
+        raise Blocked('realtime_existing_anchor_invalid') from None
+
+
+def _original_credential(directory, plan, receipt,*,installation=None):
     import guard
     import realtime_bootstrap as c1
+    import resource_claim
+    installation=resource_claim.require_installation(installation)
     _, before = _private(directory / 'before-secret.json')
     _, authority = _private(directory / 'authority.json')
     _, stage = _private(directory / 'stage.json')
     _, provenance = _private(guard.ROOT / 'installed' / 'source-authority' / (plan['operation'] + '.json'))
-    expected_provenance = {'schema': 'voice-staging-source-capture-v1', 'operation': plan['operation'],
-                           'context': plan['context'], 'helper_sha256': plan['helper_sha256'],
-                           'approved_sha256': plan['source_authority_sha256'], 'execution_sha256': plan['execution_sha256']}
+    _validate_original_provenance(plan,provenance,installation=installation)
+    if (plan['schema'] in ('voice-staging-realtime-bootstrap-v3','voice-staging-realtime-bootstrap-v4')
+        and stage.get('marker',{}).get('data',{}).get('generation')!=installation.generation):
+        raise Blocked('realtime_existing_generation_changed')
     # Check trusted parents through _private before reading the private credential.
     password = c1._read_private(directory / 'credential', limit=128)
-    if (provenance != expected_provenance or hashlib.sha256(password).hexdigest() != plan['credential_sha256']
+    if (hashlib.sha256(password).hexdigest() != plan['credential_sha256']
             or c1._secret_identity(before) != plan['secret']
             or digest(authority['approved']) != plan['source_authority_sha256']
             or digest(authority['approved']['source_files']) != plan['source_files_sha256']
@@ -206,15 +239,17 @@ def _original_credential(directory, plan, receipt):
     return password
 
 
-def _validate_record(record):
+def _validate_record(record,*,installation=None):
+    import resource_claim
+    installation=resource_claim.require_installation(installation)
     fields = {'schema', 'operation', 'context', 'helper_sha256', 'source_authority_sha256',
               'execution_sha256', 'stage_sha256', 'actual_images', 'namespace_uid', 'anchor',
               'active_release', 'live'}
-    parented=isinstance(record,dict) and record.get('schema')=='voice-staging-realtime-bootstrap-existing-v2'
+    parented=isinstance(record,dict) and record.get('schema') in ('voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v4')
     if parented:fields.add('prerequisites_sha256')
     try:
-        if (type(record) is not dict or set(record) != fields
-                or record['schema'] not in ('voice-staging-realtime-bootstrap-existing-v1','voice-staging-realtime-bootstrap-existing-v2')
+        resource_claim.record_fields(record,'realtime_existing',fields,installation=installation)
+        if (type(record) is not dict
                 or parented and (not isinstance(record.get('prerequisites_sha256'),str)
                     or not re.fullmatch(r'[a-f0-9]{64}',record['prerequisites_sha256']))
                 or not re.fullmatch(r'[a-f0-9]{12}', record['operation'])
@@ -238,7 +273,7 @@ def _validate_record(record):
                 or any(not isinstance(live['secret'][k], str) or not live['secret'][k] for k in ('uid', 'resourceVersion'))
                 or any(not re.fullmatch(r'[a-f0-9]{64}', live['secret'][k]) for k in ('data_sha256', 'realtime_value_sha256'))):
             raise ValueError()
-    except (KeyError, TypeError, ValueError, AttributeError):
+    except (KeyError, TypeError, ValueError, AttributeError,RuntimeError):
         raise Blocked('realtime_existing_record_invalid') from None
 
 
@@ -310,9 +345,14 @@ def _source(session, approved, execution):
         raise Blocked('realtime_existing_source_invalid')
     _session(session)
     _, provenance = _private(guard.ROOT / 'installed' / 'source-authority' / (session.operation + '.json'))
-    expected = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+    expected = {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256,
+                'operation': session.operation,
                 'context': session.context, 'helper_sha256': session.helper,
                 'approved_sha256': digest(approved), 'execution_sha256': digest(execution)}
+    import resource_claim
+    try:resource_claim.validate_source_capture(provenance,installation=session.installation)
+    except (ValueError,RuntimeError,TypeError,AttributeError):
+        raise Blocked('realtime_existing_source_invalid') from None
     if provenance != expected: raise Blocked('realtime_existing_source_invalid')
     gis_existing_update.validate_source_authority(approved, {'tag': session.context['commit'],
                                                              'images': session.context['images']})
@@ -336,9 +376,9 @@ def _load_existing(session, actual, rollout_target):
     _, record = _private(directory / 'existing.json')
     _, authority = _private(directory / 'authority.json')
     _, stage = _private(directory / 'stage.json')
-    _validate_record(record)
+    _validate_record(record,installation=session.installation)
     parent=None
-    if record['schema']=='voice-staging-realtime-bootstrap-existing-v2':
+    if record['schema'] in ('voice-staging-realtime-bootstrap-existing-v2','voice-staging-realtime-bootstrap-existing-v4'):
         import staging_prerequisites
         parent=staging_prerequisites.load_capture(session,actual=actual,rollout_target=rollout_target)
         if digest(parent)!=record['prerequisites_sha256']:raise Blocked('realtime_existing_parent_changed')
@@ -357,19 +397,19 @@ def _load_existing(session, actual, rollout_target):
           or rollout_target.get('realtime_bootstrap_sha256') != digest(record)):
         raise Blocked('realtime_existing_target_changed')
     _source(session, authority['approved'], authority['execution'])
-    ancestry, plan, receipt, directory0 = _anchor()
+    ancestry, plan, receipt, directory0 = _anchor(installation=session.installation)
     if (ancestry['anchor'] != record['anchor'] or ancestry['active_release'] != record['active_release']
             or plan['namespace_uid'] != record['namespace_uid']):
         raise Blocked('realtime_existing_anchor_changed')
-    password = _original_credential(directory0, plan, receipt)
+    password = _original_credential(directory0, plan, receipt,installation=session.installation)
     kube = Kube()
     _check_stage(kube, stage)
     if _observe(session, kube, plan, receipt, password) != record['live']:
         raise Blocked('realtime_existing_live_changed')
     _check_stage(kube, stage)
-    ancestry2, plan2, receipt2, directory2 = _anchor()
+    ancestry2, plan2, receipt2, directory2 = _anchor(installation=session.installation)
     if ((ancestry2, plan2, receipt2, directory2) != (ancestry, plan, receipt, directory0)
-            or _original_credential(directory2, plan2, receipt2) != password):
+            or _original_credential(directory2, plan2, receipt2,installation=session.installation) != password):
         raise Blocked('realtime_existing_anchor_changed')
     _source(session, authority['approved'], authority['execution'])
     _session(session)
@@ -397,6 +437,7 @@ def run_existing(actions, request, approved, execution, source_root, stage):
         session = actions.tt_session
         if type(actions) is not bridge_root.Actions or type(stage) is not __import__('runtime_stage').RolloutStage:
             raise Blocked('realtime_existing_authority_invalid')
+        resource_claim.require_session(session,installation=actions.installation)
         row = _session(session)
         parent=None
         if row.get('phase')=='prerequisites-captured':
@@ -426,26 +467,26 @@ def run_existing(actions, request, approved, execution, source_root, stage):
                     or record['stage_sha256'] != digest(_stage_view(stage))):
                 raise Blocked('realtime_existing_record_changed')
             return record
-        ancestry, plan, receipt, original_dir = _anchor()
-        password = _original_credential(original_dir, plan, receipt)
+        ancestry, plan, receipt, original_dir = _anchor(installation=session.installation)
+        password = _original_credential(original_dir, plan, receipt,installation=session.installation)
         view = _stage_view(stage); kube = Kube(); _check_stage(kube, view)
         live = _observe(session, kube, plan, receipt, password)
         _check_stage(kube, view)
-        ancestry2, plan2, receipt2, directory2 = _anchor()
+        ancestry2, plan2, receipt2, directory2 = _anchor(installation=session.installation)
         if ((ancestry2, plan2, receipt2, directory2) != (ancestry, plan, receipt, original_dir)
-                or _original_credential(directory2, plan2, receipt2) != password):
+                or _original_credential(directory2, plan2, receipt2,installation=session.installation) != password):
             raise Blocked('realtime_existing_anchor_changed')
         _source(session, approved, execution); _session(session)
-        record = {'schema': 'voice-staging-realtime-bootstrap-existing-v1', 'operation': session.operation,
+        record = {'schema': 'voice-staging-realtime-bootstrap-existing-v3','installation_sha256':session.installation.sha256, 'operation': session.operation,
                   'context': copy.deepcopy(session.context), 'helper_sha256': session.helper,
                   'source_authority_sha256': digest(approved), 'execution_sha256': digest(execution),
                   'stage_sha256': digest(view), 'actual_images': copy.deepcopy(stage.old_images),
                   'namespace_uid': plan['namespace_uid'], 'anchor': ancestry['anchor'],
                   'active_release': ancestry['active_release'], 'live': live}
         if parent is not None:
-            record['schema']='voice-staging-realtime-bootstrap-existing-v2'
+            record['schema']='voice-staging-realtime-bootstrap-existing-v4'
             record['prerequisites_sha256']=digest(parent)
-        _validate_record(record)
+        _validate_record(record,installation=session.installation)
         parent = directory.parent
         # The operation directory is root-owned, exclusive and never adopted.
         for path in (parent, *parent.parents):

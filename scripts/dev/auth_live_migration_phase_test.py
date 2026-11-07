@@ -441,16 +441,30 @@ class AuthMigrationContract(unittest.TestCase):
                      self.before+[self.appended[0],self.appended[2]]):
             with self.subTest(rows=rows), self.assertRaises(ValueError): classify_history(rows)
 
-    def test_profile_binds_complete_real_source_catalog(self):
+    def test_profile_binds_complete_historical_source_catalog(self):
         root=Path(__file__).resolve().parents[2] / 'src/backend/auth/src/main/resources'
-        catalog={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (root/'db/migration').glob('*.sql')}
         profile=(root/'roleidentityauthority/migration-history-linked-oauth-v1.json').read_bytes()
+        # This qualification is frozen at V32; later migrations need a new review.
+        rows=json.loads(profile)['flyway']
+        self.assertEqual(len(rows),29)
+        self.assertEqual(max(int(row['version']) for row in rows),32)
+        catalog={row['script']:hashlib.sha256((root/'db/migration'/row['script']).read_bytes()).hexdigest()
+                 for row in rows}
         before=expected_history(catalog,profile,26)
         after=expected_history(catalog,profile,32)
         verify_transition(before,after,after)
         for changed in ({**catalog,'V28__role_identity_owner.sql':'0'*64},
+                        {name:value for name,value in catalog.items() if name!=rows[0]['script']},
                         {**catalog,'V99__extra.sql':'0'*64}):
             with self.assertRaises(ValueError): expected_history(changed,profile,32)
+
+    def test_historical_profile_rejects_complete_current_source_catalog(self):
+        root=Path(__file__).resolve().parents[2] / 'src/backend/auth/src/main/resources'
+        catalog={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (root/'db/migration').glob('*.sql')}
+        profile=(root/'roleidentityauthority/migration-history-linked-oauth-v1.json').read_bytes()
+        for target in (26,32):
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                expected_history(catalog,profile,target)
 
     def test_clone_evidence_is_bound_to_full_receipt_and_actual_history(self):
         from frontend_runtime_executor import digest

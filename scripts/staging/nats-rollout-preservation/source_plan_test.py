@@ -92,6 +92,52 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_store_projection_rejects_source_selected_store_drift_before_writes(self):
+        for mode in ('full','app-only'):
+            with self.subTest(mode=mode):
+                kube,params=self.canonical_fixture(mode)
+                result=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+                self.assertEqual(result['schema'],'voice-staging-store-projection-v1')
+                self.assertTrue(all(call[0]=='get' or call[1][0]=='apply' and '--dry-run=server' in call[1]
+                                    or call[1][0]=='exec' and call[1][-1]==source_plan.CH_SQL for call in kube.calls))
+                kube.objects[('StatefulSet','voice-minio')]['spec']['template']['spec']['containers'][0]['image']='changed'
+                with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_canonical_change_minio-cors_voice-minio'):
+                    source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        for kind,name,error in (('Deployment','voice-redis','unsupported_canonical_change_infra_voice-redis'),
+                                ('StatefulSet','voice-clickhouse','unsupported_canonical_change_infra_voice-clickhouse'),
+                                ('Job','voice-minio-create-files-bucket','unsupported_minio_bucket_job_change')):
+            with self.subTest(name=name):
+                kube,params=self.canonical_fixture('full')
+                kube.objects[(kind,name)]['spec']['template']['spec']['containers'][0]['image']='changed'
+                with self.assertRaisesRegex(nonnats_plan.PlanError,error):source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('app-only')
+        env=kube.objects[('Deployment','voice-file')]['spec']['template']['spec']['containers'][0]['env']
+        next(item for item in env if item['name']=='FILE_R2_SIGNING_ENDPOINT')['value']='https://wrong.invalid'
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_r2_configuration_change_file'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('full')
+        kube.objects[('Job','voice-minio-create-files-bucket')]['spec']['backoffLimit']=9
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_minio_bucket_job_change'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('full');kube.bad_clickhouse=True
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'canonical_clickhouse_ddl_incompatible'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('full')
+        kube.objects[('ConfigMap','voice-clickhouse-init')]['data']['001_events.sql']='changed'
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_canonical_change_db-init_voice-clickhouse-init'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+
+    def test_store_projection_binds_referenced_minio_credentials_without_replica_dependence(self):
+        kube,params=self.canonical_fixture('app-only')
+        def row(result,kind,name):return next(item for item in result['identities'] if item['kind']==kind and item['name']==name)
+        before=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube.objects[('Deployment','voice-user')]['spec']['replicas']=0
+        paused=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        self.assertEqual(row(before,'Deployment','voice-user')['semantic_sha256'],row(paused,'Deployment','voice-user')['semantic_sha256'])
+        kube.objects[('Secret','voice-minio-credentials')]['data']['MINIO_ROOT_PASSWORD']=base64.b64encode(b'changed-credential').decode()
+        changed=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        self.assertNotEqual(row(paused,'Secret','voice-minio-credentials')['semantic_sha256'],row(changed,'Secret','voice-minio-credentials')['semantic_sha256'])
+
     def test_absent_frontend_configmaps_are_create_only_not_generic_actions(self):
         kube,params=self.canonical_fixture('full')
         names={'voice-web-runtime-config','voice-admin-runtime-config','voice-developer-portal-runtime-config'}

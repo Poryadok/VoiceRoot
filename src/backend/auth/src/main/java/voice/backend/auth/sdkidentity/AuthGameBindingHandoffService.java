@@ -44,15 +44,20 @@ public class AuthGameBindingHandoffService {
   }
 
   public ClaimReceipt claim(String handoffJws, String deviceProof, UUID operationId, String requestSha256) {
+    if (operationId == null || requestSha256 == null || !requestSha256.matches("[0-9a-f]{64}")) throw denied();
+    // The private adapter authenticates the GIS workload before entering this method.
+    SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
     HandoffVerification verification = verifyForClaim(handoffJws);
     final AuthUserPrincipalIssuer.VerifiedGameBindingHandoff handoff = verification.handoff();
     final boolean freshAssertion = verification.fresh();
     if (operationId == null || !operationId.equals(handoff.operationId()) || requestSha256 == null
         || !requestSha256.matches("[0-9a-f]{64}")) throw denied();
     return transactions.execute(status -> {
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       // Match the SDK identity -> authorization lock order used by identity revoke and consent exchange.
       jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
           Map.of("id", handoff.sourceAccountId()), rs -> { });
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       List<Map<String, Object>> grants = jdbc.queryForList("""
           SELECT a.*, s.consent_revision, s.expires_at AS linked_expires_at, i.actor_id,
                  i.application_id AS identity_application_id, i.environment_id AS identity_environment_id,
@@ -117,6 +122,7 @@ public class AuthGameBindingHandoffService {
     if (claimId == null || operationId == null || !("succeeded".equals(outcome) || "failed".equals(outcome))
         || ("succeeded".equals(outcome) != (bindingId != null))) throw denied();
     return transactions.execute(status -> {
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       // The claim's authorization owner is immutable. Read it without locks,
       // then take the same identity -> authorization/session -> claim order as
       // claim() and revoke(), and re-read/revalidate after each lock.
@@ -126,12 +132,14 @@ public class AuthGameBindingHandoffService {
           JOIN sdk_authorizations a ON a.request_id=c.authorization_request_id
           WHERE c.claim_id=:claim
           """, Map.of("claim", claimId));
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       if (ownerRows.size() != 1 || ownerRows.getFirst().get("source_account_id") == null) throw denied();
       UUID requestId = (UUID) ownerRows.getFirst().get("authorization_request_id");
       UUID sourceAccountId = (UUID) ownerRows.getFirst().get("source_account_id");
       var identities = jdbc.queryForList("""
           SELECT account_id FROM sdk_identities WHERE account_id=:account FOR UPDATE
           """, Map.of("account", sourceAccountId));
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       if (identities.size() != 1) throw denied();
       var authorizationRows = jdbc.queryForList("""
           SELECT request_id FROM sdk_authorizations WHERE request_id=:request FOR UPDATE
@@ -208,18 +216,21 @@ public class AuthGameBindingHandoffService {
    */
   public RevocationReceipt revoke(UUID operationId) {
     if (operationId == null) throw denied();
+    SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
     // source_account_id is immutable for this authorization. Read it before
     // the transaction so the transaction can acquire the common identity
     // serialization lock before the authorization and grant rows.
     List<Map<String, Object>> owners = jdbc.queryForList("""
         SELECT source_account_id FROM sdk_authorizations WHERE game_binding_operation_id=:operation
         """, Map.of("operation", operationId));
+    SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
     if (owners.size() != 1 || owners.getFirst().get("source_account_id") == null) throw denied();
     UUID sourceAccountId = (UUID) owners.getFirst().get("source_account_id");
     return transactions.execute(status -> {
       List<Map<String, Object>> identities = jdbc.queryForList("""
           SELECT account_id FROM sdk_identities WHERE account_id=:account FOR UPDATE
           """, Map.of("account", sourceAccountId));
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       if (identities.size() != 1) throw denied();
       var rows = jdbc.queryForList("""
           SELECT request_id, game_binding_status, game_binding_authority_revision

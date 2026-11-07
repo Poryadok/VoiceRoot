@@ -70,7 +70,7 @@ class GuestConversionOtpAcceptanceJdbcIntegrationTest {
 
   @Test
   void successfulAcceptanceConsumesExactOtpAndCreatesOneDurableOperationInTheSameAuthTransaction() {
-    UUID accountId = UUID.randomUUID();
+    UUID accountId = guestAccount();
     Instant now = Instant.parse("2026-09-04T10:15:30Z").truncatedTo(ChronoUnit.MICROS);
     OtpCodeRecord otp = otpCodes.create(accountId, "a1", "email_verify", now.plusSeconds(600), now);
     GuestConversionOtpAcceptance acceptance =
@@ -92,7 +92,7 @@ class GuestConversionOtpAcceptanceJdbcIntegrationTest {
 
   @Test
   void operationCreateFailureRollsBackTheExactOtpConsumptionAndOperationRow() {
-    UUID accountId = UUID.randomUUID();
+    UUID accountId = guestAccount();
     Instant now = Instant.parse("2026-09-04T10:15:30Z").truncatedTo(ChronoUnit.MICROS);
     OtpCodeRecord otp = otpCodes.create(accountId, "b2", "email_verify", now.plusSeconds(600), now);
     GuestConversionOperationRepository failureAfterInsert = new FailureAfterCreate(operations);
@@ -105,6 +105,12 @@ class GuestConversionOtpAcceptanceJdbcIntegrationTest {
 
     assertThat(otpCodes.findLatestValid(accountId, "email_verify", now)).contains(otp);
     assertThat(operationsFor(accountId)).isEmpty();
+  }
+
+  private UUID guestAccount() {
+    UUID id = UUID.randomUUID();
+    jdbc.getJdbcTemplate().update("INSERT INTO accounts(id,password_hash,type,status) VALUES(?,'fixture','guest','active')", id);
+    return id;
   }
 
   private List<GuestConversionOperation> operationsFor(UUID accountId) {

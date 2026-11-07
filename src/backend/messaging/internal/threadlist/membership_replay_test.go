@@ -86,8 +86,8 @@ func TestPostgresMembershipMigrationRoundTrip(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	ctx := context.Background()
-	for _, direction := range []string{"down", "up"} {
-		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../migrations/messaging_db/000039_thread_list_membership."+direction+".sql"))
+	for _, migration := range []string{"000040_thread_membership_baselines.down.sql", "000039_thread_list_membership.down.sql", "000039_thread_list_membership.up.sql", "000040_thread_membership_baselines.up.sql"} {
+		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../migrations/messaging_db", migration))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(raw))
 		require.NoError(t, err)

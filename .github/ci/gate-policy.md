@@ -16,7 +16,7 @@ Moving it does not assert that lexical activation checks prove arbitrary program
 semantics. The bounded guard refuses additions to prohibited root wiring and
 scans full modified source-disabled lifecycle files; ordinary service tests
 remain responsible for runtime behavior. Shipped migrations can only be extended
-additively, except the exact reviewed nine-entry Native/P3 repair transition
+additively, except the Chat21 singleton below and the exact reviewed nine-entry Native/P3 repair transition
 from source `e409cd05c40e857b61109513eb2154f968970c02` (record
 `f87ee933aa1f599284e1932e44bf32b4e2af48ba`). The validator pins both original
 and repaired mode/type/blob entries and requires the whole package: four DOWN
@@ -31,6 +31,22 @@ existing whole-migration transaction, tested through one SQL execution. Existing
 Native A3 roster relay and roomlifecycle activation remain prohibited. Exact
 source entries authorize no runtime/deployment result. An authorized historical renumber needs a separate reviewed policy
 change, not an environment override.
+
+The independent Chat21 singleton admits only
+`src/backend/migrations/chat_db/000021_chat_deleted_event_outbox.down.sql`
+from `100644 blob 37d5d9d0b0dd93f708f81b03e7e2484c8be31749` to
+`100644 blob f552270c91ce84925144712f09bf0c4a3b22fe36`. Source
+`62663f9d92e9a4a78da30443dd43c2b11b2ee1e3` was independently reviewed by
+Cedar1102-29 for `CHAT21-DOWN-FIRST-WRITER` (TT comment c4 and attachment
+`505b53a43f40d69bc023a40aef7c5e26`), with five native PostgreSQL 16 cases
+retained in attachment `2073f6fb780b41b6b90a5674bd5af4bb`. It fences writers
+before the emptiness probe and refuses stale-snapshot isolation before DDL.
+This singleton is independent of the atomic e409 package and the historical
+`guarded-correction-v1` capability. The ordinary exact-parent, merge-tree and
+clean-worktree checks remain required. Altered bytes, mode, path or baseline,
+deletion and additional historical SQL edits remain rejected. This is current
+diff admission only; historical release provenance, runtime and acceptance
+remain separate obligations.
 
 The four Make shards preserve all 70 original shell/Python recipe commands;
 policy adds current-diff, routing and latency regression tests. Full local
