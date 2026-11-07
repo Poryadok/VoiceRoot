@@ -129,6 +129,15 @@ def release_source_module():
         return None
     return release
 
+def current_source_module():
+    try:
+        import f13_current_source as current
+    except ModuleNotFoundError as error:
+        if error.name != 'f13_current_source':
+            raise
+        return None
+    return current
+
 
 def reviewed_v5_source(source):
     """Return source-only reviewed facts, never an event or admission grant."""
@@ -394,19 +403,10 @@ class C2ReviewedStoresSourceTest(unittest.TestCase):
 
     def test_public_fixture_requires_specific_current_authority_failure(self):
         fixture=RealGitSuccessorTest('test_public_current_authority_rejects_historical_fixture')
-        fixture.source='fixture-source'
-        cases=[(BASE,True,'release_actual_head'),(BASE,False,'context_bootstrap_actual_head')]
-        try:
-            import f13_current_source as current
-        except ModuleNotFoundError as error:
-            if error.name != 'f13_current_source': raise
-            current=None
-        if current is not None:
-            cases.append((current.SOURCE,True,'current_actual_head'))
-        for target,v5,reason in cases:
-            fixture.target=target
+        fixture.source='fixture-source';fixture.target='fixture-target'
+        for v5,reason in ((True,'release_actual_head'),(False,'context_bootstrap_actual_head')):
             release=SimpleNamespace(applicable=lambda repo,target:v5)
-            with self.subTest(target=target,v5=v5),patch(__name__+'.release_source_module',return_value=release):
+            with self.subTest(v5=v5),patch(__name__+'.release_source_module',return_value=release),patch(__name__+'.current_source_module',return_value=None):
                 with patch.object(authority,'qualify',side_effect=legacy.Rejected(reason)):
                     fixture.test_public_current_authority_rejects_historical_fixture()
                 with patch.object(authority,'qualify',side_effect=legacy.Rejected('unrelated_error')):
@@ -730,16 +730,14 @@ class RealGitSuccessorTest(unittest.TestCase):
                                  'refs/pull/875/merge', target, '', 'master')
 
     def test_public_current_authority_rejects_historical_fixture(self):
+        current=current_source_module()
         release=release_source_module()
-        try:
-            import f13_current_source as current
-        except ModuleNotFoundError as error:
-            if error.name != 'f13_current_source': raise
-            current=None
         if current is not None and current.applicable(ROOT,self.target):
             reason='current_actual_head'
+        elif release is not None and release.applicable(ROOT,self.target):
+            reason='release_actual_head'
         else:
-            reason='release_actual_head' if release is not None and release.applicable(ROOT,self.target) else 'context_bootstrap_actual_head'
+            reason='context_bootstrap_actual_head'
         with self.assertRaisesRegex(legacy.Rejected, '^'+reason+'$'):
             authority.qualify(ROOT, BASE, self.source, self.target, 'pull_request',
                               'refs/pull/875/merge', self.target, '', 'master')
