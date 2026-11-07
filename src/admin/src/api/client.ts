@@ -1,5 +1,5 @@
 import { apiBaseUrl, isOauthDisabled } from "../oauth/api";
-import { clearSession, getAccessToken } from "../oauth/session";
+import { getAccessToken, getSessionRevision, invalidateSession } from "../oauth/session";
 
 const staffToken = () =>
   isOauthDisabled() ? (import.meta.env.VITE_STAFF_TOKEN ?? "") : "";
@@ -15,7 +15,9 @@ export async function apiFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   const headers = new Headers(init.headers);
-  const token = getAccessToken() || staffToken();
+  const sessionToken = getAccessToken();
+  const revision = getSessionRevision();
+  const token = sessionToken || staffToken();
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
@@ -24,7 +26,7 @@ export async function apiFetch(
   }
   const response = await fetch(apiUrl(path), { ...init, headers });
   if (response.status === 401) {
-    clearSession();
+    invalidateSession(sessionToken, revision);
   }
   return response;
 }
