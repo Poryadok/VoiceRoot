@@ -31,6 +31,12 @@
   until separately specified source creation or requalification and continuity
   binding succeed; closed state must survive controller restart.
   An undeclared rollback under failed custody is outside this model's guarantee.
+  The production supervisor gates opening and attested permits with an independent
+  mTLS/Ed25519 process and actual control/source SQL health. Loss revokes the
+  incarnation and attempts existing SQL recovery; unreachable or stalled recovery
+  is CLOSED/HOLD, not proof of a stopped source. No restore/replacement/reopen may
+  proceed until verified recovery and continuity qualification. This bounded
+  model does not require a host watchdog or stopping a partitioned PostgreSQL.
   A static source receipt or a request-time check alone does not establish
   currentness or fence a transaction across invalidation. The current code has
   closed-source creation/migration, a separately signed one-leader opening,

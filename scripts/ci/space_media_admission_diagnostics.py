@@ -13,8 +13,9 @@ import subprocess
 import time
 
 
-SCHEMA = "voice-space-media-admission-commit-diagnostics-v1"
+SCHEMA = "voice-space-media-admission-diagnostics-v2"
 EVENT = "space_media_admission_commit_failed"
+RECONCILIATION_EVENT = "Space media authority reconciliation failed"
 FAILURE_CLASSES = frozenset({
     "room_head_pending", "admission_conflict", "admission_unavailable", "store_error",
 })
@@ -43,10 +44,16 @@ def sanitize_log_bytes(data: bytes, command_result: str) -> dict:
             event = json.loads(line[start:])
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if not isinstance(event, dict) or event.get("msg") != EVENT:
+        if not isinstance(event, dict):
             continue
-        failure_class = event.get("failure_class")
-        if not isinstance(failure_class, str) or failure_class not in FAILURE_CLASSES:
+        if event.get("msg") == EVENT:
+            failure_class = event.get("failure_class")
+            if not isinstance(failure_class, str) or failure_class not in FAILURE_CLASSES:
+                continue
+        elif event.get("msg") == RECONCILIATION_EVENT:
+            # Do not retain the error text: it can include authority or storage data.
+            failure_class = "authority_reconciliation_failed"
+        else:
             continue
         if len(classes) < MAX_FAILURE_RECORDS:
             classes.append(failure_class)

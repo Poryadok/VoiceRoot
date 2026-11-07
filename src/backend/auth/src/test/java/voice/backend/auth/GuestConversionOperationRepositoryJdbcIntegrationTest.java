@@ -63,7 +63,7 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
   @Test
   void createOrResume_preservesTheFirstOperationAndOtpWithSaneInitialMetadata() {
     GuestConversionOperationRepository repository = repository();
-    UUID accountId = UUID.randomUUID();
+    UUID accountId = guestAccount();
     UUID originalOtpCodeId = UUID.randomUUID();
     Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
 
@@ -98,7 +98,7 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
   @Test
   void createOrResume_concurrentCallsForOneAccountPersistOneSharedOperation() throws Exception {
     GuestConversionOperationRepository repository = repository();
-    UUID accountId = UUID.randomUUID();
+    UUID accountId = guestAccount();
     UUID otpCodeId = UUID.randomUUID();
     Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
     int callers = 8;
@@ -148,8 +148,8 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
   void createOrResume_rejectsOtpReusedByAnotherAccountWithoutCreatingAnotherRow() {
     GuestConversionOperationRepository repository = repository();
     UUID otpCodeId = UUID.randomUUID();
-    UUID firstAccountId = UUID.randomUUID();
-    UUID secondAccountId = UUID.randomUUID();
+    UUID firstAccountId = guestAccount();
+    UUID secondAccountId = guestAccount();
     Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
     repository.createOrResume(firstAccountId, otpCodeId, now);
 
@@ -1127,7 +1127,19 @@ class GuestConversionOperationRepositoryJdbcIntegrationTest {
     jdbc().update("DELETE FROM guest_conversion_operations", new MapSqlParameterSource());
   }
 
+  private UUID guestAccount() {
+    UUID id = UUID.randomUUID();
+    seedGuestAccount(id);
+    return id;
+  }
+
+  private void seedGuestAccount(UUID id) {
+    jdbc().update("INSERT INTO accounts(id,password_hash,type,status) VALUES(:id,'fixture','guest','active') ON CONFLICT(id) DO NOTHING",
+        java.util.Map.of("id", id));
+  }
+
   private GuestConversionOperation seedOperation(GuestConversionOperation operation) {
+    seedGuestAccount(operation.accountId());
     jdbc()
         .update(
             """

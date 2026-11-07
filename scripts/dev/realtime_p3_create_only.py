@@ -15,6 +15,7 @@ import media_operation_guard
 import realtime_p3_create_only_packet as packet
 import realtime_p3_create_only_socket as channel
 import realtime_p3_create_only_transport as transport
+import space_native_tool_identity as native
 import story_media_backup as backup
 
 SOCKET_PARENT = Path('/home/pmd/voice-realtime-p3/operations')
@@ -56,6 +57,7 @@ class Session:
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.intent = copy.deepcopy(journal.intent); self.listener = None; self.dirfd = None; self.inode = None
         self.pending = False; self.handoff = None; self.effects = {}; self.roots = None; self.completed = False
+        self._delegated_cut = None; self._delegated_refs = None
         self.plan = self.intent.get('realtime_p3_create')
         match = re.fullmatch(r'media-c[12]-([0-9a-f]{32})',fence.context.get('operation_id',''))
         if (not match or self.intent.get('resource_context') != fence.context or self.intent.get('namespace_uid') != namespace_uid
@@ -67,16 +69,43 @@ class Session:
                 or not isinstance(self.plan['source_repo'],str) or not Path(self.plan['source_repo']).is_absolute()):
             raise CreateError('P3 creation identity unavailable')
         self.suffix = match[1]
+        self._refs=(journal,fence,client,fence.ledger)
+        self._identity=(copy.deepcopy(fence.context),copy.deepcopy(lock),namespace_uid)
+        self._custody=native.SpaceNativeToolPhase._custody(journal)
+
+    def _local(self):
+        if (any(a is not b for a,b in zip(self._refs,(self.journal,self.fence,self.client,self.fence.ledger)))
+                or self.client.journal is not self.journal or self.fence.ledger.client is not self.client
+                or (self.fence.context,self.lock,self.namespace_uid)!=self._identity
+                or self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent
+                or native.SpaceNativeToolPhase._custody(self.journal)!=self._custody): raise ValueError()
 
     def _guard(self):
-        if (self.journal.poisoned or self.journal.intent != self.intent or self.journal.state.get('intent') != self.intent): raise ValueError()
+        self._local()
         media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
-        row, _ = self.fence.ledger.read()
+        if self._delegated_refs is not None and self._delegated_cut is None: raise ValueError()
+        cut_snapshot=cut_custody=None
+        if self._delegated_cut is not None:
+            cut=self._delegated_cut
+            if (self._delegated_refs is None or any(a is not b for a,b in zip(self._delegated_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)))
+                    or cut.fence.context!=self.fence.context or cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid): raise ValueError()
+            cut_snapshot=copy.deepcopy((cut.journal.intent,cut.journal.state))
+            cut_custody=native.SpaceNativeToolPhase._custody(cut.journal)
+            cut.verify_drained()
+            if self._delegated_refs is None or any(a is not b for a,b in zip(self._delegated_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger))): raise ValueError()
+        row, rev = self.fence.ledger.read()
+        if cut_snapshot is not None and cut.fence.ledger.read()!=(row,rev): raise ValueError()
         if self.handoff is not None and (row.get('realtime_p3_handoff') != self.handoff
                 or self.journal.state['steps'].get('realtime-p3-handoff') != self.handoff): raise ValueError()
         local = {k.removeprefix('realtime-p3-object-'):v for k,v in self.journal.state['steps'].items()
                  if k.startswith('realtime-p3-object-')}
         if row.get('realtime_p3_objects',{}) != self.effects or local != self.effects: raise ValueError()
+        self._local()
+        if cut_snapshot is not None and (self._delegated_cut is not cut or
+                self._delegated_refs is None or any(a is not b for a,b in zip(self._delegated_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger))) or
+                cut.fence.context!=self.fence.context or cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid or
+                (cut.journal.intent,cut.journal.state)!=cut_snapshot or
+                native.SpaceNativeToolPhase._custody(cut.journal)!=cut_custody): raise ValueError()
 
     def _poison(self):
         try: self.fence.uncertain('P3 create-only outcome uncertain')
@@ -166,13 +195,24 @@ class Session:
 
     def finish(self):
         """Receive root packet, dry-run, then create and observe each fixed object."""
+        return self._finish(False,None,None)
+
+    def finish_delegated(self,capability,token):
+        """Use the fixed delegated issuer; its terminal success precedes all effects."""
+        return self._finish(True,capability,token)
+
+    def _finish(self,delegated,capability,token):
         try:
             if self.listener is None or self.handoff is None: raise ValueError()
             self._guard()
             info = os.stat('packet.sock',dir_fd=self.dirfd,follow_symlinks=False)
             if (not stat.S_ISSOCK(info.st_mode) or (info.st_dev,info.st_ino) != self.inode
                     or os.getpid() != self.handoff['pid'] or _ticks() != self.handoff['start_ticks']): raise ValueError()
-            envelope = channel.receive(self.listener,self.fence.context['operation_id'],self.plan['issuer_source_sha'])
+            if not delegated:
+                envelope = channel.receive(self.listener,self.fence.context['operation_id'],self.plan['issuer_source_sha'])
+            else:
+                from realtime_p3_delegated_receiver import receive
+                envelope = receive(self,capability,token)
             self._guard(); self._check_roots()
             principal = self.roots[PUBLIC[0]]['certificate']; media = self.roots[PUBLIC[1]]['certificate']; space = self.roots[PUBLIC[2]]['certificate']
             objects = packet.validate(envelope,self.fence.context['operation_id'],self.plan['issuer_source_sha'],principal,media,space)

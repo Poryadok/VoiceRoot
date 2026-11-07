@@ -84,6 +84,44 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
+History cursors anchor a public UUIDv7 to its private `messages.history_position`.
+Migration `000039` allocates that position under the per-chat transaction advisory
+lock before insertion and holds the lock through commit/rollback. History pages
+use this order for latest/before/after, so a delayed insertion with an earlier UUID
+is recovered after an already observed commit. Different chats remain independent;
+the sequence is not a global API cursor. Legacy rows are backfilled in UUID order
+under an exclusive table lock. Positions and their chat binding are immutable;
+the metadata-only backfill temporarily suspends the message lifecycle row trigger
+inside that exclusive transaction and restores its original enable mode before
+commit, including when retained messages belong to a frozen Space. Payload writes
+remain fenced after migration. Gaps from rollback/idempotent retries are harmless. Deploy the migration before
+the reader change; rollback to the old reader before DOWN. DOWN preserves message
+IDs/data but restores the old reader's late-commit limitation.
+
+The selected-chat Flutter controller keeps accepted server-order progress apart
+from display ordering by timestamp/UUID. It drains returned `next_cursor` pages,
+persists a failed page's continuation for retry, and advances its message-ID anchor
+from the final server-ordered response. Local cache schema version 2 stores this
+metadata per `(profile_id, chat_id)` alongside accepted bodies; the existing
+50-message offline body limit does not discard cursor progress. Profile/logout
+cache clearing removes both. Version-1 caches have no trusted history anchor and
+refresh latest history rather than derive a cursor from their sorted bodies.
+
+`GetMessagesResponse.history_reset` is true when a missing/deleted explicit or
+encoded page anchor caused the existing latest-50 fallback. That response is a
+fresh latest snapshot in descending server history order, with a **before** cursor
+for older history if more rows remain; it is never a forward continuation. A
+catch-up client discards that failed forward continuation, reloads latest history
+and seeds its new forward anchor from the first server-ordered message. Empty
+snapshots clear the anchor. The flag defaults to false for ordinary pages.
+
+An online controller restart must restore trusted per-chat progress before
+adopting a new latest anchor. It may refresh latest bodies for presentation, but
+retains and drains the saved forward continuation first, including after a failed
+page. This avoids skipping the gap between a saved page and a newer latest page.
+Roll out Messaging's additive reset metadata before the client that consumes it;
+no cursor decoding or UUID/timestamp ordering is required in the client.
+
 ### Durable message-event publication (BE-188 A1)
 
 Enabled Messaging mutations persist their immutable `MessageStreamEvent` bytes,

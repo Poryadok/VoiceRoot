@@ -28,7 +28,8 @@ class MessageCacheDatabase extends _$MessageCacheDatabase {
 
   /// Encrypted cache for live integration tests (headless desktop fallback key).
   static Future<MessageCacheDatabase> openEncryptedForLiveIntegration() async {
-    final executor = await openEncryptedMessageCacheExecutorForLiveIntegration();
+    final executor =
+        await openEncryptedMessageCacheExecutorForLiveIntegration();
     return MessageCacheDatabase(executor);
   }
 
@@ -38,5 +39,25 @@ class MessageCacheDatabase extends _$MessageCacheDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createAll();
+      await customStatement(_historyCursorTable);
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) await customStatement(_historyCursorTable);
+    },
+  );
+
+  static const _historyCursorTable = '''
+CREATE TABLE cached_message_history (
+  profile_id TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  after_message_id TEXT,
+  page_cursor TEXT,
+  PRIMARY KEY (profile_id, chat_id)
+)''';
 }

@@ -1196,7 +1196,7 @@ func (s *MessagingGRPC) GetMessages(ctx context.Context, req *messagingv1.GetMes
 			HasMore:    hasMore,
 		},
 	}
-	return &messagingv1.GetMessagesResponse{MessageList: ml, DmPeerState: dmPeerState}, nil
+	return &messagingv1.GetMessagesResponse{MessageList: ml, DmPeerState: dmPeerState, HistoryReset: useFallback}, nil
 }
 
 func historyBlockScanLimit(pageLimit int) int {

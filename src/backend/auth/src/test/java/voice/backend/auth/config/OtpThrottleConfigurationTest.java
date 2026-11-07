@@ -86,6 +86,11 @@ class OtpThrottleConfigurationTest {
   @Configuration(proxyBeanMethods = false)
   static class OtpDependencies {
     @Bean
+    voice.backend.auth.sessionepoch.SessionEpochFloorStore sessionEpochFloors() {
+      return new voice.backend.auth.sessionepoch.InMemorySessionEpochFloorStore();
+    }
+
+    @Bean
     ReleasePolicy releasePolicy() {
       return ReleasePolicy.development();
     }

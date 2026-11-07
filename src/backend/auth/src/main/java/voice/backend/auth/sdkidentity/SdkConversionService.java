@@ -76,6 +76,7 @@ public class SdkConversionService {
     fresh(proofExpires);
     if (!existing.isEmpty()) {
       Row row = new Row(existing.getFirst());
+      SdkTerminalFences.requireLive(jdbc, "sdk_conversion", row.id("operation_id"));
       if (!digest.equals(row.text("request_hash"))) throw new SdkAuthorizationConflictException();
       if (!device.equals(row.id("device_id")) || metadata.number("ownership_generation") != row.number("source_generation")) {
         throw denied();
@@ -110,11 +111,19 @@ public class SdkConversionService {
 
   public Operation status(UUID operationId, long issuedAt, String deviceProof) {
     String payload = SdkConversionProofs.statusPayload(operationId, issuedAt, clock);
-    Row row = read(operationId, false);
-    SdkIdentityService.possession(row.text("public_jwk"), deviceProof, payload);
-    // A revoked/retired source key authorizes this purpose-limited recovery read, never new access.
-    SdkConversionProofs.statusPayload(operationId, issuedAt, clock);
-    return operation(row);
+    return transactions.execute(transaction -> {
+      Row observed = read(operationId, false);
+      jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
+          Map.of("id", observed.id("source_account_id")), rs -> { });
+      // The erased row's proof key must not be retained just to disclose terminal status.
+      try { SdkTerminalFences.requireLive(jdbc, "sdk_conversion", operationId); }
+      catch (SdkOperationErasedException erased) { throw denied(); }
+      Row row = read(operationId, true);
+      SdkIdentityService.possession(row.text("public_jwk"), deviceProof, payload);
+      // A revoked/retired source key authorizes this purpose-limited recovery read, never new access.
+      SdkConversionProofs.statusPayload(operationId, issuedAt, clock);
+      return operation(row);
+    });
   }
 
   public Operation attachNewTarget(UUID operationId, String voiceBearer) {
@@ -154,9 +163,16 @@ public class SdkConversionService {
   }
 
   private Row locked(UUID operationId) {
-    Row observed = read(operationId, false);
+    SdkTerminalFences.requireLive(jdbc, "sdk_conversion", operationId);
+    Row observed;
+    try { observed = read(operationId, false); }
+    catch (SdkIdentityDeniedException missing) {
+      SdkTerminalFences.requireLive(jdbc, "sdk_conversion", operationId);
+      throw missing;
+    }
     jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
         Map.of("id", observed.id("source_account_id")), rs -> { });
+    SdkTerminalFences.requireLive(jdbc, "sdk_conversion", operationId);
     return read(operationId, true);
   }
 

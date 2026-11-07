@@ -257,6 +257,17 @@ outbox entry; protected per-reference classification adds no cached exclusion
 marker or new storage. See the [implementation plan](testing/be080-file-preview-exec-plan.md)
 for current verification and activation obligations.
 
+### `messaging_db` (Messaging Service): history cursor order
+
+Migration `000039` adds immutable `messages.history_position`, the owned
+`message_history_position_seq`, and chat/thread position indexes. A BEFORE INSERT
+trigger takes the existing per-chat mutation transaction advisory lock before
+allocating a position, covering all message producers and retaining serialization
+through commit. Positions order history pages; public UUIDv7 message IDs remain
+unchanged cursor anchors. Sequence gaps are allowed; positions are private and
+never a global catch-up cursor. Existing rows are backfilled in UUID order under
+an exclusive table lock; message identity/content is preserved by DOWN.
+
 ### `messaging_db` (Messaging Service): ListThreads successor (accepted target)
 
 The bounded `ListThreads` successor keeps all projection state in `messaging_db` and has **no cross-database foreign keys**. Chat remains the membership authority and delivers durable membership events through an outbox; Messaging records consumed events idempotently.

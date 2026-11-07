@@ -433,7 +433,11 @@ jobs:
           manifest=json.loads(read(code/'capture-manifest.json',65536))
           if (not isinstance(manifest,dict) or not (1<=len(manifest)<=89 or
               len(manifest)==94 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
-              == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20')):
+              == '13397edd8fae921ff480cd366fbcb63439fe00e55e3f8bfe9c00ea0c9790fe20' or
+              len(manifest)==99 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+              == '9e08bb7df3c0dcdb9f4bf6287895eff08a4451062ca41199b79ca131da7465e4' or
+              len(manifest)==100 and hashlib.sha256(json.dumps(sorted(manifest),separators=(',',':')).encode()).hexdigest()
+              == '6d3ce2a5893bbb4d340a3a97daddb2e024f8ebfdb358db6641b0258e621bb002')):
               raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
           if 'nats-rollout-preservation/resource_claim.py' not in manifest:raise SystemExit('NATS_ROLLOUT=RESOURCE_FENCE_UPGRADE_REQUIRED')
           for relative,wanted in manifest.items():
@@ -444,7 +448,8 @@ jobs:
                   st=directory.lstat()
                   if not stat.S_ISDIR(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
                   if directory==code:break
-              if hashlib.sha256(read(path,16<<20)).hexdigest()!=wanted:raise SystemExit('NATS_ROLLOUT=CHANGED_CODE')
+              limit=(32 if relative=='nats-rollout-preservation/story-restored8-probe' else 16)<<20
+              if hashlib.sha256(read(path,limit)).hexdigest()!=wanted:raise SystemExit('NATS_ROLLOUT=CHANGED_CODE')
           entry='nats-rollout-preservation/bridge_client.py' if bridge_action else 'nats-rollout-preservation/workflow_entry.py'
           if entry not in manifest:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
           if action=='--bridge-prepare':

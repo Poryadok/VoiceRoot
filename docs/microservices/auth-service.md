@@ -1,5 +1,45 @@
 # Auth Service
 
+## Terminal account-erasure receipts (accepted 2026-11-03)
+
+At the original account-deletion P30D deadline, Auth replaces identity-bearing
+SDK and ownership-transfer recovery receipts with permanent opaque operation
+fences. This is the accepted terminal exception to exact raw receipt replay:
+subsequent retries return an explicit erased outcome and cannot reconstruct
+personal data, sessions, grants, bindings or the former receipt payload.
+
+Fences retain only the opaque operation identity, operation family,
+opaque deletion fence/cycle, terminal erased outcome and completion time. They
+must not retain account/profile/provider identifiers, personal payloads,
+credentials, original receipt bytes, or replay hashes derived from personal
+fields. Lookup remains protected by the operation family's existing authority;
+an erased outcome grants no fresh action or identity disclosure.
+
+Authenticated retries receive `operation_erased` (HTTP 409 for SDK operations,
+gRPC `FAILED_PRECONDITION` for ownership-transfer recovery). A public retry whose
+only authentication key was erased retains the ordinary generic denial; the
+operation identifier alone never authorizes disclosure of a terminal fence.
+
+Local cleanup and its durable fence commit atomically. Repeated cleanup and a
+lost response recover the same terminal outcome. Each participant independently
+honors the original deadline; collecting its receipt never delays local erasure.
+Deleting a linked regular account does not delete a separate live SDK principal.
+Pending work must be fenced against later commits that recreate erased data.
+Raw account-owned credentials and workflow rows admit INSERT only at READ COMMITTED
+under the owning account row lock, using fresh database time after acquisition.
+Missing, terminal or deadline-due owners reject the write; a recoverable owner
+strictly before the original deadline remains admissible. The nine guarded stores
+are refresh_tokens, otp_codes, backup_codes, linked_identities, e2e_key_backups,
+guest_conversion_operations, verification_source_sync_targets, linked_oauth_attempts
+and account_deletion_operations. Their account_id is immutable; same-owner UPDATE
+and DELETE retain existing locking behavior. This prevents a delayed writer from
+recreating personal data after physical cleanup.
+Restored backups apply permanent fences before serving. Existing Space-deletion
+proof pseudonymization remains governed by its separately accepted key policy.
+
+This records the owner's contract decision; implementation, transport wiring,
+privacy tests and deployment evidence remain required before activation.
+
 When an account-deletion request races scheduled recovery, it observes the same
 durable operation for at most two seconds per pending stage while another worker
 holds its lease. It neither steals that lease nor infers success from a timeout:
@@ -16,6 +56,21 @@ returns its existing unavailable/error result immediately.
 > Trusted schema owner is explicit (`AUTH_IDENTITY_SCHEMA_OWNER`); migration
 > history uses the existing Flyway/canonical mode without synthetic rows. See
 > [source ExecPlan](../testing/auth-identity-current444-source-plan.md).
+
+## Account lifecycle decision time
+
+A committed restore decision is authorized by one fresh database-time cut after
+the owning account and lifetime row locks, strictly before the original
+`purge_at`. The fact and its intent become durable only if that transaction
+commits. Later journal serialization, WAL flush and response completion may
+finish at or after the deadline. These completion times do not redefine the
+serialized decision cut. A restore reaching the owning locks at or after the
+deadline is denied; rollback publishes no decision or intent. Same-account
+expiry cannot overtake the account/lifetime locks held by that restore.
+
+This defines the deadline boundary for the private exact-cycle source component.
+Protected observation, hint transport and activation remain separate work; see
+the [source plan](../testing/auth-account-lifecycle-producer-exec-plan.md).
 
 ## User parent identity protected registration
 
@@ -556,16 +611,20 @@ Missing or invalid credentials yield `UNAUTHENTICATED`; a verified wrong caller
 yields `PERMISSION_DENIED`. Malformed UUIDs, nonpositive epochs or malformed
 digests yield `INVALID_ARGUMENT`. Missing, unconsumed and mismatched records all
 yield the same coarse `PERMISSION_DENIED`; storage/configuration failure yields
-`UNAVAILABLE`. Errors do not disclose stored bindings, digest, factors or account
-state.
+`UNAVAILABLE`. A terminal operation fence yields `FAILED_PRECONDITION` with
+`operation_erased` only after the same verified Space caller checks. Errors do
+not disclose stored bindings, digest, factors or account state.
 
 Recovery matches the original epoch; it does not reauthorize against the current
-account, session floor, password, 2FA, security revision or proof expiry. A retained
-consumed receipt remains recoverable after account deletion, including physical
-removal of its account row. The store uses a separate read-only `READ_COMMITTED`
+account, session floor, password, 2FA, security revision or proof expiry. Before
+terminal receipt erasure, a retained consumed receipt remains recoverable after
+account deletion, including removal of its account row by a legacy partial
+cleanup. At the original P30D deadline the terminal policy above replaces that
+raw receipt with its opaque fence. The store uses a separate read-only `READ_COMMITTED`
 transaction, suspending any caller transaction; an uncommitted consume cannot
 become recovery authority, even in the same thread. Lookup takes no account or
-proof row lock and changes no rows.
+proof row lock and changes no rows. Fence and receipt visibility are read in one
+statement; a committed fence dominates any residual raw row.
 
 An absent receipt is not evidence that an in-flight consume will never commit.
 Space must persist its immutable original bindings and proof digest before

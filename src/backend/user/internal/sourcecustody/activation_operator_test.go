@@ -33,6 +33,7 @@ func TestActivationOperatorRequiresMTLSAndSignedOneLeaderDecision(t *testing.T) 
 	control = limited
 	controller.pool = limited
 	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public}
+	attachSyntheticOperatorSupervisor(t, handler, claim)
 	pki := processTLS(t, t.TempDir(), "operator")
 	cert, err := tls.LoadX509KeyPair(pki.serverCert, pki.serverKey)
 	require.NoError(t, err)
@@ -199,6 +200,7 @@ func TestActivationOperatorFencesWhenSourceOpeningFails(t *testing.T) {
 	require.NoError(t, err)
 	defer wrongSource.Close()
 	handler := &activationHandler{controller: controller, admin: admin, source: wrongSource, keys: keys, signer: public}
+	attachSyntheticOperatorSupervisor(t, handler, claim)
 	encoded, err := json.Marshal(claim)
 	require.NoError(t, err)
 	request := httptest.NewRequest(http.MethodPost, "https://operator/open", bytes.NewReader(encoded))
@@ -227,6 +229,7 @@ func TestActivationOperatorFencesWhenSourceOpeningFails(t *testing.T) {
 func TestActivationOperatorSignedCutoverActivatesGuardsBeforeOpening(t *testing.T) {
 	ctx, control, admin, source, keys, controller, claim, public, profile, account := openSourceFixtureOptions(t, false)
 	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public}
+	attachSyntheticOperatorSupervisor(t, handler, claim)
 	encoded, err := json.Marshal(claim)
 	require.NoError(t, err)
 	request := httptest.NewRequest(http.MethodPost, "https://operator/open", bytes.NewReader(encoded))
@@ -286,6 +289,7 @@ func TestActivationOperatorShutdownFencesOpenedSource(t *testing.T) {
 	})
 	defer stopParent()
 	handler := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public}
+	attachSyntheticOperatorSupervisor(t, handler, claim)
 	encoded, err := json.Marshal(claim)
 	require.NoError(t, err)
 	request := httptest.NewRequest(http.MethodPost, "https://operator/open", bytes.NewReader(encoded))
@@ -423,6 +427,11 @@ func TestActivationOperatorConfigIsAllOrNothing(t *testing.T) {
 	values["CUSTODY_OPERATOR_CLIENT_CERT_SHA256"] = strings.Repeat("ab", 32)
 	values["CUSTODY_SOURCE_ADMIN_DATABASE_URL"] = "postgres://operator:secret@localhost:5432/postgres?sslmode=verify-full&sslrootcert=fixture"
 	values["CUSTODY_SOURCE_DATABASE_URL"] = "postgres://operator:secret@localhost:5432/user_db?sslmode=verify-full&sslrootcert=fixture"
+	values["CUSTODY_SUPERVISOR_URL"] = "https://localhost:4445"
+	values["CUSTODY_SUPERVISOR_SERVER_CERT_SHA256"] = strings.Repeat("cd", 32)
+	for _, name := range []string{"CUSTODY_SUPERVISOR_TLS_CA_FILE", "CUSTODY_SUPERVISOR_CLIENT_CERT_FILE", "CUSTODY_SUPERVISOR_CLIENT_KEY_FILE", "CUSTODY_SUPERVISOR_SIGNER_PUBLIC_KEY_FILE"} {
+		values[name] = "fixture"
+	}
 	config, err = loadActivationOperatorConfig(lookup)
 	require.NoError(t, err)
 	require.NotNil(t, config)

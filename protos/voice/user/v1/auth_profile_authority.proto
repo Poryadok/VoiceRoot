@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package voice.user.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/user/v1;userv1";
+option java_multiple_files = true;
+option java_package = "app.voice.user.v1";
+
+// Only the separate auth-profile-authority capability exposes these methods.
+// Neither response authorizes independent profile admission or raw enumeration.
+service AuthProfileAuthorityService {
+  rpc MatchAuthProfileReferences(MatchAuthProfileReferencesRequest) returns (MatchAuthProfileReferencesResponse);
+  rpc ResolveAuthOwnershipTarget(ResolveAuthOwnershipTargetRequest) returns (ResolveAuthOwnershipTargetResponse);
+}
+
+message AuthProfileSourcePin {
+  string user_source_generation = 1;
+  string history_generation = 2;
+  uint64 keyset_revision = 3;
+}
+
+// An exact qualified local observation, not an independent CURRENT grant.
+message AuthProfileSourceCut {
+  AuthProfileSourcePin source = 1;
+  uint64 user_authority_revision = 2;
+  uint64 through_revision = 3;
+  bytes head_digest = 4;
+  uint64 retained_floor = 5;
+  uint64 unresolved_erasure_issued = 6;
+  uint64 verified_erasure_covered = 7;
+  // Response observation window is [observed_at, observed_at + 2 seconds).
+  // It expires independently of the request and never grants admission.
+  google.protobuf.Timestamp observed_at = 8;
+}
+
+enum AuthProfileMatchOutcome {
+  AUTH_PROFILE_MATCH_OUTCOME_UNSPECIFIED = 0;
+  AUTH_PROFILE_MATCH_OUTCOME_MATCH = 1;
+  AUTH_PROFILE_MATCH_OUTCOME_DIFFERENT_ACCOUNT = 2;
+  AUTH_PROFILE_MATCH_OUTCOME_INCOMPLETE = 3;
+}
+
+message MatchAuthProfileReferencesRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string inventory_id = 3;
+  uint64 inventory_revision = 4;
+  string account_id = 5;
+  // Echoed Auth context, never asserted as User-owned account lifecycle facts.
+  string owner_handle = 6;
+  string deletion_cycle_id = 7;
+  // Canonical sorted unique finite batch, 1..256. Never a raw-ID enumeration.
+  repeated string profile_ids = 8;
+  AuthProfileSourcePin expected_source = 9;
+}
+
+message AuthProfileReferenceMatch {
+  string profile_id = 1;
+  AuthProfileMatchOutcome outcome = 2;
+  string association_id = 3;
+  uint64 association_revision = 4;
+  // BIRTH, RETAINED_NOW or VERIFIED_HISTORY; absent for INCOMPLETE.
+  string capture_origin = 5;
+}
+
+message MatchAuthProfileReferencesResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string inventory_id = 3;
+  uint64 inventory_revision = 4;
+  string account_id = 5;
+  string owner_handle = 6;
+  string deletion_cycle_id = 7;
+  bytes request_digest = 8;
+  repeated AuthProfileReferenceMatch results = 9;
+  AuthProfileSourceCut source_cut = 10;
+  // Only these requested entries have evidence; never a global roster claim.
+  bool all_requested_resolved = 11;
+}
+
+enum AuthOwnershipTargetOutcome {
+  AUTH_OWNERSHIP_TARGET_OUTCOME_UNSPECIFIED = 0;
+  AUTH_OWNERSHIP_TARGET_OUTCOME_CURRENT_PROFILE = 1;
+  AUTH_OWNERSHIP_TARGET_OUTCOME_TERMINAL_PROFILE = 2;
+  AUTH_OWNERSHIP_TARGET_OUTCOME_INCOMPLETE = 3;
+}
+
+message ResolveAuthOwnershipTargetRequest {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string operation_id = 3;
+  string profile_id = 4;
+  AuthProfileSourcePin expected_source = 5;
+}
+
+message ResolveAuthOwnershipTargetResponse {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  string operation_id = 3;
+  string profile_id = 4;
+  bytes request_digest = 5;
+  AuthOwnershipTargetOutcome outcome = 6;
+  // Private current tuple only. Never reconstructed for terminal/unknown IDs.
+  string account_id = 7;
+  uint64 profile_revision = 8;
+  bool deleted = 9;
+  bool frozen = 10;
+  bool account_inactive = 11;
+  string association_id = 12;
+  uint64 association_revision = 13;
+  string terminal_operation_id = 14;
+  uint64 terminal_revision = 15;
+  string terminal_receipt_id = 16;
+  bytes terminal_receipt_digest = 17;
+  AuthProfileSourceCut source_cut = 18;
+}

@@ -108,6 +108,7 @@ func TestCheckedSourceCommandPreservesExistingIdentityOverTLS(t *testing.T) {
 	require.Equal(t, "CLOSED", state)
 	controller, err := Start(ctx, control, binding)
 	require.NoError(t, err)
+	t.Cleanup(func() { cleanupTestController(controller) })
 	_, _, err = controller.AcquireAttested(ctx, binding)
 	require.Error(t, err)
 	require.NoError(t, controller.Shutdown(ctx))

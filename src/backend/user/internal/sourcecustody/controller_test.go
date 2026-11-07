@@ -50,6 +50,15 @@ func custodyBinding() Binding {
 	return Binding{Epoch: 1, SourceID: uuid.NewString(), HistoryGeneration: uuid.New(), UserSourceGeneration: uuid.New(), KeysetDigest: [32]byte{1}}
 }
 
+// cleanupTestController releases a leader even if a later assertion aborts the
+// test. Explicit scenario shutdown/recovery assertions remain authoritative;
+// this fallback does not claim that a failed controller recovered its source.
+func cleanupTestController(c *Controller) {
+	cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = c.Shutdown(cleanup)
+}
+
 func custodyFixture(t *testing.T) (context.Context, *pgxpool.Pool, *pgxpool.Pool, Binding, *Controller) {
 	return custodyFixtureWithFailure(t, false)
 }

@@ -86,6 +86,21 @@ func runUser(parent context.Context) error {
 		return errors.New("user Space capture principal config: capture listener required")
 	}
 	var captureRuntime *spaceCaptureRuntime
+	authProfileConfig, authProfileEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "auth-profile-authority", "USER_AUTH_PROFILE_PRINCIPAL_", ":9104")
+	if err != nil {
+		return fmt.Errorf("user Auth profile principal config: %w", err)
+	}
+	if authProfileEnabled && !captureEnabled {
+		return errors.New("user Auth profile authority requires qualified guarded source runtime")
+	}
+	var authProfileRuntime *socialprincipal.Runtime
+	if authProfileEnabled {
+		authProfileRuntime, err = socialprincipal.New(runCtx, authProfileConfig)
+		if err != nil {
+			return fmt.Errorf("user Auth profile principal: %w", err)
+		}
+		defer func() { _ = authProfileRuntime.Close() }()
+	}
 	var capturePrincipalConfig socialprincipal.Config
 	if captureEnabled {
 		cfg, configErr := loadSpaceCaptureRuntimeConfig(os.LookupEnv)
@@ -295,12 +310,14 @@ func runUser(parent context.Context) error {
 		// Capture startup can then install its guarded writer consistently.
 		profiles := store.NewProfileStore(pool)
 		var captureAuthority grpcsvc.SpaceAccountCaptureAuthority
+		var authProfileReader grpcsvc.AuthProfileReader
 		if captureRuntime != nil {
 			guarded, capture, bindErr := captureRuntime.bind(runCtx, pool)
 			if bindErr != nil {
 				return errors.New("qualified User capture source unavailable")
 			}
 			profiles = guarded
+			authProfileReader = capture
 			captureAuthority, err = grpcsvc.NewCustodiedSpaceAccountCaptureAuthority(capture.CaptureProfiles)
 			if err != nil {
 				return errors.New("qualified User capture source unavailable")
@@ -604,6 +621,23 @@ func runUser(parent context.Context) error {
 			defer notificationPresenceServer.Stop()
 			if err := startup.Serve(notificationPresenceServer, notificationPresenceListener); err != nil {
 				return fmt.Errorf("user Notification presence principal serve: %v", err)
+			}
+		}
+		if authProfileRuntime != nil {
+			if authProfileReader == nil {
+				return errors.New("qualified Auth profile reader unavailable")
+			}
+			listener, err := net.Listen("tcp", authProfileConfig.ListenAddr)
+			if err != nil {
+				return fmt.Errorf("user Auth profile principal listen: %w", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, authProfileRuntime.ServerOptions()...)
+			server := grpc.NewServer(options...)
+			userv1.RegisterAuthProfileAuthorityServiceServer(server, &grpcsvc.AuthProfileAuthorityGRPC{Reader: authProfileReader})
+			defer server.Stop()
+			if err := startup.Serve(server, listener); err != nil {
+				return fmt.Errorf("user Auth profile principal serve: %w", err)
 			}
 		}
 		if catalogRuntime != nil {

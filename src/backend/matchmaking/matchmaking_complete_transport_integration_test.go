@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	redisserver "github.com/alicebob/miniredis/v2/server"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -471,20 +472,26 @@ func TestGatewayCompleteMatchUsesProtectedMMListenerAndPersistsActorLeave(t *tes
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileB, false)
 
-	// A stalled Redis floor read times out before the protected service is
-	// reached. Use a separate Gateway with an accept-and-stall Redis endpoint.
-	stalledRedisAddr := startStalledMatchSquadRedis(t)
+	// Allow the blacklist lookup, then stall the exact session-floor lookup.
+	stalledRedisAddr, floorRead := startStalledMatchSquadRedis(t, accountID)
 	stalledGateway := startMatchSquadGateway(t, ctx, gatewayBinary, trace, reserveMatchSquadTCPPort(t), mmAddress, stalledRedisAddr, caFile, clientCertFile, clientKeyFile, principalDir, authJWKS.URL, "gateway-next")
-	shortClient := &http.Client{Timeout: 2 * time.Second}
+	shortClient := &http.Client{Timeout: 5 * time.Second}
 	stalledReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+stalledGateway+"/api/v1/matchmaking/matches/"+matchID.String()+"/complete", strings.NewReader(`{"operation_id":"`+uuid.NewString()+`"}`))
 	require.NoError(t, err)
 	stalledReq.Header.Set("Authorization", "Bearer "+signMatchSquadUserJWT(t, authKey, accountID, profileB.String(), 1))
 	stalledReq.Header.Set("Content-Type", "application/json")
 	stalledResponse, stalledErr := shortClient.Do(stalledReq)
-	if stalledResponse != nil {
-		stalledResponse.Body.Close()
+	require.NoError(t, stalledErr)
+	defer stalledResponse.Body.Close()
+	select {
+	case <-floorRead:
+	default:
+		t.Fatal("Gateway did not reach the stalled session floor")
 	}
-	require.Error(t, stalledErr, "stalled session floor must not authorize the request")
+	require.Equal(t, http.StatusServiceUnavailable, stalledResponse.StatusCode)
+	var stalledBody map[string]any
+	require.NoError(t, json.NewDecoder(stalledResponse.Body).Decode(&stalledBody))
+	require.Equal(t, "auth_unavailable", stalledBody["error"])
 	assertCompleteMatchParticipantState(t, ctx, pool, matchID, profileB, false)
 
 	select {
@@ -518,24 +525,64 @@ func startMatchSquadRedis(t *testing.T, ctx context.Context) string {
 	return net.JoinHostPort(host, port.Port())
 }
 
-func startStalledMatchSquadRedis(t *testing.T) string {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+func TestStalledMatchSquadRedisAllowsBlacklistAndStallsExactFloor(t *testing.T) {
+	accountID := uuid.New()
+	addr, floorRead := startStalledMatchSquadRedis(t, accountID)
+	blacklist, err := net.DialTimeout("tcp", addr, time.Second)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
-	go func() {
-		for {
-			conn, acceptErr := listener.Accept()
-			if acceptErr != nil {
-				return
-			}
-			go func() {
-				defer conn.Close()
-				_, _ = io.Copy(io.Discard, conn)
-			}()
+	defer blacklist.Close()
+	_, err = io.WriteString(blacklist, "*2\r\n$6\r\nEXISTS\r\n$15\r\njwt:blacklist:x\r\n")
+	require.NoError(t, err)
+	require.NoError(t, blacklist.SetReadDeadline(time.Now().Add(time.Second)))
+	response := make([]byte, 4)
+	_, err = io.ReadFull(blacklist, response)
+	require.NoError(t, err)
+	require.Equal(t, ":0\r\n", string(response))
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	require.NoError(t, err)
+	defer conn.Close()
+	key := "auth:session:min_epoch:" + accountID.String()
+	_, err = fmt.Fprintf(conn, "*2\r\n$3\r\nGET\r\n$%d\r\n%s\r\n", len(key), key)
+	require.NoError(t, err)
+	select {
+	case <-floorRead:
+	case <-time.After(time.Second):
+		t.Fatal("session floor GET was not observed")
+	}
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(100*time.Millisecond)))
+	_, err = conn.Read(make([]byte, 1))
+	var timeout net.Error
+	require.ErrorAs(t, err, &timeout, "floor read must remain stalled")
+	require.True(t, timeout.Timeout(), "floor read must time out rather than close")
+}
+
+func startStalledMatchSquadRedis(t *testing.T, accountID uuid.UUID) (string, <-chan struct{}) {
+	t.Helper()
+	server, err := redisserver.NewServer("127.0.0.1:0")
+	require.NoError(t, err)
+	release := make(chan struct{})
+	floorRead := make(chan struct{}, 1)
+	t.Cleanup(func() { close(release); server.Close() })
+	require.NoError(t, server.Register("EXISTS", func(peer *redisserver.Peer, _ string, args []string) {
+		if len(args) != 1 || !strings.HasPrefix(args[0], "jwt:blacklist:") {
+			peer.WriteError("unexpected blacklist lookup")
+			return
 		}
-	}()
-	return listener.Addr().String()
+		peer.WriteInt(0)
+	}))
+	require.NoError(t, server.Register("GET", func(peer *redisserver.Peer, _ string, args []string) {
+		if len(args) != 1 || args[0] != "auth:session:min_epoch:"+accountID.String() {
+			peer.WriteError("unexpected floor lookup")
+			return
+		}
+		select {
+		case floorRead <- struct{}{}:
+		default:
+		}
+		<-release
+		peer.WriteError("fixture closed")
+	}))
+	return server.Addr().String(), floorRead
 }
 
 func seedCompleteMatchFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, profileA, profileB uuid.UUID) uuid.UUID {
@@ -596,8 +643,8 @@ func buildMatchSquadGateway(t *testing.T, ctx context.Context, fixtureDir string
 	tree := matchSquadGitValue(t, projectRoot, "rev-parse", "HEAD^{tree}")
 	sourceRoot := filepath.Join(fixtureDir, "gateway-source")
 	worktree := exec.Command("git", "-C", projectRoot, "worktree", "add", "--detach", "--quiet", sourceRoot, revision)
-	worktree.Stdout, worktree.Stderr = io.Discard, io.Discard
-	require.NoError(t, worktree.Run(), "create the exact immutable Gateway source tree")
+	worktreeOutput, err := worktree.CombinedOutput()
+	require.NoError(t, err, "create the exact immutable Gateway source tree: %s", worktreeOutput)
 	t.Cleanup(func() {
 		remove := exec.Command("git", "-C", projectRoot, "worktree", "remove", sourceRoot)
 		remove.Stdout, remove.Stderr = io.Discard, io.Discard
@@ -609,6 +656,9 @@ func buildMatchSquadGateway(t *testing.T, ctx context.Context, fixtureDir string
 	require.Equal(t, revision, matchSquadGitValue(t, sourceRoot, "rev-parse", "HEAD"))
 	require.Equal(t, tree, matchSquadGitValue(t, sourceRoot, "rev-parse", "HEAD^{tree}"))
 	binary := filepath.Join(fixtureDir, "gateway-fixture")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
 	buildCtx, cancelBuild := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelBuild()
 	ldflags := "-X=main.matchFoundTransportTraceRevision=" + revision + " -X=main.matchFoundTransportTraceTree=" + tree

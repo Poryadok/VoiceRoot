@@ -75,6 +75,18 @@ class UpgradeTests(unittest.TestCase):
             for changed in (dict(row,status='active'),dict(row,status='uncertain'),dict(row,phase='unknown'),dict(row,actual={}),dict(row,foreign=True)):
                 write(changed)
                 with self.assertRaises(installer.Blocked):installer.tt_resource_journal_snapshot(installed)
+            import resource_claim
+            scoped=dict(row,schema='voice-staging-resource-fence-v2',installation_sha256=resource_claim.production_installation().sha256,
+                        cohort_preservation_sha256='e'*64)
+            write(scoped);before=path.read_bytes()
+            self.assertEqual(installer.tt_resource_journal_snapshot(installed),{str(path):hashlib.sha256(before).hexdigest()})
+            for changed in (dict(scoped,installation_sha256='f'*64),
+                            {k:v for k,v in scoped.items() if k!='installation_sha256'},
+                            dict(scoped,schema='voice-staging-resource-fence-v1'),
+                            dict(scoped,cohort_preservation_sha256='invalid'),dict(scoped,actual={}),
+                            dict(scoped,phase='unknown'),dict(scoped,foreign=True)):
+                write(changed)
+                with self.assertRaises(installer.Blocked):installer.tt_resource_journal_snapshot(installed)
 
     def test_inventory_rejects_unlisted_source_hardlinks_and_symlinks(self):
         with tempfile.TemporaryDirectory() as folder:

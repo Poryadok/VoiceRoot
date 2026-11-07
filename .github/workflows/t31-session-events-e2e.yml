@@ -1,6 +1,7 @@
 name: T31 HTTPS session events E2E
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - ".github/workflows/t31-session-events-e2e.yml"
@@ -12,8 +13,18 @@ on:
       - "docs/testing/game-integrations-exec-plan.md"
       - "scripts/ci/t31-session-event-compose-bootstrap.py"
       - "scripts/ci/t31-session-event-compose-bootstrap_test.py"
+      - "scripts/ci/verify_go_verbose.py"
+      - "scripts/ci/verify_go_verbose_test.py"
+      - "scripts/ci/t31-startup-diagnostics.py"
       - "scripts/dev/generate-phase0-fixture.py"
       - "scripts/dev/t31-session-event-gateway.conf"
+      - "protos/**"
+      - "src/backend/pkg/**"
+      - "src/backend/scripts/docker-go-mod-download.sh"
+      - "src/backend/file/pb/**"
+      - "src/backend/messaging/pb/**"
+      - "src/backend/user/pb/**"
+      - "src/backend/migrations/**"
       - "src/backend/auth/**"
       - "src/backend/chat/**"
       - "src/backend/controlledgame/**"
@@ -22,6 +33,7 @@ on:
       - "src/backend/migrations/game_integration_db/**"
       - "src/backend/role/**"
       - "src/backend/voice/**"
+      - "src/backend/**"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +44,7 @@ env:
   T31_COMPOSE_PROJECT: voice-t31-session-events-${{ github.run_id }}
 
 concurrency:
-  group: t31-session-events-${{ github.ref }}
+  group: t31-session-events-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -191,7 +203,8 @@ jobs:
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
             -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
-            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            2>&1 | tee "$RUNNER_TEMP/t31-claim.log" | tee -a tmp/t31-session-event-e2e/acceptance.log
+          python3 scripts/ci/verify_go_verbose.py --log "$RUNNER_TEMP/t31-claim.log" --test TestT31ComposeHTTPSClaimInboxEffectAckReclaim
 
       - name: Restart GIS while the claim lease is active
         shell: bash
@@ -217,7 +230,8 @@ jobs:
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
             -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
-            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            2>&1 | tee "$RUNNER_TEMP/t31-reclaim.log" | tee -a tmp/t31-session-event-e2e/acceptance.log
+          python3 scripts/ci/verify_go_verbose.py --log "$RUNNER_TEMP/t31-reclaim.log" --test TestT31ComposeHTTPSClaimInboxEffectAckReclaim
 
       - name: Restart GIS after receiver commit, before receiver ACK
         shell: bash
@@ -243,7 +257,8 @@ jobs:
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
             -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
-            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            2>&1 | tee "$RUNNER_TEMP/t31-drop.log" | tee -a tmp/t31-session-event-e2e/acceptance.log
+          python3 scripts/ci/verify_go_verbose.py --log "$RUNNER_TEMP/t31-drop.log" --test TestT31ComposeHTTPSClaimInboxEffectAckReclaim
 
       - name: Start another receiver process and replay exact ACK
         shell: bash
@@ -257,7 +272,8 @@ jobs:
             -p "$T31_COMPOSE_PROJECT" run --rm --no-deps \
             t31-session-event-runner /run/t31-state/t31-session-event-e2e.test \
             -test.v -test.count=1 -test.run='^TestT31ComposeHTTPSClaimInboxEffectAckReclaim$' \
-            2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            2>&1 | tee "$RUNNER_TEMP/t31-replay.log" | tee -a tmp/t31-session-event-e2e/acceptance.log
+          python3 scripts/ci/verify_go_verbose.py --log "$RUNNER_TEMP/t31-replay.log" --test TestT31ComposeHTTPSClaimInboxEffectAckReclaim
 
       - name: Prove GIS retries a committed Chat receipt after response loss
         shell: bash
@@ -269,7 +285,8 @@ jobs:
             -f docker-compose.voice-space-media.yml \
             -f docker-compose.t31-session-events-e2e.yml \
             -p "$T31_COMPOSE_PROJECT" run --build --rm --no-deps \
-            t30-chat-retry-runner 2>&1 | tee -a tmp/t31-session-event-e2e/acceptance.log
+            t30-chat-retry-runner 2>&1 | tee "$RUNNER_TEMP/t30-chat-retry.log" | tee -a tmp/t31-session-event-e2e/acceptance.log
+          python3 scripts/ci/verify_go_verbose.py --log "$RUNNER_TEMP/t30-chat-retry.log" --test TestT30ComposeChatProvisionLostResponseRetriesRealReceipt
 
       - name: Save sanitized T31 acceptance evidence
         if: always()

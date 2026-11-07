@@ -57,6 +57,22 @@ class DeploymentTest(unittest.TestCase):
         self.base.ledger.row['backend_config_effects']['backend-config-deployment-voice-chat']['nonce']='f'*32
         with self.assertRaises(deployment.DeploymentError): deployment.verify_deployment_successor(self.cut,self.journal,'chat')
 
+    def test_fixed9_dependency_requires_same_cut_and_token(self):
+        import realtime_jwks_publisher as publisher
+        class Session: pass
+        class Migration: pass
+        class Publisher: pass
+        bound=deployment.authority.BoundFixed9SpaceAuthority(self.cut,object(),object(),object(),object(),'token')
+        with patch.object(deployment.writer_cut,'WriterCut',Cut), \
+             patch.object(deployment.realtime_p3_create_only,'Session',Session), \
+             patch.object(deployment.realtime_migration_job,'Migration',Migration), \
+             patch.object(publisher,'PublisherPhase',Publisher):
+            value=deployment.Dependencies(self.cut,self.journal,Session(),Migration(),bound,Publisher(),'/source','token')
+            self.assertIs(value.space_phase,bound)
+            with self.assertRaises(ValueError):deployment.Dependencies(self.cut,self.journal,Session(),Migration(),bound,Publisher(),'/source','wrong')
+            foreign=deployment.authority.BoundFixed9SpaceAuthority(Cut(),object(),object(),object(),object(),'token')
+            with self.assertRaises(ValueError):deployment.Dependencies(self.cut,self.journal,Session(),Migration(),foreign,Publisher(),'/source','token')
+
     def test_out_of_order_and_lost_response_do_not_replay(self):
         self.cut.config_snapshot['services']=['foreign']
         with self.assertRaises(deployment.DeploymentError): deployment.apply(self.cut,self.journal,'chat')

@@ -97,12 +97,22 @@ class OwnershipTransferReceiptLookupJdbcIntegrationTest {
           VALUES(:id,'hash','regular','active',7,:createdAt)
           """, Map.of("id", binding.accountId(), "createdAt", java.sql.Timestamp.from(now.minusSeconds(3600))));
       new BackupCodeService(new JdbcBackupCodeRepository(jdbc)).generateAndStore(binding.accountId());
-      service = issuingService(store);
-      var issued = service.issue(binding, "correct", "", "");
-      var original = service.consume(binding, issued.proof());
-      String digest = digest(issued.proof());
-      assertThat(original.consumedAt()).isEqualTo(now.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
-      assertThat(restarted().lookup(binding, digest)).isEqualTo(original);
+      // Seed the actual pre-fence schema, then run current code only after upgrade.
+      // Current stores require the current migration and must not silently ignore a missing fence table.
+      String digest = digest(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]));
+      var original = new OwnershipTransferProofService.Receipt(UUID.randomUUID(), binding,
+          now.truncatedTo(java.time.temporal.ChronoUnit.MICROS), List.of("password"));
+      jdbc.update("""
+          INSERT INTO ownership_transfer_proofs
+            (operation_id,account_id,profile_id,space_id,new_owner_profile_id,session_epoch,
+             proof_hash,security_revision,verified_factors,expires_at,receipt_id,consumed_at)
+          VALUES (:operation,:account,:profile,:space,:target,7,:digest,1,'password',:expires,:receipt,:consumed)
+          """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+          .addValue("operation", binding.operationId()).addValue("account", binding.accountId())
+          .addValue("profile", binding.profileId()).addValue("space", binding.spaceId())
+          .addValue("target", binding.newOwnerProfileId()).addValue("digest", digest)
+          .addValue("expires", java.sql.Timestamp.from(now.plusSeconds(300)))
+          .addValue("receipt", original.receiptId()).addValue("consumed", java.sql.Timestamp.from(original.consumedAt())));
       jdbc.update("""
           UPDATE accounts SET password_hash='new-password',totp_enabled=TRUE,totp_secret=decode('01','hex'),
             session_epoch=8 WHERE id=:id
@@ -138,6 +148,52 @@ class OwnershipTransferReceiptLookupJdbcIntegrationTest {
           SELECT count(*) FROM role_identity_owner_journal
           WHERE owner_handle=:handle AND event_kind='RAW_ERASURE' AND state='TERMINAL'
           """, Map.of("handle", handle), Long.class)).isEqualTo(1L);
+    }
+  }
+
+  @Test void terminalFenceDominatesRawReceiptAndSurvivesItsRemoval() throws Exception {
+    var issued = service.issue(binding, "correct", "", "");
+    var receipt = service.consume(binding, issued.proof());
+    String proofDigest = digest(issued.proof());
+    assertThat(restarted().lookup(binding, proofDigest)).isEqualTo(receipt);
+    jdbc.update("""
+        INSERT INTO auth_terminal_operation_fences
+          (family,operation_id,owner_handle,deletion_cycle_id,completed_at)
+        VALUES ('ownership_transfer',:operation,:owner,:cycle,clock_timestamp())
+        """, Map.of("operation", binding.operationId(), "owner", UUID.randomUUID(), "cycle", UUID.randomUUID()));
+    assertThatThrownBy(() -> restarted().lookup(binding, proofDigest)).isInstanceOf(ProofErasedException.class);
+    assertThatThrownBy(() -> service.consume(binding, issued.proof())).isInstanceOf(ProofErasedException.class);
+    jdbc.update("DELETE FROM ownership_transfer_proofs WHERE operation_id=:operation",
+        Map.of("operation", binding.operationId()));
+    assertThatThrownBy(() -> restarted().lookup(binding, proofDigest)).isInstanceOf(ProofErasedException.class);
+    assertThatThrownBy(() -> service.consume(binding, issued.proof())).isInstanceOf(ProofErasedException.class);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM ownership_transfer_proofs WHERE operation_id=:operation",
+        Map.of("operation", binding.operationId()), Long.class)).isZero();
+  }
+
+  @ParameterizedTest @ValueSource(booleans = {false, true})
+  void receiptReadsObserveOnlyCommittedErasure(boolean rollback) throws Exception {
+    var issued = service.issue(binding, "correct", "", "");
+    var original = service.consume(binding, issued.proof());
+    String proofDigest = digest(issued.proof());
+    var outer = new org.springframework.transaction.support.TransactionTemplate(
+        new DataSourceTransactionManager(jdbc.getJdbcTemplate().getDataSource()));
+    outer.executeWithoutResult(status -> {
+      jdbc.update("""
+          INSERT INTO auth_terminal_operation_fences
+            (family,operation_id,owner_handle,deletion_cycle_id,completed_at)
+          VALUES ('ownership_transfer',:operation,:owner,:cycle,clock_timestamp())
+          """, Map.of("operation", binding.operationId(), "owner", UUID.randomUUID(), "cycle", UUID.randomUUID()));
+      jdbc.update("DELETE FROM ownership_transfer_proofs WHERE operation_id=:operation",
+          Map.of("operation", binding.operationId()));
+      // Recovery suspends this transaction and cannot expose its uncommitted fence.
+      assertThat(restarted().lookup(binding, proofDigest)).isEqualTo(original);
+      if (rollback) status.setRollbackOnly();
+    });
+    if (rollback) {
+      assertThat(restarted().lookup(binding, proofDigest)).isEqualTo(original);
+    } else {
+      assertThatThrownBy(() -> restarted().lookup(binding, proofDigest)).isInstanceOf(ProofErasedException.class);
     }
   }
 

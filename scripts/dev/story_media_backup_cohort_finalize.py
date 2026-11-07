@@ -17,11 +17,11 @@ class CohortFinalizeError(Exception):
     pass
 
 
-def validate_binding(binding, databases):
-    """Reject malformed operation and restore identity before any dump."""
-    members = cohort._members(binding, databases)
-    if (set(binding) != BINDING_KEYS or (binding['project'], binding['resource'], binding['actor'])
-            != ('voice', 'DEV', 'scheduled_devops') or type(binding['generation']) is not int
+def _validate_binding_shape(binding, databases):
+    """Shared structural checks; callers must separately establish authority."""
+    members = cohort._members_shape(binding, databases)
+    expected_keys = BINDING_KEYS | ({'full_catalog'} if 'full_catalog' in binding else set())
+    if (set(binding) != expected_keys or type(binding['generation']) is not int
             or binding['generation'] <= 0 or type(binding['revision']) is not int or binding['revision'] <= 0):
         raise CohortFinalizeError('cohort binding invalid')
     for name in ('claim', 'window'):
@@ -48,8 +48,16 @@ def validate_binding(binding, databases):
     return members
 
 
-def finalize(root, key, binding, databases, manifest, receipts):
-    """Authenticate receipt bindings; caller verifies real ledger authority."""
+def validate_binding(binding, databases):
+    """Reject malformed or non-DEV authority before any dump."""
+    members = _validate_binding_shape(binding, databases)
+    if cohort._members(binding, databases)!=members:raise CohortFinalizeError('cohort binding invalid')
+    if (binding['project'], binding['resource'], binding['actor']) != ('voice', 'DEV', 'scheduled_devops'):
+        raise CohortFinalizeError('cohort binding invalid')
+    return members
+
+
+def _finalize_receipts(root, key, binding, databases, manifest, receipts, members):
     try:
         raw = json.dumps({'binding': binding, 'databases': databases, 'manifest': manifest, 'receipts': receipts},
                          sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False).encode('ascii')
@@ -57,7 +65,7 @@ def finalize(root, key, binding, databases, manifest, receipts):
         snapshot = json.loads(raw)
         binding, databases, manifest, receipts = (snapshot['binding'], snapshot['databases'],
                                                   snapshot['manifest'], snapshot['receipts'])
-        members = validate_binding(binding, databases)
+        if cohort._members_shape(binding,databases)!=members:raise CohortFinalizeError('cohort members changed')
         engine = binding['sources']['roles']['engine']
         if not isinstance(receipts, dict) or set(receipts) != members:
             raise CohortFinalizeError('cohort receipt set invalid')
@@ -81,11 +89,38 @@ def finalize(root, key, binding, databases, manifest, receipts):
             encoded = json.dumps(receipt, sort_keys=True, separators=(',', ':'), ensure_ascii=True,
                                  allow_nan=False).encode('ascii')
             hashes[member] = hashlib.sha256(encoded).hexdigest()
-        cohort.verify(root, key, binding, databases, manifest)
+        cohort._verify_validated(root, key, binding, databases, manifest, members)
         final_binding = dict(binding); final_binding['dump_receipts'] = hashes
         final_manifest = {'format': 1, 'binding': final_binding, 'files': manifest['files']}
         final_manifest['mac'] = cohort._mac(key, final_manifest)
-        cohort.verify(root, key, final_binding, databases, final_manifest)
+        cohort._verify_validated(root, key, final_binding, databases, final_manifest, members)
         return final_binding, final_manifest
     except Exception:
         raise CohortFinalizeError('cohort finalization rejected') from None
+
+
+def finalize(root, key, binding, databases, manifest, receipts):
+    """Authenticate DEV receipt bindings; caller verifies real ledger authority."""
+    try:
+        snapshot=json.loads(json.dumps({'binding':binding,'databases':databases,'manifest':manifest,'receipts':receipts},
+                                      sort_keys=True,separators=(',',':'),ensure_ascii=True,allow_nan=False))
+        binding,databases,manifest,receipts=(snapshot[k] for k in ('binding','databases','manifest','receipts'))
+        return _finalize_receipts(root,key,binding,databases,manifest,receipts,validate_binding(binding,databases))
+    except Exception:raise CohortFinalizeError('cohort finalization rejected') from None
+
+
+def finalize_staging(session,binding,databases,manifest,receipts,catalog_ref,metadata_ref):
+    """Finalize only the root-owned STAGING operation and its fixed custody."""
+    try:
+        import staging_cohort_preservation as staging
+        snapshot=json.loads(json.dumps({'binding':binding,'databases':databases,'manifest':manifest,'receipts':receipts,
+            'catalog_ref':catalog_ref,'metadata_ref':metadata_ref},sort_keys=True,separators=(',',':'),ensure_ascii=True,allow_nan=False))
+        binding,databases,manifest,receipts,catalog_ref,metadata_ref=(snapshot[k] for k in ('binding','databases','manifest','receipts','catalog_ref','metadata_ref'))
+        members=staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+        _validate_binding_shape(binding,databases)
+        root,key=staging.backup_custody(session)
+        result=_finalize_receipts(root,key,binding,databases,manifest,receipts,members)
+        if staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)!=members:
+            raise CohortFinalizeError('staging authority changed')
+        return result
+    except Exception:raise CohortFinalizeError('staging cohort finalization rejected') from None

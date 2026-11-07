@@ -110,13 +110,12 @@ class RootAuthority(unittest.TestCase):
             'durable':ROSTER[1]['durable_name'],'config':copy.deepcopy(ROSTER[1])})
         self.fresh_auth['normalized_consumers_sha256']=plan.digest(self.fresh_auth['normalized_consumers'])
     def run_plan(self,auth=None):
-        import yaml,bootstrap_selection,nats_root_plan
+        import yaml,nats_root_plan
         from unittest.mock import patch
         with patch.object(nats_root_plan,'monitor',return_value=self.tree),\
              patch.object(nats_root_plan,'census',return_value={'fixture_census':True}),\
-             patch.object(bootstrap_selection,'ACCOUNT_SHA',self.sha),\
              patch('bootstrap_auth.prove',return_value=copy.deepcopy(auth or self.fresh_auth)) as prove:
-            result=nats_root_plan.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load)
+            result=nats_root_plan.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load,installation=self.installation)
             self.assertEqual(prove.call_args.kwargs['version'],'voice-bootstrap-auth-v5')
             return result
     def test_exact_four_target_sources_select_new_authority_and_keep_enrollment(self):

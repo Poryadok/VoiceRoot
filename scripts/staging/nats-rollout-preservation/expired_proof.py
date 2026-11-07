@@ -166,6 +166,10 @@ def observe_copy(runtime,archive,manifest,label,verify_fence,validate=None,*,rec
     finally:
         # Capture failure can leave created but unstarted clients. ID-bound
         # inspect is mandatory before removal and removal is verified.
+        # An unknown Docker outcome cannot authorize deleting mounted bytes or
+        # adopting/removing a name. Retain the private tree for reconciliation.
+        if getattr(runtime,'unresolved_effect',False):
+            raise ValueError('cohort_native_reconciliation_required')
         for name in reversed(list(runtime.owned)):
             if name in baseline:continue
             cid=runtime.inspect(name)['Id']

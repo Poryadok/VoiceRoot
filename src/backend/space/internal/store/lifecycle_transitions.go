@@ -80,10 +80,27 @@ func (s *SpaceStore) BeginLifecycleFreeze(ctx context.Context, spaceID uuid.UUID
 		if operation.method != "DELETE" || operation.spaceID != spaceID || len(operation.authReceiptBytes) == 0 {
 			return false, ErrLifecycleConflict
 		}
+		if err := operation.validate(); err != nil {
+			return false, err
+		}
 		if err := aggregate.BeginFreeze(manifest); err != nil {
 			return false, ErrLifecycleEvidenceInvalid
 		}
-		return true, nil
+		scoped := *s
+		scoped.tx = tx
+		capture, err := scoped.captureLifecycleFreezeMutation(ctx, operation, snapshot.Generation, manifest)
+		if err != nil {
+			return false, err
+		}
+		if err = persistLifecycleSnapshot(ctx, tx, aggregate.Snapshot()); err != nil {
+			return false, err
+		}
+		if capture != nil {
+			if err = scoped.finishEffectiveMemberMutations(ctx, capture); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
 	})
 }
 

@@ -14,7 +14,7 @@ JOBS = (
     'flutter-web-integration', 'flutter-ios', 'a1-e2e',
     'a1-flutter-profile-handoff', 'a1-attachment-restart-proof',
     'analytics-clickhouse-integration', 'grafana-analytics-smoke',
-    'nats-hub-config-renderer-image',
+    'nats-hub-config-renderer-image', 'f13-historical-replay',
 )
 
 
@@ -52,10 +52,11 @@ def evaluate(expression, values):
 
 
 GATE = block('ci-gate')
-ENV = dict(re.findall(r'^          (\w+): (\$\{\{.*?\}\})$', GATE, re.M))
+LEGACY_GATE = GATE.split('      - name: Verify required jobs ran\n', 1)[1]
+ENV = dict(re.findall(r'^          (\w+): (\$\{\{.*?\}\})$', LEGACY_GATE, re.M))
 # The existing Compose selection uses a folded YAML scalar.
 ENV['RUN_COMPOSE_E2E'] = re.search(
-    r'RUN_COMPOSE_E2E: >-\n(.*?)(?=^          JOB_)', GATE, re.M | re.S
+    r'RUN_COMPOSE_E2E: >-\n(.*?)(?=^          JOB_)', LEGACY_GATE, re.M | re.S
 ).group(1).strip()
 OUTPUTS = set(re.findall(r'needs\.changes\.outputs\.([\w-]+)', WORKFLOW))
 
@@ -93,6 +94,27 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
+    def test_f13_selected_result_cannot_be_skipped(self):
+        values = context('pull_request', code='true', ci_scripts='true', f13_replay='true')
+        self.assertTrue(evaluate(job_condition('f13-historical-replay'), values))
+        self.assertTrue(evaluate(ENV['RUN_F13_HISTORICAL_REPLAY'], values))
+        self.assertEqual(run_gate(values).returncode, 0)
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            with self.subTest(outcome=outcome):
+                self.assertNotEqual(run_gate(values, 'f13-historical-replay', outcome).returncode, 0)
+        unrelated = context('pull_request', code='true', ci_scripts='true')
+        self.assertFalse(evaluate(job_condition('f13-historical-replay'), unrelated))
+        self.assertFalse(evaluate(ENV['RUN_F13_HISTORICAL_REPLAY'], unrelated))
+
+    def test_changed_live_flutter_suite_requires_compose_proof(self):
+        values = context('pull_request', code='true', frontend='true', flutter_live_suite='true')
+        self.assertTrue(evaluate(job_condition('compose-e2e'), values))
+        self.assertTrue(evaluate(ENV['RUN_COMPOSE_E2E'], values))
+        self.assertEqual(run_gate(values).returncode, 0)
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            with self.subTest(outcome=outcome):
+                self.assertNotEqual(run_gate(values, 'compose-e2e', outcome).returncode, 0)
+
     def test_independent_go_jobs_stop_on_cancellation_and_pkg_failure_still_blocks_gate(self):
         values = context('pull_request', code='true', run_go='true')
         values['needs.backend-go-pkg.result'] = 'skipped'
@@ -153,8 +175,8 @@ class SelectedAcceptanceGateTests(unittest.TestCase):
         for job in ('golangci', 'backend-go-pkg', 'backend-go', 'a1-e2e',
                     'nats-hub-config-renderer-image'):
             self.assertNotEqual(run_gate(values, job, 'failure').returncode, 0, job)
-        # A1 Flutter deliberately excludes ci_global-only PRs.
-        self.assertEqual(run_gate(values, 'a1-flutter-profile-handoff', 'skipped').returncode, 0)
+        # Unknown CI inputs conservatively require the profile-handoff proof.
+        self.assertNotEqual(run_gate(values, 'a1-flutter-profile-handoff', 'skipped').returncode, 0)
 
     def test_unselected_and_plain_docs_only_skips_remain_valid(self):
         for event in ('pull_request', 'push'):
