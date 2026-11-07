@@ -7,9 +7,40 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 import transaction
+import resource_claim
+import resource_claim_test
+
+
+def authorize_after_fixture_p2(*args,scoped=False,**kwargs):
+    """Isolate downstream sequencing; this is not a qualified P2 proof."""
+    import staging_cohort_preservation as cohort
+    c=resource_claim_test.context()
+    state=args[2];session=resource_claim.Session(c,state['operation'],'b'*64,lambda:resource_claim_test.card(c),resource_claim_test.MemoryJournal())
+    session.admit(start=True)
+    if scoped:
+        state['schema']='nats-rollout-root-v2';state['installation_sha256']=session.installation.sha256
+        state['target']['installation_sha256']=session.installation.sha256
+        session.journal.row.update(target_sha256=resource_claim.digest(state['target']))
+        state['resource_fence']=session.binding()
+    handle=cohort.QualifiedFinalAdmission()
+    with patch.object(cohort,'issue_final_admission',return_value=handle),patch.object(cohort,'complete_authorization'):
+        return transaction.authorize(*args,resource_session=session,cohort_request={'fixture':'p2'},**kwargs)
 
 
 class TransactionFailureTest(unittest.TestCase):
+    def test_scoped_authorization_rejects_changed_target_before_admission(self):
+        import staging_cohort_preservation as cohort
+        c=resource_claim_test.context();session=resource_claim.Session(c,'a'*12,'b'*64,
+            lambda:resource_claim_test.card(c),resource_claim_test.MemoryJournal());session.admit(start=True)
+        target={'mode':'full','installation_sha256':session.installation.sha256}
+        session.journal.row.update(target_sha256=resource_claim.digest(target))
+        state={'schema':'nats-rollout-root-v2','installation_sha256':session.installation.sha256,
+               'resource_fence':session.binding(),'target':dict(target,mode='app-only')}
+        with patch.object(cohort,'issue_final_admission') as issue:
+            with self.assertRaisesRegex(transaction.Blocked,'installation_binding_changed'):
+                transaction.authorize(None,Path('/unused'),state,'a'*64,'b'*64,{},resource_session=session,cohort_request={})
+        issue.assert_not_called()
+
     def test_bootstrap_target_hash_without_receipt_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(transaction.Blocked,'realtime_bootstrap_receipt_missing'):
@@ -17,13 +48,13 @@ class TransactionFailureTest(unittest.TestCase):
             self.assertFalse((Path(temp)/'checkpoint.json').exists())
 
     def test_bootstrap_receipt_failure_is_not_retired_as_readonly(self):
-        receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','proof':'fixture'};target={'realtime_bootstrap_sha256':transaction.canonical(receipt)}
+        receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','proof':'fixture'};target={'realtime_bootstrap_sha256':transaction.canonical(receipt),'installation_sha256':resource_claim.production_installation().sha256}
         module=Mock();module.load_completed.side_effect=transaction.Blocked('bootstrap_changed')
         with tempfile.TemporaryDirectory() as temp, patch.dict(sys.modules,{'realtime_bootstrap':module}), \
                 patch('operator_retirement.record_readonly_failure') as retired:
             with self.assertRaisesRegex(transaction.Blocked,'bootstrap_changed'):
                 transaction.prepare(None,Path(temp),Path(temp),target,{},'a'*12,{},[],{},
-                    resource_session=Mock(),realtime_bootstrap_receipt=receipt)
+                    resource_session=Mock(installation=resource_claim.production_installation()),realtime_bootstrap_receipt=receipt)
             state=json.loads((Path(temp)/'checkpoint.json').read_text())
             self.assertEqual((state['status'],state['fence_status']),('BLOCKED','UNKNOWN'))
             self.assertEqual(state['realtime_bootstrap'],receipt)
@@ -31,12 +62,12 @@ class TransactionFailureTest(unittest.TestCase):
 
     def test_existing_bootstrap_admission_uses_root_loader_and_rejects_other_schema(self):
         for schema in ('voice-staging-realtime-bootstrap-existing-v1','untrusted'):
-            receipt={'schema':schema};target={'realtime_bootstrap_sha256':transaction.canonical(receipt)}
+            receipt={'schema':schema};target={'realtime_bootstrap_sha256':transaction.canonical(receipt),'installation_sha256':resource_claim.production_installation().sha256}
             module=Mock();module.load_existing.side_effect=transaction.Blocked('existing_changed')
             with self.subTest(schema=schema),tempfile.TemporaryDirectory() as temp, patch.dict(sys.modules,{'realtime_bootstrap':module}):
                 with self.assertRaises(transaction.Blocked):
                     transaction.prepare(None,Path(temp),Path(temp),target,{},'a'*12,{},[],{},
-                        resource_session=Mock(),realtime_bootstrap_receipt=receipt)
+                        resource_session=Mock(installation=resource_claim.production_installation()),realtime_bootstrap_receipt=receipt)
                 state=json.loads((Path(temp)/'checkpoint.json').read_text())
                 self.assertEqual((state['status'],state['fence_status']),('BLOCKED','UNKNOWN'))
                 self.assertEqual(module.load_existing.call_count,1 if schema.endswith('existing-v1') else 0)
@@ -65,6 +96,7 @@ class TransactionFailureTest(unittest.TestCase):
             else:row['input_target']['changed_services']=[fault]
             with self.subTest(fault=fault),self.assertRaisesRegex(transaction.Blocked,'backend_candidate_unproved'):transaction.rollback_package(row)
 
+    # Synthetic admission isolates downstream sequencing; gate tests exercise real denial.
     def test_bot_completed_version_renderer_failure_retry_does_not_run_jobs_twice(self):
         plan=[{'database':'bot','files':{'000004_slash_interaction_outbox.up.sql':'trusted'}}]
         before={'uid':'secret','resourceVersion':'1','bot_prerequisite':{'authority':{'pg':'same'},'observation':{'database':'bot_db','version':3,'dirty':False,'duplicate_token_groups':0}}}
@@ -73,12 +105,12 @@ class TransactionFailureTest(unittest.TestCase):
         stage=Mock();stage.final_path=Path('/same');stage.expected={'namespace_uid':'namespace'};stage.marker={'metadata':{'uid':'marker','resourceVersion':'7'},'data':{'generation':'g','previousGeneration':'p','dataPVC':'same'}};stage.final_claim={'metadata':{'name':'same','uid':'pvc'},'spec':{'volumeName':'pv'}};stage.final_pv={'metadata':{'uid':'pv'},'spec':{'local':{}}};stage.refence.return_value={'verified':True}
         state['cut']['census_sha256']='c'*64
         with patch.object(transaction,'reconstruct',return_value=stage),patch.object(transaction,'context',return_value={'marker':{'data':{'phase':'rollout-capturing'}}}),patch.object(transaction,'save'),patch.object(transaction,'file_sha',return_value='b'*64),patch.object(transaction,'verify_archive',return_value=True),patch.object(transaction,'revalidate_inputs'),patch.object(transaction.space_safeguards,'before_migrate'),patch.object(transaction.space_safeguards,'after_migrate'),patch.object(transaction.migrations,'preflight',side_effect=[before,after,after,dict(after,uid='drift')]),patch.object(transaction.migrations,'execute',return_value=['owned-job']) as jobs,patch.object(transaction,'DockerRuntime'),patch.object(transaction,'verify_post_apply'),patch.object(transaction.renderer_root,'apply_paused',side_effect=[transaction.Blocked('renderer_cas_interrupted'),None]):
-            with self.assertRaisesRegex(transaction.Blocked,'renderer_cas_interrupted'):transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+            with self.assertRaisesRegex(transaction.Blocked,'renderer_cas_interrupted'):authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
             self.assertEqual(state['migration_completed_metadata'],after);stage.prepared.assert_not_called()
-            transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+            authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
             jobs.assert_called_once();stage.prepared.assert_called_once()
             state.update(phase='RENDERER_TEMPLATE',status='BLOCKED');state.pop('authorization',None)
-            with self.assertRaisesRegex(transaction.Blocked,'database_secret_changed'):transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+            with self.assertRaisesRegex(transaction.Blocked,'database_secret_changed'):authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
             jobs.assert_called_once()
 
     def test_full_prior_selects_complete_root_recorded_catalog_without_hub_or_empty_services(self):
@@ -117,7 +149,7 @@ class TransactionFailureTest(unittest.TestCase):
                 stage.final_pv={'metadata':{'uid':'pv'},'spec':{'local':{}}}
                 order=[]
                 stage.prepared.side_effect=lambda:order.append('prepared')
-                def renderer(*a):
+                def renderer(*a,**kwargs):
                     order.append('renderer')
                     if failed:raise transaction.Blocked('renderer_paused_template_changed')
                 with patch.object(transaction,'reconstruct',return_value=stage),patch.object(transaction,'context',return_value={}),\
@@ -130,10 +162,10 @@ class TransactionFailureTest(unittest.TestCase):
                      patch.object(transaction.migrations,'execute') as jobs,patch.object(transaction,'apply_contract') as nats,\
                      patch.object(transaction.renderer_root,'apply_paused',side_effect=renderer):
                     if failed:
-                        with self.assertRaises(transaction.Blocked):transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+                        with self.assertRaises(transaction.Blocked):authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
                         self.assertNotIn('authorization',state);stage.prepared.assert_not_called()
                     else:
-                        transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+                        authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
                         self.assertEqual(order,['native-proof','postcondition','renderer','prepared'])
                         self.assertEqual(state['phase'],'PAUSED_APPLY')
                     self.assertIs(proof.call_args.args[2],post)
@@ -193,11 +225,12 @@ class TransactionFailureTest(unittest.TestCase):
                     order.append('offnode')
                     if scenario=='offnode-failed':raise transaction.encrypted_cut.CryptoError('backup_space_offnode_unverified')
                     return backup
-                def migrate(*args):
+                def migrate(*args,**kwargs):
+                    self.assertIsInstance(kwargs.get('resource_session'),resource_claim.Session)
                     self.assertTrue(order,'migration was attempted before offnode/snapshot checks')
                     self.assertEqual(order[-1],'snapshot-closed')
                     order.append('migration');return []
-                def renderer(*args):
+                def renderer(*args,**kwargs):
                     self.assertEqual(order[-1],'snapshot-closed')
                     self.assertEqual(state['space_postcondition'],after)
                     self.assertEqual(state['phase'],'RENDERER_TEMPLATE')
@@ -213,14 +246,17 @@ class TransactionFailureTest(unittest.TestCase):
                      patch.object(transaction.migrations,'execute',side_effect=migrate) as jobs,\
                      patch.object(transaction.renderer_root,'apply_paused',side_effect=renderer) as renderer_apply:
                     if scenario=='success':
-                        receipt=transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+                        receipt=authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{},scoped=True)
+                        self.assertEqual(receipt['schema'],'nats-rollout-preservation-v2')
+                        self.assertEqual(receipt['installation_sha256'],state['installation_sha256'])
+                        self.assertEqual(receipt['resource_fence'],state['resource_fence'])
                         self.assertEqual(state['space_postcondition'],after)
                         self.assertEqual(order,['offnode','snapshot-open','snapshot-closed','migration',
                             'snapshot-open','snapshot-closed','renderer','prepared'])
                         self.assertEqual(state['phase'],'PAUSED_APPLY')
                     else:
                         with self.assertRaises((transaction.encrypted_cut.CryptoError,space_migration.SpaceError,transaction.Blocked)):
-                            transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+                            authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
                         stage.prepared.assert_not_called()
                         self.assertNotIn('authorization',state)
                         if scenario!='renderer-failed':renderer_apply.assert_not_called()
@@ -264,7 +300,7 @@ class TransactionFailureTest(unittest.TestCase):
              patch('nats_contract_custody.advance',return_value={}),\
              patch.object(transaction.migrations,'execute',return_value=[]) as jobs:
             with self.assertRaisesRegex(transaction.Blocked,'bot_forward_constraint_prerequisite_failed'):
-                transaction.authorize(None,Path('/private'),state,'a'*64,'b'*64,{})
+                authorize_after_fixture_p2(None,Path('/private'),state,'a'*64,'b'*64,{})
             prerequisite.assert_called_once();nats.assert_not_called();jobs.assert_not_called()
         stage.prepared.assert_not_called();stage.restart.assert_not_called()
         self.assertNotIn('authorization',state)
@@ -341,7 +377,7 @@ class TransactionFailureTest(unittest.TestCase):
                'events':[],'provenance':{},'cut':{},'context':{}}
         stage=Mock();stage.final_path=Path('/selected-store');stage.current={'replicas':0,'override':False}
         written=[]
-        def reconstruct(kube,state,journal):
+        def reconstruct(kube,state,journal,*,installation=None):
             stage.save=journal
             return stage
         def interrupted_restart():
@@ -368,7 +404,7 @@ class TransactionFailureTest(unittest.TestCase):
             'authorization':receipt,'events':[],'provenance':{},'cut':{},'context':{},'renderer_authority':forward}
         stage=Mock();stage.final_path=Path('/same-selected-store');stage.refence.return_value={'verified':True};stage.finish_released_marker=None;stage.snapshots={}
         written=[];calls=[]
-        def cas(current,authority):
+        def cas(current,authority,*,installation=None):
             self.assertEqual(written[-1]['renderer_recovery_authority'],reverse)
             self.assertEqual(written[-1]['renderer_authority'],reverse)
             calls.append('cas')
@@ -389,7 +425,7 @@ class TransactionFailureTest(unittest.TestCase):
             stage.renderer_post_start(stage)
         invert.assert_called_once();stage.adopt_rollback_target.assert_called_once()
         stage.restore_original_templates.assert_called_once();proof.assert_called_once();stage.restart.assert_called_once()
-        live.assert_called_once_with(stage,reverse)
+        live.assert_called_once_with(stage,reverse,installation=None)
         self.assertEqual(state['status'],'ROLLED_BACK')
 
     def test_post_apply_proof_failure_records_blocked_and_never_restarts(self):
@@ -476,7 +512,7 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
 
     def test_actual_bridge_prepare_rollback_selects_only_story_and_keeps_active_release_binding(self):
         import bridge_root
-        previous=self.fixture();actions=object.__new__(bridge_root.Actions)
+        previous=self.fixture();actions=object.__new__(bridge_root.Actions);actions._installation=resource_claim.production_installation()
         actions.state=Mock(return_value=(Path('/private'),previous))
         actions._prepare=Mock(return_value={'fresh':'transaction'})
         active={'operation':previous['operation'],'target_sha256':'final-manifest'}
@@ -499,7 +535,7 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
         class StopBeforeFence(Exception):pass
         with tempfile.TemporaryDirectory() as td:
             installed=Path(td);(installed/'sources').mkdir()
-            actions=object.__new__(bridge_root.Actions);actions.code=installed;actions.binding={}
+            actions=object.__new__(bridge_root.Actions);actions._installation=resource_claim.production_installation();actions.code=installed;actions.binding={}
             actions._idle=Mock();actions._report=Mock()
             actions._dispatcher=Mock(return_value=(1,{'head_sha':'a'*40}))
             stage=Mock();stage.snapshots=copy.deepcopy(previous['context']['snapshots'])

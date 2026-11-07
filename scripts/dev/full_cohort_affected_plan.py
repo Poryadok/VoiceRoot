@@ -188,12 +188,27 @@ def _verify_catalog(probe,cut,scope):
     before=probe.catalog.verify_receipt(probe.token)
     current=_full_catalog(probe.catalog,before['engine'],before['server_start'])
     expected=copy.deepcopy(before['all_databases'])
+    properties=copy.deepcopy(before['properties']); excluded=copy.deepcopy(before['excluded'])
+    if getattr(cut,'space_fresh',None) is not None:
+        import writer_cut_space
+        import space_fresh_install_phase
+        binding=writer_cut_space.verify_binding(cut,require_finished=True)
+        proof=space_fresh_install_phase.verify_historical(binding['phase'],binding['token'])
+        if (proof['operation_id']!=cut.fence.context['operation_id'] or proof['source_sha']!=cut.fence.context['commit'] or
+                proof['namespace_uid']!=cut.namespace_uid or proof['receipt_sha256']!=binding['receipt_sha256'] or
+                proof['original_catalog_sha256']!=writer_cut.digest(before) or expected.get('space_db')!=proof['old_oid']):
+            raise AffectedError('Space catalog proof changed')
+        post=proof['catalog']
+        if (not isinstance(post,dict) or set(post)!={'databases','all_databases','excluded','properties'} or
+                post['all_databases'].get('space_db')!=proof['new_oid']):raise AffectedError('Space catalog proof invalid')
+        expected=copy.deepcopy(post['all_databases']);properties=copy.deepcopy(post['properties']);excluded=copy.deepcopy(post['excluded'])
+        if writer_cut_space.verify_binding(cut,require_finished=True)!=binding:raise AffectedError('Space binding changed')
     if 'realtime_db' not in expected and 'realtime_db' in scope['database_oids']:
         expected['realtime_db']=scope['database_oids']['realtime_db']
     if (scope['engine']!=before['engine'] or scope['server_start']!=before['server_start'] or
             scope['database_oids']!=expected or scope['databases']!=sorted(expected) or
-            current['all_databases']!=expected or current['excluded']!=before['excluded'] or
-            any(current['properties'].get(name)!=value for name,value in before['properties'].items()) or
+            current['all_databases']!=expected or current['excluded']!=excluded or
+            any(current['properties'].get(name)!=value for name,value in properties.items()) or
             ('realtime_db' not in before['all_databases'] and 'realtime_db' in expected and
              current['databases'].get('realtime_db')!=expected['realtime_db']) or
             probe.catalog.verify_receipt(probe.token)!=before):
@@ -206,6 +221,15 @@ def verify_effective_catalog(probe,cut):
     scope=cut.current_effective_session_scope(); result=_verify_catalog(probe,cut,scope)
     if cut.current_effective_session_scope()!=scope: raise AffectedError('effective scope changed')
     return result
+
+
+def verify_provisioned_catalog(probe,cut):
+    """Verify the typed provision successor without sampling sessions."""
+    scope=cut.current_provisioned_session_scope()
+    current=_verify_catalog(probe,cut,scope)
+    if cut.current_provisioned_session_scope()!=scope:
+        raise AffectedError('provisioned scope changed')
+    return current
 
 
 def inspect_provisioned(probe,cut):
@@ -225,15 +249,38 @@ def inspect_provisioned(probe,cut):
         raise AffectedError('provisioned scope observation unavailable') from None
 
 
+def verify_space_catalog(probe,cut):
+    """Verify the completed Space successor without asserting zero sessions."""
+    try:
+        scope=cut.current_base_session_scope();result=_verify_catalog(probe,cut,scope)
+        if cut.current_base_session_scope()!=scope:raise ValueError()
+        return copy.deepcopy(result)
+    except BaseException:raise AffectedError('Space catalog unavailable') from None
+
+
+def inspect_space_completed(probe,cut):
+    """Sample zero against only the protected completed Space replacement."""
+    try:
+        scope=cut.current_base_session_scope();before=_verify_catalog(probe,cut,scope)
+        result=pg.inspect(scope,probe.catalog._guard)
+        if (not isinstance(result,dict) or set(result)!={'scope','active_sessions','active_transactions'} or
+                result['scope']!=scope or type(result['active_sessions']) is not int or result['active_sessions']!=0 or
+                type(result['active_transactions']) is not int or result['active_transactions']!=0 or
+                cut.current_base_session_scope()!=scope or _verify_catalog(probe,cut,scope)!=before or
+                cut.current_base_session_scope()!=scope):raise ValueError()
+        return copy.deepcopy(result)
+    except BaseException:raise AffectedError('Space scope observation unavailable') from None
+
+
 def verify_migration_catalog(probe,cut):
     """Bind an active source-owned migration DB before effective-scope completion."""
     import writer_cut_migration
     binding=cut.migration
-    if not isinstance(binding,dict) or binding.get('kind') not in ('auth','realtime'): raise AffectedError('migration unavailable')
+    if not isinstance(binding,dict) or binding.get('kind') not in ('auth','realtime','go'): raise AffectedError('migration unavailable')
     _,state=writer_cut_migration.normalized(cut,binding['kind'],binding['phase'],binding['root'])
     if state['execution']!=binding['plan']['execution'] or state['stable']!=binding['plan']['stable']:
         raise AffectedError('migration identity changed')
-    scope=copy.deepcopy(cut.admission['session_scope']); execution=state['execution']
+    scope=cut.current_base_session_scope(); execution=state['execution']
     db,oid=execution['database'],execution['database_oid']
     if db in scope['database_oids'] and scope['database_oids'][db]!=oid: raise AffectedError('migration database changed')
     if db not in scope['database_oids']:
@@ -244,7 +291,7 @@ def verify_migration_catalog(probe,cut):
     if final!=state or cut.migration is not binding: raise AffectedError('migration changed')
     return {'scope':scope,'catalog':result}
 
-def build(package_phase, inventory_phase, token, catalog_phase=None):
+def build(package_phase, inventory_phase, token, catalog_phase=None, realtime_absent=None):
     """Return only source-observed routes of actual image-changed DB writers."""
     try:
         if type(package_phase) is not package.PackagePhase or type(inventory_phase) is not inventory.InventoryPhase:
@@ -276,7 +323,7 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
             # These fixed services have separately planned configuration changes.
             # Until a protected source-owned config plan exists, an equal image
             # cannot establish that the service is unchanged.
-            if not changed and name in PLANNED_CONFIG_UNKNOWN:
+            if not changed and name in PLANNED_CONFIG_UNKNOWN and not (name=='realtime' and realtime_absent is not None):
                 raise ValueError()
             if not changed:
                 unchanged.append(name)
@@ -284,6 +331,20 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
                 changed_names.add('voice-'+name)
             entries=workloads[name]
             if not isinstance(entries,list) or len(entries)!=len(pods): raise ValueError()
+            if name=='realtime' and realtime_absent is not None:
+                import realtime_absent_phase
+                if (type(realtime_absent) is not realtime_absent_phase.RealtimeAbsentPhase or
+                        realtime_absent.inventory is not inventory_phase or realtime_absent.catalog is not catalog_phase or
+                        any(e.get('status')!='hold' or e.get('reason')!='database_configuration_missing' for e in entries)):
+                    raise ValueError()
+                absent=realtime_absent.verify_current(token)
+                if (absent['source_sha']!=candidate['source_sha'] or absent['deployment_uid']!=projection[name]['uid'] or
+                        absent['generation']!=projection[name]['generation'] or
+                        absent['spec_sha256']!=projection[name]['spec_sha256']): raise ValueError()
+                changed_names.add('voice-realtime')
+                potential['voice-realtime']={'uid':projection[name]['uid'],'generation':projection[name]['generation'],
+                    'spec_sha256':projection[name]['spec_sha256'],'routes':[], 'reason':'qualified_create_only_realtime'}
+                continue
             if name not in metadata.OWNERS and name!='gateway':
                 if name not in POTENTIAL_NONOWNERS or any(e.get('status')!='observed' or
                         e.get('result',{}).get('binding',{}).get('state')!='not_observed' for e in entries):
@@ -343,7 +404,8 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
         if len(engines)!=1 or len({v['database_oid'] for v in databases.values()})!=len(databases): raise ValueError()
         if inventory_phase.verify_current(token)!=observed or package_phase.verify_current(token)!=candidate or \
                 inventory_phase.fence.ledger.read()!=package_phase.fence.ledger.read() or \
-                (full_catalog and catalog_phase.verify_current(token)!=catalog_receipt): raise ValueError()
+                (full_catalog and catalog_phase.verify_current(token)!=catalog_receipt) or \
+                (realtime_absent is not None and realtime_absent.verify_current(token)!=absent): raise ValueError()
         return {'operation_id':candidate['operation_id'],'source_sha':candidate['source_sha'],
                 'package_sha256':candidate['package_sha256'],'writers':writers,'databases':databases,
                 'unchanged_images':unchanged,'unobserved_nonowners':nonowners,
@@ -357,12 +419,12 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
         raise AffectedError('affected writer routes unavailable') from None
 
 
-def drain(package_phase, inventory_phase, token, cut, catalog_phase=None):
+def drain(package_phase, inventory_phase, token, cut, catalog_phase=None, realtime_absent=None):
     """Re-derive immediately, then invoke only an exactly matching writer cut."""
     try:
         if type(cut) is not writer_cut.WriterCut or cut.fence.context!=package_phase.fence.context or \
                 cut.lock!=package_phase.lock or cut.namespace_uid!=package_phase.namespace_uid: raise ValueError()
-        plan=build(package_phase,inventory_phase,token,catalog_phase)
+        plan=build(package_phase,inventory_phase,token,catalog_phase,realtime_absent)
         sources=cut.admission['controllers']; names=[x['metadata']['name'] for x in sources]
         if len(names)!=len(set(names)) or set(names)!=set(plan['writers']): raise ValueError()
         for source in sources:

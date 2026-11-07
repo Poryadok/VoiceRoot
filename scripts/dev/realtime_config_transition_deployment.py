@@ -26,7 +26,9 @@ class Dependencies:
                 or type(session) is not realtime_p3_create_only.Session or type(migration) is not realtime_migration_job.Migration
                 or type(publisher_phase) is not publisher.PublisherPhase
                 or not isinstance(token,str) or not token): raise ValueError()
-        if type(space_phase) is not space_plan.SpacePlanPhase:
+        if type(space_phase) is authority.BoundFixed9SpaceAuthority:
+            if space_phase.cut is not cut or space_phase.token!=token: raise ValueError()
+        elif type(space_phase) is not space_plan.SpacePlanPhase:
             import space_p3_issuer_create as issuer
             if type(space_phase) is not issuer.Session: raise ValueError()
         self.cut,self.journal,self.session,self.migration,self.space_phase,self.publisher_phase=cut,journal,session,migration,space_phase,publisher_phase

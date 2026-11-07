@@ -21,7 +21,7 @@ from auth_user_adoption_runtime import digest, QUALIFIED_TOOLS, validate_ddl_gat
 import story_media_backup_restore as media_restore
 
 
-def validate_cohort(root, key, binding, databases, manifest, metadata, custody, restore, admission):
+def validate_cohort(root, key, binding, databases, manifest, metadata, custody, restore, admission, *, phase=None):
     binding, databases, manifest, metadata, custody, restore, admission = (
         snapshot_protected(v) for v in (binding, databases, manifest, metadata, custody, restore, admission))
     if (not isinstance(admission, dict) or set(admission) != {'source_sha','target','flyway_enabled',
@@ -35,7 +35,7 @@ def validate_cohort(root, key, binding, databases, manifest, metadata, custody, 
                    for k in ('plan_sha256','custody_sha256','restore_sha256'))):
         raise ValueError('source or configuration admission unavailable')
     if (not isinstance(key, bytes) or len(key) != 32 or not isinstance(binding,dict)
-            or set(binding) != finalize.BINDING_KEYS | {'dump_receipts'}
+            or set(binding) != finalize.BINDING_KEYS | {'dump_receipts'} | ({'full_catalog'} if 'full_catalog' in binding else set())
             or not re.fullmatch(r'media-c1-[0-9a-f]{32}',str(binding.get('operation_id','')))
             or not isinstance(databases,list) or 'auth_db' not in databases):
         raise ValueError('C1 cohort identity invalid')
@@ -64,8 +64,17 @@ def validate_cohort(root, key, binding, databases, manifest, metadata, custody, 
             or not re.fullmatch(r'[0-9a-f]{64}',str(custody['bundle_sha256']))
             or digest(custody) != admission['custody_sha256']):
         raise ValueError('protected cohort readback receipt unavailable')
+    extended = 'migration_logins' in restore if isinstance(restore,dict) else False
+    if 'full_catalog' in binding:
+        import auth_live_migration_phase as auth_live
+        protected, provenance = auth_live.verified_sources(phase,metadata,26)
+        if (protected != binding or provenance['custody_sha256'] != digest(custody)
+                or provenance['restore_sha256'] != digest(restore)):
+            raise ValueError('protected mixed cohort authority unavailable')
+    elif extended:
+        raise ValueError('unexpected mixed cohort receipt')
     if (not isinstance(restore,dict) or set(restore) != {'operation_id','snapshot_id','source_sha','manifest_sha256',
-            'databases','scope','cleanup'} or restore['operation_id'] != binding['operation_id']
+            'databases','scope','cleanup'} | ({'migration_logins'} if extended else set()) or restore['operation_id'] != binding['operation_id']
             or restore['snapshot_id'] != binding['snapshot_id'] or restore['source_sha'] != binding['source_sha']
             or restore['manifest_sha256'] != digest(manifest)
             or restore['scope'] != 'selected-cohort-roles-catalog-and-ledger-only' or restore['cleanup'] != 'verified'
@@ -83,7 +92,8 @@ def qualify_cohort(source_root, root, key, binding, databases, manifest, metadat
     `journal` is the dedicated fence/CAS adapter, prebound to these inputs.
     It must implement guard(), stage(name, status), state and durable save().
     """
-    frozen = validate_cohort(root, key, binding, databases, manifest, metadata, custody, restore, admission)
+    frozen = validate_cohort(root, key, binding, databases, manifest, metadata, custody, restore, admission,
+                             phase=journal.phase if 'full_catalog' in binding else None)
     binding, databases, manifest, metadata, custody, restore, admission = (frozen[k] for k in
         ('binding','databases','manifest','metadata','custody','restore','admission'))
     source = admission['source_sha']

@@ -54,20 +54,29 @@ func TestMaintenanceWindowWithRealAutovacuum(t *testing.T) {
 	require.NoError(t, err)
 	var workerPID int32
 	var backendType, workerApplication string
-	var checkErr error
-	require.Eventually(t, func() bool {
-		err := admin.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname='space_db' AND backend_type='autovacuum worker' LIMIT 1`).Scan(&workerPID)
-		if err != nil {
-			return false
+	deadline := time.Now().Add(30 * time.Second)
+	observedAcrossCheck := false
+	for time.Now().Before(deadline) {
+		err = admin.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname='space_db' AND backend_type='autovacuum worker' LIMIT 1`).Scan(&workerPID)
+		if err == pgx.ErrNoRows {
+			time.Sleep(50 * time.Millisecond)
+			continue
 		}
-		checkErr = check()
-		if checkErr != nil {
-			return true
-		}
+		require.NoError(t, err)
+		require.NoError(t, check(), "real autovacuum must preserve the drained application's maintenance window")
 		err = admin.QueryRow(ctx, `SELECT backend_type,application_name FROM pg_stat_activity WHERE pid=$1 AND datname='space_db'`, workerPID).Scan(&backendType, &workerApplication)
-		return err == nil
-	}, 30*time.Second, 50*time.Millisecond, "same real autovacuum worker must remain present across the successful check")
-	require.NoError(t, checkErr, "real autovacuum must preserve the drained application's maintenance window")
+		if err == pgx.ErrNoRows {
+			// A real worker may finish during the check. Trigger another cycle;
+			// a vanished worker cannot satisfy the before/after proof.
+			_, err = target.Exec(ctx, `UPDATE vacuum_probe SET payload=payload WHERE i<=5000`)
+			require.NoError(t, err)
+			continue
+		}
+		require.NoError(t, err)
+		observedAcrossCheck = true
+		break
+	}
+	require.True(t, observedAcrossCheck, "same real autovacuum worker must remain present across the successful check")
 	require.Equal(t, "autovacuum worker", backendType)
 	require.NotEqual(t, applicationName, workerApplication)
 	t.Logf("same actual %s PID %d remained across successful production owner check", backendType, workerPID)

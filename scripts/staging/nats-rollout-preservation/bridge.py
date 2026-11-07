@@ -86,7 +86,7 @@ def _save(path,row):
     finally:
         if scratch.exists():scratch.unlink()
 
-def dispatch(directory,request,execute,recover,execute_observed=None,reporter=None,admit=None):
+def dispatch(directory,request,execute,recover,execute_observed=None,reporter=None,admit=None,validate_cached=None):
     """Never rerun an interrupted mutation unless checkpoint proves completion.
 
     Tokens are excluded from the durable journal. The request hash includes
@@ -110,7 +110,9 @@ def dispatch(directory,request,execute,recover,execute_observed=None,reporter=No
             state=json.loads(os.read(fd,65537))
         finally:os.close(fd)
         if state['request_sha256']!=wanted:raise BridgeError('bridge_nonce_reused')
-        if state['phase']=='COMPLETE':return state['result']
+        if state['phase']=='COMPLETE':
+            if validate_cached is not None:validate_cached(public,state['result'])
+            return state['result']
         result=recover(public)
         if result is None:raise BridgeError('bridge_interrupted_requires_recovery')
     else:
@@ -212,7 +214,7 @@ def drain(installed):
                 with scope as resource:
                     result=dispatch(installed/'journal',request,actions.execute,actions.recover,
                         execute_observed=actions.execute_observed,reporter=reporter,
-                        admit=None if resource is None else resource.admit_request)
+                        admit=None if resource is None else resource.admit_request, validate_cached=actions.validate_cached)
                     if resource is not None:
                         import resource_claim
                         resource_claim.finish_request(resource,actions,request,result)

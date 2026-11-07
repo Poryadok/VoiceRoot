@@ -63,7 +63,9 @@ OUTPUTS = set(re.findall(r'needs\.changes\.outputs\.([\w-]+)', WORKFLOW))
 def context(event, **flags):
     values = {'github.event_name': event, 'github.ref': 'refs/heads/master',
               'needs.changes.result': 'success', 'inputs.profile': 'auto',
-              'workflow_not_cancelled': True}
+              'workflow_not_cancelled': True,
+              'needs.space-native-tool.result': 'success',
+              'needs.cohort-joint.result': 'success'}
     values.update({'needs.changes.outputs.' + key: 'false' for key in OUTPUTS})
     values['needs.changes.outputs.integration_go_services'] = '[]'
     values.update({'needs.changes.outputs.' + key: value for key, value in flags.items()})
@@ -93,6 +95,28 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
+    def test_full_rollout_tool_and_cohort_steps_require_success_when_selected(self):
+        for job,step,var in (('space-native-tool','Verify Space native tool job','SPACE_TOOL_RESULT'),
+                             ('cohort-joint','Verify cohort composition job','COHORT_JOINT_RESULT')):
+            self.assertIn('      - '+job+'\n',GATE)
+            match=re.search(r'^      - name: '+re.escape(step)+r'\n        if: (.*?)\n'
+                            r'        env:\n          '+var+r': (\$\{\{.*?\}\})\n'
+                            r'        run: (.*?)\n',GATE,re.M)
+            self.assertIsNotNone(match,step)
+            condition,expression,command=match.groups()
+            self.assertEqual(expression,'${{ needs.'+job+'.result }}')
+            self.assertEqual(command,'test "$'+var+'" = success')
+            for event,full,scripts in itertools.product(('pull_request','push'),('false','true'),('false','true')):
+                values=context(event,full_application_request=full,ci_scripts=scripts)
+                selected=bool(evaluate(condition,values))
+                self.assertEqual(selected,bool(evaluate(job_condition(job),values)),(job,event,full,scripts))
+                if selected:
+                    for result in ('success','failure','cancelled','skipped',''):
+                        values['needs.'+job+'.result']=result
+                        actual=subprocess.run([bash(),'-c',command],env={var:evaluate(expression,values)},
+                                              capture_output=True,text=True,timeout=10)
+                        self.assertEqual(actual.returncode==0,result=='success',(job,result))
+
     def test_independent_go_jobs_stop_on_cancellation_and_pkg_failure_still_blocks_gate(self):
         values = context('pull_request', code='true', run_go='true')
         values['needs.backend-go-pkg.result'] = 'skipped'

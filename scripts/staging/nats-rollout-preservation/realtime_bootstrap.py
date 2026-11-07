@@ -14,19 +14,20 @@ from controller import Blocked
 
 
 def validate_plan(plan, session):
+    import resource_claim
     fields = {'schema', 'operation', 'context', 'helper_sha256', 'source_sha',
               'source_files_sha256', 'source_authority_sha256', 'execution_sha256', 'stage_sha256',
               'credential_sha256', 'actual_images', 'namespace_uid', 'postgres',
               'secret', 'active_marker_sha256'}
-    parented=isinstance(plan,dict) and plan.get('schema')=='voice-staging-realtime-bootstrap-v2'
+    parented=isinstance(plan,dict) and plan.get('schema') in ('voice-staging-realtime-bootstrap-v2','voice-staging-realtime-bootstrap-v4')
     if parented:fields.add('prerequisites_sha256')
     def nonempty(value):
         return isinstance(value, str) and bool(value)
     def meta(row, fields):
         return type(row) is dict and set(row) == fields and all(nonempty(v) for v in row.values())
     try:
-        if (type(plan) is not dict or set(plan) != fields
-            or plan['schema'] not in ('voice-staging-realtime-bootstrap-v1','voice-staging-realtime-bootstrap-v2')
+        resource_claim.record_fields(plan,'realtime_plan',fields,installation=getattr(session,'installation',None))
+        if (type(plan) is not dict
             or parented and (not isinstance(plan.get('prerequisites_sha256'),str)
                 or not re.fullmatch(r'[a-f0-9]{64}',plan['prerequisites_sha256']))
             or plan['operation'] != session.operation or plan['context'] != session.context
@@ -58,7 +59,7 @@ def validate_plan(plan, session):
             or not meta(secret, {'uid', 'resourceVersion', 'data_sha256'})
             or not re.fullmatch(r'[a-f0-9]{64}', secret['data_sha256'])):
             raise ValueError()
-    except (KeyError, TypeError, ValueError, AttributeError):
+    except (KeyError, TypeError, ValueError, AttributeError, RuntimeError):
         raise Blocked('realtime_bootstrap_plan_invalid') from None
 
 
@@ -232,15 +233,24 @@ def _capture_readonly(kind, credential=None):
     import resource_claim
     session=getattr(commands.authority_guard,'__self__',None)
     if isinstance(session,resource_claim.Session) and session.check().get('phase')=='prerequisites-captured':
+        session=resource_claim.require_session(session,installation=session.installation)
         import staging_prerequisites
-        staging_prerequisites.load_capture(session)
-        if session._prerequisite_readonly_permit is not None:raise Blocked('realtime_bootstrap_readonly_permit_busy')
-        session._prerequisite_readonly_permit=list(command)
+        if session._prerequisite_readonly_busy or session._prerequisite_readonly_permit is not None:
+            raise Blocked('realtime_bootstrap_readonly_permit_busy')
+        session._prerequisite_readonly_busy=True
         try:
+            captured=staging_prerequisites.load_capture(session)
+            if session.check().get('target_sha256')!=resource_claim.digest(captured):raise Blocked('realtime_bootstrap_readonly_capture_changed')
+            session._prerequisite_readonly_capture=copy.deepcopy(captured)
+            session._prerequisite_readonly_permit=commands.launch_snapshot(command,body,25,limit,_ENV,())
             result=commands.capture(command,body=body,timeout=25,limit=limit,env=_ENV)
-            staging_prerequisites.load_capture(session)
+            if session._prerequisite_readonly_permit is not None:raise Blocked('realtime_bootstrap_readonly_permit_unconsumed')
+            session.readonly_current()
             return result
-        finally:session._prerequisite_readonly_permit=None
+        finally:
+            session._prerequisite_readonly_permit=None
+            session._prerequisite_readonly_capture=None
+            session._prerequisite_readonly_busy=False
     return commands.capture(command,body=body,timeout=25,limit=limit,env=_ENV)
 
 
@@ -428,7 +438,7 @@ def _check_live(session, kube, plan, stage_view):
     import resource_claim
     session.check()
     path = guard.ROOT / 'installed' / 'realtime-bootstrap' / session.operation / 'authority.json'
-    resource_claim.trusted_json(path)
+    resource_claim.trusted_json(path,limit=2<<20)
     authority = json.loads(_read_private(path))
     if (type(authority) is not dict or set(authority) != {'approved', 'execution'}
         or digest(authority['approved']) != plan['source_authority_sha256']
@@ -451,9 +461,13 @@ def _verify_source_capture(session, approved, execution):
     session.check()
     path = guard.ROOT / 'installed' / 'source-authority' / (session.operation + '.json')
     captured = resource_claim.trusted_json(path)
-    expected = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+    expected = {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256,
+                'operation': session.operation,
                 'context': session.context, 'helper_sha256': session.helper,
                 'approved_sha256': digest(approved), 'execution_sha256': digest(execution)}
+    try:resource_claim.validate_source_capture(captured,installation=session.installation)
+    except (ValueError,RuntimeError,TypeError,AttributeError):
+        raise Blocked('realtime_bootstrap_source_authority_changed') from None
     if captured != expected:
         raise Blocked('realtime_bootstrap_source_authority_changed')
     session.check()
@@ -517,7 +531,7 @@ def _effect(session, path, state, name, before, request_sha256, submit, observe,
     save(path, state)
     session.check()
     if observe() != before: raise Blocked('realtime_bootstrap_before_changed')
-    if state['plan'].get('schema')=='voice-staging-realtime-bootstrap-v2':
+    if state['plan'].get('schema') in ('voice-staging-realtime-bootstrap-v2','voice-staging-realtime-bootstrap-v4'):
         import staging_prerequisites
         parent=staging_prerequisites.load_capture(session,actual=state['plan']['actual_images'])
         if digest(parent)!=state['plan']['prerequisites_sha256']:raise Blocked('realtime_bootstrap_parent_changed')
@@ -548,6 +562,7 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
             or approved.get('source_sha') != session.context['commit']
             or execution.get('head_sha') != approved['source_sha']):
             raise Blocked('realtime_bootstrap_authority_invalid')
+        resource_claim.require_session(session,installation=actions.installation)
         session.check()
         parent=None
         if session.check().get('phase')=='prerequisites-captured':
@@ -574,7 +589,9 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
             raise Blocked('realtime_bootstrap_namespace_changed')
         password = secrets.token_urlsafe(32).encode('ascii')
         secret_patch(secret, password)
-        plan = {'schema': 'voice-staging-realtime-bootstrap-v1', 'operation': session.operation,
+        if stage.expected.get('generation')!=session.installation.generation:
+            raise Blocked('realtime_bootstrap_generation_changed')
+        plan = {'schema': 'voice-staging-realtime-bootstrap-v3','installation_sha256':session.installation.sha256, 'operation': session.operation,
                 'context': copy.deepcopy(session.context), 'helper_sha256': session.helper,
                 'source_sha': approved['source_sha'], 'source_files_sha256': digest(approved['source_files']),
                 'source_authority_sha256': digest(approved), 'execution_sha256': digest(execution),
@@ -582,13 +599,13 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
                 'actual_images': copy.deepcopy(stage.old_images), 'namespace_uid': namespace,
                 'postgres': pg, 'secret': _secret_identity(secret), 'active_marker_sha256': digest(view['marker'])}
         if parent is not None:
-            plan['schema']='voice-staging-realtime-bootstrap-v2'
+            plan['schema']='voice-staging-realtime-bootstrap-v4'
             plan['prerequisites_sha256']=digest(parent)
         validate_plan(plan, session)
         base = _create_custody(guard.ROOT / 'installed', session.operation, password, secret)
         save(base / 'authority.json', {'approved': approved, 'execution': execution})
         save(base / 'stage.json', view)
-        state = {'schema': 'voice-staging-realtime-bootstrap-checkpoint-v1', 'plan': plan,
+        state = {'schema': 'voice-staging-realtime-bootstrap-checkpoint-v2','installation_sha256':session.installation.sha256, 'plan': plan,
                  'resource_fence': None, 'status': 'PLANNED', 'steps': {}, 'receipt': None}
         path = base / 'checkpoint.json'; save(path, state)
         state['resource_fence'] = session.bind_realtime_bootstrap(plan, stage.old_images)
@@ -626,7 +643,7 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
                           digest({'kind': 'secret', 'plan_sha256': digest(plan)}),
                           submit_secret, observe_secret, valid_secret)
         _check_live(session, kube, plan, view); _writer_check(kube, view); _verify_runtime_auth(password)
-        receipt = {'schema': 'voice-staging-realtime-bootstrap-receipt-v1', 'plan_sha256': digest(plan),
+        receipt = {'schema': 'voice-staging-realtime-bootstrap-receipt-v2','installation_sha256':session.installation.sha256, 'plan_sha256': digest(plan),
                    'steps_sha256': digest(state['steps']), 'role_oid': role['role']['oid'],
                    'database_oid': final['database']['oid'], 'owner_oid': role['role']['oid'],
                    'secret': changed, 'migration_pass': False}
@@ -639,13 +656,21 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
 
 
 def _records(state, session):
-    if (type(state) is not dict or set(state) != {'schema', 'plan', 'resource_fence', 'status', 'steps', 'receipt'}
-        or state['schema'] != 'voice-staging-realtime-bootstrap-checkpoint-v1' or state['status'] != 'COMPLETE'):
+    import resource_claim
+    installation=resource_claim.require_installation(getattr(session,'installation',None))
+    try:
+        resource_claim.record_fields(state,'realtime_checkpoint',{'schema','plan','resource_fence','status','steps','receipt'},installation=installation)
+    except (RuntimeError,ValueError,TypeError):raise Blocked('realtime_bootstrap_completion_invalid') from None
+    scoped=state.get('schema')=='voice-staging-realtime-bootstrap-checkpoint-v2'
+    if state['status'] != 'COMPLETE':
         raise Blocked('realtime_bootstrap_completion_invalid')
     plan = state['plan']; receipt = state['receipt']; steps = state['steps']
     validate_plan(plan, session)
-    initial = {'schema': 'voice-staging-resource-fence-v1', 'context': session.context,
+    if scoped!=(plan.get('schema') in ('voice-staging-realtime-bootstrap-v3','voice-staging-realtime-bootstrap-v4')):
+        raise Blocked('realtime_bootstrap_completion_invalid')
+    initial = {'schema': ('voice-staging-resource-fence-v2' if scoped else 'voice-staging-resource-fence-v1'), 'context': session.context,
                'operation': session.operation, 'helper_sha256': session.helper, 'target_sha256': digest(plan)}
+    if scoped:initial['installation_sha256']=installation.sha256
     if state['resource_fence'] != initial: raise Blocked('realtime_bootstrap_fence_changed')
     fields = {'status', 'request_sha256', 'before_sha256', 'readback'}
     if (type(steps) is not dict or set(steps) != {'role', 'database', 'secret'}
@@ -667,26 +692,29 @@ def _records(state, session):
         or not secret['resourceVersion'] or secret['resourceVersion'] == plan['secret']['resourceVersion']
         or not isinstance(secret.get('data_sha256'), str) or not re.fullmatch(r'[a-f0-9]{64}', secret['data_sha256'])):
         raise Blocked('realtime_bootstrap_completion_invalid')
-    expected = {'schema': 'voice-staging-realtime-bootstrap-receipt-v1', 'plan_sha256': digest(plan),
+    expected = {'schema': ('voice-staging-realtime-bootstrap-receipt-v2' if scoped else 'voice-staging-realtime-bootstrap-receipt-v1'), 'plan_sha256': digest(plan),
                 'steps_sha256': digest(steps), 'role_oid': role['role']['oid'], 'database_oid': final['database']['oid'],
                 'owner_oid': role['role']['oid'], 'secret': steps['secret']['readback'], 'migration_pass': False}
+    if scoped:expected['installation_sha256']=installation.sha256
     if receipt != expected: raise Blocked('realtime_bootstrap_completion_invalid')
     return plan, receipt, final, initial
 
 
-def validate_historical_checkpoint(checkpoint, rollout_pass_state):
+def validate_historical_checkpoint(checkpoint, rollout_pass_state,*,installation=None):
     """Validate a captured original receipt, without granting current TT authority."""
     import resource_claim
     from types import SimpleNamespace
     try:
+        installation=resource_claim.require_installation(installation)
         if rollout_pass_state.get('status') != 'PASS': raise ValueError()
-        binding = resource_claim.historical_binding(rollout_pass_state)
-        original = SimpleNamespace(context=binding['context'], operation=binding['operation'], helper=binding['helper_sha256'])
+        binding = resource_claim.historical_binding(rollout_pass_state,installation=installation)
+        original = SimpleNamespace(context=binding['context'], operation=binding['operation'], helper=binding['helper_sha256'],installation=installation)
         plan, receipt, _, _ = _records(checkpoint, original)
+        if (binding['schema']=='voice-staging-resource-fence-v2') != (checkpoint.get('schema')=='voice-staging-realtime-bootstrap-checkpoint-v2'): raise ValueError()
         if rollout_pass_state['target'].get('realtime_bootstrap_sha256') != digest(receipt): raise ValueError()
-        if plan['schema']=='voice-staging-realtime-bootstrap-v2':
+        if plan['schema'] in ('voice-staging-realtime-bootstrap-v2','voice-staging-realtime-bootstrap-v4'):
             import staging_prerequisites
-            historical=staging_prerequisites.validate_historical_capture(original.operation)
+            historical=staging_prerequisites.validate_historical_capture(original.operation,installation=installation)
             if digest(historical)!=plan['prerequisites_sha256']:raise ValueError()
         return copy.deepcopy(plan), copy.deepcopy(receipt)
     except Exception:
@@ -703,14 +731,14 @@ def _load_completed(session, actual, rollout_target):
     session.check()
     base = guard.ROOT / 'installed' / 'realtime-bootstrap' / session.operation
     for path in (base / 'checkpoint.json', base / 'before-secret.json', base / 'authority.json', base / 'stage.json'):
-        resource_claim.trusted_json(path)
+        resource_claim.trusted_json(path,limit=2<<20)
     state = json.loads(_read_private(base / 'checkpoint.json'))
     before = json.loads(_read_private(base / 'before-secret.json'))
     authority = json.loads(_read_private(base / 'authority.json'))
     view = json.loads(_read_private(base / 'stage.json'))
     password = _read_private(base / 'credential', limit=128)
     plan, receipt, final, initial_binding = _records(state, session)
-    if plan['schema']=='voice-staging-realtime-bootstrap-v2':
+    if plan['schema'] in ('voice-staging-realtime-bootstrap-v2','voice-staging-realtime-bootstrap-v4'):
         import staging_prerequisites
         parent=staging_prerequisites.load_capture(session,actual=actual,rollout_target=rollout_target)
         if digest(parent)!=plan['prerequisites_sha256']:raise Blocked('realtime_bootstrap_parent_changed')

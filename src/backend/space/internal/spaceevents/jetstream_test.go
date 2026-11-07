@@ -78,6 +78,7 @@ func TestJetStreamPublisher_SpaceCreatedRoundTrip(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectSpaceCreated)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.FlushTimeout(10*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -112,6 +113,7 @@ func TestJetStreamPublisher_InviteCreatedRoundTrip(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectSpaceInviteCreated)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.FlushTimeout(10*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)
@@ -147,6 +149,7 @@ func TestJetStreamPublisher_TreeNodeUpsertedIncludesPinFields(t *testing.T) {
 	sub, err := nc.SubscribeSync(subjectSpaceTreeChanged)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, nc.FlushTimeout(10*time.Second))
 
 	pub, err := NewJetStreamPublisher(url)
 	require.NoError(t, err)

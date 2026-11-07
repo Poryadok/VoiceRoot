@@ -200,10 +200,48 @@ def postseal_members(base, receipt):
         raise CryptoError('backup_postseal_shape_invalid') from None
 
 
-def encrypt_cut(base, key_directory, space=None, *, postseal=None):
+COHORT_MEMBERS=('cohort-before.tar','cohort-before-manifest.json','cohort-before.key')
+
+
+def cohort_members(base,session):
+    """Revalidate only the fixed root-owned cohort capsule for this Session."""
+    import guard
+    import resource_claim
+    import staging_cohort_preservation
+    if (not isinstance(session,resource_claim.Session) or not session.admitted
+        or Path(base)!=guard.ROOT/('rollout-'+session.operation)):
+        raise CryptoError('backup_cohort_authority_invalid')
+    session.check()
+    expected=staging_cohort_preservation.capsule_members(session)
+    if type(expected) is not dict or set(expected)!=set(COHORT_MEMBERS):raise CryptoError('backup_cohort_inventory_invalid')
+    for name in COHORT_MEMBERS:
+        descriptor=expected[name]
+        if (type(descriptor) is not dict or set(descriptor)!={'sha256','bytes'}
+            or not isinstance(descriptor['sha256'],str) or not re.fullmatch(r'[a-f0-9]{64}',descriptor['sha256'])
+            or type(descriptor['bytes']) is not int or not 0<descriptor['bytes']<=64<<30
+            or name=='cohort-before.key' and descriptor['bytes']!=32
+            or name=='cohort-before-manifest.json' and descriptor['bytes']>16<<20):
+            raise CryptoError('backup_cohort_inventory_invalid')
+        fd,row=regular(Path(base)/name,private=True);sha=hashlib.sha256()
+        with os.fdopen(fd,'rb') as stream:
+            while chunk:=stream.read(1<<20):sha.update(chunk)
+            after=os.fstat(stream.fileno())
+        if ((row.st_dev,row.st_ino,row.st_size,row.st_mtime_ns,row.st_ctime_ns)
+            !=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)
+            or row.st_size!=descriptor['bytes'] or sha.hexdigest()!=descriptor['sha256']):
+            raise CryptoError('backup_cohort_changed')
+    if staging_cohort_preservation.capsule_members(session)!=expected:raise CryptoError('backup_cohort_changed')
+    return expected
+
+
+def encrypt_cut(base, key_directory, space=None, *, postseal=None, cohort_session=None):
+    if cohort_session is not None:
+        import guard
+        if Path(key_directory)!=guard.ROOT/'installed'/'recovery':raise CryptoError('backup_cohort_recipient_invalid')
     base, key_directory = directory(base), directory(key_directory)
     extra,space_hashes=space_members(base,space)
     current,current_hashes=postseal_members(base,postseal)
+    cohort=cohort_members(base,cohort_session) if cohort_session is not None else {}
     for path in (key_directory / 'recovery-key.pem', key_directory / 'recovery-cert.pem'):
         fd, _ = regular(path, private=True)
         os.close(fd)
@@ -216,7 +254,7 @@ def encrypt_cut(base, key_directory, space=None, *, postseal=None):
         payload = scratch / 'payload.tar'
         with tarfile.open(payload, 'w') as bundle:
             payload.chmod(0o600)
-            for name in ('rollout-before.tar', 'rollout-before-manifest.json', 'copy-checkpoint.json',*extra,*current):
+            for name in ('rollout-before.tar', 'rollout-before-manifest.json', 'copy-checkpoint.json',*extra,*current,*cohort):
                 fd, row = regular(base / name)
                 with os.fdopen(fd, 'rb') as stream:
                     member = tarfile.TarInfo(name)
@@ -243,6 +281,9 @@ def encrypt_cut(base, key_directory, space=None, *, postseal=None):
                 raise CryptoError('backup_postseal_payload_changed')
             result['postseal_members']=current_hashes
         if space_hashes:result['space_members']=space_hashes
+        if cohort:
+            if cohort_members(base,cohort_session)!=cohort:raise CryptoError('backup_cohort_changed')
+            result['cohort_members']=cohort
         return result
     except BaseException:
         target.unlink()
@@ -253,7 +294,7 @@ def encrypt_cut(base, key_directory, space=None, *, postseal=None):
         scratch.rmdir()
 
 
-def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None):
+def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None,cohort_session=None):
     """Authenticated actual-operation restore bound to identical remote bytes.
 
     Caller first independently streams the complete remote ciphertext and
@@ -261,10 +302,18 @@ def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None):
     member must match its root-owned source; no archive path is extracted.
     The readback callback verifies/restores only the private recovered archive.
     """
+    if cohort_session is not None:
+        import guard
+        if Path(key_directory)!=guard.ROOT/'installed'/'recovery':raise CryptoError('backup_cohort_recipient_invalid')
     base,key_directory=directory(base),directory(key_directory)
     if not callable(readback):raise CryptoError('backup_restore_reader_invalid')
     required={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json'}
     expected_members=required if expected_members is None else set(expected_members)
+    cohort=cohort_members(base,cohort_session) if cohort_session is not None else {}
+    if cohort and binding.get('cohort_members')!=cohort:raise CryptoError('backup_cohort_changed')
+    if not cohort and 'cohort_members' in binding:raise CryptoError('backup_cohort_inventory_invalid')
+    if cohort:expected_members.update(cohort)
+    elif set(COHORT_MEMBERS)&expected_members:raise CryptoError('backup_cohort_inventory_invalid')
     if not required<=expected_members:raise CryptoError('backup_restore_member_inventory_invalid')
     hashes={};cipher=base/'rollout-backup.cms'
     fd,row=regular(cipher,private=True);sha=hashlib.sha256();count=0
@@ -282,20 +331,22 @@ def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None):
             '-recip',str(key_directory/'recovery-cert.pem'),
             '-inkey',str(key_directory/'recovery-key.pem'),'-out',str(payload)])
         payload.chmod(0o600);seen=set();recovered=scratch/'rollout-before.tar'
+        cohort_dir=scratch/'cohort';cohort_dir.mkdir(mode=0o700)
         with tarfile.open(payload,'r|') as archive:
             for member in archive:
                 name=member.name
                 if (name in seen or len(seen)>=262144 or not member.isreg()
                     or name.startswith('/') or any(p in ('','.','..') for p in name.split('/'))
                     or not (name in ('rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json',
-                        'space-before.dump','space-before-manifest.json','current-copy-closed.tar','current-copy-observed.json')
+                        'space-before.dump','space-before-manifest.json','current-copy-closed.tar','current-copy-observed.json',*COHORT_MEMBERS)
                         or re.fullmatch(r'current-record-files/[a-f0-9]{64}\.json',name))):
                     raise CryptoError('backup_restore_member_invalid')
                 seen.add(name);fd,expected=regular(base/name,private=True)
                 if member.size!=expected.st_size:os.close(fd);raise CryptoError('backup_restore_member_changed')
                 expected_sha=hashlib.sha256();actual_sha=hashlib.sha256();n=0
-                output=recovered.open('xb') if name=='rollout-before.tar' else None
-                if output is not None:recovered.chmod(0o600)
+                output_path=recovered if name=='rollout-before.tar' else cohort_dir/name if name in cohort else None
+                output=output_path.open('xb') if output_path is not None else None
+                if output is not None:output_path.chmod(0o600)
                 try:
                     with os.fdopen(fd,'rb') as original,archive.extractfile(member) as restored:
                         while chunk:=restored.read(1<<20):
@@ -313,6 +364,11 @@ def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None):
         if seen!=expected_members:
             raise CryptoError('backup_restore_member_missing')
         proof=readback(recovered)
+        cohort_proof=None
+        if cohort:
+            import staging_cohort_preservation
+            if cohort_members(base,cohort_session)!=cohort:raise CryptoError('backup_cohort_changed')
+            cohort_proof=staging_cohort_preservation.qualify_decrypted(cohort_session,cohort_dir)
         # Cipher inode/content is not permitted to change during decryption.
         fd,current=regular(cipher,private=True);sha=hashlib.sha256()
         with os.fdopen(fd,'rb') as source:
@@ -321,9 +377,12 @@ def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None):
             or (row.st_dev,row.st_ino,row.st_mtime_ns,row.st_ctime_ns)
                 !=(current.st_dev,current.st_ino,current.st_mtime_ns,current.st_ctime_ns)):
             raise CryptoError('backup_restore_cipher_changed')
-        return {'schema':'voice-nats-decrypted-restore-v1','cipher_sha256':binding['cipher_sha256'],
+        result={'schema':'voice-nats-decrypted-restore-v1','cipher_sha256':binding['cipher_sha256'],
             'cipher_bytes':binding['cipher_bytes'],'decrypted_members_verified':True,
-            'members':hashes,'readback':proof,'remote_equivalence':'FULL_CIPHERTEXT_SHA256_AND_SIZE'}
+            'members':{k:v for k,v in hashes.items() if k!='cohort-before.key'},
+            'readback':proof,'remote_equivalence':'FULL_CIPHERTEXT_SHA256_AND_SIZE'}
+        if cohort:result['cohort_readback']=cohort_proof
+        return result
     finally:
         import shutil
         shutil.rmtree(scratch)

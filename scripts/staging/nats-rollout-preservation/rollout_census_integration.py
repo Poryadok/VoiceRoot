@@ -117,8 +117,8 @@ def _safe_failure_detail(stderr):
     return ' '.join(parts)
 
 
-def call(args, **kwargs):
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180, **kwargs)
+def call(args, *, timeout=180, **kwargs):
+    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, **kwargs)
     if result.returncode:
         detail = _safe_failure_detail(result.stderr)
         message = 'owned_census_fixture_command_failed'

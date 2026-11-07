@@ -147,7 +147,7 @@ class ExistingFactsTests(unittest.TestCase):
             receipt_path = root / 'installed/source-authority' / (session.operation + '.json')
             receipt_path.parent.mkdir(parents=True, mode=0o700)
             def save_provenance():
-                value = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+                value = {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256, 'operation': session.operation,
                          'context': ctx, 'helper_sha256': session.helper,
                          'approved_sha256': existing.digest(approved), 'execution_sha256': existing.digest(execution)}
                 receipt_path.write_text(json.dumps(value)); receipt_path.chmod(0o600)
@@ -225,7 +225,7 @@ class ProtectedAnchorTests(unittest.TestCase):
                    'owner_oid': 13, 'secret': secret, 'migration_pass': False}
         target = {'tag': ctx['commit'], 'images': ctx['images'], 'manifest_sha256': 'd' * 64,
                   'realtime_bootstrap_sha256': existing.digest(receipt)}
-        state = {'operation': self.op, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
+        state = {'schema':'nats-rollout-root-v1','operation': self.op, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
                  'context': {'expected': {'namespace_uid': 'ns', 'source_claim_uid': 'nats-pvc'}},
                  'target': target, 'code_capture': code, 'realtime_bootstrap': receipt,
                  'resource_fence': {'schema': 'voice-staging-resource-fence-v1', 'operation': self.op,
@@ -263,6 +263,62 @@ class ProtectedAnchorTests(unittest.TestCase):
         ancestry, plan, receipt, directory = existing._anchor()
         self.assertEqual(ancestry['anchor'], {'operation': self.op, 'receipt_sha256': existing.digest(self.receipt)})
         self.assertEqual(existing._original_credential(directory, plan, receipt), self.password)
+
+    def test_scoped_c1_checkpoint_preserves_domain_and_rejects_mixed_versions(self):
+        import resource_claim
+        authority=resource_claim.InstallationAuthority('owned-isolated-v1','11111111-1111-4111-8111-111111111111',
+            'r20260930a4','a'*64,'b'*64,'c'*64)
+        state=copy.deepcopy(self.checkpoint);plan=state['plan']
+        plan.update(schema='voice-staging-realtime-bootstrap-v3',installation_sha256=authority.sha256)
+        state['steps']['secret']['request_sha256']=existing.digest({'kind':'secret','plan_sha256':existing.digest(plan)})
+        state['receipt'].update(schema='voice-staging-realtime-bootstrap-receipt-v2',installation_sha256=authority.sha256,
+            plan_sha256=existing.digest(plan),steps_sha256=existing.digest(state['steps']))
+        state.update(schema='voice-staging-realtime-bootstrap-checkpoint-v2',installation_sha256=authority.sha256)
+        state['resource_fence'].update(schema='voice-staging-resource-fence-v2',installation_sha256=authority.sha256,
+                                       target_sha256=existing.digest(plan))
+        session=SimpleNamespace(operation=self.op,context=self.ctx,helper=plan['helper_sha256'],installation=authority)
+        result=self.c1._records(state,session)
+        self.assertEqual(result[0],plan);self.assertEqual(result[1],state['receipt'])
+        for key in ('plan','receipt','resource_fence'):
+            bad=copy.deepcopy(state);bad[key]['installation_sha256']='f'*64
+            with self.subTest(key=key),self.assertRaises(Exception):self.c1._records(bad,session)
+        bad=copy.deepcopy(state);bad['schema']='voice-staging-realtime-bootstrap-checkpoint-v1';del bad['installation_sha256']
+        with self.assertRaises(Exception):self.c1._records(bad,session)
+
+    def test_scoped_c1_anchor_and_original_credential_keep_same_domain(self):
+        import resource_claim
+        authority=resource_claim.InstallationAuthority('owned-isolated-v1','11111111-1111-4111-8111-111111111111',
+            'r20260930a4','a'*64,'b'*64,'c'*64)
+        self.stage['marker']={'data':{'generation':authority.generation}}
+        plan=self.checkpoint['plan'];plan.update(schema='voice-staging-realtime-bootstrap-v3',
+            installation_sha256=authority.sha256,stage_sha256=existing.digest(self.stage),
+            active_marker_sha256=existing.digest(self.stage['marker']))
+        self.checkpoint['steps']['secret']['request_sha256']=existing.digest({'kind':'secret','plan_sha256':existing.digest(plan)})
+        self.receipt.update(schema='voice-staging-realtime-bootstrap-receipt-v2',installation_sha256=authority.sha256,
+            plan_sha256=existing.digest(plan),steps_sha256=existing.digest(self.checkpoint['steps']))
+        self.checkpoint.update(schema='voice-staging-realtime-bootstrap-checkpoint-v2',installation_sha256=authority.sha256)
+        self.checkpoint['resource_fence'].update(schema='voice-staging-resource-fence-v2',installation_sha256=authority.sha256,
+                                                 target_sha256=existing.digest(plan))
+        target=self.state['target'];target.update(registry='registry',mode='full',changed_services=[],
+            source_hashes={'source':'1'*64},template_hashes={'voice-user':'2'*64},input_template_hashes={'voice-user':'3'*64},
+            migration_sha256='4'*64,nonnats_sha256='5'*64,installation_sha256=authority.sha256,
+            realtime_bootstrap_sha256=existing.digest(self.receipt))
+        self.state.update(schema='nats-rollout-root-v2',installation_sha256=authority.sha256)
+        self.state['resource_fence'].update(schema='voice-staging-resource-fence-v2',installation_sha256=authority.sha256,
+                                            target_sha256=existing.digest(target))
+        self.active.update(schema='voice-active-release-v1',installation_sha256=authority.sha256)
+        self._save()
+        self._write(self.root/'installed/source-authority'/(self.op+'.json'),
+            {'schema':'voice-staging-source-capture-v2','installation_sha256':authority.sha256,'operation':self.op,
+             'context':plan['context'],'helper_sha256':plan['helper_sha256'],
+             'approved_sha256':plan['source_authority_sha256'],'execution_sha256':plan['execution_sha256']})
+        ancestry,loaded,receipt,directory=existing._anchor(installation=authority)
+        self.assertEqual(ancestry['anchor']['receipt_sha256'],existing.digest(self.receipt))
+        self.assertEqual(existing._original_credential(directory,loaded,receipt,installation=authority),self.password)
+        with self.assertRaises(Exception):existing._anchor()
+        with patch.object(self.c1,'_read_private',side_effect=AssertionError('credential read')) as read:
+            with self.assertRaises(Exception):existing._original_credential(directory,loaded,receipt)
+            read.assert_not_called()
 
     def test_resealed_original_authority_without_capture_receipt_is_rejected(self):
         _, plan, receipt, directory = existing._anchor()
@@ -304,7 +360,7 @@ class ProtectedAnchorTests(unittest.TestCase):
             with self.assertRaises(existing.Blocked):existing._validate_record(invalid)
         target = {'tag': self.ctx['commit'], 'images': self.ctx['images'], 'manifest_sha256': 'e' * 64,
                   'realtime_bootstrap_sha256': existing.digest(record)}
-        state = {'operation': op2, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
+        state = {'schema': 'nats-rollout-root-v1', 'operation': op2, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
                  'context': self.state['context'], 'target': target,
                  'code_capture': self.state['code_capture'], 'realtime_bootstrap': record,
                  'resource_fence': {'schema': 'voice-staging-resource-fence-v1', 'operation': op2,
@@ -328,7 +384,7 @@ class ProtectedAnchorTests(unittest.TestCase):
         self._write(self.root / 'installed/realtime-bootstrap' / op2 / 'existing.json', parented)
         with patch.dict(sys.modules,{'staging_prerequisites':loader}):
             self.assertEqual(existing._anchor()[0]['anchor'],ancestry['anchor'])
-            loader.validate_historical_capture.assert_called_with(op2)
+            loader.validate_historical_capture.assert_called_with(op2,installation=__import__('resource_claim').production_installation())
             loader.validate_historical_capture.return_value={'changed':True}
             with self.assertRaisesRegex(existing.Blocked,'anchor_changed'):existing._anchor()
         self._write(self.root / ('rollout-' + op2) / 'checkpoint.json', state)
@@ -432,7 +488,7 @@ class ProtectedAnchorTests(unittest.TestCase):
         binding = {'nats-rollout-preservation/realtime_bootstrap_existing.py':
                    hashes['scripts/staging/nats-rollout-preservation/realtime_bootstrap_existing.py']}
         session = resource_claim.Session(self.ctx, operation, existing.digest(binding), lambda: copy.deepcopy(state), journal)
-        actions = object.__new__(bridge_root.Actions); actions.tt_session = session; actions.binding = binding
+        actions = object.__new__(bridge_root.Actions); actions.tt_session = session; actions.binding = binding; actions._installation = session.installation
         marker = {'metadata': {'name': 'voice-nats-generation', 'uid': 'marker'}}
         deploy = {'metadata': {'uid': 'deploy', 'generation': 1}, 'spec': {'replicas': 1}}
         stage = object.__new__(runtime_stage.RolloutStage)
@@ -442,7 +498,7 @@ class ProtectedAnchorTests(unittest.TestCase):
         approved = {'schema': 'voice-source-authority-v1', 'verified': True, 'source_sha': self.ctx['commit'], 'source_files': hashes}
         execution = {'head_sha': self.ctx['commit']}
         self._write(self.root / 'installed/source-authority' / (operation + '.json'),
-                    {'schema': 'voice-staging-source-capture-v1', 'operation': operation, 'context': self.ctx,
+                    {'schema': 'voice-staging-source-capture-v2', 'installation_sha256': session.installation.sha256, 'operation': operation, 'context': self.ctx,
                      'helper_sha256': session.helper, 'approved_sha256': existing.digest(approved),
                      'execution_sha256': existing.digest(execution)})
         _, plan, receipt, _ = existing._anchor()

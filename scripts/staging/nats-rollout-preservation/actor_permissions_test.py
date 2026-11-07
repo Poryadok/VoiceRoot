@@ -21,6 +21,22 @@ class PermissionTests(unittest.TestCase):
         with self.assertRaisesRegex(module.PermissionError, '^actor_permissions_unsupported_or_missing$'):
             self.check(supplied, pub, sub)
 
+    def test_complete_canonical_bootstrap_acl_accepts_exact_grants(self):
+        import actor_root
+        root=Path(__file__).resolve().parents[3]
+        grant=actor_root.source_grants((root/'deploy/nats/acl-intent.yaml').read_bytes())['bootstrap']
+        self.assertGreater(len(grant['publish']),100)
+        result=self.check(effective(grant['publish'],grant['subscribe']),grant['publish'],grant['subscribe'])
+        self.assertTrue(result['effective_permission_language_compatible'])
+
+    def test_exact_allow_still_obeys_deny_and_missing_allow(self):
+        for pattern,denied in (('x.a','x.a'),('x.*','x.a'),('x.>','x.a.b')):
+            with self.subTest(pattern=pattern):
+                self.check(effective([pattern]),[pattern])
+                self.reject(effective([pattern],pub_deny=[denied]),[pattern])
+        self.reject(effective(['x.a']),['x.b'])
+        with patch.object(module,'MAX_WORK',2):self.reject(effective(['x.a','y.a']),['x.a'])
+
     def test_exact_actor_rights_and_neighbor_denial(self):
         info='$JS.API.CONSUMER.INFO.social_events.rt_realtime1_friend_removed'
         ack='$JS.ACK.social_events.rt_realtime1_friend_removed.>'

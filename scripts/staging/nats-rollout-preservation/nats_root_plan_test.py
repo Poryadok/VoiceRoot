@@ -2,7 +2,7 @@ import copy,hashlib,json,shutil,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import bootstrap_selection
-from bootstrap_selection_test import fixture as enrollment_fixture
+from bootstrap_selection_test import owned_fixture as enrollment_fixture
 from nats_contract_plan_test import live
 from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V5_SOURCE_HASHES
 from rollout_census_test import CREATED
@@ -12,7 +12,7 @@ from controller import Blocked
 class Tests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.source=Path(self.tmp.name)
-        self.kube,self.enrollment,self.rows,self.sha=enrollment_fixture()
+        self.kube,self.enrollment,self.rows,self.installation=enrollment_fixture()
         self.streams=live();self.tree={'streams':3,'consumers':0,'messages':14,'bytes':200,'total':1,'account_details':[{'id':'A'+'A'*55,'stream_detail':[]}]}
         for name,info in self.streams.items():
             state=dict(info['state'],consumer_count=0,bytes=100)
@@ -42,9 +42,8 @@ class Tests(unittest.TestCase):
         return {'kind':'ConfigMap','metadata':{'name':'voice-nats-'+part+'-bootstrap'},'data':{'bootstrap.sh':text}}
     def run_plan(self,auth=None):
         with patch.object(module,'TARGET_FILES',self.files),patch.object(module,'monitor',return_value=self.tree),patch.object(module,'census',return_value={'fixture_census':True}),\
-             patch.object(bootstrap_selection,'ACCOUNT_SHA',self.sha),\
              patch('bootstrap_auth.prove',return_value=auth or copy.deepcopy(self.fresh_auth)) as prove:
-            result=module.preflight(self.kube,self.source,self.enrollment,self.contract,self.decode)
+            result=module.preflight(self.kube,self.source,self.enrollment,self.contract,self.decode,installation=self.installation)
             self.assertEqual(prove.call_args.args[0],b'renewed-private-creds')
             return result
     def test_root_producer_binds_source_existing_enrollment_server_and_plan(self):
@@ -109,9 +108,8 @@ class CanonicalBootstrapTests(unittest.TestCase):
     def run_plan(self):
         import yaml
         with patch.object(module,'monitor',return_value=self.tree),patch.object(module,'census',return_value={'fixture_census':True}),\
-             patch.object(bootstrap_selection,'ACCOUNT_SHA',self.sha),\
              patch('bootstrap_auth.prove',return_value=copy.deepcopy(self.fresh_auth)):
-            return module.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load)
+            return module.preflight(self.kube,self.source,self.enrollment,self.contract,yaml.safe_load,installation=self.installation)
     def compatible(self,authority):
         import compiler,yaml
         return compiler.compatible_bootstrap(self.source,self.contract,yaml.safe_load,
@@ -210,5 +208,49 @@ class CanonicalBootstrapTests(unittest.TestCase):
         self.mutate('search')
         with self.assertRaisesRegex(Blocked,'rollout_bootstrap_contract_unsupported'):
             self.compatible(authority)
+
+class BindingCompatibilityTests(unittest.TestCase):
+    def setUp(self):
+        from resource_claim import production_installation
+        self.installation=production_installation()
+        self.legacy={'plan_sha256':'a'*64,'server_image':module.NATS_IMAGE,
+            'enrollment_sha256':'b'*64,'sources':{'source':'c'*64}}
+        self.current=dict(self.legacy,schema='voice-nats-root-plan-binding-v2',
+            installation_sha256=self.installation.sha256)
+
+    def matches(self,current=None,expected=None,installation=None):
+        return module.binding_matches(self.current if current is None else current,
+            self.legacy if expected is None else expected,installation=installation or self.installation)
+
+    def test_legacy_production_binding_compares_original_fields_without_rewriting(self):
+        for roster in (False,True):
+            current=copy.deepcopy(self.current);expected=copy.deepcopy(self.legacy)
+            if roster:
+                current['live_auth_sha256']=expected['live_auth_sha256']='d'*64
+            before=copy.deepcopy((current,expected))
+            self.assertTrue(self.matches(current,expected))
+            self.assertEqual((current,expected),before)
+
+    def test_legacy_binding_refuses_every_changed_original_field(self):
+        for key in self.legacy:
+            current=copy.deepcopy(self.current);current[key]='changed'
+            with self.subTest(key=key):self.assertFalse(self.matches(current))
+
+    def test_v2_binding_requires_exact_installation_schema_and_fields(self):
+        self.assertTrue(self.matches(expected=self.current))
+        for updates in ({'installation_sha256':'f'*64},{'schema':'unknown'},{'extra':True}):
+            with self.subTest(updates=updates):
+                self.assertFalse(self.matches(dict(self.current,**updates),self.current))
+        for field in ('schema','installation_sha256'):
+            partial=copy.deepcopy(self.current);partial.pop(field)
+            self.assertFalse(self.matches(expected=partial))
+
+    def test_isolated_authority_cannot_adopt_legacy_production_binding(self):
+        from resource_claim import InstallationAuthority
+        isolated=InstallationAuthority('owned-isolated-v1','11111111-1111-4111-8111-111111111111',
+            'r20261102a','a'*64,'b'*64,'c'*64)
+        current=dict(self.current,installation_sha256=isolated.sha256)
+        self.assertFalse(self.matches(current,installation=isolated))
+        self.assertTrue(self.matches(current,current,isolated))
 
 if __name__=='__main__':unittest.main()

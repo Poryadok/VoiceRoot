@@ -21,14 +21,13 @@ class FutureHistoryTests(unittest.TestCase):
         result['nats-rollout-preservation/installer.py']=hashlib.sha256(Path(installer.__file__).read_bytes()).hexdigest()
         return result
 
-    def test_exact_actual_81_to_reviewed_89_source_and_binary_pins(self):
-        target=self.target();self.assertEqual(len(target),89)
+    def test_exact_actual_81_to_provisional_94_source_and_binary_pins(self):
+        target=self.target();self.assertEqual(len(target),94)
         self.assertEqual(set(target),installer.TT_FENCING_PREDECESSOR_MEMBERS|
-            {installer.TT_FENCING_NEW_MEMBER,'nats-rollout-preservation/gis_existing_update.py',
-             'nats-rollout-preservation/realtime_bootstrap.py','nats-rollout-preservation/realtime_bootstrap_existing.py'})
+            {installer.TT_FENCING_NEW_MEMBER,'nats-rollout-preservation/gis_existing_update.py'} | installer.FULL23_NEW_MEMBERS)
         projection={k:v for k,v in target.items() if k!='nats-rollout-preservation/installer.py'}
         self.assertEqual(hashlib.sha256(json.dumps(projection,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
-                         '8f5e1095a702b4bcde11ae5be2111457cf61a05010da1b2bfd95200ed8180dae')
+                         '54aa6eca4a2f7435224fac6e3ac5f4953601122d91fded31eb7dd3953fc62ff4')
         old=json.loads((Path(__file__).resolve().parent/'installed_cohort_predecessor_fixture.json').read_bytes())
         for name in installer.TT_FENCING_BINARY_MEMBERS:self.assertEqual(target[name],old[name])
         with patch.object(installer.root_cli,'code_binding',return_value=target), \
@@ -53,11 +52,11 @@ class FutureHistoryTests(unittest.TestCase):
              patch.object(installer,'_upgrade_idle_transition') as transition:
             with self.assertRaises(installer.Blocked):installer.upgrade_idle_full23_installed_cohort_v1(Path('/capture'))
             transition.assert_not_called()
-    def test_new_history_paths_must_both_be_absent(self):
+    def test_new_history_paths_must_all_be_absent(self):
         with tempfile.TemporaryDirectory() as folder:
             installed=Path(folder)
             installer.require_future_history_absent(installed)
-            for name in ('source-authority','realtime-bootstrap'):
+            for name in ('source-authority','realtime-bootstrap','prerequisites'):
                 path=installed/name;path.mkdir()
                 with self.assertRaisesRegex(installer.Blocked,'bridge_full23_future_history_present'):
                     installer.require_future_history_absent(installed)
@@ -68,7 +67,7 @@ class FutureHistoryTests(unittest.TestCase):
                 path.unlink()
 
     def test_actual_full23_idle_transition_vetoes_presence_before_replacement(self):
-        for name in ('source-authority','realtime-bootstrap'):
+        for name in ('source-authority','realtime-bootstrap','prerequisites'):
             with self.subTest(name=name),tempfile.TemporaryDirectory() as folder:
                 root=Path(folder);installed=root/'installed';installed.mkdir(mode=0o750)
                 for child,mode in (('inbox',0o1730),('processing',0o700),('journal',0o700),('responses',0o750),('recovery',0o700)):
