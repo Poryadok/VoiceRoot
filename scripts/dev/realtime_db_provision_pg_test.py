@@ -61,6 +61,15 @@ class PostgreSQLBoundary(unittest.TestCase):
         self.assertNotEqual(self.sql('realtime_db', 'realtime', 'CREATE TABLE forbidden(id int)', check=False).returncode, 0)
         self.assertNotEqual(self.sql('realtime_db', 'realtime', 'DROP TABLE realtime_incarnations', check=False).returncode, 0)
 
+    def test_shadow_schema_cannot_hide_existing_realtime_role(self):
+        self.sql('postgres','postgres',"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='realtime') THEN CREATE ROLE realtime LOGIN; END IF; END $$; CREATE SCHEMA shadow_fixture; CREATE VIEW shadow_fixture.pg_roles AS SELECT * FROM pg_catalog.pg_roles WHERE rolname <> 'realtime'; ALTER ROLE postgres SET search_path = shadow_fixture, pg_catalog;")
+        try:
+            result=json.loads(self.sql('postgres','postgres',provision.CATALOG_SQL).stdout)
+            self.assertIsInstance(result['role'],dict)
+            self.assertGreater(result['role']['oid'],0)
+        finally:
+            self.sql('postgres','postgres','ALTER ROLE postgres RESET search_path; DROP SCHEMA shadow_fixture CASCADE;')
+
     def test_source_backed_single_login_and_create_collisions(self):
         # Separate names from the restricted-role characterization above.
         self.sql('postgres', 'postgres', 'CREATE DATABASE foreign_fixture;')

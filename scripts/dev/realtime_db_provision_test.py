@@ -8,6 +8,15 @@ import realtime_db_provision as provision
 
 
 class SQLContract(unittest.TestCase):
+    def test_catalog_and_transport_pin_system_namespace(self):
+        for name in ('pg_roles','pg_auth_members','pg_database'):
+            self.assertIn('pg_catalog.'+name,provision.CATALOG_SQL)
+        pg=object.__new__(provision.KubePostgres); pg.operation_guard=lambda:None
+        with mock.patch.object(provision.subprocess,'run',return_value=mock.Mock(returncode=0,stdout=b'{}')) as run:
+            pg.catalog()
+        command=run.call_args.args[0]
+        self.assertTrue(any('search_path=pg_catalog,public' in str(arg) for arg in command))
+
     def test_create_only_fixed_role_and_database(self):
         password = b'fixtureCredential_123456789012345678901234'
         role = provision.role_sql(password)

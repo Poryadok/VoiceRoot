@@ -312,7 +312,7 @@ def resume_capture(kube,base,state,code,binding,approved,execution,*,verify_exec
     def validate(actual,broker,tree,row,manifest):
         current=nats_root_plan.closed_copy_preflight(kube,workspace,state['bootstrap_enrollment'],
             state['contract'],compiler.decode_yaml,actual,broker,tree)
-        if (current['plan']!=original['nats_contract'] or current['binding']!=original['nats_contract_binding']
+        if (current['plan']!=original['nats_contract'] or not nats_root_plan.binding_matches(current['binding'],original['nats_contract_binding'])
             or current['scripts']!=original['nats_target_scripts']):
             raise Blocked('paused_recovery_original_nats_authority_changed')
         fresh();accepted.update(current)

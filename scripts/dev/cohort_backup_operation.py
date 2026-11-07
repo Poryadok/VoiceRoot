@@ -8,6 +8,7 @@ import story_media_backup_cohort as cohort
 import story_media_backup_cohort_capture as capture
 import story_media_backup_cohort_finalize as finalize
 import story_media_backup_cohort_custody as custody
+import cohort_backup_phases as phases
 
 ROOT = Path('/home/pmd/voice-dev-media-operations')
 
@@ -21,8 +22,10 @@ def run(phase, root, key, expected, admin_role, drain):
     p = phase.phases
     pending = False
     try:
-        phase._guard()
         binding = copy.deepcopy(phase.binding)
+        if 'full_catalog' in binding and type(phase) is not phases.CohortPhases:
+            raise CohortOperationError('full catalog phase required')
+        phase._guard()
         finalize.validate_binding(binding, binding['databases'])
         context = p.fence.context
         source = binding['sources']['roles']['engine']

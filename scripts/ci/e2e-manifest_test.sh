@@ -6,11 +6,43 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MANIFEST="${ROOT}/.github/ci/e2e-features.yml"
 SCRIPT="${ROOT}/scripts/ci/e2e-manifest.sh"
 GO_DOWNLOAD_HELPER="${ROOT}/src/backend/scripts/docker-go-mod-download.sh"
+source "${ROOT}/scripts/ci/manifest-lines.sh"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
 }
+
+normalized_lines=()
+assert_normalized_fixture() {
+  [[ "${#normalized_lines[@]}" -eq 2 ]] || fail 'line normalization changed line count'
+  [[ "${normalized_lines[0]}" == First && "${normalized_lines[1]}" == Second ]] || \
+    fail 'line normalization changed exact values or order'
+}
+read_normalized_lines() {
+  voice_normalize_manifest_lines "$@" || return 1
+  normalized_lines=("${voice_manifest_lines[@]}")
+}
+
+normalization_fixture="$(mktemp)"
+trap 'rm -f "${normalization_fixture}"' EXIT
+printf 'First\nSecond\n' >"${normalization_fixture}"
+read_normalized_lines "${normalization_fixture}"
+assert_normalized_fixture
+read_normalized_lines < <(printf 'First\r\nSecond\r\n')
+assert_normalized_fixture
+if read_normalized_lines < <(printf 'First\r\r\nSecond\r\n'); then
+  fail 'doubled carriage return was accepted'
+fi
+if read_normalized_lines < <(printf 'First\rSecond\r\n'); then
+  fail 'embedded carriage return was accepted'
+fi
+if read_normalized_lines < <(printf 'First\r'); then
+  fail 'unterminated carriage return was accepted'
+fi
+read_normalized_lines < <(printf 'First\nFinal')
+[[ "${#normalized_lines[@]}" -eq 2 && "${normalized_lines[1]}" == Final ]] || \
+  fail 'valid unterminated final line was rejected'
 
 count_gateway="$(bash "${SCRIPT}" "${MANIFEST}" smoke_gateway | wc -l | tr -d '[:space:]')"
 count_flutter="$(bash "${SCRIPT}" "${MANIFEST}" smoke_flutter | wc -l | tr -d '[:space:]')"
@@ -72,7 +104,8 @@ if [[ "${a1_parser_rc}" -ne 0 ]]; then
   rm -f "${a1_output_file}" "${a1_error_file}"
   fail "e2e manifest parser must support a1_multi_account_gateway before exact-content checks"
 fi
-mapfile -t a1_actual < "${a1_output_file}"
+read_normalized_lines "${a1_output_file}"
+a1_actual=("${normalized_lines[@]}")
 rm -f "${a1_output_file}" "${a1_error_file}"
 [[ "${#a1_actual[@]}" -eq "${#a1_expected[@]}" ]] || \
   fail "a1_multi_account_gateway must contain exactly seven tests, got ${#a1_actual[@]}"
@@ -99,7 +132,8 @@ if [[ "${t055_parser_rc}" -ne 0 ]]; then
   rm -f "${t055_output_file}" "${t055_error_file}"
   fail "e2e manifest parser must support a1_flutter_profile_handoff before exact-content checks"
 fi
-mapfile -t profile_handoff_actual < "${t055_output_file}"
+read_normalized_lines "${t055_output_file}"
+profile_handoff_actual=("${normalized_lines[@]}")
 rm -f "${t055_output_file}" "${t055_error_file}"
 [[ "${#profile_handoff_actual[@]}" -eq "${#profile_handoff_expected[@]}" ]] || \
   fail "a1_flutter_profile_handoff must contain exactly four tests, got ${#profile_handoff_actual[@]}"

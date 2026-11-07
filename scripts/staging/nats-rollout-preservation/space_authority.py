@@ -1,11 +1,46 @@
 """Fixed existing Space database authority; private values never enter receipts."""
 import base64
+import copy
 import hashlib
 import re
 from urllib.parse import urlsplit,parse_qs
 
 class AuthorityError(ValueError):pass
 def fail():raise AuthorityError('space_database_authority_rejected')
+
+PASSWORD_ARGS=('exec','voice-postgres-0','--','sh','-ceu',
+    'printf "{\\"password_sha256\\":\\"%s\\"}" "$(printf %s "$POSTGRES_PASSWORD" | sha256sum | cut -d" " -f1)"')
+
+def _password_observation(kube):
+    """Read only the fixed pod password digest under the captured parent fence."""
+    import commands,resource_claim
+    guard=commands.authority_guard
+    session=getattr(guard,'__self__',None)
+    bound=type(session) is resource_claim.Session and getattr(guard,'__func__',None) is resource_claim.Session.check
+    if not bound or session.check().get('phase')!='prerequisites-captured':
+        return kube.run(list(PASSWORD_ARGS))
+    session=resource_claim.require_session(session,installation=session.installation)
+    import staging_prerequisites
+    if session._prerequisite_readonly_busy or session._prerequisite_readonly_permit is not None:
+        raise AuthorityError('space_database_readonly_permit_busy')
+    session._prerequisite_readonly_busy=True
+    try:
+        captured=staging_prerequisites.load_capture(session)
+        if session.check().get('target_sha256')!=resource_claim.digest(captured):
+            raise AuthorityError('space_database_readonly_capture_changed')
+        session._prerequisite_readonly_capture=copy.deepcopy(captured)
+        argv=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging',*PASSWORD_ARGS]
+        env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'}
+        session._prerequisite_readonly_permit=commands.launch_snapshot(argv,b'',30,2<<20,env,())
+        result=kube.run(list(PASSWORD_ARGS))
+        if session._prerequisite_readonly_permit is not None:
+            raise AuthorityError('space_database_readonly_permit_unconsumed')
+        session.readonly_current()
+        return result
+    finally:
+        session._prerequisite_readonly_permit=None
+        session._prerequisite_readonly_capture=None
+        session._prerequisite_readonly_busy=False
 
 def identity(row):
     metadata=row['metadata'];uid=metadata['uid'];rv=metadata['resourceVersion']
@@ -42,8 +77,7 @@ def capture(kube):
         if url.scheme not in ('postgres','postgresql') or url.hostname not in hosts or url.port not in (None,5432) or url.path!='/space_db' or not url.username or not url.password or url.fragment:fail()
         if query!={'sslmode':['disable']}:fail()
         wanted=hashlib.sha256(password).hexdigest()
-        observed=kube.run(['exec','voice-postgres-0','--','sh','-ceu',
-            'printf "{\\"password_sha256\\":\\"%s\\"}" "$(printf %s "$POSTGRES_PASSWORD" | sha256sum | cut -d" " -f1)"'])
+        observed=_password_observation(kube)
         if observed!={'password_sha256':wanted}:fail()
         result={'schema':'voice-space-authority-v1','namespace':identity(namespace),'controller':identity(controller),
             'pod':identity(pod),'claim':identity(claim),'pv':identity(pv),'pv_name':pv_name,'image':image,

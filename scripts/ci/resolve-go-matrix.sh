@@ -7,6 +7,7 @@
 # space<->user/role, voice<->realtime; any Go service change also runs gateway tests.
 # Trade-off: wider CI than minimal path filter; narrower than global.
 set -euo pipefail
+command -v jq >/dev/null || { echo 'resolve-go-matrix: jq is required' >&2; exit 1; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 GO_SERVICES=(
@@ -18,7 +19,17 @@ GO_SERVICES=(
 filter_val() {
   local key="$1"
   if [[ -n "${FILTER_JSON:-}" ]]; then
-    [[ "$(echo "${FILTER_JSON}" | jq -r --arg k "${key}" '.[$k] // "false"')" == "true" ]]
+    local value
+    value="$(printf '%s' "${FILTER_JSON}" | jq -r --arg k "${key}" '.[$k] // "false"')" || {
+      echo "resolve-go-matrix: cannot read filter ${key}" >&2
+      exit 1
+    }
+    value="${value%$'\r'}"
+    case "$value" in
+      true) return 0 ;;
+      false) return 1 ;;
+      *) echo "resolve-go-matrix: invalid filter ${key}" >&2; exit 1 ;;
+    esac
   else
     local env_key="FILTER_${key}"
     [[ "${!env_key:-}" == "true" ]]
@@ -76,18 +87,41 @@ services=()
 integration_services=()
 run_pkg=false
 
-# Testcontainers run only the Go services whose path filters changed. The
-# ordinary backend-go matrix may widen via ci_global/global for broad CI.
-for svc in "${GO_SERVICES[@]}"; do
-  if filter_val "svc_${svc}"; then
-    add_integration_unique "${svc}"
-    # The callback receiver contract is consumed by Game Integration; run
-    # both full integration suites when the receiver changes.
-    if [[ "${svc}" == "controlledgame" ]]; then
-      add_integration_unique gameintegration
+# Shared source, generated contracts and global wiring can affect any service;
+# keep full integration coverage until a narrower consumer inventory is proven.
+if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg || filter_val go_build_shared || filter_val auth; then
+  integration_services=("${GO_SERVICES[@]}")
+else
+  for svc in "${GO_SERVICES[@]}"; do
+    if filter_val "svc_${svc}"; then
+      add_integration_unique "${svc}"
+      # The callback receiver contract is consumed by Game Integration.
+      if [[ "${svc}" == "controlledgame" ]]; then
+        add_integration_unique gameintegration
+      fi
+      # Event consumers and dedicated invalidations: docs/CONTRACT_MATRIX.md.
+      case "${svc}" in
+        user) consumers=(analytics social notification federation realtime) ;;
+        social) consumers=(analytics notification chat federation) ;;
+        role) consumers=(analytics notification federation realtime voice) ;;
+        messaging) consumers=(analytics notification search moderation realtime) ;;
+        chat) consumers=(analytics notification realtime search) ;;
+        space) consumers=(analytics notification realtime search voice) ;;
+        voice) consumers=(analytics notification realtime) ;;
+        moderation) consumers=(analytics notification user) ;;
+        subscription) consumers=(analytics user space voice file notification) ;;
+        file) consumers=(analytics messaging) ;;
+        matchmaking) consumers=(analytics notification voice chat) ;;
+        story) consumers=(analytics notification matchmaking) ;;
+        federation) consumers=(analytics role moderation) ;;
+        bot) consumers=(analytics messaging) ;;
+        notification|search|gateway) consumers=(analytics) ;;
+        *) consumers=() ;;
+      esac
+      for consumer in "${consumers[@]}"; do add_integration_unique "${consumer}"; done
     fi
-  fi
-done
+  done
+fi
 
 if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg || filter_val go_build_shared; then
   services=("${GO_SERVICES[@]}")
@@ -113,10 +147,16 @@ fi
 # Docker source consumers are independent of S2S test edges. Include their
 # ordinary checks too, so every selected build has a backend-go matrix entry.
 docker_json="$(python3 "${ROOT}/scripts/ci/resolve-go-docker-matrix.py")"
+docker_services="$(printf '%s' "${docker_json}" | jq -r '.[]')"
 while IFS= read -r svc; do
   svc="${svc%$'\r'}"
   [[ -n "${svc}" ]] && add_unique "${svc}"
-done < <(echo "${docker_json}" | jq -r '.[]')
+done <<<"${docker_services}"
+
+# Preserve existing RPC-neighbour and source-consumer coverage for full tests.
+for svc in "${services[@]}"; do
+  add_integration_unique "${svc}"
+done
 
 if ((${#services[@]} == 0)); then
   go_json='[]'
@@ -131,11 +171,16 @@ if ((${#integration_services[@]} == 0)); then
 else
   integration_json="$(printf '%s\n' "${integration_services[@]}" | jq -R . | jq -s -c .)"
 fi
+integration_analytics=false
+for svc in "${integration_services[@]}"; do
+  [[ "${svc}" == analytics ]] && integration_analytics=true
+done
 
 {
   echo "go_services=${go_json}"
   echo "docker_go_services=${docker_json}"
   echo "integration_go_services=${integration_json}"
+  echo "integration_analytics=${integration_analytics}"
   echo "run_pkg=${run_pkg}"
   echo "run_go=${run_go}"
 } >>"${GITHUB_OUTPUT:-/dev/stdout}"

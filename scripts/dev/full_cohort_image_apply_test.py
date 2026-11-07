@@ -634,6 +634,46 @@ class FullCohortTest(unittest.TestCase):
         self.client.pods[0]['status']['containerStatuses'][0]['imageID'] = 'sha256:' + 'd' * 64
         with self.assertRaises(cohort.RecoveryRequired): phase.verify_after_resume()
 
+    def test_resume_lineage_and_resume_can_be_rechecked_sequentially(self):
+        phase=self.new(); phase.apply(); self.client.resume(self.cut_journal,self.ledger)
+        before=self.client.patches
+        first=phase.verify_after_resume()
+        self.assertFalse(phase.verifying)
+        lineage=phase.verify_activation_lineage()
+        self.assertFalse(phase.verifying)
+        self.assertEqual(len(lineage['images']),23)
+        self.assertEqual(phase.verify_after_resume(),first)
+        self.assertFalse(phase.verifying)
+        self.assertEqual(self.client.patches,before)
+        self.assertEqual(self.ledger.row['status'],'active')
+
+    def test_resume_error_clears_own_flag_but_preserves_uncertainty(self):
+        phase=self.new(); phase.apply(); self.client.resume(self.cut_journal,self.ledger)
+        self.client.pods[0]['status']['containerStatuses'][0]['imageID']='sha256:'+'d'*64
+        with self.assertRaises(cohort.RecoveryRequired): phase.verify_after_resume()
+        self.assertFalse(phase.verifying)
+        self.assertTrue(phase.poisoned)
+        self.assertEqual(self.ledger.row['status'],'uncertain')
+        with self.assertRaises(cohort.RecoveryRequired): phase.verify_activation_lineage()
+        self.assertEqual(self.ledger.row['status'],'uncertain')
+
+    def test_nested_resume_verification_refuses_without_clearing_outer_flag(self):
+        phase=self.new(); phase.apply(); self.client.resume(self.cut_journal,self.ledger)
+        original=self.client.call; seen=[]; entered=[False]
+        def nested(*args,**kwargs):
+            if not entered[0]:
+                entered[0]=True
+                try: phase.verify_after_resume()
+                except cohort.RecoveryRequired: seen.append(phase.verifying)
+                else: self.fail('nested verification was accepted')
+            return original(*args,**kwargs)
+        with mock.patch.object(self.client,'call',side_effect=nested):
+            with self.assertRaises(cohort.RecoveryRequired): phase.verify_after_resume()
+        self.assertEqual(seen,[True])
+        self.assertFalse(phase.verifying)
+        self.assertTrue(phase.poisoned)
+        self.assertEqual(self.ledger.row['status'],'uncertain')
+
     def test_pod_defaults_and_injected_service_account_are_narrowly_checked(self):
         phase = self.new()
         name = 'voice-web'

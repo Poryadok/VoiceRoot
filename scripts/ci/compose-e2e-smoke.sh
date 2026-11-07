@@ -34,6 +34,19 @@ else
   exit "${flutter_manifest_exit}"
 fi
 
+if [[ -n "${VOICE_AFFECTED_PATHS_JSON:-}" ]]; then
+  affected_flutter_list="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST}" affected_flutter)" || exit 1
+  if [[ -n "${affected_flutter_list}" ]]; then
+    while IFS= read -r suite; do
+      found=false
+      for existing in "${FLUTTER_TESTS[@]}"; do
+        if [[ "${existing}" == "${suite}" ]]; then found=true; break; fi
+      done
+      if [[ "${found}" == false ]]; then FLUTTER_TESTS+=("${suite}"); fi
+    done <<<"${affected_flutter_list}"
+  fi
+fi
+
 if ((${#GATEWAY_TESTS[@]} == 0)); then
   printf 'compose_e2e_pre_echo_stage=gateway_empty_list status=failed exit=1\n'
   echo "no smoke gateway tests in ${MANIFEST}" >&2
@@ -74,6 +87,7 @@ for pattern in \
 done
 
 cd "${ROOT}/src/frontend"
+flutter pub get
 ARGS=()
 for f in "${FLUTTER_TESTS[@]}"; do
   ARGS+=("${f}")
@@ -84,6 +98,7 @@ TRACE_FILE=''
 STATUS_FILE=''
 notification_container=''
 mm_accept_game_id=''
+flutter_events=''
 cleanup_mm_accept_fixture() {
   if [[ -n "${mm_accept_game_id}" ]]; then
     if ! python3 "${ROOT}/scripts/ci/compose_mm_accept_fixture.py" archive "${mm_accept_game_id}"; then
@@ -96,6 +111,10 @@ cleanup_mm_accept_fixture() {
 cleanup_fcm_diagnostic() {
   local original_status=$?
   trap - EXIT
+  if [[ -n "${flutter_events}" ]] && ! rm -f -- "${flutter_events}"; then
+    echo 'compose_flutter_events_cleanup=failed' >&2
+    if ((original_status == 0)); then original_status=1; fi
+  fi
   if ! cleanup_mm_accept_fixture && ((original_status == 0)); then
     original_status=1
   fi
@@ -192,14 +211,21 @@ fi
 # if the create call loses its result after PostgreSQL commits.
 mm_accept_game_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 python3 "${ROOT}/scripts/ci/compose_mm_accept_fixture.py" create "${mm_accept_game_id}"
+flutter_events="$(mktemp)"
 set +e
-flutter test --concurrency=1 "${ARGS[@]}" \
+flutter test --no-pub --reporter json --concurrency=1 "${ARGS[@]}" \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_COMPOSE_MM_ACCEPT_GAME_ID="${mm_accept_game_id}" \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
   --dart-define=VOICE_FCM_DIAGNOSTIC_FILE="${TRACE_FILE}" \
-  --dart-define=VOICE_FCM_DIAGNOSTIC_STATUS_FILE="${STATUS_FILE}"
-flutter_status=$?
+  --dart-define=VOICE_FCM_DIAGNOSTIC_STATUS_FILE="${STATUS_FILE}" | tee "${flutter_events}"
+flutter_status=${PIPESTATUS[0]}
+if ((flutter_status == 0)); then
+  event_args=()
+  for suite in "${ARGS[@]}"; do event_args+=(--suite "${PWD}/${suite}"); done
+  python3 "${ROOT}/scripts/ci/flutter_test_events.py" --events "${flutter_events}" "${event_args[@]}"
+  flutter_status=$?
+fi
 set -e
 
 if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then

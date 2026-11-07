@@ -28,14 +28,17 @@ public final class JdbcSdkRegistrationIntentBinder implements RegistrationIntent
           AND (type='regular' OR (type='guest' AND regular_email_verification_pending=TRUE))
         """, Map.of("account", newAccountId));
     if (accounts.isEmpty()) throw invalid();
+    requireLive(intentId);
     var keys = jdbc.queryForList("""
         SELECT o.operation_id,o.source_account_id FROM sdk_registration_intents r
         JOIN sdk_conversion_operations o ON o.operation_id=r.operation_id WHERE r.intent_id=:intent
         """, Map.of("intent", intentId));
+    requireLive(intentId);
     if (keys.isEmpty()) throw invalid();
     Map<String, Object> key = keys.getFirst();
     // Match every SDK operation: identity -> operation -> intent/device.
     jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:source_account_id FOR UPDATE", key, rs -> { });
+    requireLive(intentId);
     jdbc.query("SELECT operation_id FROM sdk_conversion_operations WHERE operation_id=:operation_id FOR UPDATE", key, rs -> { });
     var rows = jdbc.queryForList("""
         SELECT r.expires_at,r.consumed_at FROM sdk_registration_intents r
@@ -60,4 +63,9 @@ public final class JdbcSdkRegistrationIntentBinder implements RegistrationIntent
   }
 
   private static AuthException invalid() { return new AuthException("validation_failed"); }
+
+  private void requireLive(UUID intentId) {
+    try { SdkTerminalFences.requireLive(jdbc, "sdk_registration", intentId); }
+    catch (SdkOperationErasedException erased) { throw new AuthException("operation_erased"); }
+  }
 }

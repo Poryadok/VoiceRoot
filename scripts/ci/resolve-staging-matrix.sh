@@ -6,10 +6,26 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CATALOG="${ROOT}/scripts/ci/staging-image-catalog.json"
 
+# Native Windows jq writes CRLF to pipes. JSON escapes embedded carriage
+# returns, so removing transport CRs preserves the JSON and its scalar values.
+jq() {
+  command jq "$@" | tr -d '\r'
+}
+type -P jq >/dev/null || { echo 'resolve-staging-matrix: jq is required' >&2; exit 2; }
+
 filter_val() {
   local key="$1"
   if [[ -n "${FILTER_JSON:-}" ]]; then
-    [[ "$(echo "${FILTER_JSON}" | jq -r --arg k "${key}" '.[$k] // "false"')" == "true" ]]
+    local value
+    value="$(printf '%s\n' "${FILTER_JSON}" | jq -r --arg k "${key}" '
+      if type != "object" then error("filters must be an object") else . end |
+      if has($k) then .[$k] else false end |
+      if . == true or . == "true" then "true"
+      elif . == false or . == "false" then "false"
+      else error("invalid filter value") end')" || {
+      echo 'resolve-staging-matrix: invalid filter input' >&2; exit 2;
+    }
+    [[ "${value}" == "true" ]]
   else
     local env_key="FILTER_${key//-/_}"
     env_key="${env_key^^}"
@@ -137,13 +153,18 @@ adjust_promote_for_missing_manifests() {
   fi
 }
 
-mapfile -t ALL_NAMES < <(jq -r '.images[].name' "${CATALOG}")
-mapfile -t GO_NAMES < <(jq -r '.images[] | select(.language == "go") | .name' "${CATALOG}")
+all_names="$(jq -er '.images | if type == "array" and length > 0 then .[].name else error("invalid catalog") end' "${CATALOG}")"
+go_names="$(jq -er '.images[] | select(.language == "go") | .name' "${CATALOG}")"
+mapfile -t ALL_NAMES <<< "${all_names}"
+mapfile -t GO_NAMES <<< "${go_names}"
 
 # Parse go_services from resolve-go-matrix (JSON array string).
 go_services=()
 if [[ -n "${GO_SERVICES_JSON:-}" && "${GO_SERVICES_JSON}" != "[]" ]]; then
-  mapfile -t go_services < <(echo "${GO_SERVICES_JSON}" | jq -r '.[]')
+  go_names_input="$(printf '%s\n' "${GO_SERVICES_JSON}" | jq -r 'if type == "array" and all(.[]; type == "string" and test("^[a-z][a-z0-9]*$")) then .[] else error("invalid Go services") end')"
+  if [[ -n "${go_names_input}" ]]; then
+    mapfile -t go_services <<< "${go_names_input}"
+  fi
 fi
 
 # CI wiring widens verification to every Go module, but only direct service

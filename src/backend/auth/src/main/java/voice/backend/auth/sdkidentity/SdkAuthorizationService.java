@@ -122,6 +122,7 @@ public class SdkAuthorizationService {
           """, Map.of("source", source.accountId(), "key", idempotencyKey));
       if (!existing.isEmpty()) {
         Row row = new Row(existing.getFirst());
+        SdkTerminalFences.requireLive(jdbc, "sdk_authorization", row.id("request_id"));
         if (!requestHash.equals(row.text("request_hash"))) throw new SdkAuthorizationConflictException();
         if (policy.revision() != row.number("policy_revision")
             || !source.deviceId().equals(row.id("device_id"))
@@ -183,7 +184,7 @@ public class SdkAuthorizationService {
     try { target = UUID.fromString(claims.userId()); }
     catch (RuntimeException invalid) { throw denied(); }
     return transactions.execute(transaction -> {
-      Row row = locked(requestId);
+      Row row = locked(requestId, true);
       source(row, true);
       policy(row);
       if (expectedPolicyRevision != row.number("policy_revision")) throw denied();
@@ -275,7 +276,7 @@ public class SdkAuthorizationService {
     try { account = UUID.fromString(claims.userId()); }
     catch (RuntimeException invalid) { throw denied(); }
     return transactions.execute(transaction -> {
-      Row row = locked(requestId);
+      Row row = locked(requestId, true);
       source(row, true);
       policy(row);
       target(account, claims.sessionEpoch(), claims.jti());
@@ -329,15 +330,18 @@ public class SdkAuthorizationService {
     token(code);
     if (challengeId == null || operationId == null || verifier == null || verifier.length() > 128
         || bindingChallenges == null || principalIssuer == null || subjectDigest == null) throw denied();
+    SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
     SdkBindingChallengeAuthority.Challenge challenge = bindingChallenges.resolveBindingChallenge(challengeId);
     return transactions.execute(transaction -> {
       var requests = jdbc.queryForList("""
           SELECT request_id FROM sdk_authorizations WHERE game_binding_challenge_id=:challenge
             AND game_binding_operation_id=:operation
           """, Map.of("challenge", challengeId, "operation", operationId));
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       if (requests.isEmpty()) throw denied();
       UUID requestId = (UUID) requests.getFirst().get("request_id");
-      Row row = locked(requestId);
+      Row row = locked(requestId, true);
+      SdkTerminalFences.requireLive(jdbc, "sdk_binding", operationId);
       String deviceKey = source(row, true);
       if (!operationId.equals(challenge.operationId()) || !challengeId.equals(row.id("game_binding_challenge_id"))
           || !challenge.nonce().equals(row.text("game_binding_challenge_nonce"))
@@ -452,12 +456,27 @@ public class SdkAuthorizationService {
   }
 
   private Row locked(UUID requestId) {
+    return locked(requestId, false);
+  }
+
+  private void requireLive(UUID requestId, boolean disclose) {
+    try { SdkTerminalFences.requireLive(jdbc, "sdk_authorization", requestId); }
+    catch (SdkOperationErasedException erased) {
+      if (disclose) throw erased;
+      throw denied();
+    }
+  }
+
+  private Row locked(UUID requestId, boolean disclose) {
     if (requestId == null) throw denied();
+    requireLive(requestId, disclose);
     var source = jdbc.queryForList("SELECT source_account_id FROM sdk_authorizations WHERE request_id=:id", Map.of("id", requestId));
+    requireLive(requestId, disclose);
     if (source.isEmpty()) throw denied();
     // Every operation locks SDK identity first, matching enrollment and revoke.
     jdbc.query("SELECT account_id FROM sdk_identities WHERE account_id=:id FOR UPDATE",
         Map.of("id", source.getFirst().get("source_account_id")), rs -> { });
+    requireLive(requestId, disclose);
     var rows = jdbc.queryForList("SELECT * FROM sdk_authorizations WHERE request_id=:id FOR UPDATE", Map.of("id", requestId));
     if (rows.isEmpty()) throw denied();
     return new Row(rows.getFirst());

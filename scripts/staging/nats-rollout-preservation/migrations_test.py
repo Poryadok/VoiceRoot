@@ -54,14 +54,30 @@ class MigrationPlanTest(unittest.TestCase):
                 if mutation=='secret':rows[0]['secret_key']='NATS_OPERATOR_CREDS'
                 with self.assertRaises(Blocked):migrations.validate_plan(rows,'app-only')
 
+    def test_missing_admission_blocks_before_migration_create(self):
+        kube=Mock();stage=Mock();stage.operation='123456abcdef'
+        with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
+            migrations.execute(kube,stage,plan(),'full',{},lambda e:None)
+        kube.run.assert_not_called()
+
+    def test_unissued_admission_blocks_before_migration_create(self):
+        kube=Mock();stage=Mock();stage.operation='123456abcdef'
+        with self.assertRaisesRegex(Blocked, 'cohort_final_admission_not_issued'):
+            migrations.execute(kube,stage,plan(),'full',{},lambda e:None,
+                               resource_session=object(),qualified_admission=object())
+        kube.run.assert_not_called()
+
+    # Synthetic validator isolates downstream guards; it is not admission proof.
+    @patch('staging_cohort_preservation.validate_migration_admission', new=lambda *args: None)
     def test_metadata_secret_veto_precedes_any_job_create(self):
         kube=Mock();kube.secret_meta.return_value={'uid':'old','resourceVersion':'100'}
         kube.run.return_value=True
         stage=Mock();stage.operation='123456abcdef'
-        with self.assertRaises(Blocked):
-            migrations.execute(kube,stage,plan(),'full',{'uid':'old','resourceVersion':'99'},lambda e:None)
+        with self.assertRaisesRegex(Blocked, 'rollout_database_secret_changed'):
+            migrations.execute(kube,stage,plan(),'full',{'uid':'old','resourceVersion':'99'},lambda e:None,resource_session=object(),qualified_admission=object())
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
 
+    @patch('staging_cohort_preservation.validate_migration_admission', new=lambda *args: None)
     def test_bot_forward_collision_recheck_precedes_any_migration_create(self):
         import bot_migration
         sql='CREATE UNIQUE INDEX example ON bot_event_log(bot_id,interaction_token);'
@@ -74,17 +90,19 @@ class MigrationPlanTest(unittest.TestCase):
         stage=Mock();stage.operation='123456abcdef'
         with patch('bot_migration.capture',side_effect=bot_migration.PrerequisiteError('collision')):
             with self.assertRaisesRegex(Blocked,'bot_forward_constraint_prerequisite_failed'):
-                migrations.execute(kube,stage,[row],'full',{},lambda e:None)
+                migrations.execute(kube,stage,[row],'full',{},lambda e:None,resource_session=object(),qualified_admission=object())
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
         stage.verify_final_storage.assert_not_called()
 
+    @patch('staging_cohort_preservation.validate_migration_admission', new=lambda *args: None)
     def test_owned_fence_loss_precedes_any_job_create(self):
         kube=Mock();meta={'uid':'old','resourceVersion':'100'};kube.secret_meta.return_value=meta
         kube.run.return_value=True
         stage=Mock();stage.operation='123456abcdef';stage.verify_final_storage.side_effect=Blocked('ownership_changed')
-        with self.assertRaises(Blocked):migrations.execute(kube,stage,plan(),'full',meta,lambda e:None)
+        with self.assertRaisesRegex(Blocked, 'ownership_changed'):migrations.execute(kube,stage,plan(),'full',meta,lambda e:None,resource_session=object(),qualified_admission=object())
         self.assertFalse(any(c.args[0][0]=='create' for c in kube.run.call_args_list))
 
+    @patch('staging_cohort_preservation.validate_migration_admission', new=lambda *args: None)
     def test_completed_job_uid_must_match_created_job(self):
         kube=Mock();meta={'uid':'old','resourceVersion':'100'};kube.secret_meta.return_value=meta
         cm,job=migrations.documents(plan(),'123456abcdef')
@@ -93,7 +111,7 @@ class MigrationPlanTest(unittest.TestCase):
                               [job['metadata']['name'],job['metadata']['uid']],
                               {'metadata':{'uid':'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'},'status':{'succeeded':1}}]
         stage=Mock();stage.operation='123456abcdef'
-        with self.assertRaises(Blocked):migrations.execute(kube,stage,plan(),'full',meta,lambda e:None)
+        with self.assertRaisesRegex(Blocked, 'rollout_migration_not_complete'):migrations.execute(kube,stage,plan(),'full',meta,lambda e:None,resource_session=object(),qualified_admission=object())
         self.assertEqual(sum(c.args[0][0]=='create' for c in kube.run.call_args_list),2)
 
     def test_legacy_copy_url_encodes_existing_authority_without_mutating_source(self):

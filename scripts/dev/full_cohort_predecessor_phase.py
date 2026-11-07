@@ -94,8 +94,8 @@ def _read_history(check):
     try:
         with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(
                 check.endpoint + '/api/projects/voice/resources/DEV', timeout=10) as response:
-            raw = response.read((2 << 20) + 1)
-        if len(raw) > 2 << 20: raise ValueError()
+            raw = response.read((8 << 20) + 1)
+        if len(raw) > 8 << 20: raise ValueError()
         return json.loads(raw)
     except (OSError, ValueError):
         raise PredecessorError('C1 deployment history unavailable') from None
@@ -269,6 +269,7 @@ def capture(fence, client, expected_lock, namespace_uid, journal, previous, revi
     descriptor in the very same CAS replacing `previous` at `revision`.
     """
     import full_cohort_config_custody as config_custody
+    import space_native_tool_identity_custody as tool_custody
     import media_operation_journal
     if (type(journal) is not media_operation_journal.Journal or client.journal is not journal or
             journal.poisoned or journal.dirfd is None or journal.lockfd is None or
@@ -282,14 +283,17 @@ def capture(fence, client, expected_lock, namespace_uid, journal, previous, revi
     publisher = validate_publisher(previous, namespace_uid)
     event = deployment_event(_read_history(fence.check), previous)
     config = config_custody.read_completed(previous, namespace_uid)
+    tool_snapshot = tool_custody.read_completed(previous, namespace_uid)
     check_pre_begin(fence, client, expected_lock, namespace_uid, previous, revision)
-    snapshot = {'schema':'voice-full-cohort-predecessor-snapshot-v1',
+    snapshot = {'schema':'voice-full-cohort-predecessor-snapshot-v2',
                 'operation_id':fence.context['operation_id'], 'namespace_uid':namespace_uid,
                 'ledger_uid':revision[0], 'ledger_resourceVersion':revision[1],
                 'old_row_sha256':digest(previous), 'previous_operation_id':previous['operation_id'],
                 'previous_commit':previous['commit'], 'deployment':event,
                 'config_completion':{'snapshot':config, 'marker':copy.deepcopy(previous[config_custody.MARKER]),
                                      'ledger_effects':copy.deepcopy(previous['backend_config_effects'])},
+                'tool_completion':{'snapshot':tool_snapshot, 'marker':copy.deepcopy(previous[tool_custody.MARKER]),
+                                   'ledger_tool':copy.deepcopy(previous['space_native_tool'])},
                 'p3_receipt':p3, 'p3_handoff':copy.deepcopy(previous['realtime_p3_handoff']),
                 'p3_objects':copy.deepcopy(previous['realtime_p3_objects']), 'publisher':publisher}
     descriptor = {'schema':'voice-full-cohort-predecessor-v1',
@@ -304,6 +308,8 @@ def capture(fence, client, expected_lock, namespace_uid, journal, previous, revi
         raise PredecessorError('C1 deployment history changed')
     if config_custody.read_completed(previous, namespace_uid) != config:
         raise PredecessorError('C1 config custody changed')
+    if tool_custody.read_completed(previous, namespace_uid) != tool_snapshot:
+        raise PredecessorError('C1 tool custody changed')
     check_pre_begin(fence, client, expected_lock, namespace_uid, previous, revision)
     return descriptor
 
@@ -313,6 +319,7 @@ def load(fence, client, expected_lock, namespace_uid, journal):
     import media_operation_guard
     import media_operation_journal
     import full_cohort_config_custody as config_custody
+    import space_native_tool_identity_custody as tool_custody
     import frontend_runtime_executor
     import resource_fencing
     try:
@@ -336,7 +343,7 @@ def load(fence, client, expected_lock, namespace_uid, journal):
                 descriptor.get('ledger_uid') != snapshot['ledger_uid'] or
                 descriptor.get('ledger_resourceVersion') != snapshot['ledger_resourceVersion'] or
                 descriptor.get('previous_operation_id') != snapshot['previous_operation_id'] or
-                snapshot['schema'] != 'voice-full-cohort-predecessor-snapshot-v1' or
+                snapshot['schema'] != 'voice-full-cohort-predecessor-snapshot-v2' or
                 snapshot['operation_id'] != fence.context['operation_id'] or snapshot['namespace_uid'] != namespace_uid):
             raise ValueError()
         old = {'operation_id':snapshot['previous_operation_id'], 'commit':snapshot['previous_commit'],
@@ -350,6 +357,12 @@ def load(fence, client, expected_lock, namespace_uid, journal):
         if (previous_config.get('operation_id') != snapshot['previous_operation_id'] or
                 previous_config.get('commit') != snapshot['previous_commit']): raise ValueError()
         config_custody.validate_snapshot(config['snapshot'],config['marker'],previous_config,namespace_uid)
+        completion=snapshot['tool_completion']
+        if not isinstance(completion,dict) or set(completion)!={'snapshot','marker','ledger_tool'}: raise ValueError()
+        previous_tool=dict(completion['snapshot']['resource_context'],space_native_tool=completion['ledger_tool'])
+        if (previous_tool.get('operation_id')!=snapshot['previous_operation_id'] or
+            previous_tool.get('commit')!=snapshot['previous_commit']): raise ValueError()
+        tool_custody.validate_snapshot(completion['snapshot'],completion['marker'],previous_tool,namespace_uid)
         media_operation_guard.verify(fence, client, expected_lock, namespace_uid)
         if fence.ledger.read() != (row, revision): raise ValueError()
         return copy.deepcopy(snapshot)

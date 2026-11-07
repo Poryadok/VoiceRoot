@@ -361,12 +361,14 @@ class MessageListData {
     this.nextCursor,
     this.hasMore = false,
     this.dmPeerState,
+    this.historyReset = false,
   });
 
   final List<VoiceMessage> messages;
   final String? nextCursor;
   final bool hasMore;
   final messaging_pb.DmPeerState? dmPeerState;
+  final bool historyReset;
 
   factory MessageListData.fromJson(Map<String, dynamic> json) {
     final list = json['message_list'] as Map<String, dynamic>? ?? json;
@@ -378,6 +380,8 @@ class MessageListData {
           .toList(growable: false),
       nextCursor: list['next_cursor'] as String?,
       hasMore: list['has_more'] as bool? ?? false,
+      historyReset:
+          json['history_reset'] == true || json['historyReset'] == true,
     );
   }
 }
@@ -524,6 +528,7 @@ class VoiceMessagesClient {
         nextCursor: list.nextCursor,
         hasMore: list.hasMore,
         dmPeerState: data.hasDmPeerState() ? data.dmPeerState : null,
+        historyReset: data.historyReset,
       );
     });
   }

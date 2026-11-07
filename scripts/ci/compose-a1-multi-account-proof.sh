@@ -18,6 +18,7 @@ A1_EXPECTED_TESTS=(
 )
 umask 077
 unset VOICE_A1_SESSION_EPOCH_ISOLATED
+source "${ROOT}/scripts/ci/manifest-lines.sh"
 
 manifest_entries="$(bash "${ROOT}/scripts/ci/e2e-manifest.sh" "${MANIFEST_PATH}" a1_multi_account_gateway)" || {
   echo "failed to read a1_multi_account_gateway from ${MANIFEST_PATH}" >&2
@@ -27,7 +28,11 @@ if [[ -z "${manifest_entries}" ]]; then
   echo "a1_multi_account_gateway is empty in ${MANIFEST_PATH}" >&2
   exit 2
 fi
-mapfile -t manifest_tests <<<"${manifest_entries}"
+if ! voice_normalize_manifest_lines <<<"${manifest_entries}"; then
+  echo "a1_multi_account_gateway contains an unexpected carriage return" >&2
+  exit 2
+fi
+manifest_tests=("${voice_manifest_lines[@]}")
 if [[ "${#manifest_tests[@]}" -ne "${#A1_EXPECTED_TESTS[@]}" ]]; then
   echo "a1_multi_account_gateway must contain exactly seven tests" >&2
   exit 2

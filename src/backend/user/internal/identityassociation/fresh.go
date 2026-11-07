@@ -37,6 +37,10 @@ func NewMigratedStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, pin
 }
 
 func newPristineStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, historyGeneration, userSourceGeneration uuid.UUID) (*Store, error) {
+	return newPristineStoreForPhysicalSource(ctx, pool, keys, historyGeneration, userSourceGeneration, nil)
+}
+
+func newPristineStoreForPhysicalSource(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, historyGeneration, userSourceGeneration uuid.UUID, physical *PhysicalSourceIdentity) (*Store, error) {
 	if historyGeneration == uuid.Nil || userSourceGeneration == uuid.Nil || historyGeneration == userSourceGeneration || keys == nil || keys.snapshot.Revision != 1 {
 		return nil, ErrIncomplete
 	}
@@ -49,10 +53,15 @@ func newPristineStore(ctx context.Context, pool *pgxpool.Pool, keys *Keyset, his
 		return nil, ErrIncomplete
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err = checkPhysicalSource(ctx, tx.SQL(), physical); err != nil {
+		return nil, err
+	}
 	var pristine bool
 	err = tx.SQL().QueryRow(ctx, `SELECT user_source_generation=$1 AND history_generation=$2
 		AND history_head=0 AND retained_floor=0 AND keyset_revision=0 AND active_key_version IS NULL
+		AND head_digest=decode('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855','hex')
 		AND NOT guards_active AND baseline_cut=0 AND unresolved_erase_issued=0 AND unresolved_erase_covered=0
+		AND NOT EXISTS(SELECT 1 FROM profiles WHERE identity_association_id IS NOT NULL OR identity_baseline_cut<>0)
 		AND NOT EXISTS(SELECT 1 FROM identity_key_versions)
 		AND NOT EXISTS(SELECT 1 FROM identity_associations)
 		AND NOT EXISTS(SELECT 1 FROM identity_profile_reservations)
