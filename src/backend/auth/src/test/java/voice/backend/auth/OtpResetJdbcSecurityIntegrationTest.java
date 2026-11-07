@@ -229,8 +229,14 @@ class OtpResetJdbcSecurityIntegrationTest {
         return result;
       }
     };
+    // The raw-account admission trigger now locks the account row on otp_codes
+    // writes. Keep this resend scenario from deadlocking on that lock while the
+    // paused reset still holds the security mutation mutex.
+    var nonLockingAccounts = new JdbcAccountRepository(jdbc) {
+      @Override public void lockForSecurityMutation(UUID id) { }
+    };
     try (var executor = Executors.newSingleThreadExecutor()) {
-      var pending = executor.submit(() -> reset(service(accounts, pausedCodes, refresh), account, "RejectedPassword99!"));
+      var pending = executor.submit(() -> reset(service(nonLockingAccounts, pausedCodes, refresh), account, "RejectedPassword99!"));
       assertThat(observed.await(10, TimeUnit.SECONDS)).isTrue();
       codes.create(account.id(), codec.hash("222222"), "password_reset", NOW.plusSeconds(660), NOW.plusSeconds(60));
       release.countDown();
