@@ -64,6 +64,17 @@ func main() {
 		if err == nil {
 			err = sourcecustody.RunExistingMigration(ctx, creation, recovery)
 		}
+	} else if len(os.Args) == 2 && os.Args[1] == "adopt-existing-pristine" {
+		var cfg sourcecustody.AdoptionConfig
+		cfg, err = sourcecustody.LoadAdoptionConfig(os.LookupEnv)
+		if err == nil {
+			err = sourcecustody.RunAdoption(ctx, cfg)
+		}
+		if err == nil {
+			fmt.Println("CLOSED")
+		} else {
+			fmt.Fprintln(os.Stderr, "HOLD")
+		}
 	} else if len(os.Args) == 2 && os.Args[1] == "check-existing-identity" {
 		var cfg sourcecustody.CheckedSourceConfig
 		cfg, err = sourcecustody.LoadCheckedSourceConfig(os.LookupEnv)

@@ -204,6 +204,42 @@ independent control/source system IDs, database name/OID, source ID and epoch,
 only a `CLOSED` control record. It does not create lineage, prove currentness,
 or authorize capture: a separately reviewed signed opening is still required.
 
+An existing exact clean version-22 source with a completely pristine, inactive
+identity domain uses the separate `adopt-existing-pristine` operator command
+after `quarantine-existing`. This is a new fenced adoption, not evidence of a
+historical database creation or migration. Existing profile rows, UUIDs and
+account references are retained unchanged; no historical `BIRTH` or association
+is synthesized. All identity history, reservations, aliases, parent fences,
+key versions and baseline markers must be empty, with original zero counters
+and the empty-history digest. The native catalog, constraints, indexes, physical
+database and independently supplied generations are checked before provisioning
+the complete revision-1 keyset. Dirty, drifted, partially initialized or already
+guarded sources are refused.
+
+The command uses the independent cluster/database/epoch/lineage/keyset pins and
+verified TLS/key-manifest settings required by `check-existing-identity`, plus
+canonical nonzero `CUSTODY_ADOPTION_RECEIPT_ID` and lowercase nonzero 32-byte
+hex `CUSTODY_ADOPTION_EVIDENCE_DIGEST`. The latter binds separately retained,
+reviewed backup/restore and exclusive administrator, endpoint, writer, restore
+and promotion custody evidence. Neither a digest, a receipt, reading values
+from the source nor TLS proves that those operational facts happened.
+
+Before any maintenance connection, the independent control database commits
+an `ADOPTING` receipt binding those pins and evidence. Only after provisioning,
+closing connections and verifying the source has no sessions/prepared
+transactions does it atomically record `ADOPTED_CLOSED`, control state `CLOSED`
+and phase `EXISTING_INITIALIZED_CLOSED`. Successful CLI output is `CLOSED`;
+every failure outputs `HOLD` and refuses automatic retry, including an unknown
+commit acknowledgement. An interrupted attempt may use `recover-initialization`
+to fence it; recovery never authorizes retry or reopening. Retain both databases
+and receipts for independent recovery review.
+
+Adoption leaves guards inactive and admission closed. Establishing the retained
+baseline still requires the separately reviewed, fresh signed `GuardCutover`
+opening with full participating-writer, source/restore and Auth evidence, live
+supervision and physical fencing. Later observations are `RETAINED_NOW`; adoption
+does not reconstruct unavailable historical association or Auth history.
+
 ## Notification primary lookup (BE-118 prerequisite)
 
 The separate `notification-primary` capability exposes only the existing
