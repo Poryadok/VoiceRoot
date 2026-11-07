@@ -91,6 +91,16 @@ MULTI_OWNER_INVENTORY_ENTRIES = {
         ('story/v1/reference_inventory_grpc.pb.go', '06656fe9cd9478cbacde07b63eacb6b32bef5035'))}
 MULTI_OWNER_INVENTORY_VOICE_PATHS = frozenset(MULTI_OWNER_INVENTORY_ENTRIES)
 
+# Exact PR #1048 generated User custody files, for detached v2 fixture
+# reconstruction only. This does not grant current or producer authority.
+USER_CUSTODY_VOICE_SOURCE = 'e97c16b56d19c94e03f5a4735df23dd5b0c7bd25'
+USER_CUSTODY_VOICE_ENTRIES = {
+    'src/backend/voice/pb/voice/user/v1/user_source_custody.pb.go':
+        {'mode': '100644', 'type': 'blob', 'oid': 'f45d295e4c17f7141337b442e9249905fd14efce'},
+    'src/backend/voice/pb/voice/user/v1/user_source_custody_grpc.pb.go':
+        {'mode': '100644', 'type': 'blob', 'oid': 'c44ab6964525e08f06aca22fa0612594adb8940f'},
+}
+
 
 def git(*args, data=None, env=None):
     return subprocess.check_output(['git', '-C', str(ROOT), *args], input=data, env=env).decode().strip()
@@ -202,10 +212,21 @@ def reviewed_catalog_voice_additions(source, record):
         reviewed_tree=legacy.tree(str(ROOT),reviewed)
         source_tree=legacy.tree(str(ROOT),source)
         reviewed_paths={name for name in reviewed_tree if name.startswith(prefix)}
-        legacy.require(not expected-reviewed_paths and added==reviewed_paths-expected,
+        custody_ancestor = subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+             USER_CUSTODY_VOICE_SOURCE, source], capture_output=True).returncode == 0
+        custody_paths = set(USER_CUSTODY_VOICE_ENTRIES) if custody_ancestor else set()
+        if custody_ancestor:
+            custody_tree = legacy.tree(str(ROOT), USER_CUSTODY_VOICE_SOURCE)
+            custody_voice_paths = {name for name in custody_tree if name.startswith(prefix)}
+            legacy.require(custody_voice_paths == reviewed_paths | custody_paths
+                and all(custody_tree.get(name) == entry and source_tree.get(name) == entry
+                        for name, entry in USER_CUSTODY_VOICE_ENTRIES.items()),
+                'v2_fixture_unreviewed_voice_source')
+        legacy.require(not expected-reviewed_paths and added==(reviewed_paths-expected) | custody_paths,
             'v2_fixture_unreviewed_voice_source')
         legacy.require(all(reviewed_tree[name]['mode']=='100644' and reviewed_tree[name]['type']=='blob'
-            and source_tree[name]==reviewed_tree[name] for name in added),'v2_fixture_unreviewed_voice_source')
+            and source_tree[name]==reviewed_tree[name] for name in added-custody_paths),'v2_fixture_unreviewed_voice_source')
         return added
     if not added:
         catalog_ancestor = subprocess.run(
@@ -508,6 +529,57 @@ class ReviewedCurrentDocumentSourcesTest(unittest.TestCase):
                     self.assertFalse(check(source))
 
 
+class ReviewedUserCustodyVoiceSourceTest(unittest.TestCase):
+    def test_exact_generated_custody_additions_and_descendant(self):
+        record = successor.load_record(ROOT)
+        source = 'e97c16b56d19c94e03f5a4735df23dd5b0c7bd25'
+        prefix = 'src/backend/voice/'
+        before = {p for p in legacy.tree(str(ROOT), record['source']) if p.startswith(prefix)}
+        baseline = {p for p in legacy.tree(str(ROOT), 'a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259') if p.startswith(prefix)}
+        custody = {
+            'src/backend/voice/pb/voice/user/v1/user_source_custody.pb.go',
+            'src/backend/voice/pb/voice/user/v1/user_source_custody_grpc.pb.go',
+        }
+        self.assertEqual(reviewed_catalog_voice_additions(
+            'a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259', record), baseline - before)
+        for current in (source, git('rev-parse', 'HEAD')):
+            with self.subTest(source=current):
+                self.assertEqual(reviewed_catalog_voice_additions(current, record),
+                                 (baseline - before) | custody)
+
+    def test_custody_source_rejects_mutation_mode_removal_extra_and_disconnected_history(self):
+        record = successor.load_record(ROOT)
+        current = 'e97c16b56d19c94e03f5a4735df23dd5b0c7bd25'
+        custody = (
+            'src/backend/voice/pb/voice/user/v1/user_source_custody.pb.go',
+            'src/backend/voice/pb/voice/user/v1/user_source_custody_grpc.pb.go',
+        )
+        for name in custody:
+            for variant in ('content', 'mode', 'symlink', 'other_blob', 'missing', 'ancestry', 'extra'):
+                with tempfile.TemporaryDirectory() as directory:
+                    env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                    git('read-tree', current, env=env)
+                    entry = legacy.entry(ROOT, current, name)
+                    if variant == 'missing':
+                        git('update-index', '--force-remove', '--', name, env=env)
+                    elif variant == 'extra':
+                        extra = 'src/backend/voice/pb/voice/user/v1/unreviewed_extra.pb.go'
+                        git('update-index', '--add', '--cacheinfo', '100644,' + entry['oid'] + ',' + extra, env=env)
+                    elif variant != 'ancestry':
+                        mode = ('100755' if variant == 'mode' else
+                                '120000' if variant == 'symlink' else entry['mode'])
+                        oid = (entry['oid'] if variant in ('mode', 'symlink') else
+                               legacy.entry(ROOT, current, custody[1] if name == custody[0] else custody[0])['oid']
+                               if variant == 'other_blob' else git(
+                                   'hash-object', '-w', '--stdin', data=b'unreviewed custody source\n'))
+                        git('update-index', '--cacheinfo', mode + ',' + oid + ',' + name, env=env)
+                    changed = RealGitSuccessorTest.commit(git('write-tree', env=env),
+                                                          [BASE if variant == 'ancestry' else current])
+                with self.subTest(path=name, variant=variant), self.assertRaisesRegex(
+                        legacy.Rejected, '^v2_fixture_unreviewed_voice_source$'):
+                    reviewed_catalog_voice_additions(changed, record)
+
+
 class ReviewedMultiOwnerInventorySourceTest(unittest.TestCase):
     def test_complete_reviewed_inventory_source_and_descendant(self):
         record = successor.load_record(ROOT)
@@ -517,8 +589,12 @@ class ReviewedMultiOwnerInventorySourceTest(unittest.TestCase):
             'src/backend/voice/pb/voice/messaging/v1/reference_inventory_grpc.pb.go'}
         for current in (source, git('rev-parse', 'HEAD')):
             with self.subTest(source=current):
+                custody_ancestor = subprocess.run(
+                    ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                     USER_CUSTODY_VOICE_SOURCE, current], capture_output=True).returncode == 0
                 self.assertEqual(reviewed_catalog_voice_additions(current, record),
-                                 CATALOG_VOICE_PATHS | paths)
+                                 CATALOG_VOICE_PATHS | paths |
+                                 (set(USER_CUSTODY_VOICE_ENTRIES) if custody_ancestor else set()))
 
     def test_mixed_old_and_new_inventory_closure_rejects(self):
         record = successor.load_record(ROOT)
@@ -763,6 +839,10 @@ class RealGitSuccessorTest(unittest.TestCase):
         verified=reviewed_v5_source(current)
         reviewed_additions=({name for name in legacy.tree(str(ROOT),verified[0]) if name.startswith(prefix)}-expected
                             if verified is not None else CATALOG_VOICE_PATHS | MULTI_OWNER_INVENTORY_VOICE_PATHS)
+        if verified is not None and subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 USER_CUSTODY_VOICE_SOURCE, current], capture_output=True).returncode == 0:
+            reviewed_additions |= set(USER_CUSTODY_VOICE_ENTRIES)
         self.assertEqual(reviewed_catalog_voice_additions(current,self.record),reviewed_additions)
         unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
         with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):

@@ -482,6 +482,18 @@ f13_standalone_suites() {
   if [[ -f "${ROOT}/scripts/ci/f13_release_source_test.py" ]]; then
     python3 "${ROOT}/scripts/ci/f13_release_source_test.py"
   fi
+  if [[ -f "${ROOT}/scripts/ci/f13_current_source_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_current_source_test.py"
+  fi
+  if [[ -f "${ROOT}/scripts/ci/f13_source_dag_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_source_dag_test.py"
+  fi
+  if [[ -f "${ROOT}/scripts/ci/f13_current_source_integration_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_current_source_integration_test.py"
+  fi
+  if [[ -f "${ROOT}/scripts/ci/f13_base_bridge_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_base_bridge_test.py"
+  fi
   if [[ -f "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py" ]]; then
     python3 "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py"
   fi

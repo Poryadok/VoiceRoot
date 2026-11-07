@@ -410,12 +410,12 @@ def boundary_132_capability(repo, merge, first, source, collector_base, collecto
     unit=source_132_unit(repo)
     require([merge,first,source]==[unit['merge'],*unit['parents']],'exact132_literal_tuple')
     production=production_applicability(repo)
-    production_base=production['collection_base'] if production.get('type')=='F13-PRODUCTION-SOURCE-v11' else production['base']
+    production_base=production['collection_base'] if production.get('type') in ('F13-PRODUCTION-SOURCE-v11','F13-PRODUCTION-SOURCE-v12') else production['base']
     if nested_scope is None:
         require([collector_base,collector_target]==[production_base,production['source']],
                 'exact132_actual_production_outer_scope')
     else:
-        require(production.get('type')=='F13-PRODUCTION-SOURCE-v11'
+        require(production.get('type') in ('F13-PRODUCTION-SOURCE-v11','F13-PRODUCTION-SOURCE-v12')
             and [collector_base,collector_target]==[HISTORY_69_BASE,HISTORY_69_SOURCE]
             and nested_scope['type']=='F54_EXACT69_LIVE_132_SCOPE_v1'
             and nested_scope['child_scope']==dict(base=collector_base,target=collector_target,
@@ -597,7 +597,7 @@ def current_author_J_context_applicability(repo,native,historical,current,new):
 
 def current_author_J_native_applicability(repo, native, historical, current):
     """Preserve old reviewed facts; independently derive current source authority."""
-    if current.get('version') == 'NATIVE-P3-SOURCE-v5':
+    if current.get('version') in ('NATIVE-P3-SOURCE-v5','NATIVE-P3-SOURCE-v6'):
         verifier,new=native.verified_record(repo,current)
         documentation,previous=verifier.predecessor_record(repo,current)
         require(documentation is native.documentation,'current_J_release_predecessor_identity')
@@ -5154,7 +5154,11 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    if binding['type']=='F13-PRODUCTION-SOURCE-v11':
+    if binding['type']=='F13-PRODUCTION-SOURCE-v12':
+        require(current['version']=='NATIVE-P3-SOURCE-v6' and
+            binding['record']==current['record'] and binding['record_sha256']==current['record_sha256'] and
+            binding['reviewed_source']==current['snapshot'], 'production_F_exact_current_native_dependency')
+    elif binding['type']=='F13-PRODUCTION-SOURCE-v11':
         require(current['version']=='NATIVE-P3-SOURCE-v5' and
             verifier.production_record(repo)['native_record']==dict(version=current['version'],
                 source=current['snapshot'],path=verifier.RECORD_PATH,sha256=current['record_sha256']),
@@ -5843,8 +5847,9 @@ def master_context(repo, capability, binding_raw, context):
     entries={name:entry_binding(repo,binding['source'],name) for name in source_delta.decode().splitlines()}
     require(all(entry_binding(repo,binding['target'],name)==value for name,value in entries.items()),'actual_master_source_result_entry_parity')
     history_base=None
-    if production_roles is not None and current['type']=='F13-PRODUCTION-SOURCE-v11':
-        require(binding['version']=='NATIVE-P3-SOURCE-v5','production_history_exact_native_version')
+    if production_roles is not None and current['type'] in ('F13-PRODUCTION-SOURCE-v11','F13-PRODUCTION-SOURCE-v12'):
+        require(binding['version']==('NATIVE-P3-SOURCE-v6' if current['type']=='F13-PRODUCTION-SOURCE-v12'
+                else 'NATIVE-P3-SOURCE-v5'),'production_history_exact_native_version')
         verifier,_=native.verified_record(repo,binding)
         history_base=verifier.collection_base(repo,binding)
         require(history_base==current['collection_base'] and history_base==binding['collection_base'],
