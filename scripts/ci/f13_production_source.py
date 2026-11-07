@@ -224,6 +224,12 @@ def fixture_applicable(repo,target='HEAD'):
 def qualify(repo):
     require(Path(repo).resolve()==ROOT.resolve(),'production_actual_root')
     try:
+        import f13_current_source as current
+    except ModuleNotFoundError as error:
+        if error.name != 'f13_current_source': raise
+        current = None
+    if current is not None and current.applicable(repo): return current.production_qualify(repo)
+    try:
         import f13_release_source as release
     except ModuleNotFoundError as error:
         if error.name != 'f13_release_source':raise
@@ -1140,7 +1146,7 @@ def materialize(repo,destination):
             data=archive.read('objects/'+item['sha256'])
             require(len(data)==item['bytes'] and sha(data)==item['sha256'],'production_materialized_historical_hash')
             path=folder/name.lstrip('/');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
-    if binding['type'] in ('F13-PRODUCTION-SOURCE-v3',TRANSPORT_VERSION,TEST_VERSION,RENDER_VERSION,SOCIAL_VERSION,INTEGRATION_VERSION,FIXTURE_VERSION,BOOTSTRAP_VERSION,'F13-PRODUCTION-SOURCE-v11'):
+    if binding['type'] in ('F13-PRODUCTION-SOURCE-v3',TRANSPORT_VERSION,TEST_VERSION,RENDER_VERSION,SOCIAL_VERSION,INTEGRATION_VERSION,FIXTURE_VERSION,BOOTSTRAP_VERSION,'F13-PRODUCTION-SOURCE-v11','F13-PRODUCTION-SOURCE-v12'):
         current,_=load_successor(repo)
         supplemental=validate_manual_supplement(repo,current)
         destination=folder/'fixed3071-unit/manual'

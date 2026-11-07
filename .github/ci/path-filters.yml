@@ -230,6 +230,7 @@ history_audit:
   - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
   - scripts/ci/voice-r22-runtime-scope*
   - scripts/ci/resolve-voice-r22-base.sh
+  - scripts/ci/f13_*
 
 # The DEV overlay applicator has its own focused required Linux contract job.
 match_squad_overlay:
