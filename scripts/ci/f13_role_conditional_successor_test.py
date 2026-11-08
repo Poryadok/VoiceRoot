@@ -230,6 +230,8 @@ class RoleSuccessorTest(unittest.TestCase):
                  git('ls-tree','-r',cls.actual_head).splitlines()}
         cls.restored_context=[row for row in cls.record['context']
                               if current.get(row['path'])!=row['entry']['oid']]
+        cls.restored_required=[row for row in cls.record['required_current_source']
+                               if current.get(row['path'])!=row['entry']['oid']]
         closure=json.loads(legacy.git(ROOT,'show',successor.PINNED_RECORD_COMMIT+':'+
                                           cls.record['closure_manifest']['path']))
         packages={item['directory']:set(item['paths']) for item in closure['package_inventories']}
@@ -241,7 +243,7 @@ class RoleSuccessorTest(unittest.TestCase):
                      GIT_AUTHOR_NAME='F13 fixture',GIT_COMMITTER_NAME='F13 fixture',
                      GIT_AUTHOR_EMAIL='fixture@example.invalid',GIT_COMMITTER_EMAIL='fixture@example.invalid')
             git('read-tree',cls.actual_head,env=env)
-            for row in cls.restored_context:
+            for row in cls.restored_context + cls.restored_required:
                 entry=row['entry']
                 git('update-index','--add','--cacheinfo',
                     entry['mode']+','+entry['oid']+','+row['path'],env=env)
@@ -290,7 +292,39 @@ class RoleSuccessorTest(unittest.TestCase):
             'src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go',
             'src/backend/file/pb/voice/file/v1/file.pb.go',
             'src/backend/file/pb/voice/file/v1/file_grpc.pb.go',
-            'src/backend/pkg/integrationtest/migrations.go'})
+            'src/backend/pkg/go.mod',
+            'src/backend/pkg/integrationtest/migrations.go',
+            'src/backend/role/internal/principalgrpc/join_approval.go',
+            'src/backend/role/internal/principalgrpc/join_approval_test.go'})
+        # These are the exact reviewed A2 changes to the real tree. Restoring
+        # historical blobs below is confined to the private test target and
+        # does not qualify the actual source.
+        a2_source = '5b8beccc3cd39e2b4bb8c3d06b8769a5586f3ec5'
+        a2_entries = {
+            'docs/microservices/role-service.md': '78b23264c7c9bc8e13d9c6b639b9b0a8f3d5b576',
+            'src/backend/role/internal/grpcsvc/ordinary_scope.go': 'a238764cff3f6326efa1932a403936f18d717f66',
+            'src/backend/role/internal/principalgrpc/interceptor.go': '3c55dfaa98d435bacc840ff1f53ab012ca22b70d',
+            'src/backend/role/internal/principalgrpc/join_approval.go': '0ef07b87cd0aac9ff7d4e5107e90e3cbe858046e',
+            'src/backend/role/internal/principalgrpc/join_approval_test.go': '29a85a5919291419d2fcae7464ae44fc11841a47',
+        }
+        self.assertEqual({row['path'] for row in self.restored_required}, set(a2_entries) - {
+            'src/backend/role/internal/principalgrpc/join_approval.go',
+            'src/backend/role/internal/principalgrpc/join_approval_test.go'})
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        a2_source,self.actual_head]).returncode,0)
+        for path, oid in a2_entries.items():
+            with self.subTest(path=path):
+                expected = {'mode':'100644','type':'blob','oid':oid}
+                self.assertEqual(legacy.entry(ROOT,a2_source,path),expected)
+                self.assertEqual(legacy.entry(ROOT,self.actual_head,path),expected)
+        pkg_mod = 'src/backend/pkg/go.mod'
+        pkg_source = '2c279b1e733e62b8af653294a421b3a20f2266ba'
+        pkg_entry = {'mode':'100644','type':'blob',
+                     'oid':'60bc3002aa7ebd5e952d2c988166e93c618cb697'}
+        self.assertEqual(legacy.entry(ROOT,pkg_source,pkg_mod),pkg_entry)
+        self.assertEqual(legacy.entry(ROOT,self.actual_head,pkg_mod),pkg_entry)
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        pkg_source,self.actual_head]).returncode,0)
         story_file_grpc = 'src/backend/file/pb/voice/file/v1/file_grpc.pb.go'
         reviewed_story_source = 'f38e45008308e5309e0a371a411afb4c7bace6ae'
         reviewed_entry = {'mode':'100644','type':'blob',
@@ -330,8 +364,8 @@ class RoleSuccessorTest(unittest.TestCase):
         self.assertEqual(git('rev-list','--parents','-n','1',self.target).split(),
                          [self.target,self.actual_head])
         self.assertEqual(set(git('diff','--name-only',self.actual_head,self.target).splitlines()),
-                         {row['path'] for row in self.restored_context}|set(self.removed_package_paths))
-        for row in self.restored_context:
+                         {row['path'] for row in self.restored_context + self.restored_required}|set(self.removed_package_paths))
+        for row in self.restored_context + self.restored_required:
             with self.subTest(path=row['path']):
                 self.assertEqual(legacy.entry(ROOT,self.target,row['path']),row['entry'])
         for path in self.removed_package_paths:
@@ -350,6 +384,17 @@ class RoleSuccessorTest(unittest.TestCase):
         for row in self.record['required_current_source']:
             with self.subTest(path=row['path']),self.assertRaisesRegex(legacy.Rejected,'actual_entry'):
                 self.qualify(self.changed(row['path']))
+
+    def test_required_binding_missing_mode_and_symlink_rejected(self):
+        row = self.restored_required[0]
+        name = row['path']
+        historical = legacy.git(ROOT, 'cat-file', 'blob', row['entry']['oid'])
+        for variant, content, mode, rejection in (
+                ('missing', None, '100644', 'single_entry'),
+                ('executable', historical, '100755', 'actual_entry'),
+                ('symlink', historical, '120000', 'actual_entry')):
+            with self.subTest(variant=variant), self.assertRaisesRegex(legacy.Rejected, rejection):
+                self.qualify(self.changed(name, content, mode))
 
     def test_dependency_drift(self):
         with self.assertRaisesRegex(legacy.Rejected,'actual_entry'):

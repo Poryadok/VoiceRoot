@@ -20,6 +20,8 @@ import (
 
 func Method(target string) string {
 	switch target {
+	case "auth-profile-authority":
+		return "/voice.user.v1.AuthProfileAuthorityService/MatchAuthProfileReferences"
 	case "catalog":
 		return "/voice.catalogactor.v1.CatalogActorAuthorityService/GetCatalogActorStates"
 	case "auth-admission":
@@ -55,6 +57,8 @@ func Method(target string) string {
 // whole service merely because it has a verified Social principal.
 func AllowsMethod(target, method string) bool {
 	switch target {
+	case "auth-profile-authority":
+		return method == Method(target) || method == "/voice.user.v1.AuthProfileAuthorityService/ResolveAuthOwnershipTarget"
 	case "catalog":
 		return method == Method(target)
 	case "auth-admission", "space-account-capture":
@@ -319,6 +323,9 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 }
 
 func expectedIssuer(target string) string {
+	if target == "auth-profile-authority" {
+		return "auth"
+	}
 	if target == "space-account-capture" {
 		return "space"
 	}
@@ -352,6 +359,9 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
+	if capability == "auth-profile-authority" {
+		return true
+	}
 	return capability == "catalog" || capability == "notification-primary" || capability == "auth-admission" || capability == "space-account-capture" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
 }
 

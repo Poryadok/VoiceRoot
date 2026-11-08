@@ -89,6 +89,7 @@ func TestRecoverInterruptedActivationAfterGuardCutover(t *testing.T) {
 	claim, err = SignOpenAttestation(claim, private)
 	require.NoError(t, err)
 	require.NoError(t, restarted.verifyOpenAttestation(claim, newPublic, time.Now()))
+	armSyntheticSupervision(t, restarted, claim, newPublic)
 	var sessions, prepared int
 	require.NoError(t, admin.QueryRow(ctx, `SELECT (SELECT count(*) FROM pg_stat_activity WHERE datid=$1 OR usename=$3),(SELECT count(*) FROM pg_prepared_xacts WHERE database=$2 OR owner=$3)`, claim.Physical.DatabaseOID, claim.Physical.Database, claim.WriterRole).Scan(&sessions, &prepared))
 	require.Zero(t, sessions)

@@ -1,5 +1,7 @@
 """Decode and validate one E2E catalog selection before emitting any test names."""
 from pathlib import Path
+import json
+import os
 import re
 import sys
 
@@ -49,17 +51,39 @@ def selection(path, section):
     return value
 
 
+def affected_flutter(path, changed_paths, root=None):
+    """Return changed catalogued suites in the catalog's deterministic order."""
+    if type(changed_paths) is not list or any(type(value) is not str for value in changed_paths):
+        raise ValueError('changed paths must be a list of strings')
+    changed = set(changed_paths)
+    root = Path(root) if root is not None else Path(__file__).resolve().parents[2]
+    full = selection(path, 'full_flutter')
+    separately_proved = selection(path, 'a1_flutter_profile_handoff')
+    known = {'src/frontend/' + suite for suite in full + separately_proved}
+    unknown = [name for name in changed if name.startswith('src/frontend/test/')
+               and 'live' in name and name.endswith('test.dart') and name not in known
+               and ((root / name).exists() or (root / name).is_symlink())]
+    if unknown:
+        raise ValueError('changed live Flutter suite is absent from the E2E catalog')
+    return [suite for suite in full
+            if 'src/frontend/' + suite in changed]
+
+
 def main():
     if len(sys.argv) != 3:
         print('ERROR: expected manifest path and section', file=sys.stderr)
         return 1
     try:
-        names = selection(Path(sys.argv[1]), sys.argv[2])
-    except (OSError, UnicodeError, ValueError, TypeError, RecursionError, yaml.YAMLError) as error:
+        if sys.argv[2] == 'affected_flutter':
+            names = affected_flutter(Path(sys.argv[1]), json.loads(os.environ['VOICE_AFFECTED_PATHS_JSON']))
+        else:
+            names = selection(Path(sys.argv[1]), sys.argv[2])
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError, RecursionError, yaml.YAMLError) as error:
         print(f'ERROR: invalid E2E manifest selection ({type(error).__name__})', file=sys.stderr)
         return 1
     # Output is atomic with respect to validation: no usable prefix on failure.
-    sys.stdout.write('\n'.join(names) + '\n')
+    if names:
+        sys.stdout.write('\n'.join(names) + '\n')
     return 0
 
 

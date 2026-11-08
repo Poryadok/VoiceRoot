@@ -1,0 +1,16 @@
+{
+  "space": [
+    ["voice/backend/space/internal/store", "TestAccountBanCannotSucceedWithoutCompleteOwnerCapture"],
+    ["voice/backend/space/internal/store", "TestNative51CreatorBornCurrentSchema"],
+    ["voice/backend/space/internal/store", "TestNative51ProofDiagnosticEnums"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/serving_login_needs_no_private_schema_access"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/guard_predicate"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/guard_event_columns"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/internal_foreign_key_disabled"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/column_public_privilege"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/table_public_privilege"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/private_schema_relation"],
+    ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/unexpected_prefixed_relation"]
+  ]
+}

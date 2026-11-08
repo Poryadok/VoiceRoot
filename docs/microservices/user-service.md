@@ -94,25 +94,106 @@ replacement leader, and reports failure if it cannot obtain the lock and fence
 within the bounded shutdown period. Operators must allow time for this work;
 forced termination cannot perform it.
 
-The monitor does not gate opening and cannot fence if it is itself absent or
-cannot reach either database. `WATCHING` is not proof of future supervision,
-exclusive custody or source continuity. Independent supervision, a safe
-admission gate, automatic fencing under monitor loss, and a complete deployed
-Ban proof remain open; do not enable this path without those controls. See
-[Backend gaps](../todo/backend.md#space).
+`watch-activation` is the legacy leader-loss recovery command. `WATCHING` alone
+does not authorize opening or attest future supervision, exclusive custody or
+source continuity. The production operator additionally requires the separate
+`sourcecustody supervise` process described below. No monitor database is needed.
 
-The planned supervised admission contract is not implemented by `WATCHING`.
-It requires a separately authenticated monitor to arm while the writer is
-`NOLOGIN`, using responses bound to the current leader challenge and the digest
-of the complete signed opening decision. The controller issues a fresh random
-nonce and increasing sequence for each probe; a valid response expires at the
-original local monotonic deadline and cannot be replayed to extend authority.
-Opening and permit issuance require live supervision. Loss or expiry revokes
-that controller incarnation permanently and starts bounded recovery; a later
-heartbeat cannot reopen it. A new leader requires a new challenge, monitor
-enrollment and signed opening decision. This contract provides bounded
-admission revocation, not a substitute for independent source-side fencing,
-session termination or restore and promotion custody.
+The selected model is **bounded custodian-attested continuity**, as recorded in
+[Backend gaps](../todo/backend.md#space). Before a declared restore, clone
+promotion or source replacement, close admission and obtain verified drain or
+source fencing for every participating writer and in-flight database session.
+If SQL cannot be reached, an opener is stalled, a lock remains held, prepared
+transactions exist, or a close/commit acknowledgement is uncertain, the outcome
+is **HOLD**. It does not authorize restore, promotion, replacement or reopening.
+A source may remain connectable during HOLD; local admission revocation is not
+proof that `ALLOW_CONNECTIONS=false`, `NOLOGIN` or session termination completed.
+No host watchdog or bounded stop of a partitioned PostgreSQL is required by this
+model. Undeclared rollback under failed custody remains outside its guarantee.
+
+The independent supervisor starts with one exact, fresh, custodian-signed opening
+decision. It verifies the real control/source identities, binding, dormant writer,
+zero source/writer sessions and prepared transactions, and current control
+leadership before announcing `SUPERVISOR_READY`. These checks use a maintenance
+database on the source cluster while the actual source forbids connections;
+startup never enables source access or activates guards. Each signed response
+also checks actual control state/phase, physical binding, recorded opening
+evidence, source identity and writer/prepared state. The custodian must still
+independently prove all writer deployments, Auth continuity and administrative,
+network, storage, backup/restore and promotion custody. Healthy SQL and nonzero
+evidence digests do not supply that proof.
+
+Controller and supervisor authenticate each other with mTLS and pinned leaf
+certificates. The supervisor's Ed25519 signing key is independent of the
+custodian key and is never supplied to User or the custody controller. Responses
+bind the current challenge and digest of the complete signed decision, fresh
+random nonce, increasing sequence and supervisor incarnation. The controller
+uses the existing local monotonic deadline; replay cannot renew it. `/open`,
+`OpenQualified`, attested permit issuance and held permit checks require live
+supervision. Loss or expiry irrevocably revokes that controller incarnation and
+attempts SQL recovery. Either process can attempt recovery after detecting the
+other's loss. Recovery records `RECOVERED_CLOSED` only after independently checked
+source/writer restrictions, zero sessions and zero prepared transactions. Failed
+or incomplete recovery remains HOLD; late heartbeats cannot reopen it.
+
+User remains a remote held-stream client of the custody service. The operator
+and custody stream server share the same controller; User does not start a
+second controller, discover an opening decision, receive a monitor signing key,
+or hold administrative credentials. In-flight observations remain bounded by
+their existing deadlines; this is not a distributed zero-in-flight commit fence.
+A new opening requires verified recovery, a new controller challenge, a newly
+reviewed decision and a new supervisor process. Restored/cloned sources additionally
+require proven continuity; new epochs or physical IDs cannot repair lost identity
+history, reservations or terminal facts.
+
+### Running the bounded supervisor
+
+The existing `custody` target packages the production executable:
+
+```sh
+docker build --target custody -f src/backend/user/Dockerfile --build-arg VOICE_SOURCE_SHA=<commit> -t voice-user-custody:<commit> src/backend
+```
+
+Run the custody operator with the image's default `/sourcecustody` entrypoint.
+Run the independently administered supervisor using the same immutable custody
+image with argument `supervise` (Kubernetes `args: ["supervise"]`). Secret files
+are read-only mounts readable by the image's uid 65532. Keep the supervisor
+signing key and its source/control maintenance credentials in the independent
+supervisor workload; User receives only its existing writer and held-stream
+client credentials.
+
+The operator retains its existing configuration and additionally requires all:
+
+- `CUSTODY_SUPERVISOR_URL`: explicit HTTPS origin, without a query or path.
+- `CUSTODY_SUPERVISOR_TLS_CA_FILE`, `CUSTODY_SUPERVISOR_CLIENT_CERT_FILE`,
+  `CUSTODY_SUPERVISOR_CLIENT_KEY_FILE`.
+- `CUSTODY_SUPERVISOR_SERVER_CERT_SHA256`: lowercase leaf SHA-256 pin.
+- `CUSTODY_SUPERVISOR_SIGNER_PUBLIC_KEY_FILE`: independent Ed25519 public key.
+
+The separate `supervise` command requires all:
+
+- `CUSTODY_SUPERVISOR_LISTEN`, `CUSTODY_SUPERVISOR_TLS_CERT_FILE`,
+  `CUSTODY_SUPERVISOR_TLS_KEY_FILE`, `CUSTODY_SUPERVISOR_CLIENT_CA_FILE`,
+  `CUSTODY_SUPERVISOR_CLIENT_CERT_SHA256` (the controller client's leaf pin).
+- `CUSTODY_SUPERVISOR_SIGNER_PRIVATE_KEY_FILE` (PKCS#8 Ed25519),
+  `CUSTODY_SUPERVISOR_CUSTODIAN_PUBLIC_KEY_FILE` (PKIX Ed25519), and
+  `CUSTODY_SUPERVISOR_DECISION_FILE` (the exact signed opening JSON).
+- `CUSTODY_SUPERVISOR_CONTROL_DATABASE_URL` and
+  `CUSTODY_SUPERVISOR_SOURCE_ADMIN_DATABASE_URL`: independently pinned
+  `verify-full` PostgreSQL URLs. The latter must use another database on the
+  source cluster and a recovery administrator, never the writer role. Control
+  credentials need the existing custody read/close/recovery permissions; source
+  maintenance credentials need the existing recovery privileges. No libpq `PG*`
+  environment overrides are permitted.
+
+Provision the source CLOSED, writer NOLOGIN and independently qualified writer,
+Auth and continuity evidence first. Start the custody server, obtain its current
+`GET /challenge`, review and sign the exact decision with `sign-open`, mount that
+decision only in the supervisor, and start `supervise`. Submit the same signed
+decision to authenticated `POST /open`. `SUPERVISOR_READY` alone does not open
+admission. Guard cutover remains an explicit signed operation. Following any
+failure, retain the decision/evidence and actual recovery result; do not reuse
+the old process/decision or bypass a HOLD by changing database flags.
 
 For an existing version-22 identity source, `quarantine-existing` first fences
 the supplied physical database. `check-existing-identity` then requires the
@@ -122,6 +203,42 @@ independent control/source system IDs, database name/OID, source ID and epoch,
 `CUSTODY_USER_KEYS_DIR`. It checks the retained identity state and publishes
 only a `CLOSED` control record. It does not create lineage, prove currentness,
 or authorize capture: a separately reviewed signed opening is still required.
+
+An existing exact clean version-22 source with a completely pristine, inactive
+identity domain uses the separate `adopt-existing-pristine` operator command
+after `quarantine-existing`. This is a new fenced adoption, not evidence of a
+historical database creation or migration. Existing profile rows, UUIDs and
+account references are retained unchanged; no historical `BIRTH` or association
+is synthesized. All identity history, reservations, aliases, parent fences,
+key versions and baseline markers must be empty, with original zero counters
+and the empty-history digest. The native catalog, constraints, indexes, physical
+database and independently supplied generations are checked before provisioning
+the complete revision-1 keyset. Dirty, drifted, partially initialized or already
+guarded sources are refused.
+
+The command uses the independent cluster/database/epoch/lineage/keyset pins and
+verified TLS/key-manifest settings required by `check-existing-identity`, plus
+canonical nonzero `CUSTODY_ADOPTION_RECEIPT_ID` and lowercase nonzero 32-byte
+hex `CUSTODY_ADOPTION_EVIDENCE_DIGEST`. The latter binds separately retained,
+reviewed backup/restore and exclusive administrator, endpoint, writer, restore
+and promotion custody evidence. Neither a digest, a receipt, reading values
+from the source nor TLS proves that those operational facts happened.
+
+Before any maintenance connection, the independent control database commits
+an `ADOPTING` receipt binding those pins and evidence. Only after provisioning,
+closing connections and verifying the source has no sessions/prepared
+transactions does it atomically record `ADOPTED_CLOSED`, control state `CLOSED`
+and phase `EXISTING_INITIALIZED_CLOSED`. Successful CLI output is `CLOSED`;
+every failure outputs `HOLD` and refuses automatic retry, including an unknown
+commit acknowledgement. An interrupted attempt may use `recover-initialization`
+to fence it; recovery never authorizes retry or reopening. Retain both databases
+and receipts for independent recovery review.
+
+Adoption leaves guards inactive and admission closed. Establishing the retained
+baseline still requires the separately reviewed, fresh signed `GuardCutover`
+opening with full participating-writer, source/restore and Auth evidence, live
+supervision and physical fencing. Later observations are `RETAINED_NOW`; adoption
+does not reconstruct unavailable historical association or Auth history.
 
 ## Notification primary lookup (BE-118 prerequisite)
 
@@ -743,3 +860,45 @@ snapshot, not an atomic permit, Auth account-eligibility proof, generation lease
 zero-lag cross-service deletion barrier. Consumers must combine fresh authority with
 their own durable generation gates. UNKNOWN denies admission and never authorizes
 permanent purge or restore. No profile-deleted event is introduced.
+## Auth profile reference authority (BE-019 prerequisite)
+
+The separate `AuthProfileAuthorityService` exposes only
+`MatchAuthProfileReferences` and `ResolveAuthOwnershipTarget` under capability
+`auth-profile-authority`: issuer/subject `auth`/`service:auth`, audience `user`,
+mTLS, exact RPC/request ID/hash binding and shared Redis replay protection.
+It adds no methods to existing Social, Role, SDK or admission grants.
+
+Matching accepts a canonical sorted unique finite roster of 1..256 profile UUIDs
+from Auth's own local inventory. Request ID, inventory ID/revision, account,
+opaque owner and deletion cycle bind the exact response and request digest.
+The digest is SHA-256 over the request's full protobuf message name in UTF-8,
+one NUL byte and deterministic protobuf request bytes.
+Owner/cycle are echoed Auth context, never User lifecycle authority. Retired
+associations can MATCH without a live profile row. DIFFERENT_ACCOUNT requires
+positive complete canonical account-selector evidence; missing history or a
+retained-key alias yields INCOMPLETE. `all_requested_resolved` covers only the
+supplied roster. No foreign raw account identifier or selector is returned.
+
+The target resolver returns a current private account/profile tuple with revision
+and eligibility flags, a canonical terminal receipt without a raw account tuple,
+or INCOMPLETE. Its observation is **not** an admission grant: Auth must admit the
+target under its local account/lifetime locks; independent User retirement needs
+its own fence protocol. The source cut includes generation/keyset/history/head,
+retained floor and unresolved-erasure counters; issued and covered counters
+must be equal for every accepted response, including INCOMPLETE. The response window is
+`[observed_at, observed_at + 2 seconds)`; clients also reject observations more
+than one second ahead of their clock. An optional expected source pin must match
+exactly. Neither a pin nor a cut establishes independent source custody.
+
+The read holds a qualified source permit through its identity transaction and
+commit, validates the physical database and guarded catalog, and never captures,
+backfills or repairs missing facts. Missing source policy or lost custody denies
+the response. Configure the opt-in listener with prefix
+`USER_AUTH_PROFILE_PRINCIPAL_`: `GRPC_LISTEN` (default `:9104`),
+`TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, `JWKS_CLIENT_CERT_FILE`,
+`JWKS_CLIENT_KEY_FILE`, `REPLAY_REDIS_ADDR`, optional `REPLAY_REDIS_PASSWORD`
+and `JWKS_CA_FILE`, plus existing `S2S_JWKS_URLS_JSON` Auth issuer settings.
+All existing qualified guarded User source runtime configuration and the
+Space capture listener must already be enabled; this reader reuses source
+custody, not Space authorization. Partial settings fail startup. No deployment
+or P30D erasure activation is implied by this prerequisite.

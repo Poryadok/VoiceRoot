@@ -117,6 +117,18 @@ class AuthOwnershipReceiptAdapterTest {
     assertThat(failure.getError().getMessage()).doesNotContain(digest, "private-storage");
   }
 
+  @Test void erasedReceiptIsExplicitOnlyForVerifiedSpace() {
+    when(proofs.lookup(binding, digest)).thenThrow(new ProofErasedException());
+    var result = lookup(space(), request());
+    denied(result, Status.Code.FAILED_PRECONDITION);
+    assertThat(Status.fromThrowable(result.getError()).getDescription()).isEqualTo("operation_erased");
+    clearInvocations(proofs);
+    denied(lookup(null, request()), Status.Code.UNAUTHENTICATED);
+    denied(lookup(new VerifiedPrincipal("service", "gateway", null, null, 0), request()),
+        Status.Code.PERMISSION_DENIED);
+    verifyNoInteractions(proofs);
+  }
+
   @Test void unconfiguredServiceIsUnavailable() {
     grpc = new AuthGrpcService(mock(AuthService.class), mock(OtpService.class));
     denied(lookup(space(), request()), Status.Code.UNAVAILABLE);

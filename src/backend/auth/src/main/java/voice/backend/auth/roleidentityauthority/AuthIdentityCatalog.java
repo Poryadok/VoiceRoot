@@ -9,21 +9,22 @@ import java.util.HexFormat;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-/** Owned V28 invariants, permitting unrelated compatible additive migrations. */
+/** Finite, whole-release catalogs; A4 replaces owned function bodies explicitly. */
 final class AuthIdentityCatalog {
   private static final ObjectMapper JSON = new ObjectMapper();
   // Resource loading and parsing happen during construction, outside SQL locks.
-  private final JsonNode expected = load();
+  private final JsonNode original = load(1);
+  private final JsonNode lifecycle = load(2);
   private final AuthIdentityDatabasePolicy policy;
 
   AuthIdentityCatalog() { this(null); }
   AuthIdentityCatalog(AuthIdentityDatabasePolicy policy) { this.policy = policy; }
 
-  private static JsonNode load() {
-    try (var input = AuthIdentityCatalog.class.getResourceAsStream("/roleidentityauthority/catalog-v1.json")) {
+  private static JsonNode load(int version) {
+    try (var input = AuthIdentityCatalog.class.getResourceAsStream("/roleidentityauthority/catalog-v"+version+".json")) {
       var result = JSON.readTree(input);
-      require(result.path("version").asInt() == 1 && result.path("tables").size() == 6
-          && result.path("functions").size() == 6 && result.path("triggers").size() == 3);
+      require(result.path("version").asInt() == version && result.path("tables").size() == (version==1?6:9)
+          && result.path("functions").size() == (version==1?6:11) && result.path("triggers").size() == (version==1?3:9));
       return result;
     } catch (Exception failure) { throw unavailable(); }
   }
@@ -42,13 +43,20 @@ final class AuthIdentityCatalog {
     // create the barrier or invoke an unvalidated helper to acquire it.
     jdbc.execute("LOCK TABLE ONLY public.auth_identity_ddl_barrier IN ACCESS SHARE MODE");
     AuthIdentityDdlGateCatalog.validate(jdbc, policy);
-    AuthIdentityMigrationHistory.validate(jdbc, policy.loader());
+    int version = AuthIdentityMigrationHistory.validate(jdbc, policy.loader());
+    JsonNode expected = version==1 ? original : lifecycle;
     // Relation locks retain protection against ordinary table/trigger DDL.
-    jdbc.execute("LOCK TABLE public.accounts,public.role_identity_account_selectors,"
+    String lock = "LOCK TABLE public.accounts,public.role_identity_account_selectors,"
         + "public.role_identity_key_versions,public.role_identity_lifetimes,"
-        + "public.role_identity_owner_journal,public.role_identity_owner_state IN ACCESS SHARE MODE");
+        + "public.role_identity_owner_journal,public.role_identity_owner_state";
+    if (version==2) lock += ",public.auth_account_lifecycle_schedules,public.auth_account_lifecycle_decisions,public.auth_account_lifecycle_intents";
+    jdbc.execute(lock+" IN ACCESS SHARE MODE");
 
-    for (var table : expected.path("tables")) validateTable(jdbc, table);
+    for (var table : expected.path("tables")) {
+      int triggers = 0;
+      for (var trigger : expected.path("triggers")) if (trigger.path("table").equals(table.path("name"))) triggers++;
+      validateTable(jdbc, table, triggers);
+    }
     for (var function : expected.path("functions")) validateFunction(jdbc, function);
     for (var trigger : expected.path("triggers")) {
       var rows = jdbc.queryForList("SELECT t.tgtype::integer AS type,t.tgenabled,t.tgisinternal,"
@@ -70,7 +78,7 @@ final class AuthIdentityCatalog {
     }
   }
 
-  private void validateTable(JdbcTemplate jdbc, JsonNode table) {
+  private void validateTable(JdbcTemplate jdbc, JsonNode table, int triggers) {
     String name = table.path("name").asText();
     var rows = jdbc.queryForList("SELECT c.oid,c.relkind,c.relpersistence,c.relrowsecurity,c.relforcerowsecurity,"
         + "NOT EXISTS(SELECT 1 FROM pg_inherits i WHERE i.inhrelid=c.oid OR i.inhparent=c.oid) "
@@ -93,15 +101,16 @@ final class AuthIdentityCatalog {
     }
     for (var constraint : table.path("constraints")) {
       var definitions = jdbc.queryForList("SELECT pg_get_constraintdef(con.oid,false) AS definition,"
-          + "con.convalidated AND NOT con.condeferrable AND (con.conindid=0 OR EXISTS "
+          + "con.convalidated AND con.condeferrable=? AND con.condeferred=? AND (con.conindid=0 OR EXISTS "
           + "(SELECT 1 FROM pg_index i WHERE i.indexrelid=con.conindid AND i.indisvalid AND i.indisready)) AS valid "
-          + "FROM pg_constraint con WHERE con.conrelid=?::oid AND con.conname=?", oid, constraint.path("name").asText());
+          + "FROM pg_constraint con WHERE con.conrelid=?::oid AND con.conname=?", constraint.path("deferrable").asBoolean(false),
+          constraint.path("initiallyDeferred").asBoolean(false),oid, constraint.path("name").asText());
       require(definitions.size() == 1 && Boolean.TRUE.equals(definitions.getFirst().get("valid"))
           && constraint.path("definition").asText().equals(definitions.getFirst().get("definition")));
     }
     if (!name.equals("accounts")) {
       int count = jdbc.queryForObject("SELECT count(*)::integer FROM pg_trigger WHERE tgrelid=?::oid AND NOT tgisinternal", Integer.class, oid);
-      require(count == (name.equals("role_identity_owner_journal") ? 1 : 0));
+      require(count == triggers);
     }
   }
 
@@ -114,10 +123,13 @@ final class AuthIdentityCatalog {
     var row = rows.getFirst();
     require(Boolean.FALSE.equals(row.get("prosecdef")) && Boolean.FALSE.equals(row.get("proleakproof"))
         && "v".equals(row.get("provolatile")) && "u".equals(row.get("proparallel"))
-        && row.get("proconfig") == null && "plpgsql".equals(row.get("lanname"))
+        && "plpgsql".equals(row.get("lanname"))
         && function.path("arguments").asText().equals(row.get("arguments"))
         && function.path("resultType").asText().equals(row.get("result")));
     try {
+      Object config = row.get("proconfig");
+      JsonNode actualConfig = config == null ? JSON.nullNode() : JSON.valueToTree(((java.sql.Array)config).getArray());
+      require(actualConfig.equals(function.has("config") ? function.path("config") : JSON.nullNode()));
       byte[] source = ((String) row.get("prosrc")).replace("\r\n", "\n").getBytes(StandardCharsets.UTF_8);
       require(function.path("sourceSha256").asText().equals(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(source))));
     } catch (Exception failure) { throw unavailable(); }

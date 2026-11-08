@@ -47,6 +47,9 @@ WHERE chat_id=$1 FOR UPDATE`, chat).Scan(&current, &applied, &quarantined)
 		return false, ErrMembershipUnavailable
 	}
 	if err = replayMembership(ctx, tx, chat, incarnation, applied); err != nil {
+		if errors.Is(err, ErrMembershipConflict) {
+			return false, quarantineMembership(ctx, tx, chat)
+		}
 		return false, err
 	}
 	err = tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM thread_list_membership_inbox i
@@ -143,10 +146,19 @@ WHERE chat_id=$1 AND incarnation=$2 AND
 		return err
 	}
 	if !found {
-		// With complete origin replay, an unseen event at/below the applied
-		// prefix proves missing/conflicting identity history, never a stale no-op.
+		covered := false
+		// A sealed baseline can cover history that never reached this inbox.
+		// Retained identity conflicts were checked first; an unknown covered
+		// delivery cannot become a new mutation or revive a retired lineage.
 		if e.Offset <= applied {
-			return quarantineMembership(ctx, tx, e.ChatID)
+			var baseline int64
+			if err = tx.QueryRow(ctx, `SELECT baseline_q FROM thread_list_membership_heads WHERE chat_id=$1`, e.ChatID).Scan(&baseline); err != nil {
+				return err
+			}
+			if e.Offset > baseline {
+				return quarantineMembership(ctx, tx, e.ChatID)
+			}
+			covered = true
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO thread_list_membership_inbox
 (chat_id,incarnation,journal_offset,event_id,profile_id,membership_revision,payload)
@@ -154,8 +166,20 @@ VALUES($1,$2,$3,$4,$5,$6,$7)`, e.ChatID, e.Incarnation, e.Offset, e.EventID, e.P
 		if err != nil {
 			return err
 		}
+		if covered {
+			if err = applyCoveredMembershipEvidence(ctx, tx, e); err != nil {
+				if errors.Is(err, ErrMembershipConflict) {
+					return quarantineMembership(ctx, tx, e.ChatID)
+				}
+				return err
+			}
+			return tx.Commit(ctx)
+		}
 	}
 	if err = replayMembership(ctx, tx, e.ChatID, incarnation, applied); err != nil {
+		if errors.Is(err, ErrMembershipConflict) {
+			return quarantineMembership(ctx, tx, e.ChatID)
+		}
 		return err
 	}
 	return tx.Commit(ctx)
@@ -177,14 +201,14 @@ WHERE chat_id=$1 AND incarnation=$2 AND journal_offset=$3`, chat, incarnation, a
 		}
 		var next MembershipRecord
 		if json.Unmarshal(raw, &next) != nil || next.Validate() != nil || next.ChatID != chat || next.Incarnation != incarnation || next.Offset != applied+1 {
-			return quarantineMembership(ctx, tx, chat)
+			return ErrMembershipConflict
 		}
 		canonical, marshalErr := canonicalMembership(next)
 		if marshalErr != nil || !bytes.Equal(raw, canonical) {
-			return quarantineMembership(ctx, tx, chat)
+			return ErrMembershipConflict
 		}
 		if err = applyMembershipPair(ctx, tx, next); errors.Is(err, ErrMembershipConflict) {
-			return quarantineMembership(ctx, tx, chat)
+			return ErrMembershipConflict
 		} else if err != nil {
 			return err
 		}
@@ -216,13 +240,18 @@ AND NOT EXISTS(SELECT 1 FROM thread_list_membership_inbox i WHERE i.chat_id=h.ch
 func quarantineMembership(ctx context.Context, tx pgx.Tx, chat uuid.UUID) error {
 	// Commit the quarantine instead of returning an error that would roll it
 	// back. A transport retry/restart cannot silently restore this scope.
-	if _, err := tx.Exec(ctx, `UPDATE thread_list_membership_heads SET quarantined=true WHERE chat_id=$1`, chat); err != nil {
+	if err := markMembershipQuarantine(ctx, tx, chat); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	return ErrMembershipConflict
+}
+
+func markMembershipQuarantine(ctx context.Context, tx pgx.Tx, chat uuid.UUID) error {
+	_, err := tx.Exec(ctx, `UPDATE thread_list_membership_heads SET quarantined=true WHERE chat_id=$1`, chat)
+	return err
 }
 
 func applyMembershipPair(ctx context.Context, tx pgx.Tx, e MembershipRecord) error {

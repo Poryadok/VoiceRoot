@@ -28,6 +28,7 @@ class AuthFlywayJournal:
         self.poisoned = False
         self.started = False
         self.binding = copy.deepcopy(binding)
+        self.source_metadata = copy.deepcopy(source_metadata)
         self.hashes = {'manifest_sha256': manifest_sha256, 'custody_sha256': custody_sha256,
                        'restore_sha256': restore_sha256, 'plan_sha256': plan_sha256,
                        'metadata_sha256': _digest(source_metadata)}
@@ -92,9 +93,16 @@ class AuthFlywayJournal:
                 or artifact.get('head_sha') != planned['source_sha'] or type(artifact.get('run_id')) is not int
                 or str(artifact['run_id']) != planned['run_id']): raise ValueError()
         ri, rr = rs['intent'], rs['receipt']
-        if (not isinstance(ri,dict) or set(ri) != {'status','operation_id','snapshot_id','invocation_nonce','manifest_sha256','artifact_id'}
+        mixed = isinstance(ri,dict) and 'migration_roles_sha256' in ri
+        if 'full_catalog' in binding:
+            import auth_live_migration_phase as auth_live
+            actual, provenance = auth_live.verified_sources(self.phase,self.source_metadata,26)
+            if (actual != binding or provenance['custody_sha256'] != self.hashes['custody_sha256']
+                    or provenance['restore_sha256'] != self.hashes['restore_sha256']): raise ValueError()
+        elif mixed: raise ValueError()
+        if (not isinstance(ri,dict) or set(ri) != {'status','operation_id','snapshot_id','invocation_nonce','manifest_sha256','artifact_id'} | ({'migration_roles_sha256'} if mixed else set())
                 or ri.get('status') != 'pending' or not isinstance(rr,dict)
-                or set(rr) != {'operation_id','snapshot_id','source_sha','manifest_sha256','databases','scope','cleanup'}
+                or set(rr) != {'operation_id','snapshot_id','source_sha','manifest_sha256','databases','scope','cleanup'} | ({'migration_logins'} if mixed else set())
                 or ri.get('operation_id') != binding['operation_id'] or ri.get('snapshot_id') != binding['snapshot_id']
                 or ri.get('invocation_nonce') != p.invocation or ri.get('manifest_sha256') != marker['manifest_sha256']
                 or ri.get('artifact_id') != rd['receipt']['artifact_id']

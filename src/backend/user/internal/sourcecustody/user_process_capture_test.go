@@ -51,10 +51,11 @@ func TestUserProcessServesQualifiedSpaceCapture(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires disposable TLS PostgreSQL and a User process")
 	}
+	supervisorBinary := buildProductionSupervisor(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	integrationtest.ConfigureDockerTesting()
-	_, control := recoveryTLSDatabase(t, ctx, "user-process-control")
+	controlURL, control := recoveryTLSDatabase(t, ctx, "user-process-control")
 	adminURL, admin := recoveryTLSDatabase(t, ctx, "user-process-source")
 	request := CreationRequest{SourceID: uuid.NewString(), Epoch: 1, Database: "voice_source_test"}
 	require.NoError(t, control.QueryRow(ctx, `SELECT system_identifier::text FROM pg_control_system()`).Scan(&request.ControlSystemID))
@@ -116,9 +117,14 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	claim := OpenAttestation{Challenge: challenge, ControlSystem: controlSystem, ControlDatabase: controlDatabase, ControlDatabaseOID: controlOID, Binding: binding, Physical: physical, WriterRole: "custody_app", SourceEvidenceDigest: [32]byte{3}, WriterManifestDigest: [32]byte{1}, AuthEvidenceDigest: [32]byte{2}, GuardCutover: true, IssuedAtUnix: now.Unix(), ExpiresAtUnix: now.Add(4 * time.Minute).Unix()}
 	claim, err = SignOpenAttestation(claim, private)
 	require.NoError(t, err)
-	require.NoError(t, controller.PrepareOpenSource(ctx, admin, claim, public))
-	require.NoError(t, controller.ActivateQualifiedGuards(ctx, admin, source, keys, claim, public))
-	require.NoError(t, controller.OpenQualified(ctx, admin, source, keys, claim, public))
+	supervisor, monitor, _ := startProductionSupervisor(t, supervisorBinary, controlURL, adminURL, claim, public)
+	operator := &activationHandler{controller: controller, admin: admin, source: source, keys: keys, signer: public, supervisor: supervisor}
+	t.Cleanup(func() {
+		if operator.supervised != nil {
+			_ = operator.supervised.stop()
+		}
+	})
+	require.Equal(t, http.StatusNoContent, openThroughOperator(t, operator, claim))
 
 	dir := t.TempDir()
 	pki := processTLS(t, dir, "user-process")
@@ -312,20 +318,45 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 	}
 	var response *userv1.CaptureSpaceMemberAccountBindingsResponse
 	var callErr error
-	require.Eventually(t, func() bool {
+	admitted := false
+	deadline := time.Now().Add(45 * time.Second)
+	for time.Now().Before(deadline) {
 		select {
 		case <-done:
 			joined = true
-			return true
+			deadline = time.Time{}
 		default:
 		}
+		if joined {
+			break
+		}
 		response, callErr = call()
-		return callErr == nil
-	}, 45*time.Second, 250*time.Millisecond, "User did not admit capture; last error: %v", callErr)
-	if joined {
+		if callErr == nil {
+			admitted = true
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if !admitted {
+		monitorState := "running"
+		select {
+		case monitorErr := <-monitor.done:
+			monitor.joined = true
+			monitorState = fmt.Sprintf("exited: %v: %s", monitorErr, monitor.stderr.String())
+		default:
+		}
+		recoveryState := "pending"
+		select {
+		case <-operator.supervised.done:
+			recoveryState = fmt.Sprintf("settled: %v", operator.supervised.result)
+		default:
+		}
 		_ = logFile.Sync()
 		output, _ := os.ReadFile(logFile.Name())
-		t.Fatalf("User exited before admitting capture: %s", output)
+		if len(output) > 6000 {
+			output = output[len(output)-6000:]
+		}
+		t.Fatalf("User failed to admit capture (exited=%v, supervisor_live=%v, monitor=%s, recovery=%s, last_error=%v): %s", joined, operator.supervised.session.live(), monitorState, recoveryState, callErr, output)
 	}
 	require.NoError(t, spaceaccountcapture.ValidateResponse(requestCapture, response))
 	require.Len(t, response.Results, 1)
@@ -369,7 +400,37 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO custody_app`)
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return
 	}
-	require.NoError(t, controller.CloseAdmission(ctx))
+	monitor.killAndJoin(t)
+	select {
+	case <-operator.supervised.session.revoked():
+	case <-time.After(8 * time.Second):
+		t.Fatal("supervisor loss did not revoke capture")
+	}
+	requestCapture.OperationId = uuid.NewString()
+	select {
+	case <-done:
+		joined = true
+		t.Fatal("User exited before post-revocation capture")
+	default:
+	}
 	_, err = call()
 	require.Error(t, err, "capture must fail after custody closes")
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	select {
+	case <-done:
+		joined = true
+		t.Fatal("User exited instead of refusing post-revocation capture")
+	default:
+	}
+	select {
+	case <-operator.supervised.done:
+	case <-time.After(40 * time.Second):
+		t.Fatal("source recovery did not settle")
+	}
+	require.NoError(t, operator.supervised.result)
+	var sourceAllowed, writerLogin bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT datallowconn FROM pg_database WHERE oid=$1`, physical.DatabaseOID).Scan(&sourceAllowed))
+	require.NoError(t, admin.QueryRow(ctx, `SELECT rolcanlogin FROM pg_roles WHERE rolname=$1`, claim.WriterRole).Scan(&writerLogin))
+	require.False(t, sourceAllowed)
+	require.False(t, writerLogin)
 }

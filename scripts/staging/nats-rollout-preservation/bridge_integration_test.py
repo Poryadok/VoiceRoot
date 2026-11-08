@@ -14,7 +14,7 @@ import bridge_root
 
 class IntegrationTests(unittest.TestCase):
     def test_installed_first_install_receipt_is_revalidated_then_consumed_by_normal_release(self):
-        import copy,guard,gis_first_install as gis
+        import copy,guard,resource_claim,gis_first_install as gis
         from gis_first_install_test import plan as gis_plan
         from gis_prerequisite_test import ReadyKube
         kube=ReadyKube();first=gis_plan()
@@ -22,7 +22,7 @@ class IntegrationTests(unittest.TestCase):
         ready=gis.verify_ready(kube,first,timeout=1,sleep=lambda _delay:None)
         transition=gis.transition_receipt(first,ready,source_ci=first['source_ci'],
             custody=first['custody'],target_mode='app-only')
-        original={'operation':first['operation'],'status':'PASS','target':{'mode':'app-only'},
+        original={'schema':'nats-rollout-root-v1','operation':first['operation'],'status':'PASS','target':{'mode':'app-only'},
             'gis_first_install':first,'gis_first_install_transition_receipt':transition,
             'context':{'expected':{'namespace_uid':transition['namespace_uid'],
                 'source_claim_uid':'00000000-0000-0000-0000-000000000012'}},
@@ -33,19 +33,19 @@ class IntegrationTests(unittest.TestCase):
             (op/'checkpoint.json').write_text(json.dumps(original),encoding='utf-8')
             def read(path):return json.loads(Path(path).read_text(encoding='utf-8'))
             def save(path,row):Path(path).write_text(json.dumps(row),encoding='utf-8')
-            actions=object.__new__(bridge_root.Actions)
+            actions=object.__new__(bridge_root.Actions);actions._installation=resource_claim.production_installation()
             with patch.object(bridge_root,'INSTALLED',installed),patch.object(guard,'ROOT',root),\
                     patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root,'save',side_effect=save):
                 actions._active_release(original)
                 anchor=read(installed/'active-release.json')['gis_first_install_transition']
                 # A legacy release cannot replace the current GIS authority.
                 with self.assertRaisesRegex(bridge_root.Blocked,'gis_existing_publication_stale'):
-                    actions._active_release({'operation':'c'*12,'context':{'expected':original['context']['expected']},
+                    actions._active_release({'schema':'nats-rollout-root-v1','operation':'c'*12,'context':{'expected':original['context']['expected']},
                         'target':{'manifest_sha256':'8'*64},'gis_transition':None})
                 self.assertEqual(anchor,read(installed/'active-release.json')['gis_first_install_transition'])
                 binding=actions._previous_gis_transition(kube)
                 self.assertEqual(binding['receipt_sha256'],transition['receipt_sha256'])
-                second={'operation':'b'*12,'context':{'expected':original['context']['expected']},
+                second={'schema':'nats-rollout-root-v1','operation':'b'*12,'context':{'expected':original['context']['expected']},
                     'target':{'manifest_sha256':'a'*64},'gis_transition':copy.deepcopy(binding)}
                 with self.assertRaisesRegex(bridge_root.Blocked,'gis_existing_publication_stale'):
                     actions._active_release(second)

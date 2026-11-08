@@ -327,7 +327,7 @@ public class AuthRestController {
     HttpStatus status = switch (ex.getMessage()) {
         case "capability_unavailable" -> HttpStatus.PRECONDITION_FAILED;
       case "validation_failed", "registration_conflict" -> HttpStatus.BAD_REQUEST;
-      case "linked_account_profile_conflict", "guest_reminder_already_shown", "totp_already_enabled" -> HttpStatus.CONFLICT;
+      case "operation_erased", "linked_account_profile_conflict", "guest_reminder_already_shown", "totp_already_enabled" -> HttpStatus.CONFLICT;
       case "otp_rate_limited" -> HttpStatus.TOO_MANY_REQUESTS;
       case "auth_unavailable", "oauth_unavailable", "verification_pending" -> HttpStatus.SERVICE_UNAVAILABLE;
       case "not_found" -> HttpStatus.NOT_FOUND;
@@ -336,6 +336,9 @@ public class AuthRestController {
       default -> HttpStatus.UNAUTHORIZED;
     };
     ResponseEntity.BodyBuilder response = ResponseEntity.status(status);
+    if ("operation_erased".equals(ex.getMessage())) {
+      response.header("Cache-Control", "no-store");
+    }
     if ("otp_rate_limited".equals(ex.getMessage())) {
       response.header("Retry-After", "600");
     }

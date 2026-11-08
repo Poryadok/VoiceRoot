@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +23,12 @@ func main() {
 	var err error
 	if len(os.Args) == 2 && os.Args[1] == "sign-open" {
 		err = signOpen()
+	} else if len(os.Args) == 2 && os.Args[1] == "supervise" {
+		var cfg sourcecustody.SupervisorConfig
+		cfg, err = sourcecustody.LoadSupervisorConfig(os.LookupEnv)
+		if err == nil {
+			err = sourcecustody.ServeSupervisor(ctx, cfg, func(addr string) { fmt.Printf("SUPERVISOR_READY %s\n", addr) })
+		}
 	} else if len(os.Args) == 2 && os.Args[1] == "fence-current" {
 		var cfg sourcecustody.FenceConfig
 		cfg, err = sourcecustody.LoadFenceConfig(os.LookupEnv)
@@ -57,6 +64,17 @@ func main() {
 		if err == nil {
 			err = sourcecustody.RunExistingMigration(ctx, creation, recovery)
 		}
+	} else if len(os.Args) == 2 && os.Args[1] == "adopt-existing-pristine" {
+		var cfg sourcecustody.AdoptionConfig
+		cfg, err = sourcecustody.LoadAdoptionConfig(os.LookupEnv)
+		if err == nil {
+			err = sourcecustody.RunAdoption(ctx, cfg)
+		}
+		if err == nil {
+			fmt.Println("CLOSED")
+		} else {
+			fmt.Fprintln(os.Stderr, "HOLD")
+		}
 	} else if len(os.Args) == 2 && os.Args[1] == "check-existing-identity" {
 		var cfg sourcecustody.CheckedSourceConfig
 		cfg, err = sourcecustody.LoadCheckedSourceConfig(os.LookupEnv)
@@ -83,7 +101,11 @@ func main() {
 		err = sourcecustody.ErrUnavailable
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "source custody unavailable")
+		if errors.Is(err, sourcecustody.ErrSupervisionHold) {
+			fmt.Fprintln(os.Stderr, "source custody HOLD: verified recovery required")
+		} else {
+			fmt.Fprintln(os.Stderr, "source custody unavailable")
+		}
 		os.Exit(1)
 	}
 }

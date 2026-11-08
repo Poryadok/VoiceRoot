@@ -18,6 +18,43 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
+// This fixture initializes only the seeded legacy spaces used by the
+// concurrency, delayed-capture and roster proofs, after the real native50 transition.
+func TestAccountBanFixtureConcurrencyEnrollment50(t *testing.T) {
+	accountBanFixtureEnrollment50(t, []int{8, 9, 11, 12})
+}
+
+// The clock fixture uses a separate database and enrolls only its roster space.
+func TestAccountBanFixtureRosterEnrollment50(t *testing.T) {
+	accountBanFixtureEnrollment50(t, []int{8})
+}
+
+func accountBanFixtureEnrollment50(t *testing.T, spaces []int) {
+	t.Helper()
+	ctx := context.Background()
+	dsn := os.Getenv("SPACE_BAN_TEST_DATABASE_URL")
+	require.NotEmpty(t, dsn, "owned native50 fixture required")
+	owner, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err)
+	t.Cleanup(owner.Close)
+	st := &SpaceStore{Pool: owner}
+	before, err := st.InspectNativeInstallerSource(ctx, 50)
+	require.NoError(t, err)
+	for _, n := range spaces {
+		space := nativeBanSpace(n)
+		var count int
+		require.NoError(t, owner.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, space, []uuid.UUID{nativeBanProfile(1), nativeBanProfile(2), nativeBanProfile(3)}).Scan(&count))
+		require.Equal(t, 3, count)
+		require.NoError(t, st.InitializeNativeMembership(ctx, space))
+		var complete bool
+		require.NoError(t, owner.QueryRow(ctx, `SELECT state='COMPLETE' FROM native_membership_guard.spaces WHERE space_id=$1`, space).Scan(&complete))
+		require.True(t, complete)
+	}
+	after, err := st.InspectNativeInstallerSource(ctx, 50)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "fixture enrollment must preserve the source seal")
+}
+
 func TestAccountBanIntentConcurrency50(t *testing.T) {
 	ctx := context.Background()
 	dsn := os.Getenv("SPACE_BAN_TEST_DATABASE_URL")

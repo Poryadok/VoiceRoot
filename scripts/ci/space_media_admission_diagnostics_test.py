@@ -11,6 +11,13 @@ import space_media_admission_diagnostics as diagnostics  # noqa: E402
 
 
 class SpaceMediaAdmissionDiagnosticsTests(unittest.TestCase):
+    def test_classifies_authority_reconciliation_without_exposing_error_text(self):
+        raw = b'{"msg":"Space media authority reconciliation failed","error":"private-token-and-dsn"}\n'
+        result = diagnostics.sanitize_log_bytes(raw, "complete")
+        self.assertEqual(result['result'], 'matched')
+        self.assertEqual(result['failure_classes'], ['authority_reconciliation_failed'])
+        self.assertNotIn('private-token-and-dsn', json.dumps(result))
+
     def test_keeps_only_exact_event_and_allowlisted_failure_class(self):
         lines = [
             'voice-1 | {"msg":"space_media_admission_commit_failed","failure_class":"room_head_pending","profile_id":"private"}',

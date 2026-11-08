@@ -7,6 +7,7 @@ import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join, extname, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { clickRetry, pollAfterNavigation } from './web-startup-poll.mjs';
 
 const root = resolve(process.argv[2] ?? 'src/frontend/build/web');
 const output = resolve(process.argv[3] ?? 'tmp/web-startup-browser');
@@ -78,7 +79,7 @@ try {
     if (!entry) return;
     pending.delete(message.id);
     clearTimeout(entry.timer);
-    if (message.error) entry.reject(new Error(JSON.stringify(message.error)));
+    if (message.error) entry.reject(Object.assign(new Error(message.error.message), { code: message.error.code }));
     else entry.done(message.result);
   });
   const send = (method, params = {}, sessionId) => new Promise((done, reject) => {
@@ -139,10 +140,8 @@ try {
     await screenshot('error');
     const point = await evaluate(`(() => { const r = document.getElementById('voice-startup-retry').getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
-    for (const type of ['mousePressed', 'mouseReleased']) {
-      await command('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 });
-    }
-    await until('retry reload reaches rendered app', () => evaluate(
+    await clickRetry(command, point);
+    await pollAfterNavigation(() => evaluate(
       `!document.getElementById('voice-startup') && performance.getEntriesByName('voice-startup:first-frame').length === 1`));
     journey.retryRendered = true;
     await screenshot('retry-ready');

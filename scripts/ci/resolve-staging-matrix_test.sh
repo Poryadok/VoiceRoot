@@ -74,6 +74,11 @@ FILTER_JSON='{"code":"true","auth":"true"}' GO_SERVICES_JSON='[]' run_matrix
 assert_contains "${build_services}" auth
 assert_not_contains "${build_services}" gateway
 
+echo "== auth consumer test impact does not deploy Auth =="
+FILTER_JSON='{"code":"true","svc_subscription":"true","auth_test_impact":"true"}' GO_SERVICES_JSON='["subscription"]' run_matrix
+[[ "${run_auth}" == "false" ]] || fail "test impact must not set Auth deployment"
+assert_not_contains "${build_services}" auth
+
 echo "== controlledgame test-only change never builds/promotes/rolls out images =="
 FILTER_JSON='{"code":"true","svc_controlledgame":"true"}' GO_SERVICES_JSON='["controlledgame"]' run_matrix
 [[ "${build_services}" == "[]" ]] || fail "controlledgame test-only change must not build images"
@@ -204,5 +209,43 @@ assert_contains "${build_services}" admin
 assert_contains "${build_services}" chat
 [[ "${promote_from_sha}" == "deadbeef" ]] || fail "expected original BASE_SHA, got ${promote_from_sha}"
 rm -f "${promote_out}"
+
+echo "== malformed filters and Go service inputs fail closed =="
+if FILTER_JSON='{' GO_SERVICES_JSON='[]' bash "${SCRIPT}" >/dev/null 2>&1; then
+  fail "invalid filter JSON must fail"
+fi
+if FILTER_JSON='{"ci_global":"false\r"}' GO_SERVICES_JSON='[]' bash "${SCRIPT}" >/dev/null 2>&1; then
+  fail "invalid filter value must fail"
+fi
+if FILTER_JSON='{}' GO_SERVICES_JSON='{}' bash "${SCRIPT}" >/dev/null 2>&1; then
+  fail "invalid Go service JSON must fail"
+fi
+FILTER_JSON='{"code":"false"}' GO_SERVICES_JSON='[ ]' FILTER_CODE=false run_matrix
+[[ "${build_services}" == '[]' ]] || fail "whitespace in an empty Go service array must be accepted"
+
+echo "== CRLF jq output preserves service names =="
+jq_dir="$(mktemp -d)"
+jq_output="$(mktemp)"
+trap 'rm -f -- "${jq_dir}/jq" "${jq_output}"; rmdir -- "${jq_dir}"' EXIT
+real_jq="$(type -P jq)"
+cat > "${jq_dir}/jq" <<'EOF'
+#!/usr/bin/env bash
+"${REAL_JQ}" "$@" | sed 's/$/\r/'
+EOF
+chmod +x "${jq_dir}/jq"
+PATH="${jq_dir}:${PATH}" REAL_JQ="${real_jq}" FILTER_JSON='{"code":"true"}' \
+  GO_SERVICES_JSON='["chat"]' GITHUB_OUTPUT="${jq_output}" bash "${SCRIPT}" >/dev/null
+grep -Fq '"chat"' "${jq_output}" || fail "CRLF jq output lost the selected service"
+if LC_ALL=C grep -q $'\r' "${jq_output}"; then
+  fail "CRLF jq output leaked carriage returns into the matrix"
+fi
+cat > "${jq_dir}/jq" <<'EOF'
+#!/usr/bin/env bash
+exit 7
+EOF
+if PATH="${jq_dir}:${PATH}" FILTER_JSON='{}' GO_SERVICES_JSON='[]' \
+    bash "${SCRIPT}" >/dev/null 2>&1; then
+  fail "failed jq must fail matrix resolution"
+fi
 
 echo "All resolve-staging-matrix tests passed."

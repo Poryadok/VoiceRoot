@@ -341,6 +341,23 @@ func TestCustodyProcessStartsClosedAndRejectsSignedStream(t *testing.T) {
 		operatorAddress := reserved.Addr().String()
 		require.NoError(t, reserved.Close())
 		operatorEnv := map[string]string{"CUSTODY_OPERATOR_LISTEN": operatorAddress, "CUSTODY_OPERATOR_TLS_CERT_FILE": operatorTLS.serverCert, "CUSTODY_OPERATOR_TLS_KEY_FILE": operatorTLS.serverKey, "CUSTODY_OPERATOR_CLIENT_CA_FILE": operatorTLS.caFile, "CUSTODY_OPERATOR_CLIENT_CERT_SHA256": fmt.Sprintf("%x", sha256.Sum256(operatorTLS.client.Certificate[0])), "CUSTODY_OPERATOR_SIGNER_PUBLIC_KEY_FILE": publicPath, "CUSTODY_SOURCE_ADMIN_DATABASE_URL": u.String(), "CUSTODY_SOURCE_DATABASE_URL": u.String(), "CUSTODY_USER_KEY_MANIFEST": manifestPath, "CUSTODY_USER_KEYS_DIR": dir}
+		monitorPublic, _, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		monitorDER, err := x509.MarshalPKIXPublicKey(monitorPublic)
+		require.NoError(t, err)
+		monitorPath := filepath.Join(dir, "unavailable-monitor-public.pem")
+		require.NoError(t, os.WriteFile(monitorPath, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: monitorDER}), 0600))
+		clientCertPath, clientKeyPath := filepath.Join(dir, "supervisor-client.pem"), filepath.Join(dir, "supervisor-client.key")
+		clientDER, err := x509.MarshalPKCS8PrivateKey(operatorTLS.client.PrivateKey)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(clientCertPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: operatorTLS.client.Certificate[0]}), 0600))
+		require.NoError(t, os.WriteFile(clientKeyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: clientDER}), 0600))
+		operatorEnv["CUSTODY_SUPERVISOR_URL"] = "https://127.0.0.1:1"
+		operatorEnv["CUSTODY_SUPERVISOR_TLS_CA_FILE"] = operatorTLS.caFile
+		operatorEnv["CUSTODY_SUPERVISOR_CLIENT_CERT_FILE"] = clientCertPath
+		operatorEnv["CUSTODY_SUPERVISOR_CLIENT_KEY_FILE"] = clientKeyPath
+		operatorEnv["CUSTODY_SUPERVISOR_SIGNER_PUBLIC_KEY_FILE"] = monitorPath
+		operatorEnv["CUSTODY_SUPERVISOR_SERVER_CERT_SHA256"] = strings.Repeat("cd", 32)
 		cfg, err := LoadServerConfig(func(name string) (string, bool) {
 			if value, ok := operatorEnv[name]; ok {
 				return value, true
