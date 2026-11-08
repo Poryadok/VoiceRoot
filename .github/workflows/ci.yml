@@ -466,7 +466,8 @@ jobs:
     if: >-
       !cancelled() &&
       (github.event_name == 'schedule' ||
-       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
+       (github.event_name == 'pull_request' && needs.changes.outputs.history_audit == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:

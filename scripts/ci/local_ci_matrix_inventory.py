@@ -11,7 +11,7 @@ import sys
 
 
 MAKEFILE_SHA256 = '87c85732b31278dff0d34afbc725a77c61b1588c877acaf020875e7bbc8eeed6'
-WORKFLOW_SHA256 = '8403630d53bc8274e46d50ae942c2998797fb879aa2a966a1f0c42ddc674ed75'
+WORKFLOW_SHA256 = 'fb0168f16cfd67a9f2bc58bddd39e6e3b7bab6ecefca63b7b43ed5ec5d2398b8'
 SHARDS = ('policy', 'runtime', 'staging', 'proofs')
 SHARD_RECIPE_COUNTS = {'policy': 80, 'runtime': 23, 'staging': 34, 'proofs': 15}
 GO_CACHE_TEST_SOURCES = (
