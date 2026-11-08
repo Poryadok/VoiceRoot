@@ -1,5 +1,6 @@
 """Owned temporary root admission for the staging preservation fixture."""
 import os
+import shutil
 from pathlib import Path
 import stat
 import subprocess
@@ -84,8 +85,16 @@ case "$1" in
   *) exit 6 ;;
 esac
 '''
+        real_python = shutil.which('python3') or '/usr/bin/python3'
+        fake_python = '''#!/bin/sh
+case "$*" in
+  *staging_qualified_helpers.py*|*staging_story_target8_helper.py*|*staging_story_target8_helper_test.py*) exit 0 ;;
+esac
+exec %s "$@"
+''' % real_python
         for name, content in {'sudo': fake_sudo, 'git': '#!/bin/sh\nexit 0\n',
-                              'docker': '#!/bin/sh\nexit 0\n'}.items():
+                              'docker': '#!/bin/sh\nexit 0\n',
+                              'python3': fake_python}.items():
             path = binary / name
             path.write_text(content, encoding='utf-8')
             path.chmod(0o755)

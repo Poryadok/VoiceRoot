@@ -359,6 +359,8 @@
     ["voice/backend/matchmaking/internal/store", "TestTerminalSearchReleaseDownRunnerPreservesPendingAndDirtyMarker"]
   ],
   "messaging": [
+    ["voice/backend/messaging/internal/grpcsvc", "TestMessagingGetMessages_LateCommitPagesAdvanceWithEarlierUUIDs"],
+    ["voice/backend/messaging/internal/grpcsvc", "TestMessagingGetMessages_MissingAnchorSignalsLatestReset"],
     ["voice/backend/messaging/internal/grpcsvc", "TestApplyGameMessageUsesGISMappingClientBeforePermitAndCommit"],
     ["voice/backend/messaging/internal/grpcsvc", "TestAudioPreviewInsertionAndRetryWithExactReference"],
     ["voice/backend/messaging/internal/grpcsvc", "TestBotSendWritesWithoutViewAndRetainsOwnerChecks"],
