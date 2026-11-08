@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/chat_draft_storage.dart';
+import 'package:voice_frontend/backend/files_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
@@ -38,6 +40,7 @@ import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
 
 import 'support/auth_test_overrides.dart';
+import 'support/gateway_test_client.dart';
 import 'support/markdown_test_helpers.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
@@ -99,6 +102,179 @@ void main() {
     await harness.pump(tester);
     expect(harness.composer(tester).text, 'Unsent after failure');
   });
+
+  testWidgets('attachment send completion preserves a newer draft', (
+    tester,
+  ) async {
+    final response = Completer<http.Response>();
+    final sendStarted = Completer<void>();
+    final files = _AttachmentSendFilesClient();
+    final harness = _ImmediateRetryHarness(
+      files: files,
+      send: (_, _) {
+        sendStarted.complete();
+        return response.future;
+      },
+    );
+    addTearDown(harness.container.dispose);
+    const draftKey = ChatDraftKey(profileId: 'prof-test', chatId: 'chat-abc');
+    final draftSubscription = harness.container.listen(
+      chatDraftProvider(draftKey),
+      (_, _) {},
+    );
+    addTearDown(draftSubscription.close);
+    final file = ChatAttachmentFile(
+      bytes: Uint8List.fromList([1, 2, 3]),
+      contentType: 'application/pdf',
+      name: 'attachment.pdf',
+    );
+    await harness.pump(tester, attachmentPicker: () async => file);
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Sent text');
+    await tester.pump();
+    await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ChatRoomPanel)),
+    )!;
+    await tester.tap(find.text(l10n.composerAttachDocument));
+    await tester.pump();
+    await sendStarted.future;
+    await tester.pump();
+
+    expect(harness.bodies, hasLength(1));
+    final sentBody = jsonDecode(harness.bodies.single) as Map<String, dynamic>;
+    expect(sentBody['content'], 'Sent text');
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Next draft');
+    await tester.pump();
+    response.complete(_successfulSendResponse());
+    await tester.pumpAndSettle();
+
+    expect(harness.composer(tester).text, 'Next draft');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    expect(
+      harness.container.read(chatDraftProvider(draftKey)).valueOrNull,
+      'Next draft',
+    );
+    await harness.pump(tester);
+    expect(harness.composer(tester).text, 'Next draft');
+  });
+
+  testWidgets(
+    'confirmed attachment retries preserve drafts and retire stale retries',
+    (tester) async {
+      final files = _AttachmentSendFilesClient();
+      final harness = _ImmediateRetryHarness(
+        files: files,
+        send: (_, attempt) async => {1, 3, 5}.contains(attempt)
+            ? _failedSendResponse()
+            : _successfulSendResponse(),
+      );
+      addTearDown(harness.container.dispose);
+      const draftKey = ChatDraftKey(profileId: 'prof-test', chatId: 'chat-abc');
+      final draftSubscription = harness.container.listen(
+        chatDraftProvider(draftKey),
+        (_, _) {},
+      );
+      addTearDown(draftSubscription.close);
+      final file = ChatAttachmentFile(
+        bytes: Uint8List.fromList([4, 5, 6]),
+        contentType: 'application/pdf',
+        name: 'confirmed.pdf',
+      );
+      await harness.pump(tester, attachmentPicker: () async => file);
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Keep this draft',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ChatRoomPanel)),
+      )!;
+      await tester.tap(find.text(l10n.composerAttachDocument));
+      await tester.pumpAndSettle();
+
+      expect(harness.bodies, hasLength(1));
+      expect(files.requestCount, 1);
+      expect(files.putCount, 1);
+      expect(files.confirmCount, 1);
+      expect(harness.composer(tester).text, 'Keep this draft');
+      expect(find.byKey(ChatRoomPanel.sendRetryKey), findsOneWidget);
+      final firstBody =
+          jsonDecode(harness.bodies.first) as Map<String, dynamic>;
+      final firstAttachments = jsonDecode(
+        firstBody['attachments_json'] as String,
+      );
+      expect(firstAttachments, hasLength(1));
+      expect(firstAttachments.single['file_id'], 'confirmed-file');
+
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Keep this newer draft',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+
+      expect(harness.bodies, hasLength(2));
+      expect(harness.bodies[1], harness.bodies[0]);
+      expect(files.requestCount, 1);
+      expect(files.putCount, 1);
+      expect(files.confirmCount, 1);
+      expect(harness.composer(tester).text, 'Keep this newer draft');
+      expect(
+        harness.container.read(chatDraftProvider(draftKey)).valueOrNull,
+        'Keep this newer draft',
+      );
+
+      await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.composerAttachDocument));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(3));
+      expect(find.byKey(ChatRoomPanel.sendRetryKey), findsOneWidget);
+      expect(
+        tester
+            .widget<TextButton>(find.byKey(ChatRoomPanel.sendRetryKey))
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(4));
+      expect(harness.bodies[3], harness.bodies[2]);
+      expect(harness.composer(tester).text, isEmpty);
+      expect(files.requestCount, 2);
+      expect(files.putCount, 2);
+      expect(files.confirmCount, 2);
+
+      await tester.tap(find.byKey(ChatRoomPanel.attachKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.composerAttachDocument));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(5));
+      expect(find.byKey(ChatRoomPanel.sendRetryKey), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(ChatRoomPanel.inputKey),
+        'Replacement message',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(ChatRoomPanel.sendKey));
+      await tester.pumpAndSettle();
+      expect(harness.bodies, hasLength(6));
+      expect(
+        (jsonDecode(harness.bodies[5]) as Map<String, dynamic>)['content'],
+        'Replacement message',
+      );
+      expect(find.byKey(ChatRoomPanel.sendRetryKey), findsNothing);
+      expect(files.requestCount, 3);
+      expect(files.putCount, 3);
+      expect(files.confirmCount, 3);
+    },
+  );
 
   for (final scheduledEnabled in [false, true]) {
     testWidgets('scheduled list request follows capability=$scheduledEnabled', (
@@ -1934,6 +2110,7 @@ class _ImmediateRetryHarness {
     Future<http.Response> Function(http.Request, int)? send,
     bool encrypted = false,
     bool threadsEnabled = false,
+    VoiceFilesClient? files,
   }) {
     final client = MockClient((request) async {
       if (request.url.path == '/api/v1/messages/send') {
@@ -1984,6 +2161,7 @@ class _ImmediateRetryHarness {
               : _DmChatListController.new,
         ),
         chatE2eEnabledProvider('chat-abc').overrideWith((ref) => encrypted),
+        if (files != null) voiceFilesClientProvider.overrideWithValue(files),
         e2eMessageServiceProvider.overrideWithValue(
           _CountingE2eMessageService(() => ++encryptionCalls),
         ),
@@ -2003,7 +2181,11 @@ class _ImmediateRetryHarness {
       container.read(chatRoomControllerProvider('chat-abc').notifier)
           as _ImmediateRoomController;
 
-  Future<void> pump(WidgetTester tester, {String locale = 'en'}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    String locale = 'en',
+    ChatAttachmentPicker? attachmentPicker,
+  }) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -2012,7 +2194,12 @@ class _ImmediateRetryHarness {
           locale: Locale(locale),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: ChatRoomPanel(chatId: 'chat-abc')),
+          home: Scaffold(
+            body: ChatRoomPanel(
+              chatId: 'chat-abc',
+              attachmentPicker: attachmentPicker,
+            ),
+          ),
         ),
       ),
     );
@@ -2027,6 +2214,70 @@ class _ImmediateRetryHarness {
         ),
       )
       .controller!;
+}
+
+class _AttachmentSendFilesClient extends VoiceFilesClient {
+  _AttachmentSendFilesClient()
+    : super(
+        gateway: gatewayHttpForTest(
+          MockClient((_) async => http.Response('{}', 200)),
+          config: const GatewayConfig(baseUrl: 'http://api.test'),
+        ),
+      );
+
+  var requestCount = 0;
+  var putCount = 0;
+  var confirmCount = 0;
+
+  @override
+  Future<FilesApiResult<FileUploadTicket>> requestUpload({
+    required String authorization,
+    required String originalName,
+    required String mimeType,
+    required int sizeBytes,
+    String? chatId,
+    String? chatType,
+    String? storyId,
+    bool isE2e = false,
+    bool music = false,
+    bool voiceNote = false,
+  }) async {
+    requestCount++;
+    return FilesApiOk(
+      FileUploadTicket(
+        fileId: 'confirmed-file',
+        presignedPutUrl: Uri.https('upload.test', '/put'),
+        r2Key: 'synthetic-upload-key',
+      ),
+    );
+  }
+
+  @override
+  Future<FilesApiResult<void>> putBytes({
+    required Uri uploadUrl,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    putCount++;
+    return const FilesApiOk(null);
+  }
+
+  @override
+  Future<FilesApiResult<FileMetadataData>> confirmUpload({
+    required String authorization,
+    required String fileId,
+    required Uint8List bytes,
+  }) async {
+    confirmCount++;
+    return const FilesApiOk(
+      FileMetadataData(
+        fileId: 'confirmed-file',
+        fileType: 'document',
+        status: 'ready',
+        originalName: 'confirmed.pdf',
+      ),
+    );
+  }
 }
 
 class _ImmediateRoomController extends ChatRoomController {
