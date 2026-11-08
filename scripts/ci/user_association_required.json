@@ -143,6 +143,26 @@
     [
       "voice/backend/user/internal/identityassociation",
       "TestProductionKeyReaderRetainsEveryVersion"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthProfileReadsCommittedStateAfterIdentityMutexWait"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthProfileMatchesCanonicalOwnerWithoutEnumeratingOrWriting"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthProfileRejectsUnqualifiedOrChangedSource"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthProfileMissingCanonicalAliasIsIncomplete"
+    ],
+    [
+      "voice/backend/user/internal/identityassociation",
+      "TestAuthProfileRetiredAliasStillMatchesAndNeverReconstructsAccount"
     ]
   ]
 }
