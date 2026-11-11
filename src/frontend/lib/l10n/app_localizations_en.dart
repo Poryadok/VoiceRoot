@@ -4090,4 +4090,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queueSearchNoRolePreference => 'No role preference';
+
+  @override
+  String storyViewerProgress(int current, int total) {
+    return 'Story $current of $total';
+  }
+
+  @override
+  String get storyViewerDeleteConfirm => 'Delete this story?';
+
+  @override
+  String get storyLfpJoinSent => 'Join request sent';
+
+  @override
+  String get storyLfpInviteSent => 'Invite sent';
+
+  @override
+  String get storyLfpInactive => 'This announcement is no longer active';
 }

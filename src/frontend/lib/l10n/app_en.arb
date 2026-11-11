@@ -1705,5 +1705,11 @@
   "composerVoiceStop": "Finish recording",
   "composerVoiceCancel": "Cancel recording",
   "composerVoiceLocked": "Recording locked",
-  "queueSearchNoRolePreference": "No role preference"
+  "queueSearchNoRolePreference": "No role preference",
+  "storyViewerProgress": "Story {current} of {total}",
+  "@storyViewerProgress": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
+  "storyViewerDeleteConfirm": "Delete this story?",
+  "storyLfpJoinSent": "Join request sent",
+  "storyLfpInviteSent": "Invite sent",
+  "storyLfpInactive": "This announcement is no longer active"
 }

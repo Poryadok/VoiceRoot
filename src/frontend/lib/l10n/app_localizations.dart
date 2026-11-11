@@ -7441,6 +7441,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No role preference'**
   String get queueSearchNoRolePreference;
+
+  /// No description provided for @storyViewerProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Story {current} of {total}'**
+  String storyViewerProgress(int current, int total);
+
+  /// No description provided for @storyViewerDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this story?'**
+  String get storyViewerDeleteConfirm;
+
+  /// No description provided for @storyLfpJoinSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Join request sent'**
+  String get storyLfpJoinSent;
+
+  /// No description provided for @storyLfpInviteSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite sent'**
+  String get storyLfpInviteSent;
+
+  /// No description provided for @storyLfpInactive.
+  ///
+  /// In en, this message translates to:
+  /// **'This announcement is no longer active'**
+  String get storyLfpInactive;
 }
 
 class _AppLocalizationsDelegate

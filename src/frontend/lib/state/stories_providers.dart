@@ -83,7 +83,9 @@ final storyDetailProvider = FutureProvider.family<StoryData?, String>((
       .getStory(authorization: auth, storyId: storyId);
   return switch (result) {
     StoriesApiOk(:final data) => data,
-    StoriesApiFailure() => null,
+    StoriesApiFailure(:final statusCode) => throw StoriesLoadException(
+      statusCode,
+    ),
   };
 });
 
@@ -113,7 +115,9 @@ final storyViewersProvider = FutureProvider.family<List<String>, String>((
       .getViewers(authorization: auth, storyId: storyId);
   return switch (result) {
     StoriesApiOk(:final data) => data,
-    StoriesApiFailure() => const [],
+    StoriesApiFailure(:final statusCode) => throw StoriesLoadException(
+      statusCode,
+    ),
   };
 });
 
@@ -130,7 +134,9 @@ final storyReactionsProvider =
           .getStoryReactions(authorization: auth, storyId: storyId);
       return switch (result) {
         StoriesApiOk(:final data) => data,
-        StoriesApiFailure() => const [],
+        StoriesApiFailure(:final statusCode) => throw StoriesLoadException(
+          statusCode,
+        ),
       };
     });
 

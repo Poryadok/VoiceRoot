@@ -4127,4 +4127,21 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get queueSearchNoRolePreference => 'Без предпочтения роли';
+
+  @override
+  String storyViewerProgress(int current, int total) {
+    return 'История $current из $total';
+  }
+
+  @override
+  String get storyViewerDeleteConfirm => 'Удалить эту историю?';
+
+  @override
+  String get storyLfpJoinSent => 'Запрос на присоединение отправлен';
+
+  @override
+  String get storyLfpInviteSent => 'Приглашение отправлено';
+
+  @override
+  String get storyLfpInactive => 'Объявление больше не актуально';
 }

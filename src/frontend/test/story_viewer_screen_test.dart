@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,7 +19,9 @@ import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/state/stories_providers.dart';
 import 'package:voice_frontend/ui/stories/story_game_tag_chip.dart';
 import 'package:voice_frontend/ui/stories/story_viewer_screen.dart';
+import 'package:voice_frontend/ui/stories/lfp_story_card.dart';
 import 'package:voice_frontend/ui/stories/story_viewers_sheet.dart';
+import 'package:voice_frontend/ui/report/report_sheet.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/gateway_test_client.dart';
@@ -59,6 +63,8 @@ void main() {
     Widget child, {
     String activeProfileId = 'prof-test',
     http.Client? client,
+    StoryData data = story,
+    Future<StoryData?> Function()? load,
   }) {
     return ProviderScope(
       overrides: [
@@ -82,7 +88,9 @@ void main() {
           );
           return controller;
         }),
-        storyDetailProvider('story-1').overrideWith((ref) async => story),
+        storyDetailProvider(
+          'story-1',
+        ).overrideWith((ref) async => load == null ? data : load()),
       ],
       child: MaterialApp(
         theme: voiceTestTheme(),
@@ -102,6 +110,380 @@ void main() {
 
     expect(find.byKey(const Key('story_viewer_reply')), findsOneWidget);
   });
+
+  testWidgets('empty story route renders recovery without clamping error', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(const StoryViewerScreen(storyIds: [])));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('No stories to show'), findsOneWidget);
+  });
+
+  testWidgets(
+    'LFP viewer retains reply/react and sends real discovery responses',
+    (tester) async {
+      final responses = <String>[];
+      final mock = MockClient((req) async {
+        if (req.url.path.endsWith('/lfp-response')) {
+          responses.add(jsonDecode(req.body)['response_type'] as String);
+        }
+        return http.Response('', 204);
+      });
+      await tester.pumpWidget(
+        wrap(
+          const StoryViewerScreen(storyIds: ['story-1']),
+          client: mock,
+          data: const StoryData(
+            id: 'story-1',
+            authorProfileId: 'author-1',
+            type: 'text',
+            textContent: 'Need a fifth player',
+            isLookingForParty: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(StoryViewerScreen.replyButtonKey), findsOneWidget);
+      expect(find.byKey(StoryViewerScreen.reactButtonKey), findsOneWidget);
+      await tester.tap(find.byKey(LfpStoryCard.joinKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Join request sent'), findsOneWidget);
+      await tester.tap(find.byKey(LfpStoryCard.inviteKey));
+      await tester.pumpAndSettle();
+      expect(responses, ['JOIN', 'INVITE']);
+    },
+  );
+
+  testWidgets('expired LFP disables join/invite but keeps private write', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        const StoryViewerScreen(storyIds: ['story-1']),
+        client: MockClient((_) async => http.Response('', 204)),
+        data: StoryData(
+          id: 'story-1',
+          authorProfileId: 'author-1',
+          type: 'text',
+          isLookingForParty: true,
+          expiresAt: DateTime.utc(2020),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<FilledButton>(find.byKey(LfpStoryCard.joinKey)).onPressed,
+      isNull,
+    );
+    expect(
+      tester.widget<FilledButton>(find.byKey(LfpStoryCard.inviteKey)).onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(find.byKey(LfpStoryCard.writeKey))
+          .onPressed,
+      isNotNull,
+    );
+    expect(find.text('This announcement is no longer active'), findsOneWidget);
+  });
+
+  testWidgets('loading then retry recovers from a sanitized detail error', (
+    tester,
+  ) async {
+    final pending = Completer<StoryData?>();
+    var attempts = 0;
+    await tester.pumpWidget(
+      wrap(
+        const StoryViewerScreen(storyIds: ['story-1']),
+        client: MockClient((_) async => http.Response('', 204)),
+        load: () {
+          attempts++;
+          return attempts == 1 ? pending.future : Future.value(story);
+        },
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Hello story'), findsNothing);
+    pending.completeError(const StoriesLoadException(500));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load story'), findsOneWidget);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(StoryViewerScreen)),
+    )!;
+    await tester.tap(find.text(l10n.commonRetry));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.text('Hello story'), findsOneWidget);
+  });
+
+  testWidgets('segments and keyboard change story and mark previous viewed', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final viewed = <String>[];
+      final mock = MockClient((req) async {
+        if (req.url.path.endsWith('/views')) viewed.add(req.url.path);
+        return http.Response('', 204);
+      });
+      await tester.pumpWidget(
+        wrap(
+          const StoryViewerScreen(storyIds: ['story-1', 'story-1']),
+          client: mock,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('story_viewer_segment_0')), findsOneWidget);
+      expect(find.byKey(const Key('story_viewer_segment_1')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Story 2 of 2'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Story 1 of 2'), findsOneWidget);
+      expect(viewed, ['/api/v1/stories/story-1/views']);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets(
+    'successful owner delete removes current story and reaches the next',
+    (tester) async {
+      var deletes = 0;
+      final response = Completer<http.Response>();
+      final mock = MockClient((req) async {
+        if (req.method == 'DELETE') {
+          deletes++;
+          return response.future;
+        }
+        if (req.url.path.endsWith('/story-2')) {
+          return http.Response(
+            '{"story":{"id":"story-2","author_profile_id":"author-1","type":"text","text_content":"Second story"}}',
+            200,
+          );
+        }
+        return http.Response('', 204);
+      });
+      await tester.pumpWidget(
+        wrap(
+          const StoryViewerScreen(storyIds: ['story-1', 'story-2']),
+          activeProfileId: 'author-1',
+          client: mock,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('story_viewer_delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.tap(find.byKey(const Key('story_viewer_segment_1')));
+      await tester.pump();
+      expect(find.text('Hello story'), findsOneWidget);
+      expect(find.text('Second story'), findsNothing);
+      response.complete(http.Response('', 204));
+      await tester.pumpAndSettle();
+      expect(deletes, 1);
+      expect(find.text('Second story'), findsOneWidget);
+      expect(find.text('Hello story'), findsNothing);
+      expect(find.byKey(const Key('story_viewer_segment_1')), findsNothing);
+    },
+  );
+
+  for (final status in [204, 500]) {
+    testWidgets(
+      'late delete $status cannot mutate a replacement profile viewer',
+      (tester) async {
+        final response = Completer<http.Response>();
+        final mock = MockClient(
+          (req) async =>
+              req.method == 'DELETE' ? response.future : http.Response('', 204),
+        );
+        await tester.pumpWidget(
+          wrap(
+            const StoryViewerScreen(storyIds: ['story-1']),
+            activeProfileId: 'author-1',
+            client: mock,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(StoryViewerScreen)),
+        );
+        await tester.tap(find.byKey(const Key('story_viewer_delete')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.pump();
+        container.read(authControllerProvider.notifier).state = const AuthState(
+          session: AuthSession(
+            accessToken: 'replacement-token',
+            refreshToken: 'replacement-refresh',
+            accountId: 'acc-test',
+            activeProfileId: 'profile-b',
+            expiresInSeconds: 900,
+          ),
+        );
+        await tester.pumpAndSettle();
+        response.complete(http.Response('', status));
+        await tester.pumpAndSettle();
+        expect(find.text('Hello story'), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(
+          container.read(authControllerProvider).activeProfileId,
+          'profile-b',
+        );
+      },
+    );
+  }
+
+  testWidgets(
+    'delete transaction is invalidated by a switch attempt returning to the same profile',
+    (tester) async {
+      final response = Completer<http.Response>();
+      await tester.pumpWidget(
+        wrap(
+          const StoryViewerScreen(storyIds: ['story-1']),
+          activeProfileId: 'author-1',
+          client: MockClient(
+            (req) async => req.method == 'DELETE'
+                ? response.future
+                : http.Response('', 204),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(StoryViewerScreen)),
+      );
+      await tester.tap(find.byKey(const Key('story_viewer_delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pump();
+      container.read(profileSwitchInProgressProvider.notifier).state = true;
+      await tester.pump();
+      container.read(profileSwitchInProgressProvider.notifier).state = false;
+      await tester.pump();
+      response.complete(http.Response('', 204));
+      await tester.pumpAndSettle();
+      expect(find.text('Hello story'), findsOneWidget);
+    },
+  );
+
+  testWidgets('LFP expiry updates mounted controls and guards a stale tap', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2099);
+    var joins = 0;
+    var invites = 0;
+    Widget app(DateTime expiresAt) => MaterialApp(
+      theme: voiceTestTheme(),
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: LfpStoryCard(
+          story: StoryData(
+            id: 'expiring',
+            authorProfileId: 'author',
+            type: 'text',
+            expiresAt: expiresAt,
+          ),
+          now: () => now,
+          onJoin: () => joins++,
+          onInvite: () => invites++,
+          onWrite: () {},
+        ),
+      ),
+    );
+    await tester.pumpWidget(app(now.add(const Duration(seconds: 2))));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<FilledButton>(find.byKey(LfpStoryCard.joinKey)).onPressed,
+      isNotNull,
+    );
+    now = now.add(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
+    expect(
+      tester.widget<FilledButton>(find.byKey(LfpStoryCard.joinKey)).onPressed,
+      isNull,
+    );
+    expect(
+      tester.widget<FilledButton>(find.byKey(LfpStoryCard.inviteKey)).onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(find.byKey(LfpStoryCard.writeKey))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.pumpWidget(app(now.add(const Duration(seconds: 2))));
+    await tester.pump();
+    now = now.add(const Duration(seconds: 2));
+    await tester.tap(find.byKey(LfpStoryCard.joinKey));
+    await tester.pump();
+    expect(joins, 0);
+    expect(invites, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('report button opens the shared Story report form', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        const StoryViewerScreen(storyIds: ['story-1']),
+        client: MockClient((_) async => http.Response('', 204)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(StoryViewerScreen.moreButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(StoryViewerScreen.reportButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ReportSheet.sheetKey), findsOneWidget);
+    expect(
+      tester.widget<ReportSheet>(find.byType(ReportSheet)).target,
+      isA<ReportStoryTarget>(),
+    );
+  });
+
+  testWidgets(
+    'owner deletion requires confirmation and preserves story on failure',
+    (tester) async {
+      var deletes = 0;
+      final mock = MockClient((req) async {
+        if (req.method == 'DELETE') {
+          deletes++;
+          return http.Response('', 500);
+        }
+        return http.Response('', 204);
+      });
+      await tester.pumpWidget(
+        wrap(
+          const StoryViewerScreen(storyIds: ['story-1']),
+          activeProfileId: 'author-1',
+          client: mock,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('story_viewer_delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(deletes, 0);
+      await tester.tap(find.byKey(const Key('story_viewer_delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(deletes, 1);
+      expect(find.byKey(StoryViewerScreen.screenKey), findsOneWidget);
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+    },
+  );
 
   testWidgets('StoryViewerScreen shows view count for author', (tester) async {
     await tester.pumpWidget(

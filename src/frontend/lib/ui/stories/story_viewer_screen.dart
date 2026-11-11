@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
@@ -7,16 +8,20 @@ import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/stories_providers.dart';
+import '../../state/social_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_emoji_style.dart';
+import '../../theme/voice_theme_providers.dart';
 import '../api_error_messages.dart';
 import '../core/voice_state_panel.dart';
 import '../core/voice_skeleton.dart';
 import '../report/report_sheet.dart';
+import '../social/profile_detail_sheet.dart';
 import 'lfp_story_card.dart';
 import 'story_game_tag_chip.dart';
 import 'story_text_style.dart';
 import 'story_viewers_sheet.dart';
+import 'story_author_session.dart';
 
 /// Full-screen story viewer with reactions and report.
 class StoryViewerScreen extends ConsumerStatefulWidget {
@@ -29,6 +34,7 @@ class StoryViewerScreen extends ConsumerStatefulWidget {
 
   static const Key screenKey = Key('story_viewer_screen');
   static const Key reportButtonKey = Key('story_viewer_report');
+  static const Key moreButtonKey = Key('story_viewer_more');
   static const Key reactButtonKey = Key('story_viewer_react');
   static const Key reactPickerKey = Key('story_viewer_react_picker');
   static const Key reactionsRowKey = Key('story_viewer_reactions_row');
@@ -45,17 +51,22 @@ class StoryViewerScreen extends ConsumerStatefulWidget {
 
 class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   late int _index;
+  late final List<String> _storyIds;
+  bool _deleting = false;
+  int _mutationEpoch = 0;
   final _markedViewed = <String>{};
 
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex.clamp(0, widget.storyIds.length - 1);
+    _storyIds = List.of(widget.storyIds);
+    _index = _storyIds.isEmpty
+        ? 0
+        : widget.initialIndex.clamp(0, _storyIds.length - 1);
     WidgetsBinding.instance.addPostFrameCallback((_) => _markCurrentViewed());
   }
 
-  String get _currentStoryId =>
-      widget.storyIds.isEmpty ? '' : widget.storyIds[_index];
+  String get _currentStoryId => _storyIds.isEmpty ? '' : _storyIds[_index];
 
   Future<void> _markCurrentViewed() async {
     final storyId = _currentStoryId;
@@ -71,7 +82,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   }
 
   void _next() {
-    if (_index < widget.storyIds.length - 1) {
+    if (_deleting) return;
+    if (_index < _storyIds.length - 1) {
       setState(() => _index++);
       _markCurrentViewed();
     } else {
@@ -80,9 +92,93 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   }
 
   void _previous() {
+    if (_deleting) return;
     if (_index > 0) {
       setState(() => _index--);
+      _markCurrentViewed();
     }
+  }
+
+  Future<void> _delete(StoryData story) async {
+    if (_deleting || ref.read(profileSwitchInProgressProvider)) return;
+    final session = StoryAuthorSession.capture(ref);
+    final epoch = _mutationEpoch;
+    if (session.profileId != story.authorProfileId) return;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.storyViewerDeleteConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.commonDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true ||
+        !mounted ||
+        !session.isCurrent(ref) ||
+        epoch != _mutationEpoch ||
+        ref.read(profileSwitchInProgressProvider)) {
+      return;
+    }
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null ||
+        ref.read(authControllerProvider).activeProfileId !=
+            story.authorProfileId) {
+      return;
+    }
+    setState(() => _deleting = true);
+    final result = await ref
+        .read(voiceStoriesClientProvider)
+        .deleteStory(authorization: auth, storyId: story.id);
+    if (!mounted) return;
+    setState(() => _deleting = false);
+    if (!session.isCurrent(ref) ||
+        epoch != _mutationEpoch ||
+        ref.read(profileSwitchInProgressProvider)) {
+      return;
+    }
+    switch (result) {
+      case StoriesApiOk():
+        ref.invalidate(storyDetailProvider(story.id));
+        ref.invalidate(storyFeedProvider);
+        ref.invalidate(storyArchiveProvider);
+        ref.invalidate(profileStoriesProvider(story.authorProfileId));
+        setState(() {
+          _storyIds.removeWhere((id) => id == story.id);
+          _index = _storyIds.isEmpty
+              ? 0
+              : _index.clamp(0, _storyIds.length - 1);
+        });
+        if (_storyIds.isEmpty) {
+          Navigator.of(context).maybePop();
+        } else {
+          _markCurrentViewed();
+        }
+      case StoriesApiFailure(:final statusCode):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              commonActionErrorMessage(l10n, statusCode: statusCode),
+            ),
+          ),
+        );
+    }
+  }
+
+  void _openAuthor(String profileId) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ProfileDetailSheet(profileId: profileId),
+    );
   }
 
   Future<void> _react() async {
@@ -131,6 +227,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
               for (final emoji in choices)
                 IconButton(
                   key: Key('story_viewer_react_emoji_$emoji'),
+                  tooltip: emoji,
                   onPressed: () => Navigator.of(context).pop(emoji),
                   icon: Text(
                     emoji,
@@ -188,6 +285,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     final voice = VoiceColors.of(context);
     final storyId = _currentStoryId;
     final activeProfileId = ref.watch(authControllerProvider).activeProfileId;
+    ref.listen<bool>(profileSwitchInProgressProvider, (_, switching) {
+      if (switching) _mutationEpoch++;
+    });
 
     if (storyId.isEmpty) {
       return Scaffold(
@@ -204,60 +304,256 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     return Scaffold(
       key: StoryViewerScreen.screenKey,
       backgroundColor: voice.canvas,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            key: StoryViewerScreen.reportButtonKey,
-            tooltip: l10n.reportTitle,
-            icon: const Icon(Icons.flag_outlined),
-            onPressed: _report,
+      appBar: storyAsync.valueOrNull == null
+          ? AppBar(
+              actions: [
+                IconButton(
+                  key: const Key('story_viewer_close'),
+                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            )
+          : null,
+      body: SafeArea(
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (_, event) {
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              _next();
+            } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              _previous();
+            } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+              Navigator.of(context).maybePop();
+            } else {
+              return KeyEventResult.ignored;
+            }
+            return KeyEventResult.handled;
+          },
+          child: GestureDetector(
+            onTapUp: (details) {
+              final width = MediaQuery.sizeOf(context).width;
+              if (details.localPosition.dx > width * 0.6) {
+                _next();
+              } else if (details.localPosition.dx < width * 0.4) {
+                _previous();
+              }
+            },
+            onVerticalDragEnd: (details) {
+              if ((details.primaryVelocity ?? 0) > 200) {
+                Navigator.of(context).maybePop();
+              }
+            },
+            child: storyAsync.when(
+              loading: () => const VoiceListSkeleton(rowCount: 4),
+              error: (error, _) => VoiceStatePanel(
+                title: l10n.storyViewerLoadError,
+                message:
+                    storyViewerErrorMessage(l10n, error) ==
+                        l10n.storyViewerLoadError
+                    ? null
+                    : storyViewerErrorMessage(l10n, error),
+                icon: Icons.cloud_off_outlined,
+                actionLabel: l10n.commonRetry,
+                onAction: () => ref.invalidate(storyDetailProvider(storyId)),
+              ),
+              data: (story) {
+                if (story == null) {
+                  return VoiceStatePanel(
+                    title: l10n.storyViewerLoadError,
+                    icon: Icons.cloud_off_outlined,
+                    actionLabel: l10n.commonRetry,
+                    onAction: () =>
+                        ref.invalidate(storyDetailProvider(storyId)),
+                  );
+                }
+                final isAuthor = activeProfileId == story.authorProfileId;
+                final onMedia =
+                    story.isLookingForParty ||
+                    story.type == 'photo' ||
+                    story.type == 'video';
+                final headerColor = onMedia ? Colors.white : voice.textPrimary;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _StoryContent(
+                      story: story,
+                      storyId: storyId,
+                      isAuthor: isAuthor,
+                      onReact: _react,
+                      onReply: () => _reply(story),
+                      reactButtonKey: StoryViewerScreen.reactButtonKey,
+                      replyButtonKey: StoryViewerScreen.replyButtonKey,
+                      viewCountKey: StoryViewerScreen.viewCountKey,
+                    ),
+                    Positioned(
+                      top: 8,
+                      left: 12,
+                      right: 12,
+                      child: IconTheme(
+                        data: IconThemeData(color: headerColor),
+                        child: Column(
+                          children: [
+                            Semantics(
+                              key: const Key('story_viewer_progress'),
+                              container: true,
+                              explicitChildNodes: true,
+                              label: l10n.storyViewerProgress(
+                                _index + 1,
+                                _storyIds.length,
+                              ),
+                              child: Row(
+                                children: [
+                                  for (var i = 0; i < _storyIds.length; i++)
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 2,
+                                        ),
+                                        child: InkWell(
+                                          key: Key('story_viewer_segment_$i'),
+                                          onTap: _deleting
+                                              ? null
+                                              : () {
+                                                  setState(() => _index = i);
+                                                  _markCurrentViewed();
+                                                },
+                                          child: SizedBox(
+                                            height: 16,
+                                            child: Center(
+                                              child: Container(
+                                                height: 3,
+                                                decoration: BoxDecoration(
+                                                  color: i <= _index
+                                                      ? headerColor
+                                                      : headerColor.withValues(
+                                                          alpha: .45,
+                                                        ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(3),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StoryAuthorHeader(
+                                    story: story,
+                                    foregroundColor: headerColor,
+                                    onTap: () =>
+                                        _openAuthor(story.authorProfileId),
+                                  ),
+                                ),
+                                if (isAuthor)
+                                  IconButton(
+                                    key: const Key('story_viewer_delete'),
+                                    tooltip: l10n.commonDelete,
+                                    onPressed: _deleting
+                                        ? null
+                                        : () => _delete(story),
+                                    icon: const Icon(Icons.delete_outline),
+                                  ),
+                                PopupMenuButton<void>(
+                                  key: StoryViewerScreen.moreButtonKey,
+                                  icon: Icon(
+                                    Icons.more_horiz,
+                                    color: headerColor,
+                                  ),
+                                  itemBuilder: (_) => [
+                                    PopupMenuItem<void>(
+                                      key: StoryViewerScreen.reportButtonKey,
+                                      onTap: _report,
+                                      child: Text(l10n.reportTitle),
+                                    ),
+                                  ],
+                                ),
+                                IconButton(
+                                  key: const Key('story_viewer_close'),
+                                  tooltip: MaterialLocalizations.of(
+                                    context,
+                                  ).closeButtonTooltip,
+                                  onPressed: () =>
+                                      Navigator.of(context).maybePop(),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryAuthorHeader extends ConsumerWidget {
+  const _StoryAuthorHeader({
+    required this.story,
+    required this.onTap,
+    required this.foregroundColor,
+  });
+  final StoryData story;
+  final VoidCallback onTap;
+  final Color foregroundColor;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref
+        .watch(profileProvider(story.authorProfileId))
+        .valueOrNull;
+    final name = profile?.displayName ?? story.authorProfileId;
+    return TextButton(
+      key: const Key('story_viewer_author'),
+      onPressed: onTap,
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            child: Text(
+              name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(color: foregroundColor),
+                ),
+                if (story.createdAt case final createdAt?)
+                  Text(
+                    '${MaterialLocalizations.of(context).formatShortDate(createdAt.toLocal())} · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(createdAt.toLocal()))}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: foregroundColor),
+                  ),
+              ],
+            ),
           ),
         ],
-      ),
-      body: GestureDetector(
-        onTapUp: (details) {
-          final width = MediaQuery.sizeOf(context).width;
-          if (details.localPosition.dx > width * 0.6) {
-            _next();
-          } else if (details.localPosition.dx < width * 0.4) {
-            _previous();
-          }
-        },
-        onVerticalDragEnd: (details) {
-          if ((details.primaryVelocity ?? 0) > 200) {
-            Navigator.of(context).maybePop();
-          }
-        },
-        child: storyAsync.when(
-          loading: () => const VoiceListSkeleton(rowCount: 4),
-          error: (error, _) => VoiceStatePanel(
-            title: l10n.storyViewerLoadError,
-            message: storyViewerErrorMessage(l10n, error),
-            icon: Icons.cloud_off_outlined,
-            actionLabel: l10n.commonRetry,
-            onAction: () => ref.invalidate(storyDetailProvider(storyId)),
-          ),
-          data: (story) {
-            if (story == null) {
-              return VoiceStatePanel(
-                title: l10n.storyViewerLoadError,
-                icon: Icons.cloud_off_outlined,
-              );
-            }
-            final isAuthor = activeProfileId == story.authorProfileId;
-            return _StoryContent(
-              story: story,
-              storyId: storyId,
-              isAuthor: isAuthor,
-              onReact: _react,
-              onReply: () => _reply(story),
-              reactButtonKey: StoryViewerScreen.reactButtonKey,
-              replyButtonKey: StoryViewerScreen.replyButtonKey,
-              viewCountKey: StoryViewerScreen.viewCountKey,
-            );
-          },
-        ),
       ),
     );
   }
@@ -347,11 +643,48 @@ class _StoryContent extends ConsumerWidget {
           );
 
     if (story.isLookingForParty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: LfpStoryCard(story: story),
-        ),
+      final catalog = ref.watch(voiceTokenCatalogProvider).valueOrNull;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  catalog?.profileAccentAt(0) ?? voice.profileAccent,
+                  catalog?.profileAccentAt(2) ?? voice.profileAccent,
+                  catalog?.profileAccentAt(5) ?? voice.profileAccent,
+                ],
+              ),
+            ),
+          ),
+          ColoredBox(color: voice.overlay),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 126,
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: LfpStoryCard(
+                  story: story,
+                  isAuthor: isAuthor,
+                  embedded: true,
+                ),
+              ),
+            ),
+          ),
+          ..._overlayChildren(
+            context,
+            l10n,
+            voice,
+            showViewCount: isAuthor,
+            reactionAggregates: reactionAggregates,
+          ),
+        ],
       );
     }
 
@@ -438,6 +771,7 @@ class _StoryContent extends ConsumerWidget {
           color: voice.elevated,
           child: Center(child: body),
         ),
+        ColoredBox(color: voice.overlay),
         ..._overlayChildren(
           context,
           l10n,
@@ -457,10 +791,15 @@ class _StoryContent extends ConsumerWidget {
     List<({String emoji, int count})> reactionAggregates = const [],
   }) {
     final gameTag = story.gameTag;
+    final onMedia =
+        story.isLookingForParty ||
+        story.type == 'photo' ||
+        story.type == 'video';
+    final foreground = onMedia ? Colors.white : voice.textPrimary;
     return [
-      if (gameTag != null && gameTag.isNotEmpty)
+      if (!story.isLookingForParty && gameTag != null && gameTag.isNotEmpty)
         Positioned(
-          top: 48,
+          top: 132,
           left: 16,
           right: 16,
           child: Align(
@@ -470,13 +809,15 @@ class _StoryContent extends ConsumerWidget {
         ),
       if (showViewCount)
         Positioned(
-          top: 8,
+          top: 96,
           left: 16,
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               key: viewCountKey,
-              onTap: () => StoryViewersSheet.show(context, storyId: storyId),
+              onTap: story.expiresAt?.isBefore(DateTime.now().toUtc()) == true
+                  ? null
+                  : () => StoryViewersSheet.show(context, storyId: storyId),
               borderRadius: BorderRadius.circular(8),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -507,32 +848,58 @@ class _StoryContent extends ConsumerWidget {
             ],
           ),
         ),
+      if (showViewCount)
+        Consumer(
+          builder: (context, ref, _) {
+            final reactions = ref.watch(storyReactionsProvider(storyId));
+            if (!reactions.hasError) return const SizedBox.shrink();
+            return Positioned(
+              left: 16,
+              right: 16,
+              bottom: 76,
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: TextButton.icon(
+                  onPressed: () =>
+                      ref.invalidate(storyReactionsProvider(storyId)),
+                  icon: const Icon(Icons.refresh),
+                  label: Text(
+                    '${commonActionErrorMessage(l10n)} ${l10n.commonRetry}',
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       Positioned(
         left: 16,
         right: 16,
         bottom: 24,
         child: Row(
           children: [
-            Expanded(
-              child: Text(
-                story.textContent ?? '',
-                style: TextStyle(color: voice.textPrimary),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
             if (!isAuthor)
-              IconButton(
-                key: replyButtonKey,
-                tooltip: l10n.storyViewerReply,
-                onPressed: onReply,
-                icon: const Icon(Icons.reply_outlined),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: replyButtonKey,
+                  onPressed: onReply,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: foreground,
+                    shape: const StadiumBorder(),
+                    alignment: Alignment.centerLeft,
+                    side: BorderSide(color: foreground.withValues(alpha: .7)),
+                  ),
+                  icon: const Icon(Icons.reply_outlined),
+                  label: Text(l10n.storyViewerReplyHint),
+                ),
               ),
+            if (isAuthor) const Spacer(),
+            const SizedBox(width: 8),
             IconButton(
               key: reactButtonKey,
               tooltip: l10n.storyReactTooltip,
+              style: IconButton.styleFrom(foregroundColor: foreground),
               onPressed: onReact,
-              icon: const Icon(Icons.add_reaction_outlined),
+              icon: const Icon(Icons.favorite_border),
             ),
           ],
         ),

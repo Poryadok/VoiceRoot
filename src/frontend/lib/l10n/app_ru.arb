@@ -1607,5 +1607,11 @@
   "composerVoiceStop": "Завершить запись",
   "composerVoiceCancel": "Отменить запись",
   "composerVoiceLocked": "Запись закреплена",
-  "queueSearchNoRolePreference": "Без предпочтения роли"
+  "queueSearchNoRolePreference": "Без предпочтения роли",
+  "storyViewerProgress": "История {current} из {total}",
+  "@storyViewerProgress": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
+  "storyViewerDeleteConfirm": "Удалить эту историю?",
+  "storyLfpJoinSent": "Запрос на присоединение отправлен",
+  "storyLfpInviteSent": "Приглашение отправлено",
+  "storyLfpInactive": "Объявление больше не актуально"
 }
