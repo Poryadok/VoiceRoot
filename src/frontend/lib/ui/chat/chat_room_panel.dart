@@ -1257,40 +1257,75 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                 label: _liveMessageAnnouncement,
                 child: const SizedBox.shrink(),
               ),
-              Material(
-                color: voice.surface,
-                elevation: 0,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+              if (_inChatSearchOpen)
+                LayoutBuilder(
+                  builder: (context, constraints) => Material(
+                    key: const Key('in_chat_search_inline_header'),
+                    color: voice.surface,
+                    child: InChatSearch(
+                      chatId: widget.chatId,
+                      controller: _inChatSearchController,
+                      focusNode: _inChatSearchFocus,
+                      compact: true,
+                      showResults: constraints.maxWidth >= 600,
+                      dismissButtonKey: ChatRoomPanel.inChatSearchKey,
+                      onActiveMessageChanged: (messageId) {
+                        ref
+                                .read(
+                                  pendingChatMessageScrollProvider(
+                                    widget.chatId,
+                                  ).notifier,
+                                )
+                                .state =
+                            messageId;
+                        ref
+                                .read(
+                                  pendingChatMessageHighlightProvider(
+                                    widget.chatId,
+                                  ).notifier,
+                                )
+                                .state =
+                            messageId;
+                      },
+                      onDismiss: _closeInChatSearch,
+                    ),
                   ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (constraints.maxWidth < 600) {
-                        return Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                )
+              else
+                Material(
+                  color: voice.surface,
+                  elevation: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 600) {
+                          return Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              ...headerLeading,
+                              SizedBox(
+                                width: constraints.maxWidth * 0.45,
+                                child: headerTitle,
+                              ),
+                              ...headerActions,
+                            ],
+                          );
+                        }
+                        return Row(
                           children: [
                             ...headerLeading,
-                            SizedBox(
-                              width: constraints.maxWidth * 0.45,
-                              child: headerTitle,
-                            ),
+                            Expanded(child: headerTitle),
                             ...headerActions,
                           ],
                         );
-                      }
-                      return Row(
-                        children: [
-                          ...headerLeading,
-                          Expanded(child: headerTitle),
-                          ...headerActions,
-                        ],
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
-              ),
               if (!reconnectBanner.dismissed &&
                   ((reconnectBanner.visible && widget.showReconnectBanner) ||
                       room.isOfflineCache))
@@ -1585,40 +1620,6 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                                   _showMessageActions(msg, isMine),
                             ),
                           ),
-                    if (_inChatSearchOpen)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: Material(
-                          elevation: 4,
-                          color: voice.surface,
-                          child: InChatSearch(
-                            chatId: widget.chatId,
-                            controller: _inChatSearchController,
-                            showSearchField: false,
-                            onActiveMessageChanged: (messageId) {
-                              ref
-                                      .read(
-                                        pendingChatMessageScrollProvider(
-                                          widget.chatId,
-                                        ).notifier,
-                                      )
-                                      .state =
-                                  messageId;
-                              ref
-                                      .read(
-                                        pendingChatMessageHighlightProvider(
-                                          widget.chatId,
-                                        ).notifier,
-                                      )
-                                      .state =
-                                  messageId;
-                            },
-                            onDismiss: _closeInChatSearch,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),

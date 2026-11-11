@@ -19,6 +19,10 @@ class InChatSearch extends ConsumerStatefulWidget {
     this.controller,
     this.showSearchField = true,
     this.onDismiss,
+    this.compact = false,
+    this.showResults = true,
+    this.focusNode,
+    this.dismissButtonKey,
   });
 
   static const Key panelKey = Key('in_chat_search_panel');
@@ -28,6 +32,7 @@ class InChatSearch extends ConsumerStatefulWidget {
   static const Key highlightKey = Key('in_chat_search_highlight');
   static const Key errorKey = Key('in_chat_search_error');
   static const Key resultsOverlayKey = Key('in_chat_search_results_overlay');
+  static const Key counterKey = Key('in_chat_search_counter');
 
   static Key activeHitKey(String messageId) =>
       Key('in_chat_search_active_$messageId');
@@ -37,6 +42,10 @@ class InChatSearch extends ConsumerStatefulWidget {
   final TextEditingController? controller;
   final bool showSearchField;
   final VoidCallback? onDismiss;
+  final bool compact;
+  final bool showResults;
+  final FocusNode? focusNode;
+  final Key? dismissButtonKey;
 
   @override
   ConsumerState<InChatSearch> createState() => _InChatSearchState();
@@ -49,6 +58,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
   List<SearchHit> _hits = const [];
   int _activeIndex = 0;
   String? _errorMessage;
+  int _queryGeneration = 0;
 
   @override
   void initState() {
@@ -79,6 +89,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
 
   Future<void> _runSearch(String query) async {
     final trimmed = query.trim();
+    final generation = ++_queryGeneration;
     if (trimmed.isEmpty) {
       setState(() {
         _hits = const [];
@@ -99,11 +110,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       setState(() {
         _hits = localHits
             .map(
-              (m) => SearchHit(
-                messageId: m.id,
-                snippet: m.content,
-                score: 1,
-              ),
+              (m) => SearchHit(messageId: m.id, snippet: m.content, score: 1),
             )
             .toList(growable: false);
         _activeIndex = 0;
@@ -113,8 +120,10 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       return;
     }
 
-    final authorization =
-        ref.read(authControllerProvider).session?.authorizationHeader;
+    final authorization = ref
+        .read(authControllerProvider)
+        .session
+        ?.authorizationHeader;
     if (authorization == null) return;
     final client = ref.read(voiceSearchClientProvider);
     final result = await client.searchInChat(
@@ -122,7 +131,11 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
       chatId: widget.chatId,
       query: trimmed,
     );
-    if (!mounted) return;
+    if (!mounted ||
+        generation != _queryGeneration ||
+        _controller.text.trim() != trimmed) {
+      return;
+    }
     if (result is SearchApiOk<InChatSearchData>) {
       setState(() {
         _hits = result.data.hits;
@@ -178,6 +191,13 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
     final voice = VoiceColors.of(context);
     final e2eEnabled = ref.watch(chatE2eEnabledProvider(widget.chatId));
     final active = _hits.isEmpty ? null : _hits[_activeIndex];
+    final resultsHeight = widget.compact
+        ? ((MediaQuery.sizeOf(context).height -
+                      MediaQuery.viewInsetsOf(context).bottom) *
+                  .25)
+              .clamp(40.0, 240.0)
+              .toDouble()
+        : 240.0;
 
     final results = Column(
       key: InChatSearch.resultsOverlayKey,
@@ -193,19 +213,19 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
               style: TextStyle(color: voice.error),
             ),
           ),
-        if (e2eEnabled && widget.showSearchField)
+        if (e2eEnabled && widget.showSearchField && !widget.compact)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Text(
               l10n.e2eInChatSearchLocalOnly,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: voice.textSecondary,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: voice.textSecondary),
             ),
           ),
         if (_hits.isNotEmpty)
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 240),
+            constraints: BoxConstraints(maxHeight: resultsHeight),
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: _hits.length,
@@ -219,8 +239,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
                   onTap: () => _selectHit(index),
                   title: _HighlightedSnippet(
                     snippet: hit.snippet,
-                    highlightKey:
-                        isActive ? InChatSearch.highlightKey : null,
+                    highlightKey: isActive ? InChatSearch.highlightKey : null,
                   ),
                   subtitle: Text(
                     l10n.inChatSearchResultScore(hit.score.toStringAsFixed(1)),
@@ -232,6 +251,101 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
           ),
       ],
     );
+
+    if (widget.compact) {
+      return Column(
+        key: InChatSearch.panelKey,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    key: InChatSearch.searchFieldKey,
+                    controller: _controller,
+                    focusNode: widget.focusNode,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: l10n.inChatSearchHint,
+                      prefixIcon: const Icon(Icons.search),
+                      isDense: true,
+                      border: InputBorder.none,
+                      suffix: _hits.isEmpty
+                          ? null
+                          : Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                '${_activeIndex + 1} / ${_hits.length}',
+                                key: InChatSearch.counterKey,
+                              ),
+                            ),
+                    ),
+                    onChanged: _debouncer?.schedule,
+                  ),
+                ),
+                IconButton(
+                  key: InChatSearch.prevHitKey,
+                  tooltip: l10n.inChatSearchPrevious,
+                  onPressed: _hits.isEmpty ? null : () => _step(-1),
+                  icon: const Icon(Icons.keyboard_arrow_up),
+                ),
+                IconButton(
+                  key: InChatSearch.nextHitKey,
+                  tooltip: l10n.inChatSearchNext,
+                  onPressed: _hits.isEmpty ? null : () => _step(1),
+                  icon: const Icon(Icons.keyboard_arrow_down),
+                ),
+                if (widget.onDismiss != null)
+                  IconButton(
+                    key: widget.dismissButtonKey,
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).closeButtonTooltip,
+                    onPressed: widget.onDismiss,
+                    icon: const Icon(Icons.close),
+                  ),
+              ],
+            ),
+          ),
+          if (e2eEnabled)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text(
+                l10n.e2eInChatSearchLocalOnly,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: voice.textSecondary),
+              ),
+            ),
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _errorMessage!,
+                        key: InChatSearch.errorKey,
+                        style: TextStyle(color: voice.error),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _runSearch(_controller.text),
+                    child: Text(l10n.commonRetry),
+                  ),
+                ],
+              ),
+            ),
+          if (widget.showResults && _errorMessage == null) results,
+        ],
+      );
+    }
 
     if (!widget.showSearchField) {
       return results;
@@ -246,9 +360,9 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Text(
               l10n.e2eInChatSearchLocalOnly,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: voice.textSecondary,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: voice.textSecondary),
             ),
           ),
         Padding(
@@ -298,14 +412,11 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
               final hit = _hits[index];
               final isActive = active?.messageId == hit.messageId;
               return ListTile(
-                key: isActive
-                    ? InChatSearch.activeHitKey(hit.messageId)
-                    : null,
+                key: isActive ? InChatSearch.activeHitKey(hit.messageId) : null,
                 onTap: () => _selectHit(index),
                 title: _HighlightedSnippet(
                   snippet: hit.snippet,
-                  highlightKey:
-                      isActive ? InChatSearch.highlightKey : null,
+                  highlightKey: isActive ? InChatSearch.highlightKey : null,
                 ),
                 subtitle: Text(
                   l10n.inChatSearchResultScore(hit.score.toStringAsFixed(1)),
@@ -321,10 +432,7 @@ class _InChatSearchState extends ConsumerState<InChatSearch> {
 }
 
 class _HighlightedSnippet extends StatelessWidget {
-  const _HighlightedSnippet({
-    required this.snippet,
-    this.highlightKey,
-  });
+  const _HighlightedSnippet({required this.snippet, this.highlightKey});
 
   final String snippet;
   final Key? highlightKey;
@@ -337,11 +445,13 @@ class _HighlightedSnippet extends StatelessWidget {
     if (match == null) {
       return Text(snippet.replaceAll(RegExp(r'</?b>|</?mark>'), ''));
     }
-    final before =
-        snippet.substring(0, match.start).replaceAll(RegExp(r'</?b>|</?mark>'), '');
+    final before = snippet
+        .substring(0, match.start)
+        .replaceAll(RegExp(r'</?b>|</?mark>'), '');
     final highlighted = match.group(1) ?? '';
-    final after =
-        snippet.substring(match.end).replaceAll(RegExp(r'</?b>|</?mark>'), '');
+    final after = snippet
+        .substring(match.end)
+        .replaceAll(RegExp(r'</?b>|</?mark>'), '');
     return Text.rich(
       TextSpan(
         style: DefaultTextStyle.of(context).style,
