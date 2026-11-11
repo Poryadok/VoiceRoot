@@ -64,6 +64,7 @@ class CallState {
     this.voiceBindingProfileId,
     this.outgoingChatId,
     this.outgoingCalleeProfileId,
+    this.outgoingMediaKind,
     this.isMuted = false,
     this.isPttHeld = false,
     this.isSpeakerMuted = false,
@@ -78,6 +79,7 @@ class CallState {
   final String? voiceBindingProfileId;
   final String? outgoingChatId;
   final String? outgoingCalleeProfileId;
+  final VoiceCallMediaKind? outgoingMediaKind;
   final bool isMuted;
   final bool isPttHeld;
   final bool isSpeakerMuted;
@@ -118,6 +120,7 @@ class CallState {
     bool clearSession = false,
     String? outgoingChatId,
     String? outgoingCalleeProfileId,
+    VoiceCallMediaKind? outgoingMediaKind,
     bool clearOutgoingTarget = false,
     bool? isMuted,
     bool? isPttHeld,
@@ -140,6 +143,9 @@ class CallState {
       outgoingCalleeProfileId: clearOutgoingTarget
           ? null
           : (outgoingCalleeProfileId ?? this.outgoingCalleeProfileId),
+      outgoingMediaKind: clearOutgoingTarget
+          ? null
+          : (outgoingMediaKind ?? this.outgoingMediaKind),
       isMuted: isMuted ?? this.isMuted,
       isPttHeld: isPttHeld ?? this.isPttHeld,
       isSpeakerMuted: isSpeakerMuted ?? this.isSpeakerMuted,
@@ -209,6 +215,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   bool _startCallInFlight = false;
+  int _outgoingAttemptGeneration = 0;
   bool _groupVoiceInFlight = false;
   bool _voiceRoomInFlight = false;
   int _voiceRoomEntryGeneration = 0;
@@ -272,10 +279,14 @@ class CallController extends StateNotifier<CallState> {
       return;
     }
     _startCallInFlight = true;
+    final outgoingGeneration = ++_outgoingAttemptGeneration;
     state = state.copyWith(
       phase: CallPhase.outgoing,
       outgoingChatId: chatId,
       outgoingCalleeProfileId: calleeProfileId,
+      outgoingMediaKind: mediaKind,
+      isMuted: false,
+      isVideoEnabled: mediaKind == VoiceCallMediaKind.video,
       clearError: true,
     );
     try {
@@ -288,6 +299,16 @@ class CallController extends StateNotifier<CallState> {
             mediaKind: mediaKind,
           );
       if (!mounted) return;
+      if (outgoingGeneration != _outgoingAttemptGeneration) {
+        // Cancellation can precede admission. Close the late server session
+        // without resurrecting the dismissed outgoing overlay.
+        if (result case VoiceApiOk(:final data)) {
+          await _ref
+              .read(voiceCallsClientProvider)
+              .endCall(authorization: auth, roomId: data.roomId);
+        }
+        return;
+      }
       switch (result) {
         case VoiceApiOk(:final data):
           _applySession(data, CallPhase.outgoing);
@@ -572,6 +593,7 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> hangUp() async {
+    ++_outgoingAttemptGeneration;
     _pendingVoiceRetry = null;
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
@@ -919,10 +941,17 @@ class CallController extends StateNotifier<CallState> {
         };
         _room = room;
         try {
+          if (room is InitialMicrophoneStateRoom) {
+            room.initialMicrophoneMuted = isMicEffectivelyMuted(
+              userMuted: state.isMuted,
+              mode: _ref.read(voiceInputSettingsProvider).mode,
+              pttHeld: state.isPttHeld,
+            );
+          }
           await room.connect(
             url: livekitUrl,
             token: data.jwt,
-            video: session.mediaKind == VoiceCallMediaKind.video,
+            video: state.isVideoEnabled,
           );
           if (!mounted ||
               !_isConnectCurrent(connectGeneration, connectRoomId)) {
@@ -930,12 +959,31 @@ class CallController extends StateNotifier<CallState> {
             await room.disconnect();
             return;
           }
+          // The post-join camera reconciliation is a v3 capability: only rooms
+          // that opt into the pre-connect initial-mute model (InitialMicrophoneStateRoom)
+          // expose it and may carry a toggle from the SDK-join window. Minimal
+          // VoiceLiveKitRoom rooms (e.g. the screen-share accept flow, whose master
+          // test fakes predate that model) must present active with master's
+          // session-derived video state instead.
+          if (room is InitialMicrophoneStateRoom) {
+            // A toggle during the SDK join can precede localParticipant creation.
+            await room.setVideoEnabled(state.isVideoEnabled);
+            if (!mounted ||
+                !_isConnectCurrent(connectGeneration, connectRoomId) ||
+                !identical(_room, room)) {
+              if (identical(_room, room)) _room = null;
+              await room.disconnect();
+              return;
+            }
+          }
           state = state.copyWith(
             phase: CallPhase.active,
             voiceBindingProfileId:
                 state.voiceBindingProfileId ??
                 _resolveVoiceBindingProfileId(session),
-            isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+            isVideoEnabled: room is InitialMicrophoneStateRoom
+                ? state.isVideoEnabled
+                : session.mediaKind == VoiceCallMediaKind.video,
             clearOutgoingTarget: true,
           );
           await _applyEffectiveMicMute();
@@ -1118,11 +1166,21 @@ class CallController extends StateNotifier<CallState> {
   }
 
   void _applySession(VoiceCallSession session, CallPhase phase) {
+    final sameAttempt =
+        state.session?.roomId == session.roomId ||
+        (state.isOutgoing &&
+            state.outgoingChatId == session.chatId &&
+            state.outgoingCalleeProfileId == session.calleeProfileId);
     state = CallState(
       phase: phase,
       session: session,
       voiceBindingProfileId: _resolveVoiceBindingProfileId(session),
-      isVideoEnabled: session.mediaKind == VoiceCallMediaKind.video,
+      isMuted: sameAttempt && state.isMuted,
+      isPttHeld: sameAttempt && state.isPttHeld,
+      isSpeakerMuted: sameAttempt && state.isSpeakerMuted,
+      isVideoEnabled: sameAttempt
+          ? state.isVideoEnabled
+          : session.mediaKind == VoiceCallMediaKind.video,
     );
   }
 
