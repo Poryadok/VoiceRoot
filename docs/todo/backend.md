@@ -271,6 +271,7 @@ and Voice IDs denied while history remains.
 
 
 - [x] **[Search] `SearchGlobal` `matched_chats` ACL** — `intersectAccessibleChats` + `AccessibleChatIDs`; profile hits — `AccountPairBlocked` в `filterProfileHits`. Remaining: User `SearchProfiles` path (`/api/v1/users/search`) still separate.
+- [ ] **[Search] `SearchGlobal` message rows carry no display metadata — no sender profile, no `created_at`, no posted-as-chat discriminator (`posted_as_chat` + `display_chat_id`) in the message reply DTO, so a message hit cannot state who posted it, when, or in which chat without inventing it; legacy projection rows are unknown-safe and the producer `senderRaw` → `uuid.Nil` edit remains Search Service scope (not the client slice). Gate: BE-H1-style "profile messages since anchor, exact ChatID anchor semantics" replaces the BE-A5/Chat21 path; tracker IDs `BE-H-PROFILE-MESSAGES-SINCE-ANCHOR-EXACT` and `CHAT-SPACE-MESSAGE-READ-45` are currently not found (0 hits) — re-check the chain before opening producer work.** — `src/backend/search/` (`message_indexer.go`, `grpcsvc/search.go`), `protos/` SearchGlobal reply; client consumers `src/frontend/lib/ui/search/global_search_panel.dart`, `src/frontend/lib/backend/search_client.dart`
 
 ### Voice
 

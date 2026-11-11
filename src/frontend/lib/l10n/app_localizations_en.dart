@@ -360,6 +360,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get globalSearchLoadError => 'Could not complete search';
 
   @override
+  String get globalSearchTitle => 'Search';
+
+  @override
+  String get globalSearchContactsAndChats => 'Contacts and chats';
+
+  @override
+  String get globalSearchLoadMore => 'Show more';
+
+  @override
+  String get globalSearchClear => 'Clear';
+
+  @override
+  String get globalSearchRetry => 'Retry';
+
+  @override
+  String get globalSearchBack => 'Back';
+
+  @override
   String get inChatSearchHint => 'Search in this chat';
 
   @override

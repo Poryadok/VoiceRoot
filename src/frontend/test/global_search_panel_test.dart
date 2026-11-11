@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,7 @@ import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/search/global_search_panel.dart';
@@ -20,6 +22,136 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('message-only search hydrates chat title across inbox pages', (tester) async {
+    final cursors = <String?>[];
+    await tester.pumpWidget(globalSearchTestAppForPaging(MockClient((request) async {
+      if (request.url.path == '/api/v1/search/global') return http.Response(jsonEncode({'global_search_results': {
+        'messages': [{'message_id':'matched','chat_id':'later-chat','snippet':'matched text'}],
+      }}), 200);
+      if (request.url.path == '/api/v1/chats') {
+        final cursor = request.url.queryParameters['cursor'];
+        cursors.add(cursor);
+        return http.Response(jsonEncode({'chat_list': {
+          'items': cursor == null ? [] : [{'chat': {'id':'later-chat','name':'Actual title','type':'CHAT_TYPE_GROUP'}}],
+          'next_cursor': cursor == null ? 'next-inbox' : '',
+        }}), 200);
+      }
+      return http.Response('{}', 200);
+    })));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(GlobalSearchPanel.searchFieldKey), 'matched');
+    await tester.pump(const Duration(milliseconds:350));
+    await tester.pumpAndSettle();
+    expect(cursors, [null, 'next-inbox']);
+    expect(find.text('Actual title'), findsOneWidget);
+    expect(find.text('matched text'), findsOneWidget);
+  });
+
+  testWidgets('profile switch boundary clears results and rejects late response', (tester) async {
+    final pending = Completer<http.Response>();
+    await tester.pumpWidget(globalSearchTestAppForPaging(MockClient((_) => pending.future)));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(tester.element(find.byKey(GlobalSearchPanel.panelKey)));
+    await tester.enterText(find.byKey(GlobalSearchPanel.searchFieldKey), 'private');
+    await tester.pump(const Duration(milliseconds: 350));
+    container.read(profileSwitchInProgressProvider.notifier).state = true;
+    await tester.pump();
+    expect(find.byType(VoiceListSkeleton), findsNothing);
+    pending.complete(http.Response(jsonEncode({'global_search_results': {'messages': [{'message_id':'old','snippet':'old private result'}]}}), 200));
+    await tester.pumpAndSettle();
+    expect(find.text('old private result'), findsNothing);
+    container.read(profileSwitchInProgressProvider.notifier).state = false;
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(GlobalSearchPanel.searchFieldKey)).controller!.text, isEmpty);
+  });
+
+  testWidgets('compact entry opens one responsive surface and Escape restores entry', (tester) async {
+    for (final width in [390.0, 1280.0]) {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final container = ProviderContainer(overrides: [
+        ...voiceThemeTestOverrides(),
+        profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+        authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+        authControllerProvider.overrideWith(authenticatedAuthController),
+      ]);
+      await tester.pumpWidget(UncontrolledProviderScope(container: container,
+        child: MaterialApp(theme: voiceTestTheme(), locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(body: Column(children: [GlobalSearchPanel(compact: true)])),
+        )));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(GlobalSearchPanel.searchFieldKey));
+      await tester.pumpAndSettle();
+      final active = find.byKey(GlobalSearchPanel.panelKey).last;
+      expect(tester.getSize(active).width, width == 390 ? 390 : 320);
+      container.read(globalSearchFocusRequestProvider.notifier).state++;
+      await tester.pumpAndSettle();
+      expect(find.byKey(GlobalSearchPanel.panelKey), findsNWidgets(2));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(GlobalSearchPanel.panelKey), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    }
+  });
+
+  testWidgets('server highlight remains styled without interpreting arbitrary markup', (tester) async {
+    await tester.pumpWidget(globalSearchTestAppForPaging(MockClient((_) async => http.Response(
+      jsonEncode({'global_search_results': {'messages': [
+        {'message_id': 'm', 'snippet': 'Final <mark>design</mark> <script>literal</script>'}
+      ]}}), 200))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(GlobalSearchPanel.searchFieldKey), 'design');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    final rich = tester.widget<Text>(find.byKey(const Key('global_search_snippet_m')));
+    expect(rich.textSpan!.toPlainText(), 'Final design <script>literal</script>');
+    final spans = (rich.textSpan! as TextSpan).children!.whereType<TextSpan>();
+    expect(spans.singleWhere((s) => s.text == 'design').style!.backgroundColor, isNotNull);
+  });
+
+  testWidgets('cursor paging preserves rows after failure and retries same cursor', (tester) async {
+    final cursors = <String>[];
+    var failNext = true;
+    await tester.pumpWidget(globalSearchTestAppForPaging(MockClient((req) async {
+      if (req.url.path != '/api/v1/search/global') return http.Response('{}', 200);
+      final cursor = req.url.queryParameters['cursor'] ?? '';
+      cursors.add(cursor);
+      expect(req.url.queryParameters['page_size'], '20');
+      if (cursor.isNotEmpty && failNext) {
+        failNext = false;
+        return http.Response('{"error_code":"internal","message":"failed"}', 500);
+      }
+      return http.Response(jsonEncode({'global_search_results': {
+        'messages': [{'message_id': cursor.isEmpty ? 'm1' : 'm2', 'chat_id': 'c1', 'snippet': cursor.isEmpty ? 'first result' : 'second result'}],
+        'next_cursor': cursor.isEmpty ? 'opaque-next' : '',
+      }}), 200);
+    })));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(GlobalSearchPanel.searchFieldKey), 'design');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('global_search_load_more')));
+    await tester.pumpAndSettle();
+    expect(find.text('first result'), findsOneWidget);
+    expect(find.byKey(const Key('global_search_error')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('global_search_retry')));
+    await tester.pumpAndSettle();
+    expect(cursors, ['', 'opaque-next', 'opaque-next']);
+    expect(find.text('first result'), findsOneWidget);
+    expect(find.text('second result'), findsOneWidget);
+    expect(find.byKey(const Key('global_search_load_more')), findsNothing);
+    await tester.tap(find.byKey(const Key('global_search_clear')));
+    await tester.pumpAndSettle();
+    expect(find.text('first result'), findsNothing);
+    expect(cursors.length, 3);
+  });
+
   http.Response searchResponse(
     String snippet, {
     List<String> profileIds = const [],
@@ -546,3 +678,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+
+Widget globalSearchTestAppForPaging(http.Client client) => ProviderScope(
+  overrides: [
+    ...voiceThemeTestOverrides(),
+    profileAccentStorageProvider.overrideWithValue(testProfileAccentStorage),
+    authSessionStorageProvider.overrideWithValue(InMemoryAuthSessionStorage()),
+    authControllerProvider.overrideWith(authenticatedAuthController),
+    gatewayConfigProvider.overrideWithValue(const GatewayConfig(baseUrl: 'http://api.test')),
+    httpClientProvider.overrideWithValue(client),
+  ],
+  child: MaterialApp(
+    theme: voiceTestTheme(), locale: const Locale('en'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: const Scaffold(body: GlobalSearchPanel()),
+  ),
+);

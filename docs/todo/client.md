@@ -65,6 +65,8 @@ _Пока пусто — критичные клиентские блокеры 
   under PLAN A5, followed by H/V and runtime verification. This subset does not
   complete the original creation-window acceptance.
 
+- [ ] **UIV3-PANEL-SEARCH-GLOBAL — message-row display metadata and full acceptance** — the ported v3 panel (`global_search_panel.dart`) renders contacts/chats/spaces and message rows with chat name + `<mark>` snippet only. `SearchGlobal` message DTO carries no sender profile, `created_at`, or posted-as-chat discriminator, so the panel does not label who posted a hit or where it was posted (BLOCKER contract: fabricated sender/date is forbidden); see the Search item in [backend.md](backend.md) and the BE-H1 anchor contract. Bounded `openDmWithProfile` fence consumption landed in `src/frontend/lib/state/chat_providers.dart` (co-owners 43/66 keep the rest of that scope). Panel chrome l10n keys `globalSearchTitle/ContactsAndChats/LoadMore/Clear/Retry/Back` landed EN+RU. H/V capture PNGs (`global-search-<scenario>-<layout>.png`) are local visual proof, not deployed acceptance; this subset does not close the original panel acceptance window.
+
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
 ### Space catalog v3 residual

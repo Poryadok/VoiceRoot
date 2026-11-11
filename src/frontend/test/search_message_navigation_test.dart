@@ -113,7 +113,9 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('historic-target'));
+      await tester.tap(
+        find.text('needle result', findRichText: true),
+      );
       await tester.pumpAndSettle();
       expect(container.read(selectedChatIdProvider), 'search-chat');
       expect(history.olderRequests, [('search-chat', 'older-search-chat')]);
@@ -137,7 +139,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('historic-target'));
+    await tester.tap(
+      find.text('needle result', findRichText: true),
+    );
     await tester.pumpAndSettle();
     expect(container.read(selectedChatIdProvider), isNull);
   });
