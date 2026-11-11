@@ -923,6 +923,76 @@ class AppLocalizationsRu extends AppLocalizations {
   String get botInstallActionError => 'Не удалось установить бота.';
 
   @override
+  String get botWebhookTitle => 'Webhook для взаимодействий';
+
+  @override
+  String get botWebhookLoadError => 'Не удалось загрузить endpoint.';
+
+  @override
+  String get botWebhookSaveError =>
+      'Не удалось сохранить endpoint. Повторите попытку.';
+
+  @override
+  String get botWebhookSaved => 'Endpoint сохранён';
+
+  @override
+  String get botWebhookPollingConfirmTitle => 'Переключиться на polling?';
+
+  @override
+  String get botWebhookPollingConfirmMessage =>
+      'Доставка через исходящий webhook прекратится. Бот сможет получать взаимодействия через polling.';
+
+  @override
+  String get botWebhookKeep => 'Оставить webhook';
+
+  @override
+  String get botWebhookOwnerOnly =>
+      'Только владелец бота может настроить этот endpoint.';
+
+  @override
+  String get botWebhookPollingEnabled => 'Polling включён';
+
+  @override
+  String get botWebhookEnabled => 'Webhook включён';
+
+  @override
+  String get botWebhookDescription =>
+      'Voice отправляет взаимодействия вашему боту на этот endpoint. Для локальной разработки используйте polling.';
+
+  @override
+  String get botWebhookEndpoint => 'Endpoint';
+
+  @override
+  String get botWebhookEndpointHint => 'https://your-bot.example/interactions';
+
+  @override
+  String get botWebhookInvalidEndpoint => 'Введите корректный HTTPS endpoint.';
+
+  @override
+  String get botWebhookSavedEndpoint => 'СОХРАНЁННЫЙ ENDPOINT';
+
+  @override
+  String get botWebhookCopied => 'Endpoint скопирован';
+
+  @override
+  String get botWebhookCopy => 'Копировать endpoint';
+
+  @override
+  String get botWebhookSwitchToPolling => 'Переключиться на polling';
+
+  @override
+  String get botWebhookSaving => 'Сохранение…';
+
+  @override
+  String get botWebhookSave => 'Сохранить endpoint';
+
+  @override
+  String get botWebhookClose => 'Закрыть';
+
+  @override
+  String get botWebhookConfirm => 'Подтвердить';
+
+  @override
   String get commonActionFailed => 'Не удалось выполнить действие.';
 
   @override
@@ -1237,6 +1307,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get commonCancel => 'Отмена';
 
   @override
+  String get commonDiscard => 'Сбросить';
+
+  @override
   String get shareLinkAction => 'Копировать ссылку';
 
   @override
@@ -1443,6 +1516,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatPinnedMessagesTitle => 'Закреплённые сообщения';
+
+  @override
+  String chatPinnedBarPosition(int position, int count) {
+    return 'Закреплённое сообщение $position из $count';
+  }
 
   @override
   String get chatPinnedMessagesOpen => 'Открыть все закреплённые сообщения';
@@ -2262,6 +2340,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsChatThemes => 'Темы чатов';
 
   @override
+  String get chatThemesIncomingSample => 'Сообщение';
+
+  @override
+  String get chatThemesOutgoingSample => 'Ваше сообщение';
+
+  @override
+  String get contactProfileCall => 'Позвонить';
+
+  @override
+  String get settingsTextScale => 'Масштаб текста';
+
+  @override
+  String get settingsUnsavedChangesTitle => 'Сбросить несохранённые изменения?';
+
+  @override
+  String get settingsUnsavedChangesMessage => 'Изменения ещё не сохранены.';
+
+  @override
   String get chatThemesPlusLabel => 'Voice Plus';
 
   @override
@@ -2280,11 +2376,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatThemesReset => 'Сбросить';
 
   @override
-  String get appIconTitle => 'Значок приложения';
+  String get appIconTitle => 'Иконка приложения';
 
   @override
-  String get appIconDeviceNotice =>
-      'Этот выбор применяется только на этом устройстве.';
+  String get appIconDeviceNotice => 'Иконка меняется на этом устройстве.';
 
   @override
   String get appIconPlusRequired =>
@@ -2319,7 +2414,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get appIconSelected => 'Выбран';
+  String get appIconSelected => 'Выбрана';
 
   @override
   String get settingsTheme => 'Тема';
@@ -2487,6 +2582,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get subscriptionSettingsTitle => 'Подписка';
+
+  @override
+  String get subscriptionPlusAnnual => 'Voice Plus · годовой';
+
+  @override
+  String get subscriptionPlusMonthly => 'Voice Plus · месячный';
+
+  @override
+  String get subscriptionPlusBadge => 'PLUS';
 
   @override
   String get subscriptionCurrentPlan => 'Текущий план';
@@ -2717,6 +2821,14 @@ class AppLocalizationsRu extends AppLocalizations {
       'Верификация организации недоступна';
 
   @override
+  String get verificationProviderLinkUnavailable =>
+      'Привязка платформ недоступна, пока не настроены возврат после OAuth и конфигурация провайдера.';
+
+  @override
+  String get verificationDomainEligibilityUnavailable =>
+      'Проверка домена недоступна, пока нельзя подтвердить право организации на верификацию и восстановить текущие DNS-инструкции.';
+
+  @override
   String get verifiedBadgePersonal => 'Верифицирован';
 
   @override
@@ -2879,7 +2991,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Настройки сохранены, но тихие часы не синхронизированы';
 
   @override
-  String get notificationGlobalEnabled => 'Уведомления включены';
+  String get notificationGlobalEnabled => 'Уведомления о сообщениях в чатах';
 
   @override
   String get notificationChatEnabled => 'Уведомления для этого чата';
@@ -2888,7 +3000,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get notificationEventTypesTitle => 'Типы событий';
 
   @override
-  String get notificationTypeNewMessage => 'Личные сообщения';
+  String get notificationTypeNewMessage => 'Сообщения в чатах';
 
   @override
   String get notificationTypeMessageRequest => 'Запросы сообщений';
@@ -2909,7 +3021,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get notificationTypeMatchFound => 'Матч найден';
 
   @override
-  String get notificationTypeSystem => 'Системные';
+  String get notificationTypeSystem => 'Системные / безопасность';
+
+  @override
+  String get notificationTypeVoiceMemberJoined =>
+      'Кто-то вошёл в голосовую комнату';
 
   @override
   String get notificationQuietHoursTitle => 'Тихие часы';
@@ -2922,6 +3038,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get notificationQuietHoursEnd => 'Конец';
+
+  @override
+  String get notificationQuietHoursTimezone => 'Часовой пояс';
 
   @override
   String get notificationQuietHoursOverrideMentions =>
@@ -3044,6 +3163,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get privacyAudienceSpacesEmpty => 'Вы не состоите ни в одном спейсе';
+
+  @override
+  String get privacyDiscardChangesTitle => 'Отменить изменения?';
+
+  @override
+  String get privacyDiscardChangesMessage =>
+      'Изменения настроек конфиденциальности не сохранены.';
 
   @override
   String get privacyActionsTitle => 'Действия';
@@ -3229,6 +3355,37 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get screenShareWaitingForVideo => 'Ожидание видео…';
+
+  @override
+  String get screenShareWatchStream => 'Смотреть трансляцию';
+
+  @override
+  String get screenShareCloseViewer => 'Закрыть просмотр';
+
+  @override
+  String get screenShareStreamPaused => 'Трансляция приостановлена';
+
+  @override
+  String get screenSharePausedLabel => 'Пауза';
+
+  @override
+  String get screenSharePanelTitle => 'Демонстрации экрана';
+
+  @override
+  String get screenShareChooseStream => 'Выбрать трансляцию';
+
+  @override
+  String get screenShareWatching => 'Просмотр';
+
+  @override
+  String screenShareStreamCaption(String name) {
+    return '$name · Демонстрация экрана';
+  }
+
+  @override
+  String screenSharePausedParticipant(String name) {
+    return '$name, пауза';
+  }
 
   @override
   String get platformWebSystemAudioUnavailable =>
@@ -3738,7 +3895,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyReactSent => 'Реакция отправлена';
 
   @override
-  String get storyHighlightsTitle => 'Избранное';
+  String get storyHighlightsTitle => 'Актуальное';
+
+  @override
+  String get storySuggestionTitle => 'Поделиться матчем';
+
+  @override
+  String get storySuggestionCompleted => 'Матч завершён';
+
+  @override
+  String get storySuggestionEditPublish => 'Редактировать и опубликовать';
+
+  @override
+  String get storySuggestionDismiss => 'Не сейчас';
+
+  @override
+  String storySuggestionDraft(String game) {
+    return 'Матч завершён · $game';
+  }
 
   @override
   String get storyLfpTitle => 'Ищу пати';
@@ -4021,6 +4195,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get contactProfileAccountDeleted => 'Аккаунт удалён';
+
+  @override
   String get matchSquadOpenChat => 'Открыть чат';
 
   @override
@@ -4129,12 +4306,174 @@ class AppLocalizationsRu extends AppLocalizations {
   String get queueSearchNoRolePreference => 'Без предпочтения роли';
 
   @override
+  String get subscriptionCancelConfirmation =>
+      'Оплаченные возможности останутся доступны до конца оплаченного периода. Отменить подписку?';
+
+  @override
+  String get subscriptionUpdatePayment => 'Обновить способ оплаты';
+
+  @override
+  String get subscriptionBillingUnavailable =>
+      'Платёжные данные этой подписки недоступны.';
+
+  @override
+  String get subscriptionBillingEmpty => 'Платёжной активности пока нет.';
+
+  @override
+  String get subscriptionBillingEvent => 'Событие подписки';
+
+  @override
+  String get subscriptionPaymentSucceeded => 'Оплата получена';
+
+  @override
+  String get subscriptionPaymentFailed => 'Оплата не прошла';
+
+  @override
+  String get subscriptionPlanCancelled => 'Подписка отменена';
+
+  @override
+  String subscriptionGraceUntil(String date) {
+    return 'Льготный период до $date';
+  }
+
+  @override
+  String get subscriptionBillingHistory => 'История платежей';
+
+  @override
+  String get subscriptionRestorePurchases => 'Восстановить покупки';
+
+  @override
+  String get subscriptionPurchasesUnavailable => 'Покупки пока недоступны.';
+
+  @override
+  String get subscriptionCleanUsername => 'Чистый @username';
+
+  @override
+  String get subscriptionResume => 'Возобновить подписку';
+
+  @override
+  String get stickerSettingsTitle => 'Стикеры';
+
+  @override
+  String get stickerSettingsInstalled => 'Установленные';
+
+  @override
+  String get stickerSettingsUpload => 'Загрузить свой набор';
+
+  @override
+  String get stickerSettingsUploadRules =>
+      'PNG или WebP, до 512×512 и 512 КБ на стикер после обработки.';
+
+  @override
+  String get stickerSettingsUploadUnavailable =>
+      'Загрузка наборов пока недоступна. Установленные наборы по-прежнему доступны.';
+
+  @override
+  String get stickerSettingsSystem => 'Системный набор';
+
+  @override
+  String get stickerSettingsOwn => 'Ваш набор';
+
+  @override
+  String get stickerSettingsSystemHint => 'Системные наборы нельзя удалить.';
+
+  @override
+  String get stickerSettingsOpen => 'Открыть';
+
+  @override
+  String get stickerSettingsClose => 'Закрыть';
+
+  @override
+  String get stickerSettingsRemove => 'Удалить';
+
+  @override
+  String get stickerSettingsRemoveTitle => 'Удалить этот набор?';
+
+  @override
+  String get stickerSettingsRemoveHint =>
+      'Он больше не будет отображаться в установленных наборах.';
+
+  @override
+  String get stickerSettingsPreviewUnavailable =>
+      'Предпросмотр этого стикера недоступен.';
+
+  @override
+  String stickerSettingsCount(int count) {
+    return 'Стикеров: $count';
+  }
+
+  @override
+  String get appealPendingTitle => 'Апелляция на рассмотрении';
+
+  @override
+  String get appealCaseIdLabel => 'ID апелляции';
+
+  @override
+  String get appealClose => 'Закрыть апелляцию';
+
+  @override
+  String get appealOneSubmissionNotice =>
+      'Одна апелляция на санкцию · Рассмотрение до 7 рабочих дней.';
+
+  @override
+  String get appIconPreferenceLoadError =>
+      'Не удалось загрузить сохранённую иконку приложения. Повторите попытку, чтобы сохранить выбор для этого устройства.';
+
+  @override
+  String get reportReasonLabel => 'Причина';
+
+  @override
+  String get reportModerationNotice =>
+      'Жалоба будет отправлена команде модерации. Автор объекта не увидит ваше имя.';
+
+  @override
+  String get reportSignInRequired => 'Войдите, чтобы отправить жалобу.';
+
+  @override
+  String get storyViewerNext => 'Следующая история';
+
+  @override
+  String get storyViewerPrevious => 'Предыдущая история';
+
+  @override
   String storyViewerProgress(int current, int total) {
     return 'История $current из $total';
   }
 
   @override
   String get storyViewerDeleteConfirm => 'Удалить эту историю?';
+
+  @override
+  String get storyViewerDeleted => 'История удалена';
+
+  @override
+  String get storyViewerPause => 'Приостановить историю';
+
+  @override
+  String get storyViewerResume => 'Продолжить историю';
+
+  @override
+  String get privacyShowLastSeen => 'Последний раз в сети';
+
+  @override
+  String get privacyBlockedUsers => 'Заблокированные пользователи';
+
+  @override
+  String privacyBlockedUsersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# заблокированного пользователя',
+      many: '# заблокированных пользователей',
+      few: '# заблокированных пользователя',
+      one: '# заблокированный пользователь',
+      zero: 'Нет заблокированных пользователей',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get commonClose => 'Закрыть';
 
   @override
   String get storyLfpJoinSent => 'Запрос на присоединение отправлен';
@@ -4144,4 +4483,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get storyLfpInactive => 'Объявление больше не актуально';
+
+  @override
+  String get privacyApplyAudience => 'Применить';
+
+  @override
+  String privacyAudienceSelectedSpaces(int count) {
+    return 'Выбранные спейсы: $count';
+  }
 }
