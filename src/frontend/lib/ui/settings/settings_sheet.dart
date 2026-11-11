@@ -59,8 +59,6 @@ class SettingsSheet extends ConsumerStatefulWidget {
 
 class _SettingsSheetState extends ConsumerState<SettingsSheet> {
   late SettingsDestination _selected;
-  GlobalKey<NavigatorState> _detailNavigator = GlobalKey<NavigatorState>();
-  _SettingsRouteObserver _routes = _SettingsRouteObserver();
   final _leaveGuards = SettingsLeaveGuards();
   bool _leaving = false;
 
@@ -71,22 +69,7 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
   }
 
   Future<bool> _leaveDetail() async {
-    final guarded = _leaveGuards.isNotEmpty;
-    if (!await _leaveGuards.canLeave() || !mounted) return false;
-    final navigator = _detailNavigator.currentState;
-    if (navigator == null) return true;
-    while (_routes.routes.length > 1) {
-      final before = _routes.routes.last;
-      await navigator.maybePop();
-      if (!mounted || _routes.routes.lastOrNull == before) return false;
-    }
-    if (!guarded &&
-        _routes.routes.lastOrNull?.popDisposition ==
-            RoutePopDisposition.doNotPop) {
-      await navigator.maybePop();
-      return false;
-    }
-    return true;
+    return await _leaveGuards.canLeave() && mounted;
   }
 
   Future<void> _close() async {
@@ -109,11 +92,7 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
       return;
     }
     if (_selected == destination || !await _leaveDetail() || !mounted) return;
-    setState(() {
-      _selected = destination;
-      _detailNavigator = GlobalKey<NavigatorState>();
-      _routes = _SettingsRouteObserver();
-    });
+    setState(() => _selected = destination);
   }
 
   Widget _detail(SettingsDestination destination) => switch (destination) {
@@ -370,13 +349,7 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
                   navigation: _navigation(true),
                   onClose: _close,
                   leaveGuards: _leaveGuards,
-                  detail: Navigator(
-                    key: _detailNavigator,
-                    observers: [_routes],
-                    onGenerateRoute: (_) => MaterialPageRoute<void>(
-                      builder: (_) => _detail(_selected),
-                    ),
-                  ),
+                  detail: _detail(_selected),
                 );
               },
             ),
@@ -444,19 +417,6 @@ class _SettingsRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SettingsRouteObserver extends NavigatorObserver {
-  final List<Route<dynamic>> routes = [];
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      routes.add(route);
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      routes.remove(route);
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
-      routes.remove(route);
 }
 
 class _AccentPicker extends ConsumerStatefulWidget {
