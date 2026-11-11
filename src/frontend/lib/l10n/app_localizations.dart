@@ -698,6 +698,42 @@ abstract class AppLocalizations {
   /// **'Could not complete search'**
   String get globalSearchLoadError;
 
+  /// No description provided for @globalSearchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get globalSearchTitle;
+
+  /// No description provided for @globalSearchContactsAndChats.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts and chats'**
+  String get globalSearchContactsAndChats;
+
+  /// No description provided for @globalSearchLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Show more'**
+  String get globalSearchLoadMore;
+
+  /// No description provided for @globalSearchClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get globalSearchClear;
+
+  /// No description provided for @globalSearchRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get globalSearchRetry;
+
+  /// No description provided for @globalSearchBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get globalSearchBack;
+
   /// No description provided for @inChatSearchHint.
   ///
   /// In en, this message translates to:

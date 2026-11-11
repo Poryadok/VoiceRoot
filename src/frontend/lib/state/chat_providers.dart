@@ -4369,22 +4369,39 @@ class ChatActions {
 
   final Ref _ref;
 
-  Future<String?> openDmWithProfile(String otherProfileId) async {
-    return switch (await openDmWithProfileResult(otherProfileId)) {
+  Future<String?> openDmWithProfile(
+    String otherProfileId, {
+    bool Function()? isCurrent,
+  }) async {
+    return switch (await openDmWithProfileResult(
+      otherProfileId,
+      isCurrent: isCurrent,
+    )) {
       ChatsApiOk() => null,
       ChatsApiFailure(:final message) => message,
     };
   }
 
   /// Opens a DM while preserving domain status for canonical link recovery.
+  ///
+  /// Global-search review fencing: the request controller and the session
+  /// install generation are captured before the request and re-checked after
+  /// it, so a profile switch, a session re-install, or a replaced controller
+  /// invalidates the DM action even when the token values match.
   Future<ChatsApiResult<void>> openDmWithProfileResult(
-    String otherProfileId,
-  ) async {
+    String otherProfileId, {
+    bool Function()? isCurrent,
+  }) async {
+    final requestController = _ref.read(authControllerProvider.notifier);
+    final identity = requestController.gatewayRequestIdentity;
+    final installation = requestController.sessionInstallGeneration;
     final session = _ref.read(authControllerProvider).session;
     if (session == null) {
       return const ChatsApiFailure(message: 'not_authenticated');
     }
-    if (_ref.read(profileSwitchInProgressProvider)) {
+    if (identity == null ||
+        _ref.read(profileSwitchInProgressProvider) ||
+        isCurrent?.call() == false) {
       return const ChatsApiFailure(message: kChatActionStaleContext);
     }
     final result = await _ref
@@ -4393,11 +4410,12 @@ class ChatActions {
           authorization: session.authorizationHeader,
           otherProfileId: otherProfileId,
         );
-    final current = _ref.read(authControllerProvider).session;
+    final currentController = _ref.read(authControllerProvider.notifier);
     if (_ref.read(profileSwitchInProgressProvider) ||
-        current?.accountId != session.accountId ||
-        current?.activeProfileId != session.activeProfileId ||
-        current?.authorizationHeader != session.authorizationHeader) {
+        !identical(currentController, requestController) ||
+        currentController.gatewayRequestIdentity != identity ||
+        currentController.sessionInstallGeneration != installation ||
+        isCurrent?.call() == false) {
       return const ChatsApiFailure(message: kChatActionStaleContext);
     }
     switch (result) {

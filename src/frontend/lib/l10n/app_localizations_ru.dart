@@ -360,6 +360,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get globalSearchLoadError => 'Не удалось выполнить поиск';
 
   @override
+  String get globalSearchTitle => 'Поиск';
+
+  @override
+  String get globalSearchContactsAndChats => 'Чаты и контакты';
+
+  @override
+  String get globalSearchLoadMore => 'Показать ещё';
+
+  @override
+  String get globalSearchClear => 'Очистить';
+
+  @override
+  String get globalSearchRetry => 'Попробовать снова';
+
+  @override
+  String get globalSearchBack => 'Назад';
+
+  @override
   String get inChatSearchHint => 'Поиск в этом чате';
 
   @override
