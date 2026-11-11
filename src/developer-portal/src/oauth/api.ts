@@ -1,4 +1,4 @@
-import { getAccessToken, clearSession } from './session';
+import { getAccessToken, getSessionRevision, invalidateSession } from './session';
 import { configuredApiBase } from '../runtimeConfig';
 
 export const apiBaseUrl = configuredApiBase;
@@ -8,6 +8,7 @@ export const oauthDisabled = import.meta.env.VITE_OAUTH_DISABLED === 'true';
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   const token = getAccessToken();
+  const revision = getSessionRevision();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -16,7 +17,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   }
   const res = await fetch(`${apiBaseUrl().replace(/\/$/, '')}${path}`, { ...init, headers });
   if (res.status === 401) {
-    clearSession();
+    invalidateSession(token, revision);
   }
   return res;
 }
