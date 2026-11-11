@@ -128,6 +128,23 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> disconnect();
 }
 
+/// Initial microphone intent must be applied before publish-on-join.
+abstract interface class InitialMicrophoneStateRoom
+    implements VoiceLiveKitRoom {
+  set initialMicrophoneMuted(bool muted);
+}
+
+/// Keep publish-on-join while honoring pre-connect mute and PTT intent.
+livekit.FastConnectOptions initialVoiceConnectOptions({
+  required bool microphoneMuted,
+  required bool video,
+}) => livekit.FastConnectOptions(
+  microphone: livekit.TrackOption<bool, livekit.LocalAudioTrack>(
+    enabled: !microphoneMuted,
+  ),
+  camera: livekit.TrackOption<bool, livekit.LocalVideoTrack>(enabled: video),
+);
+
 class VoiceCallParticipant {
   const VoiceCallParticipant({
     required this.identity,
@@ -152,12 +169,15 @@ class LiveKitVoiceRoom
     implements
         MatchSquadVoiceLiveKitRoom,
         OrdinaryVoicePresentationRoom,
+        InitialMicrophoneStateRoom,
         VoiceCallPresentationRoom {
   LiveKitVoiceRoom({livekit.Room? room, this.ordinaryVoicePresentation = false})
     : _room = room ?? livekit.Room();
 
   /// Presentation dispatch only; never an authorization or SDK resource key.
   bool ordinaryVoicePresentation;
+  @override
+  bool initialMicrophoneMuted = false;
 
   static const Duration _connectTimeout = Duration(seconds: 20);
   static const Duration _mediaEnableTimeout = Duration(seconds: 12);
@@ -225,13 +245,9 @@ class LiveKitVoiceRoom
   }) async {
     // Publish mic/camera during join (same event chain as localParticipant
     // creation). A separate setMicrophoneEnabled after connect races on web.
-    final fastConnect = livekit.FastConnectOptions(
-      microphone: const livekit.TrackOption<bool, livekit.LocalAudioTrack>(
-        enabled: true,
-      ),
-      camera: livekit.TrackOption<bool, livekit.LocalVideoTrack>(
-        enabled: video,
-      ),
+    final fastConnect = initialVoiceConnectOptions(
+      microphoneMuted: initialMicrophoneMuted,
+      video: video,
     );
 
     await _room.prepareConnection(url, token);
