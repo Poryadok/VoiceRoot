@@ -959,21 +959,31 @@ class CallController extends StateNotifier<CallState> {
             await room.disconnect();
             return;
           }
-          // A toggle during the SDK join can precede localParticipant creation.
-          // Reconcile the latest desired camera state before presenting active.
-          await room.setVideoEnabled(state.isVideoEnabled);
-          if (!mounted ||
-              !_isConnectCurrent(connectGeneration, connectRoomId) ||
-              !identical(_room, room)) {
-            if (identical(_room, room)) _room = null;
-            await room.disconnect();
-            return;
+          // The post-join camera reconciliation is a v3 capability: only rooms
+          // that opt into the pre-connect initial-mute model (InitialMicrophoneStateRoom)
+          // expose it and may carry a toggle from the SDK-join window. Minimal
+          // VoiceLiveKitRoom rooms (e.g. the screen-share accept flow, whose master
+          // test fakes predate that model) must present active with master's
+          // session-derived video state instead.
+          if (room is InitialMicrophoneStateRoom) {
+            // A toggle during the SDK join can precede localParticipant creation.
+            await room.setVideoEnabled(state.isVideoEnabled);
+            if (!mounted ||
+                !_isConnectCurrent(connectGeneration, connectRoomId) ||
+                !identical(_room, room)) {
+              if (identical(_room, room)) _room = null;
+              await room.disconnect();
+              return;
+            }
           }
           state = state.copyWith(
             phase: CallPhase.active,
             voiceBindingProfileId:
                 state.voiceBindingProfileId ??
                 _resolveVoiceBindingProfileId(session),
+            isVideoEnabled: room is InitialMicrophoneStateRoom
+                ? state.isVideoEnabled
+                : session.mediaKind == VoiceCallMediaKind.video,
             clearOutgoingTarget: true,
           );
           await _applyEffectiveMicMute();
