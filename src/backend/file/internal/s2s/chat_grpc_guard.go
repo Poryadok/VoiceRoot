@@ -71,23 +71,36 @@ func (g *GRPCChatGuard) EnsureMember(ctx context.Context, chatID, profileID uuid
 		return status.Error(codes.FailedPrecondition, "chat service not configured")
 	}
 	ctx = ForwardIncomingMetadata(ctx)
-	resp, err := g.Client.ListMembers(ctx, &chatv1.ListMembersRequest{
-		ChatId: chatID.String(),
-		Page:   &commonv1.CursorPageRequest{PageSize: 100},
-	})
-	if err != nil {
-		st, ok := status.FromError(err)
-		if ok && (st.Code() == codes.PermissionDenied || st.Code() == codes.NotFound) {
+	cursor := ""
+	seenCursors := map[string]struct{}{cursor: {}}
+	for {
+		resp, err := g.Client.ListMembers(ctx, &chatv1.ListMembersRequest{
+			ChatId: chatID.String(),
+			Page:   &commonv1.CursorPageRequest{Cursor: cursor, PageSize: 100},
+		})
+		if err != nil {
+			st, ok := status.FromError(err)
+			if ok && (st.Code() == codes.PermissionDenied || st.Code() == codes.NotFound) {
+				return grpcsvc.ErrNotChatMember
+			}
+			return err
+		}
+		memberList := resp.GetMemberList()
+		for _, member := range memberList.GetMembers() {
+			if strings.EqualFold(member.GetProfileId(), profileID.String()) {
+				return nil
+			}
+		}
+		nextCursor := memberList.GetNextCursor()
+		if nextCursor == "" {
 			return grpcsvc.ErrNotChatMember
 		}
-		return err
-	}
-	for _, member := range resp.GetMemberList().GetMembers() {
-		if strings.EqualFold(member.GetProfileId(), profileID.String()) {
-			return nil
+		if _, seen := seenCursors[nextCursor]; seen {
+			return status.Error(codes.Internal, "invalid chat membership pagination")
 		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
 	}
-	return grpcsvc.ErrNotChatMember
 }
 
 func (g *GRPCChatGuard) ChatE2EState(ctx context.Context, chatID uuid.UUID) (string, bool, error) {
