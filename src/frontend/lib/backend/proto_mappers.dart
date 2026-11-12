@@ -466,6 +466,26 @@ VoiceSubscriptionLimits voiceSubscriptionLimitsFromProto(sub_pb.Limits limits) {
   return VoiceSubscriptionLimits(limitsJson: limits.limitsJson);
 }
 
+BillingHistoryData voiceBillingHistoryFromProto(
+  sub_pb.BillingHistoryList list,
+) {
+  return BillingHistoryData(
+    events: list.events.map(voiceBillingEventFromProto).toList(growable: false),
+    nextCursor: emptyToNull(list.nextCursor),
+  );
+}
+
+VoiceBillingEvent voiceBillingEventFromProto(sub_pb.BillingEvent event) {
+  return VoiceBillingEvent(
+    id: event.id,
+    type: event.type,
+    occurredAt: protoTimestampToDateTime(
+      event.hasOccurredAt() ? event.occurredAt : null,
+    ),
+    payloadJson: emptyToNull(event.payloadJson),
+  );
+}
+
 VoicePresence voicePresenceFromProto(user_pb.PresenceStatus status) {
   return VoicePresence(
     profileId: status.profileId,

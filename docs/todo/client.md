@@ -71,6 +71,16 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **UIV3-SCREEN-MATCHMAKING-GAMEDETAIL — card picks are not transported into QueueSearch criteria** — the v3 card (`src/frontend/lib/ui/matchmaking/game_detail_screen.dart`) collects region, own role, own rank and sought min/max rank through pickers that mirror the `QueueSearchScreen._dropdown` contract and gates Start with the frozen `criteria_json` rules (region required; role iff mode `roles_required`; own rank iff `rank_required` and a member of mode ranks; bounds both-or-none and ordered by rank value — see `src/backend/matchmaking/internal/criteria/criteria.go:127` and `:135`, and the `self.role`/`self.rank` errors at `:17`–`:20`, `sought.rank_min`/`rank_max` at `:33`–`:34`). The Start route (`game_detail_screen.dart:216`) still transports only `game`, `mode` and `spaceId`; no documented contract carries the card's picks into `criteria_json`, so QueueSearchScreen stays the sole writer of criteria and the card never prefills them. Closing this needs a prefills/transport entry in the existing matchmaking contract (`docs/features/matchmaking.md`), not invented fields.
 
+### Subscription v3 control gaps — [docs/design/screen-controls.md §5.4](../design/screen-controls.md#54-subscription)
+
+- [ ] **UIV3-SCREEN-SETTINGS-SUBSCRIPTION-PLAN-CYCLE — §5.4 #4 "Manage plan" change plan (monthly ↔ annual)** — the v3 screen (`src/frontend/lib/ui/settings/subscription_settings_screen.dart`) renders the current cycle (`Billing: Yearly`) but exposes no control to change it; `billing_period` is a stored service field (`src/backend/subscription/internal/store/lifecycle.go:22`) with no documented client switch contract. Blocked on a product UI decision; do not invent a cycle-change flow.
+
+- [ ] **UIV3-SCREEN-SETTINGS-SUBSCRIPTION-RESTORE-PURCHASES — §5.4 #7 "Restore purchases" (H+V)** — no restore control on Settings/Subscription; the client billing path is browser `checkoutUrl` via `GatewayOpenExternal` (`subscription_settings_screen.dart` `_openManageBilling`) and no documented service operation performs a purchase restore. Blocked: needs a provider restore contract before any client flow.
+
+- [ ] **UIV3-SCREEN-SETTINGS-SUBSCRIPTION-CLEAN-USERNAME-PERK — §5.4 #9 purchase clean @username for extra profile** — product intent exists (`docs/features/subscription.md:39`: clean @username for an additional profile, purchased separately) but no entitlement read or separate-purchase control exists in the client, and the related Profile Edit v3 follow-up already tracks username mutation / clean-name entitlement purchase (the Profile Edit v3 item in `docs/todo/client.md`). Blocked on that contract; do not infer premium enablement from HTML controls.
+
+Tracking: fresh production suite `src/frontend/test/uiv3_subscription_settings_controls_v3_test.dart` verified §5.4 controls 5 (billing history via Gateway `GET /api/v1/subscription/billing/history`, `src/backend/gateway/transcode_subscription.go:75`), 6 (manage profiles) and 8 (payment-failure grace banner); #10 Space Pro management remains tracked in `docs/todo/backend.md:564` and the service `GetBillingHistory` stub in `docs/todo/backend.md:560`.
+
 ### Space catalog v3 residual
 
 - [ ] **UIV3-SCREEN-SPACE-CATALOG — category/game discovery contract and full acceptance** —
