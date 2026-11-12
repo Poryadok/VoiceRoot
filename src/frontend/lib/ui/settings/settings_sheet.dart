@@ -10,8 +10,10 @@ import '../../l10n/app_localizations.dart';
 import '../../backend/users_client.dart';
 import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
+import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
 import '../../theme/voice_theme_providers.dart';
+import '../core/voice_bottom_sheet.dart';
 import '../core/voice_skeleton.dart';
 import '../profile/create_profile_sheet.dart';
 import '../profile/manage_profiles_sheet.dart';
@@ -110,6 +112,201 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
       body: SingleChildScrollView(child: AppealSheet()),
     ),
   };
+
+  /// Size-independent hub for unbounded bottom-sheet hosts. It replaces the
+  /// pushed route with the detail route, mirroring the modal semantics the
+  /// settings tests exercise.
+  Widget _modalHub() {
+    final l10n = AppLocalizations.of(context)!;
+    final voice = VoiceColors.of(context);
+    final catalogAsync = ref.watch(voiceTokenCatalogProvider);
+    final profileId = ref.watch(authControllerProvider).activeProfileId;
+    final subscription = ref.watch(subscriptionProvider).valueOrNull;
+    return SafeArea(
+      child: Padding(
+        key: SettingsSheet.sheetKey,
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                l10n.settingsTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                l10n.settingsSecurity,
+                style: TextStyle(color: voice.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                key: const Key('settings_security'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.securitySettingsTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SecuritySettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                key: const Key('settings_appearance'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.settingsAppearance),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AppearanceSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                key: SettingsSheet.accessibilityKey,
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.settingsAccessibilityTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AccessibilitySettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                key: const Key('settings_appeal'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.appealSettingsTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  showAppealSheet(context);
+                },
+              ),
+              ListTile(
+                key: const Key('settings_verification'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.verificationSettingsTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  showVoiceBottomSheet<void>(
+                    context: context,
+                    child: const VerificationSettingsSheet(),
+                  );
+                },
+              ),
+              ListTile(
+                key: const Key('settings_create_profile'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.createProfileAddAction),
+                trailing: const Icon(Icons.add),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await showCreateProfileSheet(context);
+                },
+              ),
+              ListTile(
+                key: const Key('settings_manage_profiles'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.manageProfilesTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await showManageProfilesSheet(context);
+                },
+              ),
+              ListTile(
+                key: const Key('settings_privacy'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.privacySettingsTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PrivacySettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                key: const Key('settings_notifications'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.notificationSettingsTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NotificationSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                key: const Key('settings_subscription'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.subscriptionSettingsTitle),
+                subtitle: subscription != null
+                    ? Text(subscriptionPlanLabel(l10n, subscription))
+                    : null,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SubscriptionSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                key: const Key('settings_help'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.help_outline),
+                title: Text(l10n.settingsHelp),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  HelpSheet.show(context);
+                },
+              ),
+              const SizedBox(height: 16),
+              if (profileId != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  l10n.settingsAccent,
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                catalogAsync.when(
+                  data: (catalog) => _AccentPicker(
+                    key: SettingsSheet.accentKey,
+                    profileId: profileId,
+                    swatches: catalog.profileAccentDefaults,
+                  ),
+                  loading: () => const LinearProgressIndicator(minHeight: 2),
+                  error: (_, _) => const SizedBox.shrink(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   String _title(AppLocalizations l10n, SettingsDestination destination) =>
       switch (destination) {
@@ -233,6 +430,65 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
     final colors = VoiceColors.of(context);
     final profileId = ref.watch(authControllerProvider).activeProfileId;
     final catalog = ref.watch(voiceTokenCatalogProvider);
+    final subscription = ref.watch(subscriptionProvider).valueOrNull;
+    final entries = <Widget>[
+      for (final destination in SettingsDestination.values)
+        _SettingsRow(
+          key: Key('settings_${destination.name}'),
+          label: _title(l10n, destination),
+          subtitle:
+              destination == SettingsDestination.subscription &&
+                  subscription != null
+              ? subscriptionPlanLabel(l10n, subscription)
+              : null,
+          selected: desktop && _selected == destination,
+          showChevron: !desktop,
+          onTap: () => _select(destination, desktop),
+        ),
+      _SettingsRow(
+        key: const Key('settings_logout'),
+        label: l10n.authLogout,
+        color: colors.error,
+        onTap: _logout,
+      ),
+      const Divider(height: 16),
+      _SettingsRow(
+        key: const Key('settings_create_profile'),
+        label: l10n.createProfileAddAction,
+        onTap: () => showCreateProfileSheet(context),
+      ),
+      _SettingsRow(
+        key: const Key('settings_manage_profiles'),
+        label: l10n.manageProfilesTitle,
+        onTap: () => showManageProfilesSheet(context),
+      ),
+      if (profileId != null)
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.settingsAccent,
+                style: TextStyle(color: colors.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              catalog.when(
+                data: (catalog) => _AccentPicker(
+                  key: SettingsSheet.accentKey,
+                  profileId: profileId,
+                  swatches: catalog.profileAccentDefaults,
+                ),
+                loading: () => const LinearProgressIndicator(minHeight: 2),
+                error: (_, _) => TextButton(
+                  onPressed: () => ref.invalidate(voiceTokenCatalogProvider),
+                  child: Text(l10n.commonRetry),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
     return Column(
       children: [
         if (!desktop)
@@ -263,66 +519,17 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
           ),
         _account(),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.only(top: 8, bottom: 16),
-            children: [
-              for (final destination in SettingsDestination.values)
-                _SettingsRow(
-                  key: Key('settings_${destination.name}'),
-                  label: _title(l10n, destination),
-                  selected: desktop && _selected == destination,
-                  showChevron: !desktop,
-                  onTap: () => _select(destination, desktop),
-                ),
-              _SettingsRow(
-                key: const Key('settings_logout'),
-                label: l10n.authLogout,
-                color: colors.error,
-                onTap: _logout,
-              ),
-              const Divider(height: 16),
-              _SettingsRow(
-                key: const Key('settings_create_profile'),
-                label: l10n.createProfileAddAction,
-                onTap: () => showCreateProfileSheet(context),
-              ),
-              _SettingsRow(
-                key: const Key('settings_manage_profiles'),
-                label: l10n.manageProfilesTitle,
-                onTap: () => showManageProfilesSheet(context),
-              ),
-              if (profileId != null)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.settingsAccent,
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      catalog.when(
-                        data: (catalog) => _AccentPicker(
-                          key: SettingsSheet.accentKey,
-                          profileId: profileId,
-                          swatches: catalog.profileAccentDefaults,
-                        ),
-                        loading: () =>
-                            const LinearProgressIndicator(minHeight: 2),
-                        error: (_, _) => TextButton(
-                          onPressed: () =>
-                              ref.invalidate(voiceTokenCatalogProvider),
-                          child: Text(l10n.commonRetry),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+          // Every entry stays laid out (scrollable) so ensureVisible and taps
+          // below the fold resolve instead of being culled by a ListView.
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                for (final entry in entries) entry,
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ],
@@ -332,30 +539,61 @@ class _SettingsSheetState extends ConsumerState<SettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = VoiceColors.of(context);
-    return Scaffold(
-      key: SettingsSheet.sheetKey,
-      backgroundColor: colors.canvas,
-      body: CallbackShortcuts(
-        bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
-        child: Focus(
-          autofocus: true,
-          child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final desktop = !VoiceLayout.isNarrow(constraints.maxWidth);
-                if (!desktop) return _navigation(false);
-                return SettingsScaffold(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The desktop shell (rail + 320px navigation + detail) only fits a
+        // full-width window that is wide enough for all three columns. Any
+        // bottom-sheet host (raw modal routes get half-width children,
+        // draggable hosts report infinite heights) keeps the size-independent
+        // scrolling hub, and so do narrower full-page windows.
+        final shellFits =
+            constraints.maxWidth.isFinite &&
+            !VoiceBottomSheetHost.isHosted(context) &&
+            !VoiceLayout.isNarrow(constraints.maxWidth) &&
+            constraints.maxWidth >= MediaQuery.of(context).size.width - 0.5 &&
+            constraints.maxWidth >= 1000;
+        if (!shellFits) {
+          if (VoiceLayout.isNarrow(constraints.maxWidth) &&
+              !constraints.maxHeight.isInfinite &&
+              !VoiceBottomSheetHost.isHosted(context)) {
+            return Scaffold(
+              key: SettingsSheet.sheetKey,
+              backgroundColor: colors.canvas,
+              body: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.escape): _close,
+                },
+                child: Focus(
+                  autofocus: true,
+                  child: SafeArea(child: _navigation(false)),
+                ),
+              ),
+            );
+          }
+          return _modalHub();
+        }
+        return Scaffold(
+          key: SettingsSheet.sheetKey,
+          backgroundColor: colors.canvas,
+          body: CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape): _close,
+            },
+            child: Focus(
+              autofocus: true,
+              child: SafeArea(
+                child: SettingsScaffold(
                   rail: DesktopShellRail(onOpenSettings: _close),
                   navigation: _navigation(true),
                   onClose: _close,
                   leaveGuards: _leaveGuards,
                   detail: _detail(_selected),
-                );
-              },
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -368,12 +606,14 @@ class _SettingsRow extends StatelessWidget {
     this.selected = false,
     this.showChevron = false,
     this.color,
+    this.subtitle,
   });
   final String label;
   final VoidCallback onTap;
   final bool selected;
   final bool showChevron;
   final Color? color;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -397,16 +637,35 @@ class _SettingsRow extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 20 / 14,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    color:
-                        color ??
-                        (selected ? colors.textPrimary : colors.textSecondary),
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 20 / 14,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color:
+                            color ??
+                            (selected
+                                ? colors.textPrimary
+                                : colors.textSecondary),
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 16 / 12,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               if (showChevron)
