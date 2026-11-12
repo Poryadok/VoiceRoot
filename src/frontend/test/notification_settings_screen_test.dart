@@ -32,11 +32,16 @@ class _InMemoryQuietHoursStorage extends NotificationQuietHoursStorage {
 }
 
 class _FakePushNotificationsController extends PushNotificationsController {
-  _FakePushNotificationsController(super.ref);
+  _FakePushNotificationsController(
+    super.ref, {
+    this.permissionStatus = PushPermissionStatus.notDetermined,
+  });
+
+  final PushPermissionStatus permissionStatus;
 
   @override
   Future<PushPermissionStatus> getPermissionStatus() async {
-    return PushPermissionStatus.notDetermined;
+    return permissionStatus;
   }
 
   @override
@@ -46,92 +51,96 @@ class _FakePushNotificationsController extends PushNotificationsController {
 }
 
 void main() {
-  testWidgets('settings notifications tile opens notification settings screen', (
-    tester,
-  ) async {
-    final quietStorage = _InMemoryQuietHoursStorage();
-    final client = MockClient((req) async {
-      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'GET') {
-        return http.Response(
-          jsonEncode({
-            'notification_settings': {
-              'profile_id': 'prof-test',
-              'scope_type': 'global',
-              'enabled': true,
-              'suppress_types_json': '[]',
-            },
-          }),
-          200,
-        );
-      }
-      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
-          req.method == 'GET') {
-        return http.Response(
-          jsonEncode({
-            'quiet_hours': {
-              'enabled': true,
-              'start_time': '22:00',
-              'end_time': '07:00',
-              'timezone': 'UTC',
-              'override_mentions': true,
-            },
-          }),
-          200,
-        );
-      }
-      if (req.url.path == '/api/v1/subscription/me' && req.method == 'GET') {
-        return http.Response(
-          jsonEncode({
-            'subscription': {
-              'plan': 'free',
-              'status': 'cancelled',
-              'billing_period': 'monthly',
-            },
-          }),
-          200,
-        );
-      }
-      return http.Response('Not Found', 404);
-    });
+  testWidgets(
+    'settings notifications tile opens notification settings screen',
+    (tester) async {
+      final quietStorage = _InMemoryQuietHoursStorage();
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/notifications/settings' &&
+            req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'notification_settings': {
+                'profile_id': 'prof-test',
+                'scope_type': 'global',
+                'enabled': true,
+                'suppress_types_json': '[]',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+            req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'quiet_hours': {
+                'enabled': true,
+                'start_time': '22:00',
+                'end_time': '07:00',
+                'timezone': 'UTC',
+                'override_mentions': true,
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/subscription/me' && req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'subscription': {
+                'plan': 'free',
+                'status': 'cancelled',
+                'billing_period': 'monthly',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ...voiceAppTestOverrides(client: client),
-          notificationQuietHoursStorageProvider.overrideWithValue(quietStorage),
-          pushNotificationsControllerProvider.overrideWith(
-            (ref) => _FakePushNotificationsController(ref),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceAppTestOverrides(client: client),
+            notificationQuietHoursStorageProvider.overrideWithValue(
+              quietStorage,
+            ),
+            pushNotificationsControllerProvider.overrideWith(
+              (ref) => _FakePushNotificationsController(ref),
+            ),
+          ],
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: SettingsSheet()),
           ),
-        ],
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: SettingsSheet()),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('settings_notifications')), findsOneWidget);
-    expect(find.text('Notifications'), findsOneWidget);
+      expect(find.byKey(const Key('settings_notifications')), findsOneWidget);
+      expect(find.text('Notifications'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('settings_notifications')));
-    await tester.pump();
-    for (var i = 0; i < 20; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-      if (find.text('Device notifications').evaluate().isNotEmpty) break;
-    }
+      await tester.tap(find.byKey(const Key('settings_notifications')));
+      await tester.pump();
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+        if (find.text('Device notifications').evaluate().isNotEmpty) break;
+      }
 
-    expect(find.byKey(NotificationSettingsScreen.screenKey), findsOneWidget);
-    expect(find.text('Device notifications'), findsOneWidget);
-    expect(find.text('Quiet hours'), findsOneWidget);
-    expect(quietStorage.writeCount, greaterThan(0));
-    expect(quietStorage.value.enabled, isTrue);
-    expect(quietStorage.value.startTime, '22:00');
-  });
+      expect(find.byKey(NotificationSettingsScreen.screenKey), findsOneWidget);
+      expect(find.text('Device notifications'), findsOneWidget);
+      expect(find.text('Quiet hours'), findsOneWidget);
+      expect(quietStorage.writeCount, greaterThan(0));
+      expect(quietStorage.value.enabled, isTrue);
+      expect(quietStorage.value.startTime, '22:00');
+    },
+  );
 
   testWidgets('quiet hours load prefers API over local cache', (tester) async {
     final quietStorage = _InMemoryQuietHoursStorage()
@@ -143,7 +152,8 @@ void main() {
         overrideMentions: false,
       );
     final client = MockClient((req) async {
-      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'GET') {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
         return http.Response(
           jsonEncode({
             'notification_settings': {
@@ -222,7 +232,8 @@ void main() {
     const upstreamDetail = 'private notification service diagnostic';
     final quietStorage = _InMemoryQuietHoursStorage();
     final client = MockClient((req) async {
-      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'GET') {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
         return http.Response(
           jsonEncode({
             'notification_settings': {
@@ -235,7 +246,8 @@ void main() {
           200,
         );
       }
-      if (req.url.path == '/api/v1/notifications/quiet-hours' && req.method == 'GET') {
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
         return http.Response(
           jsonEncode({
             'quiet_hours': {
@@ -249,13 +261,15 @@ void main() {
           200,
         );
       }
-      if (req.url.path == '/api/v1/notifications/settings' && req.method == 'PUT') {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'PUT') {
         return http.Response(
           jsonEncode({'error_code': 'unavailable', 'message': upstreamDetail}),
           503,
         );
       }
-      if (req.url.path == '/api/v1/notifications/quiet-hours' && req.method == 'PUT') {
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'PUT') {
         return http.Response('', 204);
       }
       return http.Response('not found', 404);
@@ -351,4 +365,301 @@ void main() {
     expect(find.text(l10n.backendUnavailable), findsOneWidget);
     expect(find.text(upstreamDetail), findsNothing);
   });
+
+  testWidgets(
+    'voice room join event is localized, editable, and round trips with unknown types',
+    (tester) async {
+      String? settingsWriteBody;
+      final quietStorage = _InMemoryQuietHoursStorage();
+      final client = MockClient((req) async {
+        if (req.url.path == '/api/v1/notifications/settings' &&
+            req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'notification_settings': {
+                'profile_id': 'prof-test',
+                'scope_type': 'global',
+                'enabled': true,
+                'suppress_types_json': '["reaction","future_event"]',
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/notifications/settings' &&
+            req.method == 'PUT') {
+          settingsWriteBody = req.body;
+          final request = jsonDecode(req.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({'notification_settings': request['settings']}),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+            req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'quiet_hours': {
+                'enabled': false,
+                'start_time': '23:00',
+                'end_time': '08:00',
+                'timezone': 'UTC',
+                'override_mentions': true,
+              },
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+            req.method == 'PUT') {
+          return http.Response('', 204);
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      await _pumpNotificationSettings(
+        tester,
+        client: client,
+        quietStorage: quietStorage,
+      );
+
+      const joinEventKey = Key('notification_type_voice_member_joined');
+      expect(find.byKey(joinEventKey), findsOneWidget);
+      expect(find.text('Someone joins a voice room'), findsOneWidget);
+      expect(
+        tester.widget<SwitchListTile>(find.byKey(joinEventKey)).value,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const Key('notification_type_reaction')),
+            )
+            .value,
+        isFalse,
+      );
+
+      await tester.ensureVisible(find.byKey(joinEventKey));
+      await tester.tap(find.byKey(joinEventKey));
+      await tester.pump();
+      expect(
+        tester.widget<SwitchListTile>(find.byKey(joinEventKey)).value,
+        isFalse,
+      );
+      await tester.tap(find.byKey(NotificationSettingsScreen.saveButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(settingsWriteBody, contains('voice_member_joined'));
+      expect(settingsWriteBody, contains('future_event'));
+      expect(settingsWriteBody, contains('reaction'));
+      expect(find.text('Notification settings saved'), findsOneWidget);
+    },
+  );
+
+  testWidgets('unsupported push permission has no registration action', (
+    tester,
+  ) async {
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'notification_settings': {
+              'profile_id': 'prof-test',
+              'scope_type': 'global',
+              'enabled': true,
+              'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
+        return http.Response('', 204);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await _pumpNotificationSettings(
+      tester,
+      client: client,
+      permissionStatus: PushPermissionStatus.unsupported,
+    );
+
+    final permissionTile = tester.widget<ListTile>(
+      find.byKey(NotificationSettingsScreen.pushPermissionKey),
+    );
+    expect(permissionTile.onTap, isNull);
+    expect(find.text('Not available on this device'), findsOneWidget);
+  });
+
+  testWidgets('turning off chat message delivery disables event switches', (
+    tester,
+  ) async {
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'notification_settings': {
+              'profile_id': 'prof-test',
+              'scope_type': 'global',
+              'enabled': true,
+              'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
+        return http.Response('', 204);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await _pumpNotificationSettings(tester, client: client);
+    await tester.tap(find.byKey(NotificationSettingsScreen.globalEnabledKey));
+    await tester.pump();
+
+    final eventSwitch = tester.widget<SwitchListTile>(
+      find.byKey(const Key('notification_type_mention')),
+    );
+    expect(eventSwitch.value, isFalse);
+    expect(eventSwitch.onChanged, isNull);
+  });
+
+  testWidgets('scoped chat settings omit global-only controls', (tester) async {
+    Uri? settingsReadUri;
+    String? settingsWriteBody;
+    var quietHoursCalls = 0;
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
+        settingsReadUri = req.url;
+        return http.Response(
+          jsonEncode({
+            'notification_settings': {
+              'profile_id': 'prof-test',
+              'scope_type': 'chat',
+              'scope_id': 'chat-123',
+              'enabled': true,
+              'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'PUT') {
+        settingsWriteBody = req.body;
+        return http.Response('', 204);
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours') {
+        quietHoursCalls++;
+        return http.Response('', 204);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    await _pumpNotificationSettings(tester, client: client, chatId: 'chat-123');
+
+    expect(settingsReadUri?.queryParameters, {
+      'scope_type': 'chat',
+      'scope_id': 'chat-123',
+    });
+    expect(find.text('Notifications for this chat'), findsOneWidget);
+    expect(
+      find.byKey(NotificationSettingsScreen.pushPermissionKey),
+      findsNothing,
+    );
+    expect(find.byKey(NotificationSettingsScreen.quietHoursKey), findsNothing);
+    await tester.ensureVisible(
+      find.byKey(NotificationSettingsScreen.saveButtonKey),
+    );
+    await tester.tap(find.byKey(NotificationSettingsScreen.saveButtonKey));
+    await tester.pumpAndSettle();
+    expect(settingsWriteBody, contains('chat-123'));
+    expect(quietHoursCalls, 0);
+  });
+
+  testWidgets('settings screen fits desktop and mobile viewports', (
+    tester,
+  ) async {
+    final client = MockClient((req) async {
+      if (req.url.path == '/api/v1/notifications/settings' &&
+          req.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'notification_settings': {
+              'profile_id': 'prof-test',
+              'scope_type': 'global',
+              'enabled': true,
+              'suppress_types_json': '[]',
+            },
+          }),
+          200,
+        );
+      }
+      if (req.url.path == '/api/v1/notifications/quiet-hours' &&
+          req.method == 'GET') {
+        return http.Response('', 204);
+      }
+      return http.Response('Not Found', 404);
+    });
+
+    for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      await _pumpNotificationSettings(tester, client: client);
+      expect(tester.takeException(), isNull, reason: 'viewport $size');
+      expect(
+        tester.getRect(find.byKey(NotificationSettingsScreen.screenKey)).width,
+        lessThanOrEqualTo(size.width),
+      );
+      await tester.ensureVisible(
+        find.byKey(NotificationSettingsScreen.saveButtonKey),
+      );
+      expect(
+        find.byKey(NotificationSettingsScreen.saveButtonKey),
+        findsOneWidget,
+      );
+    }
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+}
+
+Future<void> _pumpNotificationSettings(
+  WidgetTester tester, {
+  required http.Client client,
+  _InMemoryQuietHoursStorage? quietStorage,
+  PushPermissionStatus permissionStatus = PushPermissionStatus.notDetermined,
+  String? chatId,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ...voiceAppTestOverrides(client: client),
+        notificationQuietHoursStorageProvider.overrideWithValue(
+          quietStorage ?? _InMemoryQuietHoursStorage(),
+        ),
+        pushNotificationsControllerProvider.overrideWith(
+          (ref) => _FakePushNotificationsController(
+            ref,
+            permissionStatus: permissionStatus,
+          ),
+        ),
+      ],
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: NotificationSettingsScreen(chatId: chatId)),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
