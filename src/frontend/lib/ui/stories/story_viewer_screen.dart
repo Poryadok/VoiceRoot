@@ -374,7 +374,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
                     story.isLookingForParty ||
                     story.type == 'photo' ||
                     story.type == 'video';
-                final headerColor = onMedia ? Colors.white : voice.textPrimary;
+                final headerColor = onMedia
+                    ? voice.callForeground
+                    : voice.textPrimary;
                 return Stack(
                   fit: StackFit.expand,
                   children: [
@@ -795,7 +797,7 @@ class _StoryContent extends ConsumerWidget {
         story.isLookingForParty ||
         story.type == 'photo' ||
         story.type == 'video';
-    final foreground = onMedia ? Colors.white : voice.textPrimary;
+    final foreground = onMedia ? voice.callForeground : voice.textPrimary;
     return [
       if (!story.isLookingForParty && gameTag != null && gameTag.isNotEmpty)
         Positioned(
