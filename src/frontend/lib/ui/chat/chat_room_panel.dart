@@ -281,6 +281,26 @@ class _PendingAttachmentUpload {
       );
 }
 
+class _PendingAttachmentSend {
+  const _PendingAttachmentSend({
+    required this.chatId,
+    required this.attachment,
+    required this.content,
+    required this.draftKey,
+    required this.sendGeneration,
+    required this.requestIdentity,
+    required this.sessionInstallGeneration,
+  });
+
+  final String chatId;
+  final MessageAttachment attachment;
+  final String content;
+  final ChatDraftKey? draftKey;
+  final int sendGeneration;
+  final GatewayRequestIdentity requestIdentity;
+  final int sessionInstallGeneration;
+}
+
 class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _composer = TextEditingController();
   final _slashComposerAnchor = GlobalKey();
@@ -309,6 +329,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   int? _attachmentSessionGeneration;
   _PendingAttachmentUpload? _pendingAttachmentUpload;
   FilesApiFailure? _attachmentUploadFailure;
+  _PendingAttachmentSend? _pendingAttachmentSend;
+  var _attachmentSendRetryInFlight = false;
+  var _attachmentSendRetryOperation = 0;
   var _initialUnreadCount = 0;
   var _unreadCaptured = false;
   var _pendingNewMessages = 0;
@@ -357,6 +380,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     _cancelTextSend();
     _pinnedJumpGeneration++;
     _attachmentOperation++;
+    _pendingAttachmentSend = null;
+    _attachmentSendRetryOperation++;
     _scheduledAttemptSubmissionGeneration++;
     _pendingAttachmentUpload = null;
     _attachmentUploadFailure = null;
@@ -383,6 +408,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _messageHighlightTimer?.cancel();
       _highlightedMessageId = null;
       _cancelTextSend();
+      _pendingAttachmentSend = null;
+      _attachmentSendRetryInFlight = false;
+      _attachmentSendRetryOperation++;
       _chatInfoSearchHandoffGeneration++;
       _inChatSearchOpen = false;
       _inChatSearchController.clear();
@@ -693,6 +721,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                           .read(authControllerProvider.notifier)
                           .sessionInstallGeneration)) {
             _attachmentOperation++;
+            _pendingAttachmentSend = null;
+            _attachmentSendRetryInFlight = false;
+            _attachmentSendRetryOperation++;
             _pendingAttachmentUpload = null;
             _attachmentUploadFailure = null;
             _uploadingAttachment = false;
@@ -1662,6 +1693,28 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                   l10n,
                   room.isSending || composerBlocked,
                   _pendingTextSend!,
+                ),
+              if (_pendingAttachmentSend case final attachmentSend?
+                  when !textSendFailed &&
+                      _canRetryAttachmentSend(attachmentSend))
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(_textSendFailureMessage(l10n))),
+                      TextButton(
+                        key: ChatRoomPanel.sendRetryKey,
+                        onPressed:
+                            room.isSending ||
+                                composerBlocked ||
+                                _attachmentSendRetryInFlight ||
+                                !_isCurrentAttachmentSend(attachmentSend)
+                            ? null
+                            : () => unawaited(_retryAttachmentSend()),
+                        child: Text(l10n.commonRetry),
+                      ),
+                    ],
+                  ),
                 ),
               if (_attachmentUploadFailure case final failure?)
                 Padding(
@@ -2655,6 +2708,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       draftKey: _draftKey,
       sendSilent: sendSilent,
     );
+    _pendingAttachmentSend = null;
+    _attachmentSendRetryInFlight = false;
+    _attachmentSendRetryOperation++;
     _pendingTextSend = attempt;
     _pendingTextSendControllerGeneration = null;
     await _submitTextSend(attempt);
@@ -2901,6 +2957,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final operation = ++_attachmentOperation;
     setState(() {
       _uploadingAttachment = true;
+      _pendingAttachmentSend = null;
+      _attachmentSendRetryInFlight = false;
+      _attachmentSendRetryOperation++;
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
     });
@@ -3035,6 +3094,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       chatRoomControllerProvider(attempt.chatId).notifier,
     );
     final generationBefore = controller.immediateSendGeneration;
+    final sendContent = attempt.voiceDuration == null ? _composer.text : '';
+    final sendDraftKey = attempt.voiceDuration == null ? _draftKey : null;
+    final authController = ref.read(authControllerProvider.notifier);
+    final requestIdentity = authController.gatewayRequestIdentity;
+    final sessionInstallGeneration = authController.sessionInstallGeneration;
     final attachment = MessageAttachment(
       fileId: metadata.fileId,
       type: attempt.voiceDuration != null
@@ -3048,7 +3112,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       durationSeconds: attempt.voiceDuration?.inSeconds,
     );
     final err = await controller.sendMessage(
-      attempt.voiceDuration == null ? _composer.text : '',
+      sendContent,
       attachments: [attachment],
     );
     if (!_isCurrentAttachmentOperation(operation, attempt.chatId)) return;
@@ -3064,15 +3128,98 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             ? controller.immediateSendGeneration
             : null;
       }
+      if (attempt.voiceDuration == null &&
+          err != null &&
+          requestIdentity != null &&
+          controller.immediateSendGeneration > generationBefore &&
+          controller.canRetryFailedMessage) {
+        _pendingAttachmentSend = _PendingAttachmentSend(
+          chatId: attempt.chatId,
+          attachment: attachment,
+          content: sendContent,
+          draftKey: sendDraftKey,
+          sendGeneration: controller.immediateSendGeneration,
+          requestIdentity: requestIdentity,
+          sessionInstallGeneration: sessionInstallGeneration,
+        );
+      } else {
+        _pendingAttachmentSend = null;
+      }
     });
-    if (err == null && attempt.voiceDuration == null) {
+    if (err == null &&
+        attempt.voiceDuration == null &&
+        _isCurrentAttachmentOperation(operation, attempt.chatId) &&
+        _draftKey == sendDraftKey &&
+        _composer.text == sendContent) {
       _composer.clear();
-      final key = _draftKey;
-      if (key != null) {
-        await ref.read(chatDraftProvider(key).notifier).clear();
+      if (sendDraftKey != null) {
+        await ref.read(chatDraftProvider(sendDraftKey).notifier).clear();
       }
     }
     _refocusComposer();
+  }
+
+  Future<void> _retryAttachmentSend() async {
+    final pending = _pendingAttachmentSend;
+    if (pending == null ||
+        _attachmentSendRetryInFlight ||
+        !_canRetryAttachmentSend(pending)) {
+      return;
+    }
+    final controller = ref.read(
+      chatRoomControllerProvider(pending.chatId).notifier,
+    );
+    if (pending.sendGeneration != controller.immediateSendGeneration ||
+        !controller.canRetryFailedMessage) {
+      return;
+    }
+    final retryOperation = ++_attachmentSendRetryOperation;
+    setState(() => _attachmentSendRetryInFlight = true);
+    try {
+      final error = await controller.retryFailedMessage(
+        expectedGeneration: pending.sendGeneration,
+      );
+      if (!_isCurrentAttachmentSend(pending) ||
+          !identical(_pendingAttachmentSend, pending)) {
+        return;
+      }
+      setState(() {
+        if (error == null) _pendingAttachmentSend = null;
+      });
+      if (error == null &&
+          _draftKey == pending.draftKey &&
+          _composer.text == pending.content) {
+        _composer.clear();
+        if (pending.draftKey != null) {
+          await ref.read(chatDraftProvider(pending.draftKey!).notifier).clear();
+        }
+      }
+      _refocusComposer();
+    } finally {
+      if (mounted && _attachmentSendRetryOperation == retryOperation) {
+        setState(() => _attachmentSendRetryInFlight = false);
+      }
+    }
+  }
+
+  bool _isCurrentAttachmentSend(_PendingAttachmentSend pending) {
+    final authController = ref.read(authControllerProvider.notifier);
+    return mounted &&
+        _isCurrentChat(pending.chatId) &&
+        (ref.read(selectedChatIdProvider) == null ||
+            ref.read(selectedChatIdProvider) == pending.chatId) &&
+        authController.gatewayRequestIdentity == pending.requestIdentity &&
+        authController.sessionInstallGeneration ==
+            pending.sessionInstallGeneration;
+  }
+
+  bool _canRetryAttachmentSend(_PendingAttachmentSend pending) {
+    if (!_isCurrentAttachmentSend(pending)) return false;
+    final controller = ref.read(
+      chatRoomControllerProvider(pending.chatId).notifier,
+    );
+    return controller.immediateSendGeneration == pending.sendGeneration &&
+        controller.canRetryFailedMessage;
   }
 
   Future<void> _retryVoiceSend() async {
@@ -3081,14 +3228,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final generation = _voiceSendGeneration;
     final chatId = widget.chatId;
     final controller = ref.read(chatRoomControllerProvider(chatId).notifier);
-    if (generation != null && generation != controller.immediateSendGeneration) {
+    if (generation != null &&
+        generation != controller.immediateSendGeneration) {
       return;
     }
     final generationBefore = controller.immediateSendGeneration;
     final error = generation == null
         ? await controller.sendMessage('', attachments: [attachment])
         : await controller.retryFailedMessage(expectedGeneration: generation);
-    if (!_isCurrentChat(chatId) || !identical(_pendingVoiceMessage, attachment)) {
+    if (!_isCurrentChat(chatId) ||
+        !identical(_pendingVoiceMessage, attachment)) {
       return;
     }
     setState(() {
