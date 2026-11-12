@@ -5,6 +5,19 @@ import '../../settings/reduced_motion.dart';
 import '../a11y/focus_trap.dart';
 import '../a11y/voice_focus_return.dart';
 
+/// Marks content hosted inside a [showVoiceBottomSheet] modal so full-page
+/// hosts (e.g. the persistent Settings shell) can tell the two apart.
+class VoiceBottomSheetHost extends InheritedWidget {
+  const VoiceBottomSheetHost({super.key, required super.child});
+
+  static bool isHosted(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<VoiceBottomSheetHost>() !=
+      null;
+
+  @override
+  bool updateShouldNotify(VoiceBottomSheetHost oldWidget) => false;
+}
+
 /// Draggable bottom sheet capped at 85% viewport height.
 ///
 /// Set [scrollable] to false for children that manage their own scrolling
@@ -34,20 +47,22 @@ Future<T?> showVoiceBottomSheet<T>({
         focusReturn.restore();
         onDismiss?.call();
       },
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: initialSize,
-        minChildSize: minSize,
-        maxChildSize: maxSize,
-        builder: (_, scrollController) {
-          if (!scrollable) {
-            return SizedBox.expand(child: child);
-          }
-          return SingleChildScrollView(
-            controller: scrollController,
-            child: child,
-          );
-        },
+      child: VoiceBottomSheetHost(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: initialSize,
+          minChildSize: minSize,
+          maxChildSize: maxSize,
+          builder: (_, scrollController) {
+            if (!scrollable) {
+              return SizedBox.expand(child: child);
+            }
+            return SingleChildScrollView(
+              controller: scrollController,
+              child: child,
+            );
+          },
+        ),
       ),
     ),
   );
