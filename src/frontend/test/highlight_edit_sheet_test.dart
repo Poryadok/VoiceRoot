@@ -158,9 +158,7 @@ void main() {
     expect(request?.url.path, '/api/v1/stories/highlights/hl-1/stories');
     expect(find.text('private add diagnostic'), findsNothing);
     expect(
-      find.text(
-        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
-      ),
+      find.text('The service is temporarily unavailable. Please try again.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('highlight_story_archived-1')), findsNothing);

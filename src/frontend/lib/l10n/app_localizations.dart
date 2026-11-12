@@ -491,7 +491,7 @@ abstract class AppLocalizations {
   /// No description provided for @backendUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).'**
+  /// **'The service is temporarily unavailable. Please try again.'**
   String get backendUnavailable;
 
   /// No description provided for @socialTabSearch.
@@ -887,7 +887,7 @@ abstract class AppLocalizations {
   /// No description provided for @socialFriendsBackendUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Friends are unavailable. Start the full API stack (docker compose --profile app).'**
+  /// **'The service is temporarily unavailable. Please try again.'**
   String get socialFriendsBackendUnavailable;
 
   /// No description provided for @socialRequestsLoadError.
@@ -1283,7 +1283,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatListBackendUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Chats are unavailable. Start the full API stack (docker compose --profile app).'**
+  /// **'The service is temporarily unavailable. Please try again.'**
   String get chatListBackendUnavailable;
 
   /// No description provided for @chatListDmFallback.

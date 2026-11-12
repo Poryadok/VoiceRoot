@@ -109,7 +109,7 @@
     }
   },
   "socialDiscoverHint": "Find people — use the icon on the left",
-  "backendUnavailable": "Social and chat features are unavailable. Start the full API stack (docker compose --profile app).",
+  "backendUnavailable": "The service is temporarily unavailable. Please try again.",
   "socialTabSearch": "Search",
   "socialTabFriends": "Friends",
   "socialTabContacts": "Contacts",
@@ -189,7 +189,7 @@
   "socialIncomingRequests": "Incoming",
   "socialOutgoingRequests": "Outgoing",
   "socialFriendsLoadError": "Could not load friends",
-  "socialFriendsBackendUnavailable": "Friends are unavailable. Start the full API stack (docker compose --profile app).",
+  "socialFriendsBackendUnavailable": "The service is temporarily unavailable. Please try again.",
   "socialRequestsLoadError": "Could not load requests",
   "socialProfileLoadError": "Could not load profile",
   "socialProfileUnavailable": "User unavailable",
@@ -287,7 +287,7 @@
     }
   },
   "chatListLoadError": "Could not load chats",
-  "chatListBackendUnavailable": "Chats are unavailable. Start the full API stack (docker compose --profile app).",
+  "chatListBackendUnavailable": "The service is temporarily unavailable. Please try again.",
   "chatListDmFallback": "Chat {id}",
   "@chatListDmFallback": {
     "placeholders": {

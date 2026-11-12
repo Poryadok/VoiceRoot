@@ -290,7 +290,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('chat_list_unavailable')), findsOneWidget);
-    expect(find.textContaining('Start the full API stack'), findsOneWidget);
+    expect(find.textContaining('temporarily unavailable'), findsOneWidget);
     expect(find.text('No conversations yet'), findsNothing);
   });
 }
