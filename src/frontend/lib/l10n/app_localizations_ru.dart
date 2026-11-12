@@ -184,6 +184,45 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authErrorInvalidOtp => 'Неверный или просроченный код.';
 
   @override
+  String get registerTitle => 'Возз аккаунт';
+
+  @override
+  String get registerSubtitle => 'Введите данные для возз аккаунт.';
+
+  @override
+  String get registerTypePickerLabel => 'Тип аккаунт';
+
+  @override
+  String get registerTypePersonal => 'Personal';
+
+  @override
+  String get registerTypeOrganization => 'Organization';
+
+  @override
+  String get registerDisplayNameOrganization => 'Название организации';
+
+  @override
+  String get registerTagOrganizationLabel => 'Тег организации';
+
+  @override
+  String registerTagPreview(String base) {
+    return 'available tag: @$base';
+  }
+
+  @override
+  String get registerTagAssignedHint =>
+      'Систем назначает короткий ending по taken tag.';
+
+  @override
+  String get registerErrorTagRequired => 'Enter tag.';
+
+  @override
+  String get registerSuccess => 'Аккаунт создан. Войдите для вход.';
+
+  @override
+  String get registerBackToLogin => 'Назад ко входу';
+
+  @override
   String get passwordResetTitle => 'Сброс пароля';
 
   @override

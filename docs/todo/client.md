@@ -144,6 +144,21 @@ DoD; see [PLAN.md](../PLAN.md) A6 and G1's unfinished-rich-type limitation.
 - [x] **AuthScreen: email registration + OTP** — email is the alpha default in [auth-and-contacts.md](../features/auth-and-contacts.md); `auth_screen.dart` resumes authoritative pending-email status after registration, login, and reload, and supplies verify/resend, bounded promotion retry, and logout. The initial authenticated send remains owned by Auth and is never replayed by recovery.
 - [x] **Auth UI: password-reset** — `PasswordResetScreen` (email OTP → new password); forgot-password on `AuthScreen`; `VoiceAuthClient.sendPasswordResetOtp` / `resetPassword` (**Batch 30a**). **Sessions/revoke UI shipped** (`ActiveSessionsScreen`, Security settings, **Batch 29b**).
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
+- [ ] **UIV3-AUTH-REGISTER — register v3 controls без документada register-time carrier** —
+  [`§16`](../design/screen-controls.md#16-registration-screen--auth--register) controls
+  landed as `RegisterScreen` (`src/frontend/lib/ui/auth/register_screen.dart`), but
+  submit stays on the existing contract: `auth_controller.dart:328` `register` →
+  `auth_client.dart:219` sends only `RegisterRequest(email,password)`. The type picker
+  (`register_screen.dart:185`), display-name field (`:210`) and tag base (`:219`) are
+  UI-only until a register-time carrier exists — no `RegisterRequest` field and no
+  documented profile-provisioning contract carries account type, display name or tag
+  ([auth-and-contacts.md](../features/auth-and-contacts.md)). No client API reports
+  tag availability or the final `@base#discriminator` at register time; the screen
+  echoes `@base` (`:229` `registerTagPreview`) with the assigned-suffix hint (`:233`).
+  Phone row stays hidden (post-alpha per §16) and `auth_client.dart:219` exposes no
+  `RegisterRequest.phone`. Login #8 «Register» still routes the `AuthScreen` inline
+  flow; switching the entry to `RegisterScreen` is a follow-up. Evidence:
+  `uiv3_register_screen_test.dart` (15 widget tests).
 - [ ] **Verification OAuth callback and client resume** — Implement the default-off [transport v1 contract](#oauth-callbackresume-transport-contract-v1--target) below across Auth/Gateway/Flutter and prove Web/Windows resume, bound state/PKCE, replay/cancel/expiry and authoritative rereads. Exact registrations/origins/secrets are deployment configuration. YouTube positive membership+verified-channel evidence remains a separate qualification gap; long-upload permission must not grant/revoke a badge. No provider is enabled by this documentation. See [verification.md](../features/verification.md).
 
 - [ ] **Organization verification eligibility and pending challenge readback** — The User/Gateway routes and payloads exist: `GET /api/v1/users/me/verification` returns only effective profile status/badge; organization `POST` starts with `domain` and returns `domain`/`txt_record`; `POST .../check` returns effective status. The settings design exposes the domain field only for Organization accounts, but Auth session type is only `guest|regular`, User Profile has no personal/organization kind, and `CreateProfileRequest.preset` only supports `personal|gaming|work`; Start currently checks profile ownership but does not enforce organization kind. Do not expose Start until an authoritative account/profile kind and eligibility enforcement are defined. GET status does not return the current pending request/domain/TXT/expiry, so pending instructions cannot be restored after leaving/reloading Settings. Define those readback semantics before persisting or presenting a restored pending state; keep organization controls unavailable meanwhile. See [verification.md](../features/verification.md), [user-service.md](../microservices/user-service.md), and [api-gateway.md](../microservices/api-gateway.md).
