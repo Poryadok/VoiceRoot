@@ -162,7 +162,7 @@ void main() {
   );
 
   testWidgets(
-    'tapping Start without a picked region stays on detail with the error',
+    'Start routes to QueueSearch even with no criterion picked yet',
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -178,11 +178,14 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(startButton());
         await tester.pump();
-        expect(find.text(startError()), findsOneWidget, reason: '$size error');
-        final errorText = tester.widget<Text>(find.text(startError()));
-        expect(errorText.style!.color, const Color(0xFFEF9A9A));
-        expect(find.byType(GameDetailScreen), findsOneWidget);
-        expect(find.byType(QueueSearchScreen), findsNothing);
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(QueueSearchScreen),
+          findsOneWidget,
+          reason: '$size unselected criteria route stays open',
+        );
+        expect(find.byType(GameDetailScreen), findsNothing);
         await tester.pumpWidget(const SizedBox.shrink());
       }
       await tester.binding.setSurfaceSize(null);
@@ -190,7 +193,7 @@ void main() {
   );
 
   testWidgets(
-    'role and own rank gates block Start until selected, then the route opens',
+    'role and own-rank pickers persist values and Start stays open',
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -209,14 +212,6 @@ void main() {
           GameDetailScreen.regionPickerKeyName,
           'eu',
         );
-        await tester.tap(startButton());
-        await tester.pump();
-        expect(
-          find.text(startError()),
-          findsOneWidget,
-          reason: '$size role and rank still missing',
-        );
-        expect(find.byType(QueueSearchScreen), findsNothing);
         await select(
           tester,
           GameDetailScreen.rolePickerKey('Ranked'),
@@ -261,7 +256,7 @@ void main() {
   );
 
   testWidgets(
-    'sought rank bounds need both sides ordered by rank value',
+    'out-of-order sought bounds stay accepted and Start still routes',
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -295,36 +290,15 @@ void main() {
           GameDetailScreen.soughtRankMinKey('Ranked'),
           'Silver',
         );
-        await tester.tap(startButton());
-        await tester.pump();
-        expect(
-          find.text(startError()),
-          findsOneWidget,
-          reason: '$size max side missing',
-        );
-        expect(find.byType(QueueSearchScreen), findsNothing);
         await select(
           tester,
           GameDetailScreen.soughtRankMaxKey('Ranked'),
           'Bronze',
         );
-        await tester.tap(startButton());
-        await tester.pump();
         expect(
-          find.text(startError()),
+          find.text('Bronze'),
           findsOneWidget,
-          reason: '$size min above max',
-        );
-        expect(find.byType(QueueSearchScreen), findsNothing);
-        await select(
-          tester,
-          GameDetailScreen.soughtRankMaxKey('Ranked'),
-          'Gold',
-        );
-        expect(
-          find.text('Gold'),
-          findsOneWidget,
-          reason: '$size max readout',
+          reason: '$size max readout stays below min',
         );
         await tester.tap(startButton());
         await tester.pump();
@@ -333,7 +307,7 @@ void main() {
         expect(
           find.byType(QueueSearchScreen),
           findsOneWidget,
-          reason: '$size route',
+          reason: '$size route open with out-of-order bounds',
         );
         await tester.pumpWidget(const SizedBox.shrink());
       }
@@ -398,14 +372,6 @@ void main() {
           GameDetailScreen.rolePickerKey('Ranked'),
           'No role preference',
         );
-        await tester.tap(startButton());
-        await tester.pump();
-        expect(
-          find.text(startError()),
-          findsOneWidget,
-          reason: '$size region still required',
-        );
-        expect(find.byType(QueueSearchScreen), findsNothing);
         await select(
           tester,
           GameDetailScreen.regionPickerKeyName,

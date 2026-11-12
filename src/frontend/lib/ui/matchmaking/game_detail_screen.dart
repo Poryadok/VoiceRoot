@@ -35,42 +35,10 @@ class GameDetailScreen extends StatefulWidget {
 
 class _GameDetailScreenState extends State<GameDetailScreen> {
   String? _region;
-  String? _error;
   final Map<String, String?> roleByMode = {};
   final Map<String, String?> rankByMode = {};
   final Map<String, String?> minByMode = {};
   final Map<String, String?> maxByMode = {};
-
-  GameRank? rankAt(GameMode mode, String? name) {
-    if (name == null) return null;
-    for (final rank in mode.ranks) {
-      if (rank.name == name) return rank;
-    }
-    return null;
-  }
-
-  bool _criteriaReady(GameMode mode) {
-    if ((_region ?? '').isEmpty) return false;
-    if (mode.rolesRequired && (roleByMode[mode.name] ?? '').isEmpty) {
-      return false;
-    }
-    if (mode.rankRequired) {
-      final own = rankByMode[mode.name];
-      if (own == null || !mode.ranks.any((rank) => rank.name == own)) {
-        return false;
-      }
-    }
-    final min = minByMode[mode.name];
-    final max = maxByMode[mode.name];
-    if ((min == null) != (max == null)) return false;
-    if (min != null && max != null) {
-      final minRank = rankAt(mode, min);
-      final maxRank = rankAt(mode, max);
-      if (minRank == null || maxRank == null) return false;
-      if (minRank.value > maxRank.value) return false;
-    }
-    return true;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -208,11 +176,6 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
             FilledButton(
               key: Key(GameDetailScreen.startButtonKey(mode.name)),
               onPressed: () {
-                if (!_criteriaReady(mode)) {
-                  setState(() => _error = l10n.queueSearchStartError);
-                  return;
-                }
-                setState(() => _error = null);
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => QueueSearchScreen(
@@ -224,17 +187,6 @@ class _GameDetailScreenState extends State<GameDetailScreen> {
                 );
               },
               child: Text(l10n.queueSearchStart),
-            ),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: voice.error),
-              ),
             ),
           ],
           const SizedBox(height: 24),
