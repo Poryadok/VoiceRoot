@@ -291,7 +291,11 @@ void main() {
     },
   );
 
-  testWidgets('shows nudge banner while searching', (tester) async {
+  testWidgets('search status adapts to H/V and nudge opens game details', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final game = _valorantGame();
     await tester.pumpWidget(
       ProviderScope(
@@ -305,7 +309,8 @@ void main() {
               profileId: 'p1',
               gameId: game.id,
               mode: game.config.modes.first.name,
-              criteriaJson: '{}',
+              criteriaJson:
+                  '{"self":{"role":"Duelist"},"sought":{"rank_min":"Iron","rank_max":"Gold"}}',
               status: 'searching',
             ),
           ),
@@ -321,10 +326,23 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Iron — Gold'), findsOneWidget);
+    expect(find.text('Duelist'), findsOneWidget);
     expect(find.byKey(QueueSearchScreen.nudgeBannerKey), findsOneWidget);
     expect(find.byKey(QueueSearchScreen.searchingStateKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('Change search parameters'));
+    await tester.tap(find.text('Change search parameters'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('game_detail_screen')), findsOneWidget);
   });
 
   testWidgets('queue search prefills criteria from player profile', (
@@ -365,7 +383,9 @@ void main() {
     expect(find.text('Iron'), findsNothing);
   });
 
-  testWidgets('queue search start and cancel flow', (tester) async {
+  testWidgets('failed cancellation keeps search visible and can be retried', (
+    tester,
+  ) async {
     final game = _valorantGame();
     var searchPosts = 0;
     var cancelDeletes = 0;
@@ -390,6 +410,7 @@ void main() {
       if (req.method == 'DELETE' &&
           req.url.path == '/api/v1/matchmaking/search/sess-flow') {
         cancelDeletes++;
+        if (cancelDeletes == 1) return http.Response('{}', 503);
         return http.Response('{}', 200);
       }
       return http.Response('not found', 404);
@@ -434,6 +455,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(cancelDeletes, 1);
+    expect(find.byKey(QueueSearchScreen.searchingStateKey), findsOneWidget);
+    final context = tester.element(find.byKey(QueueSearchScreen.screenKey));
+    expect(
+      find.text(AppLocalizations.of(context)!.queueSearchCancelError),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(QueueSearchScreen.cancelButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(cancelDeletes, 2);
     expect(find.byKey(QueueSearchScreen.startButtonKey), findsOneWidget);
   });
 
@@ -497,7 +528,8 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byKey(QueueSearchScreen.declinedStateKey), findsOneWidget);
     expect(find.byKey(QueueSearchScreen.searchingStateKey), findsOneWidget);
