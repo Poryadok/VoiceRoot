@@ -69,6 +69,8 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
+- [ ] **UIV3-SCREEN-MATCHMAKING-GAMEDETAIL — card picks are not transported into QueueSearch criteria** — the v3 card (`src/frontend/lib/ui/matchmaking/game_detail_screen.dart`) collects region, own role, own rank and sought min/max rank through pickers that mirror the `QueueSearchScreen._dropdown` contract and gates Start with the frozen `criteria_json` rules (region required; role iff mode `roles_required`; own rank iff `rank_required` and a member of mode ranks; bounds both-or-none and ordered by rank value — see `src/backend/matchmaking/internal/criteria/criteria.go:127` and `:135`, and the `self.role`/`self.rank` errors at `:17`–`:20`, `sought.rank_min`/`rank_max` at `:33`–`:34`). The Start route (`game_detail_screen.dart:216`) still transports only `game`, `mode` and `spaceId`; no documented contract carries the card's picks into `criteria_json`, so QueueSearchScreen stays the sole writer of criteria and the card never prefills them. Closing this needs a prefills/transport entry in the existing matchmaking contract (`docs/features/matchmaking.md`), not invented fields.
+
 ### Space catalog v3 residual
 
 - [ ] **UIV3-SCREEN-SPACE-CATALOG — category/game discovery contract and full acceptance** —
