@@ -75,6 +75,27 @@ class DowngradeProfilesResult {
   final List<String> keptProfileIds;
 }
 
+class VoiceBillingEvent {
+  const VoiceBillingEvent({
+    required this.id,
+    required this.type,
+    this.occurredAt,
+    this.payloadJson,
+  });
+
+  final String id;
+  final String type;
+  final DateTime? occurredAt;
+  final String? payloadJson;
+}
+
+class BillingHistoryData {
+  const BillingHistoryData({required this.events, this.nextCursor});
+
+  final List<VoiceBillingEvent> events;
+  final String? nextCursor;
+}
+
 /// HTTP client for Subscription routes via API Gateway (`/api/v1/subscription/**`).
 class VoiceSubscriptionClient {
   VoiceSubscriptionClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -155,6 +176,24 @@ class VoiceSubscriptionClient {
       result,
       (data) => voiceSubscriptionLimitsFromProto(
         data.hasLimits() ? data.limits : sub_pb.Limits(),
+      ),
+    );
+  }
+
+  Future<SubscriptionApiResult<BillingHistoryData>> getBillingHistory({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/subscription/billing/history'),
+      authorization: authorization,
+      createEmpty: sub_pb.GetBillingHistoryResponse.create,
+    );
+    return _map(
+      result,
+      (data) => voiceBillingHistoryFromProto(
+        data.hasBillingHistoryList()
+            ? data.billingHistoryList
+            : sub_pb.BillingHistoryList(),
       ),
     );
   }

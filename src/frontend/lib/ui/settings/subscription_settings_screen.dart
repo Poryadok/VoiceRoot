@@ -13,6 +13,8 @@ import '../core/voice_primary_button.dart';
 import '../core/voice_secondary_button.dart';
 import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
+import '../profile/manage_profiles_sheet.dart';
+import '../profile/profile_downgrade_picker_screen.dart';
 
 enum _SubscriptionPlanDisplay {
   free,
@@ -104,6 +106,11 @@ class SubscriptionSettingsScreen extends ConsumerStatefulWidget {
   static const Key planStateKey = Key('subscription_plan_state');
   static const Key freeTierNoteKey = Key('subscription_free_tier_note');
   static const Key upgradeSectionKey = Key('subscription_upgrade_section');
+  static const Key billingHistoryKey = Key('subscription_billing_history');
+  static const Key manageProfilesKey = Key('subscription_manage_profiles');
+  static const Key paymentFailureBannerKey =
+      Key('subscription_payment_failure_banner');
+  static const Key updatePaymentKey = Key('subscription_update_payment');
 
   @override
   ConsumerState<SubscriptionSettingsScreen> createState() =>
@@ -115,6 +122,10 @@ class _SubscriptionSettingsScreenState
   var _busy = false;
   String? _errorKey;
   int? _errorStatusCode;
+  /// Billing transactions are loaded on demand; null = not loaded yet.
+  List<VoiceBillingEvent>? _billingEvents;
+  var _billingLoading = false;
+  var _billingUnavailable = false;
 
   Future<void> _startCheckout(String billingPeriod) async {
     final session = ref.read(authControllerProvider).session;
@@ -211,6 +222,49 @@ class _SubscriptionSettingsScreenState
     );
   }
 
+  /// Loads billing transactions on demand via the gateway history route.
+  Future<void> _loadBillingHistory() async {
+    final session = ref.read(authControllerProvider).session;
+    if (session == null) return;
+    setState(() {
+      _billingLoading = true;
+      _billingEvents = null;
+      _billingUnavailable = false;
+    });
+    final result = await ref
+        .read(voiceSubscriptionClientProvider)
+        .getBillingHistory(authorization: session.authorizationHeader);
+    if (!mounted) return;
+    switch (result) {
+      case SubscriptionApiOk(:final data):
+        setState(() {
+          _billingLoading = false;
+          _billingEvents = data.events;
+        });
+      case SubscriptionApiFailure():
+        setState(() {
+          _billingLoading = false;
+          _billingUnavailable = true;
+        });
+    }
+  }
+
+  /// Navigates to the profile list; free tier with excess profiles opens the
+  /// downgrade picker instead (see profile_downgrade_picker_screen.dart).
+  void _manageProfiles(BuildContext context) {
+    if (ref.read(profileDowngradeRequiredProvider)) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(
+            body: ProfileDowngradePickerScreen(),
+          ),
+        ),
+      );
+      return;
+    }
+    showManageProfilesSheet(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -244,6 +298,16 @@ class _SubscriptionSettingsScreenState
           onCancel: subscription == null
               ? null
               : () => _cancelSubscription(subscription),
+          onLoadBillingHistory: subscription == null
+              ? null
+              : _loadBillingHistory,
+          onManageProfiles: () => _manageProfiles(context),
+          onUpdatePayment: subscription == null
+              ? null
+              : () => _openManageBilling(subscription),
+          billingEvents: _billingEvents,
+          billingLoading: _billingLoading,
+          billingUnavailable: _billingUnavailable,
         ),
       ),
     );
@@ -263,6 +327,12 @@ class _SubscriptionBody extends StatelessWidget {
     required this.onUpgradeYearly,
     this.onManageBilling,
     this.onCancel,
+    this.onLoadBillingHistory,
+    this.onManageProfiles,
+    this.onUpdatePayment,
+    this.billingEvents,
+    required this.billingLoading,
+    required this.billingUnavailable,
   });
 
   final AppLocalizations l10n;
@@ -281,6 +351,12 @@ class _SubscriptionBody extends StatelessWidget {
   final VoidCallback onUpgradeYearly;
   final VoidCallback? onManageBilling;
   final VoidCallback? onCancel;
+  final VoidCallback? onLoadBillingHistory;
+  final VoidCallback? onManageProfiles;
+  final VoidCallback? onUpdatePayment;
+  final List<VoiceBillingEvent>? billingEvents;
+  final bool billingLoading;
+  final bool billingUnavailable;
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +365,30 @@ class _SubscriptionBody extends StatelessWidget {
     final showUpsell = display == _SubscriptionPlanDisplay.free;
     final canManage = subscription?.providerSubscriptionId?.isNotEmpty == true;
     final statusHint = subscriptionStatusHint(l10n, subscription);
+    final billingList = billingEvents;
+    final billingRows = billingList == null
+        ? const <Row>[]
+        : billingList.map((event) {
+            final occurredAt = event.occurredAt;
+            return Row(
+        key: Key('subscription_billing_event_${event.id}'),
+        children: [
+          Expanded(
+            child: Text(
+              l10n.subscriptionBillingEvent,
+              style: TextStyle(color: voice.textSecondary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (occurredAt != null)
+            Expanded(
+              child: Text(
+                DateFormat.yMMMd(l10n.localeName).format(occurredAt.toLocal()),
+              ),
+            ),
+        ],
+      );
+    }).toList(growable: false);
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -303,6 +403,36 @@ class _SubscriptionBody extends StatelessWidget {
         if (statusHint != null) ...[
           const SizedBox(height: 12),
           Text(statusHint, style: TextStyle(color: voice.textSecondary)),
+        ],
+        if (display == _SubscriptionPlanDisplay.gracePeriod) ...[
+          const SizedBox(height: 12),
+          Container(
+            key: SubscriptionSettingsScreen.paymentFailureBannerKey,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: voice.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: voice.warning),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.subscriptionPaymentFailed,
+                  style: TextStyle(color: voice.textPrimary),
+                ),
+                if (canManage)
+                  TextButton(
+                    key: SubscriptionSettingsScreen.updatePaymentKey,
+                    onPressed: busy || billingLoading
+                        ? null
+                        : onUpdatePayment,
+                    child: Text(l10n.subscriptionUpdatePayment),
+                  ),
+              ],
+            ),
+          ),
         ],
         if (subscription?.billingPeriod.isNotEmpty == true &&
             display != _SubscriptionPlanDisplay.free) ...[
@@ -338,6 +468,35 @@ class _SubscriptionBody extends StatelessWidget {
             child: Text(l10n.subscriptionManageBilling),
           ),
         ],
+        if (isPremium) ...[
+          const SizedBox(height: 16),
+          TextButton(
+            key: SubscriptionSettingsScreen.billingHistoryKey,
+            onPressed: busy || billingLoading
+                ? null
+                : onLoadBillingHistory,
+            child: Text(l10n.subscriptionBillingHistory),
+          ),
+          if (billingLoading) ...[
+            const SizedBox(height: 12),
+            const VoiceListSkeleton(rowCount: 2),
+          ] else if (billingUnavailable) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.subscriptionBillingUnavailable,
+              style: TextStyle(color: voice.error),
+            ),
+          ] else if (billingList != null) ...[
+            const SizedBox(height: 12),
+            if (billingList.isEmpty)
+              Text(
+                l10n.subscriptionBillingEmpty,
+                style: TextStyle(color: voice.textSecondary),
+              )
+            else
+              ...billingRows,
+          ],
+        ],
         if (isPremium && subscription?.id.isNotEmpty == true) ...[
           const SizedBox(height: 8),
           TextButton(
@@ -345,6 +504,12 @@ class _SubscriptionBody extends StatelessWidget {
             child: Text(l10n.subscriptionCancel),
           ),
         ],
+        const SizedBox(height: 16),
+        TextButton(
+          key: SubscriptionSettingsScreen.manageProfilesKey,
+          onPressed: busy || billingLoading ? null : onManageProfiles,
+          child: Text(l10n.manageProfilesTitle),
+        ),
         if (errorKey != null) ...[
           const SizedBox(height: 16),
           Text(
