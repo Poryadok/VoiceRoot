@@ -105,8 +105,8 @@ class _LfpStoryCardState extends State<LfpStoryCard> {
     final baseVoice = VoiceColors.of(context);
     final voice = embedded
         ? baseVoice.copyWith(
-            textPrimary: Colors.white,
-            textSecondary: Colors.white,
+            textPrimary: baseVoice.callForeground,
+            textSecondary: baseVoice.callForeground,
           )
         : baseVoice;
     final criteria = _parseCriteria(story.lfpCriteriaJson);
@@ -204,8 +204,8 @@ class _LfpStoryCardState extends State<LfpStoryCard> {
                     key: LfpStoryCard.inviteKey,
                     style: embedded
                         ? FilledButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black87,
+                            backgroundColor: voice.overlay.withAlpha(0xDD),
+                            foregroundColor: voice.callForeground,
                           )
                         : null,
                     onPressed: expired ? null : () => _respond(true),
@@ -215,8 +215,8 @@ class _LfpStoryCardState extends State<LfpStoryCard> {
                     key: LfpStoryCard.writeKey,
                     style: embedded
                         ? OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white),
+                            foregroundColor: voice.callForeground,
+                            side: BorderSide(color: voice.callForeground),
                           )
                         : null,
                     onPressed:
