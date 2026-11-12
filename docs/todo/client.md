@@ -522,6 +522,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
   switch, reload, изменение с другого устройства и OS fallback;
   `voice_app_i18n_test.dart` и `api_error_messages_test.dart` проверяют безопасные
   локализованные API errors. Live cross-device/backend acceptance отдельно.
+- [ ] **Chat §3.5 batch delete — no batch RPC in API** — Messaging API defines only the single-message `DeleteMessage`; the UIV3 §3.5/§3.5a multi-select batch delete (`chat_room_panel.dart`) is a client-side loop: one `DeleteMessage` RPC per selected id with `forMe` per §3.5a scope rules, skip of foreign space rows without MANAGE_MESSAGES, toast `chatBatchDeleteResult(deleted, total)`. Covered by `uiv3_chat_room_controls_selection_test.dart`. If a native batch RPC is later specified, the client sheet must switch to it without changing observable semantics. Batch forward is NOT a gap — FW-05 already supports it (`ForwardMessageSheet.show(sourceMessages:)`).
 
 
 **Промпт-якорь:** `Growth/A11y from docs/todo/client.md Common Batch 5`.

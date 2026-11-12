@@ -695,6 +695,27 @@
   },
   "chatMessageDeleteForMe": "Удалить у меня",
   "chatMessageDeleteForEveryone": "Удалить у всех",
+  "chatMessageSelect": "Выбрать",
+  "chatMessagesSelected": "Выбран: {count}",
+  "@chatMessagesSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatBatchDeleteResult": "Удалено {deleted} из {total}",
+  "@chatBatchDeleteResult": {
+    "placeholders": {
+      "deleted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "chatRoomScrollToBottom": "Ke послед сообщ",
   "chatEditMessageTitle": "Изменить сообщение",
   "chatMessageEdited": "(ред.)",
   "chatDeliverySent": "Отправлено",

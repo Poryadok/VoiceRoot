@@ -1658,6 +1658,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatMessageDeleteForEveryone => 'Delete for everyone';
 
   @override
+  String get chatMessageSelect => 'Select';
+
+  @override
+  String chatMessagesSelected(int count) {
+    return 'Selected: $count';
+  }
+
+  @override
+  String chatBatchDeleteResult(int deleted, int total) {
+    return 'Deleted $deleted of $total';
+  }
+
+  @override
+  String get chatRoomScrollToBottom => 'Scroll to bottom';
+
+  @override
   String get chatEditMessageTitle => 'Edit message';
 
   @override
