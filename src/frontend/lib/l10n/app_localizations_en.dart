@@ -185,6 +185,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authErrorInvalidOtp => 'Invalid or expired code.';
 
   @override
+  String get registerTitle => 'Create your account';
+
+  @override
+  String get registerSubtitle => 'Fill in the details to create your account.';
+
+  @override
+  String get registerTypePickerLabel => 'Account type';
+
+  @override
+  String get registerTypePersonal => 'Personal';
+
+  @override
+  String get registerTypeOrganization => 'Organization';
+
+  @override
+  String get registerDisplayNameOrganization => 'Organization name';
+
+  @override
+  String get registerTagOrganizationLabel => 'Organization tag';
+
+  @override
+  String registerTagPreview(String base) {
+    return 'Free tag: @$base';
+  }
+
+  @override
+  String get registerTagAssignedHint =>
+      'If this tag is taken, the system adds a short ending.';
+
+  @override
+  String get registerErrorTagRequired => 'Enter a tag.';
+
+  @override
+  String get registerSuccess => 'Account created. Sign in to enter.';
+
+  @override
+  String get registerBackToLogin => 'Back to login';
+
+  @override
   String get passwordResetTitle => 'Reset password';
 
   @override

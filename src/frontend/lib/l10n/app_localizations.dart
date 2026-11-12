@@ -398,6 +398,78 @@ abstract class AppLocalizations {
   /// **'Invalid or expired code.'**
   String get authErrorInvalidOtp;
 
+  /// No description provided for @registerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your account'**
+  String get registerTitle;
+
+  /// No description provided for @registerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in the details to create your account.'**
+  String get registerSubtitle;
+
+  /// No description provided for @registerTypePickerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account type'**
+  String get registerTypePickerLabel;
+
+  /// No description provided for @registerTypePersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal'**
+  String get registerTypePersonal;
+
+  /// No description provided for @registerTypeOrganization.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization'**
+  String get registerTypeOrganization;
+
+  /// No description provided for @registerDisplayNameOrganization.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization name'**
+  String get registerDisplayNameOrganization;
+
+  /// No description provided for @registerTagOrganizationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization tag'**
+  String get registerTagOrganizationLabel;
+
+  /// No description provided for @registerTagPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Free tag: @{base}'**
+  String registerTagPreview(String base);
+
+  /// No description provided for @registerTagAssignedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'If this tag is taken, the system adds a short ending.'**
+  String get registerTagAssignedHint;
+
+  /// No description provided for @registerErrorTagRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a tag.'**
+  String get registerErrorTagRequired;
+
+  /// No description provided for @registerSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Account created. Sign in to enter.'**
+  String get registerSuccess;
+
+  /// No description provided for @registerBackToLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to login'**
+  String get registerBackToLogin;
+
   /// No description provided for @passwordResetTitle.
   ///
   /// In en, this message translates to:
