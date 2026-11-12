@@ -246,9 +246,7 @@ void main() {
 
     expect(find.text('private archive diagnostic'), findsNothing);
     expect(
-      find.text(
-        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
-      ),
+      find.text('The service is temporarily unavailable. Please try again.'),
       findsOneWidget,
     );
   });

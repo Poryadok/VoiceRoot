@@ -1958,9 +1958,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text(
-        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
-      ),
+      find.text('The service is temporarily unavailable. Please try again.'),
       findsWidgets,
     );
     expect(find.text(rawPayload), findsNothing);

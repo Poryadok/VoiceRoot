@@ -241,7 +241,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backendUnavailable =>
-      'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).';
+      'The service is temporarily unavailable. Please try again.';
 
   @override
   String get socialTabSearch => 'Search';
@@ -458,7 +458,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get socialFriendsBackendUnavailable =>
-      'Friends are unavailable. Start the full API stack (docker compose --profile app).';
+      'The service is temporarily unavailable. Please try again.';
 
   @override
   String get socialRequestsLoadError => 'Could not load requests';
@@ -700,7 +700,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatListBackendUnavailable =>
-      'Chats are unavailable. Start the full API stack (docker compose --profile app).';
+      'The service is temporarily unavailable. Please try again.';
 
   @override
   String chatListDmFallback(String id) {

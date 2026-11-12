@@ -239,7 +239,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get backendUnavailable =>
-      'Социальные функции и чаты недоступны. Запустите полный API-стек (docker compose --profile app).';
+      'Сервис временно недоступен. Попробуйте ещё раз.';
 
   @override
   String get socialTabSearch => 'Поиск';
@@ -458,7 +458,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get socialFriendsBackendUnavailable =>
-      'Друзья недоступны. Запустите полный API-стек (docker compose --profile app).';
+      'Сервис временно недоступен. Попробуйте ещё раз.';
 
   @override
   String get socialRequestsLoadError => 'Не удалось загрузить заявки';
@@ -705,7 +705,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatListBackendUnavailable =>
-      'Чаты недоступны. Запустите полный API-стек (docker compose --profile app).';
+      'Сервис временно недоступен. Попробуйте ещё раз.';
 
   @override
   String chatListDmFallback(String id) {

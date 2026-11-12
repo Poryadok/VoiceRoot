@@ -110,7 +110,7 @@
     }
   },
   "socialDiscoverHint": "Найти людей — иконка слева",
-  "backendUnavailable": "Социальные функции и чаты недоступны. Запустите полный API-стек (docker compose --profile app).",
+  "backendUnavailable": "Сервис временно недоступен. Попробуйте ещё раз.",
   "socialTabSearch": "Поиск",
   "socialTabFriends": "Друзья",
   "socialTabContacts": "Контакты",
@@ -176,7 +176,7 @@
   "socialIncomingRequests": "Входящие",
   "socialOutgoingRequests": "Исходящие",
   "socialFriendsLoadError": "Не удалось загрузить друзей",
-  "socialFriendsBackendUnavailable": "Друзья недоступны. Запустите полный API-стек (docker compose --profile app).",
+  "socialFriendsBackendUnavailable": "Сервис временно недоступен. Попробуйте ещё раз.",
   "socialRequestsLoadError": "Не удалось загрузить заявки",
   "socialProfileLoadError": "Не удалось загрузить профиль",
   "socialProfileUnavailable": "Пользователь недоступен",
@@ -257,7 +257,7 @@
     }
   },
   "chatListLoadError": "Не удалось загрузить чаты",
-  "chatListBackendUnavailable": "Чаты недоступны. Запустите полный API-стек (docker compose --profile app).",
+  "chatListBackendUnavailable": "Сервис временно недоступен. Попробуйте ещё раз.",
   "chatListDmFallback": "Чат {id}",
   "@chatListDmFallback": {
     "placeholders": {

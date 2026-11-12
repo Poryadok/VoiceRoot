@@ -762,9 +762,7 @@ void main() {
     expect(jsonDecode(replyRequest!.body)['text'], 'Please respond');
     expect(find.text('private reply diagnostic'), findsNothing);
     expect(
-      find.text(
-        'Social and chat features are unavailable. Start the full API stack (docker compose --profile app).',
-      ),
+      find.text('The service is temporarily unavailable. Please try again.'),
       findsOneWidget,
     );
   });
