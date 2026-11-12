@@ -1674,6 +1674,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatMessageDeleteForEveryone => 'Удалить у всех';
 
   @override
+  String get chatMessageSelect => 'Выбрать';
+
+  @override
+  String chatMessagesSelected(int count) {
+    return 'Выбран: $count';
+  }
+
+  @override
+  String chatBatchDeleteResult(int deleted, int total) {
+    return 'Удалено $deleted из $total';
+  }
+
+  @override
+  String get chatRoomScrollToBottom => 'Ke послед сообщ';
+
+  @override
   String get chatEditMessageTitle => 'Изменить сообщение';
 
   @override

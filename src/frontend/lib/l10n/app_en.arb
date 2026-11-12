@@ -732,6 +732,27 @@
   },
   "chatMessageDeleteForMe": "Delete for me",
   "chatMessageDeleteForEveryone": "Delete for everyone",
+  "chatMessageSelect": "Select",
+  "chatMessagesSelected": "Selected: {count}",
+  "@chatMessagesSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatBatchDeleteResult": "Deleted {deleted} of {total}",
+  "@chatBatchDeleteResult": {
+    "placeholders": {
+      "deleted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "chatRoomScrollToBottom": "Scroll to bottom",
   "chatEditMessageTitle": "Edit message",
   "chatMessageEdited": "(edited)",
   "chatDeliverySent": "Sent",

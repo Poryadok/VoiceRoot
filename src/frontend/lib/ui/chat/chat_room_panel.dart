@@ -140,6 +140,33 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key chatInfoKey = Key('chat_room_chat_info');
   static const Key groupVoiceStartKey = Key('chat_room_group_voice_start');
   static const Key groupVoiceJoinKey = Key('chat_room_group_voice_join');
+  // UIV3 screen-controls.md §3.4 #10 - Select toggle in the message sheet
+  static const Key messageActionSelectKey = Key(
+    'chat_room_message_action_select',
+  );
+  // UIV3 §3.5 - multi-select action bar (#1 count, #2 Forward, #3 Delete,
+  // #4 Cancel selection) and §3.5a batch delete scope sheet
+  static const Key multiSelectBarKey = Key('chat_room_multi_select_bar');
+  static const Key multiSelectForwardKey = Key(
+    'chat_room_multi_select_forward',
+  );
+  static const Key multiSelectDeleteKey = Key(
+    'chat_room_multi_select_delete',
+  );
+  static const Key multiSelectCancelKey = Key(
+    'chat_room_multi_select_cancel',
+  );
+  static const Key batchDeleteSheetKey = Key('chat_room_batch_delete_sheet');
+  static const Key batchDeleteScopeKey = Key(
+    'chat_room_batch_delete_scope',
+  );
+  // UIV3 §3.7 #1 - scroll-to-bottom FAB
+  static const Key scrollToBottomFabKey = Key(
+    'chat_room_scroll_to_bottom_fab',
+  );
+  static const Key unreadSeparatorTapKey = Key(
+    'chat_room_unread_separator_tap',
+  );
   static Key attachmentPreviewKey(String fileId) =>
       ValueKey('chat_attachment_$fileId');
 
@@ -336,6 +363,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _unreadCaptured = false;
   var _pendingNewMessages = 0;
   var _wasNearBottom = true;
+  // UIV3 §3.5 - ids selected via the §3.4 #10 Select toggle, kept in selection
+  // order so the batch sheets process the same sequence the bar counts
+  final _selectedMessageIds = <String>{};
   var _slashMenuOpen = false;
   var _executingSlash = false;
   var _inChatSearchOpen = false;
@@ -403,6 +433,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
       _messageRowKeys.clear();
+      _selectedMessageIds.clear();
       _pendingMessageJumpId = null;
       _pendingMessageJumpToken = null;
       _messageHighlightTimer?.cancel();
@@ -1649,8 +1680,24 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               ),
                               onLongPress: (msg, isMine) =>
                                   _showMessageActions(msg, isMine),
+                              onUnreadSeparatorTap: (messageId) =>
+                                  unawaited(_scrollToMessage(messageId)),
                             ),
                           ),
+                    if (!_wasNearBottom &&
+                        room.messages.isNotEmpty &&
+                        !room.isLoading)
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: Tooltip(
+                          key: ChatRoomPanel.scrollToBottomFabKey,
+                          message: l10n.chatRoomScrollToBottom,
+                          child: IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_down),
+                            onPressed: _scrollToBottom,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1664,6 +1711,42 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
+                  ),
+                ),
+              // UIV3 §3.5 - multi-select bar above the composer (#1 count,
+              // #2 Forward selected, #3 Delete selected, #4 Cancel selection)
+              if (_selectedMessageIds.isNotEmpty &&
+                  room.messages.isNotEmpty)
+                Padding(
+                  key: ChatRoomPanel.multiSelectBarKey,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        l10n.chatMessagesSelected(
+                          _selectedMessageIds.length,
+                        ),
+                      ),
+                      TextButton(
+                        key: ChatRoomPanel.multiSelectForwardKey,
+                        onPressed: _forwardSelectedMessages,
+                        child: Text(l10n.chatMessageForward),
+                      ),
+                      TextButton(
+                        key: ChatRoomPanel.multiSelectDeleteKey,
+                        onPressed: _deleteSelectedMessages,
+                        child: Text(l10n.commonDelete),
+                      ),
+                      TextButton(
+                        key: ChatRoomPanel.multiSelectCancelKey,
+                        onPressed: () => setState(
+                          () => _selectedMessageIds.clear(),
+                        ),
+                        child: Text(l10n.commonCancel),
+                      ),
+                    ],
                   ),
                 ),
               if (replyTarget != null)
@@ -3415,6 +3498,12 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     onTap: () => Navigator.of(context).pop('share'),
                   ),
                   ListTile(
+                    key: ChatRoomPanel.messageActionSelectKey,
+                    leading: const Icon(Icons.check_circle_outlined),
+                    title: Text(sheetL10n.chatMessageSelect),
+                    onTap: () => Navigator.of(context).pop('select'),
+                  ),
+                  ListTile(
                     leading: Icon(
                       message.isPinned
                           ? Icons.push_pin
@@ -3501,6 +3590,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final controller = ref.read(
       chatRoomControllerProvider(widget.chatId).notifier,
     );
+    if (action == 'select') {
+      // §3.4 #10: Select toggles membership of the §3.5 multi-select set
+      if (!_selectedMessageIds.remove(message.id)) {
+        _selectedMessageIds.add(message.id);
+      }
+      return;
+    }
     if (action == 'react') {
       final emoji = await _pickReactionEmoji();
       if (emoji != null) {
@@ -3566,6 +3662,155 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         ),
       );
     }
+  }
+
+  // UIV3 §3.5 #2 - Forward selected: FW-05 batch forward of every selected
+  // message through the shared forward sheet.
+  Future<void> _forwardSelectedMessages() async {
+    if (_selectedMessageIds.isEmpty || !mounted) return;
+    final ids = _selectedMessageIds.toSet();
+    final source = ref
+        .read(chatRoomControllerProvider(widget.chatId))
+        .messages
+        .where((message) => ids.contains(message.id))
+        .toList();
+    if (source.isEmpty) {
+      _selectedMessageIds.clear();
+      return;
+    }
+    await ForwardMessageSheet.show(
+      context,
+      sourceMessages: source,
+      sourceChatId: widget.chatId,
+    );
+  }
+
+  // UIV3 §3.5 #3 + §3.5a - Delete selected: the sheet picker resolves the
+  // scope per context table (own message: for me / for everyone; DM other's:
+  // for me only; space/group other's with MANAGE_MESSAGES: for everyone;
+  // space other's without the right: skipped), then each id gets one
+  // DeleteMessage RPC. Gap: the API has no batch delete RPC, so the batch is
+  // a client-side loop recorded in docs/todo/client.md.
+  Future<void> _deleteSelectedMessages() async {
+    if (_selectedMessageIds.isEmpty || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final activeProfileId = ref.read(authControllerProvider).activeProfileId;
+    final ids = _selectedMessageIds.toSet();
+    final selected = ref
+        .read(chatRoomControllerProvider(widget.chatId))
+        .messages
+        .where(
+          (message) =>
+              ids.contains(message.id) &&
+              message.deletedAt == null &&
+              message.messageKind != VoiceMessageKind.system,
+        )
+        .toList();
+    if (selected.isEmpty) {
+      _selectedMessageIds.clear();
+      return;
+    }
+    String? spaceId;
+    var isSpaceFeed = false;
+    for (final item in ref.read(chatListControllerProvider).items) {
+      if (item.chatId == widget.chatId) {
+        spaceId = item.chat.spaceId;
+        isSpaceFeed = item.chat.isGroup || item.chat.isChannel;
+        break;
+      }
+    }
+    var canModerateForeign = false;
+    if (spaceId != null && isSpaceFeed) {
+      canModerateForeign =
+          ref.read(
+                spacePermissionProvider((
+                  spaceId: spaceId,
+                  permission: SpacePermissions.textChatManageMessages,
+                  chatId: widget.chatId,
+                  voiceRoomId: null,
+                )),
+              )
+              .valueOrNull ==
+              true;
+    }
+    final canDeleteForMe = selected.any(
+      (message) =>
+          message.senderProfileId == activeProfileId || spaceId == null,
+    );
+    final canDeleteForEveryone = selected.any(
+      (message) =>
+          message.senderProfileId == activeProfileId ||
+          (isSpaceFeed && canModerateForeign),
+    );
+    if (!canDeleteForMe && !canDeleteForEveryone) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text(l10n.spaceModerationUnavailable)),
+      );
+      return;
+    }
+    final scope = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) {
+        final sheetL10n = AppLocalizations.of(sheetContext)!;
+        return SafeArea(
+          child: Column(
+            key: ChatRoomPanel.batchDeleteScopeKey,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                key: ChatRoomPanel.batchDeleteSheetKey,
+                sheetL10n.chatMessagesSelected(selected.length),
+              ),
+              if (canDeleteForMe)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: Text(sheetL10n.chatMessageDeleteForMe),
+                  onTap: () => Navigator.of(sheetContext).pop('for_me'),
+                ),
+              if (canDeleteForEveryone)
+                ListTile(
+                  leading: const Icon(Icons.delete_forever_outlined),
+                  title: Text(sheetL10n.chatMessageDeleteForEveryone),
+                  onTap: () => Navigator.of(
+                    sheetContext,
+                  ).pop('for_everyone'),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (scope == null) return;
+    final controller = ref.read(
+      chatRoomControllerProvider(widget.chatId).notifier,
+    );
+    final forEveryone = scope == 'for_everyone';
+    final forMe = !forEveryone;
+    var deleted = 0;
+    for (final message in selected) {
+      final isMine = message.senderProfileId == activeProfileId;
+      if (!isMine && spaceId != null && isSpaceFeed) {
+        // §3.5a: foreign space messages need MANAGE_MESSAGES and are deleted
+        // for everyone only; without the right they are skipped
+        if (!canModerateForeign || forMe) {
+          continue;
+        }
+      }
+      if (!isMine && forEveryone && !(spaceId != null && isSpaceFeed)) {
+        // §3.5a: DM peer messages can only be hidden for me
+        continue;
+      }
+      if (await controller.deleteMessage(message.id, forMe: forMe) == null) {
+        deleted++;
+      }
+    }
+    _selectedMessageIds.clear();
+    scaffoldMessenger.showSnackBar(
+      SnackBar(
+        content: Text(l10n.chatBatchDeleteResult(deleted, selected.length)),
+      ),
+    );
   }
 
   Future<String?> _pickReactionEmoji() async {
@@ -3728,6 +3973,7 @@ class _MessageListView extends ConsumerWidget {
     this.highlightedMessageId,
     this.keyboardSelectedMessageId,
     required this.onLongPress,
+    this.onUnreadSeparatorTap,
   });
 
   final String chatId;
@@ -3745,6 +3991,7 @@ class _MessageListView extends ConsumerWidget {
   final String? highlightedMessageId;
   final String? keyboardSelectedMessageId;
   final void Function(VoiceMessage message, bool isMine) onLongPress;
+  final void Function(String messageId)? onUnreadSeparatorTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3816,7 +4063,11 @@ class _MessageListView extends ConsumerWidget {
           key: messageRowKeys[msg.id],
           children: [
             if (row.unreadSeparator)
-              ChatUnreadSeparator(label: l10n.chatUnreadSeparator),
+              GestureDetector(
+                key: ChatRoomPanel.unreadSeparatorTapKey,
+                onTap: () => onUnreadSeparatorTap!(msg.id),
+                child: ChatUnreadSeparator(label: l10n.chatUnreadSeparator),
+              ),
             if (isGroup && !isMine && row.showTimestamp)
               _MessageAuthorHeader(senderProfileId: msg.senderProfileId),
             AnimatedContainer(
@@ -4694,7 +4945,8 @@ class _MessageAuthorHeader extends ConsumerWidget {
         alignment: Alignment.centerLeft,
         child: ChatAuthorLabel(
           displayName: displayName,
-          isPremium: false,
+          // UIV3 §3.3 #16 - sender premium badge in the group author header
+          isPremium: ref.watch(profilePremiumBadgeProvider(senderProfileId)),
           verificationType:
               profileAsync.valueOrNull?.verificationType ?? 'none',
           style: Theme.of(context).textTheme.labelMedium,

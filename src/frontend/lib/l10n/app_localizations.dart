@@ -3014,6 +3014,30 @@ abstract class AppLocalizations {
   /// **'Delete for everyone'**
   String get chatMessageDeleteForEveryone;
 
+  /// No description provided for @chatMessageSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get chatMessageSelect;
+
+  /// No description provided for @chatMessagesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {count}'**
+  String chatMessagesSelected(int count);
+
+  /// No description provided for @chatBatchDeleteResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {deleted} of {total}'**
+  String chatBatchDeleteResult(int deleted, int total);
+
+  /// No description provided for @chatRoomScrollToBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Scroll to bottom'**
+  String get chatRoomScrollToBottom;
+
   /// No description provided for @chatEditMessageTitle.
   ///
   /// In en, this message translates to:
