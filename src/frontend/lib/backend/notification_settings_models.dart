@@ -11,6 +11,7 @@ abstract final class NotificationEventTypes {
     friendRequest,
     matchFound,
     system,
+    voiceMemberJoined,
   ];
 
   static const newMessage = 'new_message';
@@ -21,6 +22,7 @@ abstract final class NotificationEventTypes {
   static const friendRequest = 'friend_request';
   static const matchFound = 'match_found';
   static const system = 'system';
+  static const voiceMemberJoined = 'voice_member_joined';
 }
 
 class VoiceNotificationSettings {
