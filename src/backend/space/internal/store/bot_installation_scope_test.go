@@ -35,7 +35,7 @@ type botInstallationScopeFixture struct {
 func newBotInstallationScopeFixture(t *testing.T) *botInstallationScopeFixture {
 	t.Helper()
 	ctx := context.Background()
-	db := integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"), "postgres:18-alpine")
+	db := integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"), "postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b")
 	db.Run(true, "goto", "34")
 	db.Run(true, "goto", "45")
 	transition, err := (&SpaceStore{Pool: db.Pool}).TransitionNativeMembershipCatalog45(ctx)

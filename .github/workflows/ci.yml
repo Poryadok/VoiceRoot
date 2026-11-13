@@ -3120,7 +3120,10 @@ jobs:
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:16-bookworm
+        # Digest-pinned PostgreSQL 16.15: the native installer receipts hash
+        # raw pg_attribute structures, so the floating 16-bookworm tag drifting
+        # to 16.16 (per-attribute versioning backport) changes them.
+        image: postgres@sha256:5264710be20f409750ac6dc4e5706dcef929c87e241605463f0f9aefa932a8d9
         env:
           POSTGRES_USER: voice
           POSTGRES_PASSWORD: voice-native-installer-ci

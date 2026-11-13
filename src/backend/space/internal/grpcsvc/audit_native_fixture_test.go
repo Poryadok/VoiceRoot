@@ -101,7 +101,7 @@ func auditMigrationFixture(t *testing.T, ctx context.Context, directory string) 
 	t.Helper()
 	dsn, binary := os.Getenv("VOICE_SPACE_AUDIT_FIXTURE_DSN"), os.Getenv("VOICE_SPACE_AUDIT_MIGRATE")
 	if dsn == "" && binary == "" {
-		return integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, directory, "postgres:18-alpine")
+		return integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, directory, "postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b")
 	}
 	require.True(t, dsn != "" && binary != "", "native audit fixture requires both database and pinned migrator")
 	admin, err := pgxpool.New(ctx, dsn)
