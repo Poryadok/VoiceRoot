@@ -25,11 +25,11 @@ ROUTER_CASES = ('test_docs_exclusions_and_mixed_changes', 'test_leaf_ci_keeps_sc
                 'test_ci_only_changes_cannot_skip_script_matrix', 'test_current_diff_runs_for_all_prs_and_is_required')
 # Reviewed executable inputs: refuse changes until their isolation is re-audited.
 SAFETY_SURFACE = {
-    '.github/workflows/ci.yml': 'be83b4817986ebe9df744d2e57a8ba14a52760924cc915766d495511a3e0e086',
+    '.github/workflows/ci.yml': 'd273f88472e64ddceea74d1d695f66b90372a58c06c756df64c56a869a9f6a2a',
     '.github/ci/verify-required-jobs_test.sh': '325955c7e1efe73ff85947e450d957aa4a524342ddad9c35aa3e8b9f6e4c6c63',
     '.github/ci/verify-required-jobs.sh': '311ec7b741371fa86cbee5c7e4e84167eaf7abea84e0520df5654b9cea3c5fb9',
     '.github/ci/selected-acceptance-gate_test.py': 'eaba8ca7546e40068fc8601aefb6d064c2986ba67b41284ff18581d8c4776755',
-    'scripts/ci/fast-gate-routing_test.py': '091e2eac1bd753c0132c0dcc1658ee96d42f335435d2b3b7fd8c326bd616567e',
+    'scripts/ci/fast-gate-routing_test.py': 'b13ea4b90973473038e1f3d2978ce73a2988a071464fca715111e7cc4d6260ee',
 }
 
 
