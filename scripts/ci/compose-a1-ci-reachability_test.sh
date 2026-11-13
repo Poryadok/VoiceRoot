@@ -136,7 +136,7 @@ attachment_exact_run_count="$(grep -Ec '^[[:space:]]*run:[[:space:]]+make[[:spac
 [[ "$attachment_exact_run_count" -eq 1 ]] || fail "attachment job must have exactly one exact make compose-file-attachment-restart-proof command, got $attachment_exact_run_count"
 attachment_target_count="$(grep -Ec 'make[[:space:]]+compose-file-attachment-restart-proof([^[:alnum:]_-]|$)' "$attachment_job_file" || true)"
 [[ "$attachment_target_count" -eq 1 ]] || fail "attachment job must contain exactly one attachment target occurrence, got $attachment_target_count"
-grep -Eq '^[[:space:]]*runs-on:[[:space:]]*ubuntu-latest[[:space:]]*$' "$attachment_job_file" || fail "attachment job must run on ubuntu-latest"
+grep -Eq '^[[:space:]]*runs-on:[[:space:]]*ubuntu-(latest|24\.04)[[:space:]]*$' "$attachment_job_file" || fail "attachment job must run on ubuntu-latest or the pinned ubuntu-24.04"
 grep -Eq '^[[:space:]]*- uses:[[:space:]]+actions/setup-go@v5[[:space:]]*$' "$attachment_job_file" || fail "attachment job must set up Go"
 grep -Eq '^[[:space:]]*timeout-minutes:[[:space:]]*60[[:space:]]*$' "$attachment_job_file" || fail "attachment job must have timeout-minutes: 60"
 grep -Eq "VOICE_FILE_ATTACHMENT_RESTART_CLEANUP:[[:space:]]*[\"']?true[\"']?[[:space:]]*$" "$attachment_job_file" || fail "attachment job must set VOICE_FILE_ATTACHMENT_RESTART_CLEANUP=true"
