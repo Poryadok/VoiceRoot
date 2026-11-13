@@ -34,7 +34,7 @@ job_block "$JOB" >"$job_file"
 [[ -s "$job_file" ]] || fail "missing ${JOB} workflow block"
 
 grep -Eq '^[[:space:]]*needs:[[:space:]]+changes[[:space:]]*$' "$job_file" || fail "${JOB} must need changes"
-grep -Eq '^[[:space:]]*runs-on:[[:space:]]*ubuntu-latest[[:space:]]*$' "$job_file" || fail "${JOB} must run on ubuntu-latest"
+grep -Eq '^[[:space:]]*runs-on:[[:space:]]*ubuntu-(latest|24\.04)[[:space:]]*$' "$job_file" || fail "${JOB} must run on ubuntu-latest or the pinned ubuntu-24.04"
 grep -Eq '^[[:space:]]*timeout-minutes:[[:space:]]*60[[:space:]]*$' "$job_file" || fail "${JOB} must timeout after 60 minutes"
 grep -Eq '^[[:space:]]*- uses:[[:space:]]+actions/checkout@v5[[:space:]]*$' "$job_file" || fail "${JOB} must use checkout@v5"
 grep -Eq '^[[:space:]]*- uses:[[:space:]]+subosito/flutter-action@v2[[:space:]]*$' "$job_file" || fail "${JOB} must use flutter-action@v2"
