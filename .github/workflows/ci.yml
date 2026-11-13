@@ -4422,7 +4422,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
        needs.changes.outputs.full_validation == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       GOFLAGS: -mod=readonly
     timeout-minutes: 90
