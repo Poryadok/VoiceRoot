@@ -15,7 +15,12 @@ import (
 
 const (
 	// PostgresImage is the default Postgres image for integration tests.
-	PostgresImage          = "postgres:16-bookworm"
+	// Digest-pinned: the PostgreSQL16 catalog structure receipts hash raw
+	// pg_attribute JSON, so upstream point releases (e.g. 16.15 -> 16.16
+	// backporting per-attribute versioning into attoptions) would silently
+	// retag this moving tag and change the hashed structure. Pin the exact
+	// reviewed PostgreSQL 16.15 build instead of following the floating tag.
+	PostgresImage          = "postgres:16-bookworm@sha256:5264710be20f409750ac6dc4e5706dcef929c87e241605463f0f9aefa932a8d9"
 	postgresUser           = "u"
 	postgresPass           = "p"
 	postgresStartupTimeout = time.Minute
