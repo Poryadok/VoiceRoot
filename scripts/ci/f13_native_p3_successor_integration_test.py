@@ -868,6 +868,14 @@ class RealGitSuccessorTest(unittest.TestCase):
         entry=legacy.entry(ROOT,current,'docs/DATA_STORES.md')
         if verified is not None:
             expected=reviewed_v5_stores_entry(*verified)
+            # The reviewed cursors DATA_STORES.md documentation (PR #1124) extends
+            # the reviewed stores chain past the v5 foundation source. Admit only
+            # the exact pinned entry and its reviewed ancestry, never later content.
+            if entry == CURSORS_DATA_STORES_ENTRY and legacy.entry(
+                    ROOT,CURSORS_DATA_STORES_COMMIT,'docs/DATA_STORES.md') == CURSORS_DATA_STORES_ENTRY and subprocess.run(
+                    ['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                     CURSORS_DATA_STORES_COMMIT,current],capture_output=True).returncode == 0:
+                expected=CURSORS_DATA_STORES_ENTRY
         elif entry == CURSORS_DATA_STORES_ENTRY and legacy.entry(
                 ROOT,CURSORS_DATA_STORES_COMMIT,'docs/DATA_STORES.md') == CURSORS_DATA_STORES_ENTRY and subprocess.run(
                 ['git','-C',str(ROOT),'merge-base','--is-ancestor',
