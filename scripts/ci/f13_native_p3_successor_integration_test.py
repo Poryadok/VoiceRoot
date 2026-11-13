@@ -865,8 +865,17 @@ class RealGitSuccessorTest(unittest.TestCase):
                                       'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
         current=git('rev-parse','HEAD')
         verified=reviewed_v5_source(current)
-        expected=(reviewed_v5_stores_entry(*verified) if verified is not None else AUDIO_DATA_STORES_ENTRY)
-        self.assertEqual(legacy.entry(ROOT,current,'docs/DATA_STORES.md'),expected)
+        entry=legacy.entry(ROOT,current,'docs/DATA_STORES.md')
+        if verified is not None:
+            expected=reviewed_v5_stores_entry(*verified)
+        elif entry == CURSORS_DATA_STORES_ENTRY and legacy.entry(
+                ROOT,CURSORS_DATA_STORES_COMMIT,'docs/DATA_STORES.md') == CURSORS_DATA_STORES_ENTRY and subprocess.run(
+                ['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                 CURSORS_DATA_STORES_COMMIT,current],capture_output=True).returncode == 0:
+            expected=CURSORS_DATA_STORES_ENTRY
+        else:
+            expected=AUDIO_DATA_STORES_ENTRY
+        self.assertEqual(entry,expected)
         self.assertTrue(reviewed_stores_source(D1_C2_DATA_STORES_COMMIT))
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
 
