@@ -37,6 +37,12 @@ COMMUNITY_ROLE_DOCUMENT_ENTRY = {'mode': '100644', 'type': 'blob',
 AUDIO_DATA_STORES_COMMIT = '1c3c9630b2f61e22c6e8579290b3443f0425eaa1'
 AUDIO_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
                            'oid': 'af464029d432a499f58db19b6fa440fb5c0c0d7c'}
+# Exact PR #1124's reviewed message-history cursor documentation, for this private
+# historical fixture only. Neither subsequent content nor disconnected history
+# is admitted by this tuple.
+CURSORS_DATA_STORES_COMMIT = 'ccf31ff9fbe75608a5088787c3ab16a7d5640101'
+CURSORS_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
+                             'oid': 'a5aecd4103c9a19b776dd144413ea4b90a77b84a'}
 DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 # The reviewed catalog/message-view documentation carried by the A1 aggregate.
 # This remains a test-fixture source tuple, never production authority.
@@ -99,6 +105,16 @@ USER_CUSTODY_VOICE_ENTRIES = {
         {'mode': '100644', 'type': 'blob', 'oid': 'f45d295e4c17f7141337b442e9249905fd14efce'},
     'src/backend/voice/pb/voice/user/v1/user_source_custody_grpc.pb.go':
         {'mode': '100644', 'type': 'blob', 'oid': 'c44ab6964525e08f06aca22fa0612594adb8940f'},
+}
+
+# Exact PR #1127 generated Auth profile authority clients, for detached v2 fixture
+# reconstruction only. This does not grant current or producer authority.
+AUTH_PROFILE_VOICE_SOURCE = 'a924ae229cdce3cf17ce5f86b1303ad7f8b34dd8'
+AUTH_PROFILE_VOICE_ENTRIES = {
+    'src/backend/voice/pb/voice/user/v1/auth_profile_authority.pb.go':
+        {'mode': '100644', 'type': 'blob', 'oid': '1bd2e60f8c8aed05bb81a63afe287757bb5556cc'},
+    'src/backend/voice/pb/voice/user/v1/auth_profile_authority_grpc.pb.go':
+        {'mode': '100644', 'type': 'blob', 'oid': '381f07f696dc43b8b1537de24d23649f6963cb71'},
 }
 
 
@@ -200,6 +216,11 @@ def reviewed_stores_source(source):
     if (ancestor and actual == C2_DATA_STORES_ENTRY
             and legacy.entry(ROOT, C2_DATA_STORES_COMMIT, stores) == C2_DATA_STORES_ENTRY):
         return True
+    if actual == CURSORS_DATA_STORES_ENTRY and legacy.entry(
+            ROOT, CURSORS_DATA_STORES_COMMIT, stores) == CURSORS_DATA_STORES_ENTRY:
+        return subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+             CURSORS_DATA_STORES_COMMIT, source], capture_output=True).returncode == 0
     verified=reviewed_v5_source(source)
     if verified is None:
         return False
@@ -232,10 +253,21 @@ def reviewed_catalog_voice_additions(source, record):
                 and all(custody_tree.get(name) == entry and source_tree.get(name) == entry
                         for name, entry in USER_CUSTODY_VOICE_ENTRIES.items()),
                 'v2_fixture_unreviewed_voice_source')
-        legacy.require(not expected-reviewed_paths and added==(reviewed_paths-expected) | custody_paths,
+        auth_ancestor = subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+             AUTH_PROFILE_VOICE_SOURCE, source], capture_output=True).returncode == 0
+        auth_paths = set(AUTH_PROFILE_VOICE_ENTRIES) if auth_ancestor else set()
+        if auth_ancestor:
+            auth_tree = legacy.tree(str(ROOT), AUTH_PROFILE_VOICE_SOURCE)
+            auth_voice_paths = {name for name in auth_tree if name.startswith(prefix)}
+            legacy.require(auth_voice_paths == reviewed_paths | custody_paths | auth_paths
+                and all(auth_tree.get(name) == entry and source_tree.get(name) == entry
+                        for name, entry in AUTH_PROFILE_VOICE_ENTRIES.items()),
+                'v2_fixture_unreviewed_voice_source')
+        legacy.require(not expected-reviewed_paths and added==(reviewed_paths-expected) | custody_paths | auth_paths,
             'v2_fixture_unreviewed_voice_source')
         legacy.require(all(reviewed_tree[name]['mode']=='100644' and reviewed_tree[name]['type']=='blob'
-            and source_tree[name]==reviewed_tree[name] for name in added-custody_paths),'v2_fixture_unreviewed_voice_source')
+            and source_tree[name]==reviewed_tree[name] for name in added-custody_paths-auth_paths),'v2_fixture_unreviewed_voice_source')
         return added
     if not added:
         catalog_ancestor = subprocess.run(
@@ -417,9 +449,20 @@ class C2ReviewedStoresSourceTest(unittest.TestCase):
         source = '1c3c9630b2f61e22c6e8579290b3443f0425eaa1'
         expected = {'mode': '100644', 'type': 'blob',
                     'oid': 'af464029d432a499f58db19b6fa440fb5c0c0d7c'}
-        for current in (source, git('rev-parse', 'HEAD')):
+        with self.subTest(source=source):
+            self.assertEqual(legacy.entry(ROOT, source, 'docs/DATA_STORES.md'), expected)
+            self.assertTrue(reviewed_stores_source(source))
+        current = git('rev-parse', 'HEAD')
+        with self.subTest(source=current):
+            self.assertEqual(legacy.entry(ROOT, current, 'docs/DATA_STORES.md'),
+                             CURSORS_DATA_STORES_ENTRY)
+            self.assertTrue(reviewed_stores_source(current))
+
+    def test_reviewed_cursors_source_and_descendant_are_exact(self):
+        for current in (CURSORS_DATA_STORES_COMMIT, git('rev-parse', 'HEAD')):
             with self.subTest(source=current):
-                self.assertEqual(legacy.entry(ROOT, current, 'docs/DATA_STORES.md'), expected)
+                self.assertEqual(legacy.entry(ROOT, current, 'docs/DATA_STORES.md'),
+                                 CURSORS_DATA_STORES_ENTRY)
                 self.assertTrue(reviewed_stores_source(current))
 
     def test_inventory_tuple_and_unknown_content_mode_missing_and_ancestry(self):
@@ -518,6 +561,8 @@ class ReviewedCurrentDocumentSourcesTest(unittest.TestCase):
         for name, current, check in (
                 ('docs/DATA_STORES.md', '1c3c9630b2f61e22c6e8579290b3443f0425eaa1',
                  reviewed_stores_source),
+                ('docs/DATA_STORES.md', CURSORS_DATA_STORES_COMMIT,
+                 reviewed_stores_source),
                 ('docs/microservices/space-service.md', '8c6557ae11ee53212c082d3708263e701c20e974',
                  reviewed_cold_start_document)):
             for variant in ('content', 'mode', 'missing', 'ancestry'):
@@ -553,8 +598,12 @@ class ReviewedUserCustodyVoiceSourceTest(unittest.TestCase):
             'a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259', record), baseline - before)
         for current in (source, git('rev-parse', 'HEAD')):
             with self.subTest(source=current):
+                auth_ancestor = subprocess.run(
+                    ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                     AUTH_PROFILE_VOICE_SOURCE, current], capture_output=True).returncode == 0
                 self.assertEqual(reviewed_catalog_voice_additions(current, record),
-                                 (baseline - before) | custody)
+                                 (baseline - before) | custody |
+                                 (set(AUTH_PROFILE_VOICE_ENTRIES) if auth_ancestor else set()))
 
     def test_custody_source_rejects_mutation_mode_removal_extra_and_disconnected_history(self):
         record = successor.load_record(ROOT)
@@ -601,9 +650,13 @@ class ReviewedMultiOwnerInventorySourceTest(unittest.TestCase):
                 custody_ancestor = subprocess.run(
                     ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
                      USER_CUSTODY_VOICE_SOURCE, current], capture_output=True).returncode == 0
+                auth_ancestor = subprocess.run(
+                    ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                     AUTH_PROFILE_VOICE_SOURCE, current], capture_output=True).returncode == 0
                 self.assertEqual(reviewed_catalog_voice_additions(current, record),
                                  CATALOG_VOICE_PATHS | paths |
-                                 (set(USER_CUSTODY_VOICE_ENTRIES) if custody_ancestor else set()))
+                                 (set(USER_CUSTODY_VOICE_ENTRIES) if custody_ancestor else set()) |
+                                 (set(AUTH_PROFILE_VOICE_ENTRIES) if auth_ancestor else set()))
 
     def test_mixed_old_and_new_inventory_closure_rejects(self):
         record = successor.load_record(ROOT)
@@ -791,7 +844,7 @@ class RealGitSuccessorTest(unittest.TestCase):
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
         for reviewed in (DATA_STORES_COMMIT, CATALOG_DATA_STORES_COMMIT,
                          D1_DATA_STORES_COMMIT, C2_DATA_STORES_COMMIT,
-                         D1_C2_DATA_STORES_COMMIT):
+                         D1_C2_DATA_STORES_COMMIT, CURSORS_DATA_STORES_COMMIT):
             with self.subTest(source=reviewed):
                 self.assertTrue(reviewed_stores_source(reviewed))
         stores = 'docs/DATA_STORES.md'
@@ -812,8 +865,25 @@ class RealGitSuccessorTest(unittest.TestCase):
                                       'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
         current=git('rev-parse','HEAD')
         verified=reviewed_v5_source(current)
-        expected=(reviewed_v5_stores_entry(*verified) if verified is not None else AUDIO_DATA_STORES_ENTRY)
-        self.assertEqual(legacy.entry(ROOT,current,'docs/DATA_STORES.md'),expected)
+        entry=legacy.entry(ROOT,current,'docs/DATA_STORES.md')
+        if verified is not None:
+            expected=reviewed_v5_stores_entry(*verified)
+            # The reviewed cursors DATA_STORES.md documentation (PR #1124) extends
+            # the reviewed stores chain past the v5 foundation source. Admit only
+            # the exact pinned entry and its reviewed ancestry, never later content.
+            if entry == CURSORS_DATA_STORES_ENTRY and legacy.entry(
+                    ROOT,CURSORS_DATA_STORES_COMMIT,'docs/DATA_STORES.md') == CURSORS_DATA_STORES_ENTRY and subprocess.run(
+                    ['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                     CURSORS_DATA_STORES_COMMIT,current],capture_output=True).returncode == 0:
+                expected=CURSORS_DATA_STORES_ENTRY
+        elif entry == CURSORS_DATA_STORES_ENTRY and legacy.entry(
+                ROOT,CURSORS_DATA_STORES_COMMIT,'docs/DATA_STORES.md') == CURSORS_DATA_STORES_ENTRY and subprocess.run(
+                ['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                 CURSORS_DATA_STORES_COMMIT,current],capture_output=True).returncode == 0:
+            expected=CURSORS_DATA_STORES_ENTRY
+        else:
+            expected=AUDIO_DATA_STORES_ENTRY
+        self.assertEqual(entry,expected)
         self.assertTrue(reviewed_stores_source(D1_C2_DATA_STORES_COMMIT))
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
 
@@ -858,6 +928,10 @@ class RealGitSuccessorTest(unittest.TestCase):
                 ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
                  USER_CUSTODY_VOICE_SOURCE, current], capture_output=True).returncode == 0:
             reviewed_additions |= set(USER_CUSTODY_VOICE_ENTRIES)
+        if verified is not None and subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 AUTH_PROFILE_VOICE_SOURCE, current], capture_output=True).returncode == 0:
+            reviewed_additions |= set(AUTH_PROFILE_VOICE_ENTRIES)
         self.assertEqual(reviewed_catalog_voice_additions(current,self.record),reviewed_additions)
         unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
         with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):

@@ -287,7 +287,7 @@ class RoleSuccessorTest(unittest.TestCase):
         self.assertTrue(all(result[name] is False for name in successor.FALSE_FLAGS))
 
     def test_private_fixture_restores_only_reviewed_context(self):
-        self.assertEqual({row['path'] for row in self.restored_context},{
+        expected={
             'src/backend/chat/pb/voice/chat/v1/chat.pb.go',
             'src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go',
             'src/backend/file/pb/voice/file/v1/file.pb.go',
@@ -295,7 +295,23 @@ class RoleSuccessorTest(unittest.TestCase):
             'src/backend/pkg/go.mod',
             'src/backend/pkg/integrationtest/migrations.go',
             'src/backend/role/internal/principalgrpc/join_approval.go',
-            'src/backend/role/internal/principalgrpc/join_approval_test.go'})
+            'src/backend/role/internal/principalgrpc/join_approval_test.go'}
+        # The reviewed Role transaction-scope proof update ("Stabilize cancellation
+        # and startup proofs", commit 0e43c7d6) drifted this record context path at
+        # current heads. Admit only this exact drifted blob with the reviewed
+        # ancestry; the fixture still restores the pinned historical blob below,
+        # confined to the private test target, and admits no later content.
+        scope_commit='0e43c7d6893edcea328c916f2d4e28d67d8f0b10'
+        scope_path='src/backend/role/internal/store/transaction_scope_test.go'
+        scope_entry={'mode':'100644','type':'blob',
+                     'oid':'103c3fa526d616148e166b9200ef6ae29a09a3f2'}
+        head=git('rev-parse','HEAD')
+        if (legacy.entry(ROOT,scope_commit,scope_path)==scope_entry
+                and legacy.entry(ROOT,head,scope_path)==scope_entry
+                and subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                    scope_commit,head],capture_output=True).returncode==0):
+            expected.add(scope_path)
+        self.assertEqual({row['path'] for row in self.restored_context},expected)
         # These are the exact reviewed A2 changes to the real tree. Restoring
         # historical blobs below is confined to the private test target and
         # does not qualify the actual source.
