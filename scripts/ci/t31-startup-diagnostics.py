@@ -20,7 +20,17 @@ SERVICES = (
     "notification", "gameintegration", "gateway", "matchmaking", "search",
     "file", "moderation", "social", "subscription", "story", "realtime",
     "analytics", "t31-session-event-receiver-db", "phase0-matchmaking-jwks-readiness",
+    # Infra services in the startup step's dependency graph, declared in the
+    # base docker-compose.yml: compose-db-init provisions the strict DBs
+    # (native install plus golang-migrate) before any app service boots,
+    # postgres hosts it, and nats bootstraps the event transport. Whitelisted
+    # so an infra exit shows its state and exit code instead of collapsing to
+    # services_seen=[] with first_error unknown.
+    "compose-db-init", "postgres", "nats",
 )
+# Mirrors the whitelisted infra tail above; probed in its own bounded calls so
+# the per-caller app service args stay exactly as requested.
+INFRA_SERVICES = ("compose-db-init", "postgres", "nats")
 SERVICE_SET = frozenset(SERVICES)
 STATES = frozenset({"created", "running", "restarting", "paused", "exited", "dead", "removing", "unknown"})
 HEALTH_STATES = frozenset({"healthy", "unhealthy", "starting", "none", "unknown"})
@@ -571,6 +581,50 @@ def _write_record(path: Path, record: dict) -> bool:
         return False
 
 
+def _merge_status_collection(target: dict, addition: dict) -> None:
+    known = {row["service"] for row in target["services"]}
+    extra = [row for row in addition["services"] if row["service"] not in known]
+    if extra:
+        target["services"] = (target["services"] + extra)[:len(SERVICES)]
+        target["services"].sort(key=lambda row: SERVICES.index(row["service"]))
+    target["rows_read"] += addition["rows_read"]
+    target["bytes_read"] += addition["bytes_read"]
+    target["truncated"] = target["truncated"] or addition["truncated"]
+    if target["result"] == "complete":
+        target["result"] = addition["result"]
+
+
+def _merge_log_collection(target: dict, addition: dict) -> None:
+    target["services_requested"] = list(dict.fromkeys(
+        target["services_requested"] + addition["services_requested"]))
+    seen = set(target["services_seen"]) | set(addition["services_seen"])
+    target["services_seen"] = sorted(seen, key=SERVICES.index)
+    target["bytes_read"] += addition["bytes_read"]
+    target["lines_read"] += addition["lines_read"]
+    target["truncated"] = target["truncated"] or addition["truncated"]
+    if target["result"] == "complete":
+        target["result"] = addition["result"]
+    requested = set(target["services_requested"])
+    if target["result"] != "complete":
+        target["coverage"] = "bounded_head_window_only"
+    elif requested <= seen:
+        target["coverage"] = "all_requested_observed_in_stream"
+    elif seen:
+        target["coverage"] = "partial_requested_services_observed_in_stream"
+    else:
+        target["coverage"] = "no_requested_service_observed_in_stream"
+
+
+def _infra_first_error(service: str) -> dict:
+    """Attribute a failed infra service from its exit status when no log marker."""
+    record = _error_record()
+    record["result"] = "observed_in_status"
+    record["service"] = service
+    record["stage"] = "dependency" if service == "nats" else "database"
+    record["selection"] = "infra_exit_status_without_log_marker"
+    return record
+
+
 def build_diagnostics(compose: list[str], startup_status: int, service: str | None = None,
                       include_matchmaking_startup: bool = False,
                       include_space_startup: bool = False) -> dict:
@@ -600,6 +654,31 @@ def build_diagnostics(compose: list[str], startup_status: int, service: str | No
     log_summary, first_error = sanitize_logs(log_bytes, log_result, failed_services, log_services)
     record["log_collection"] = log_summary
     record["first_error"] = first_error
+
+    # The up graph can die in provisioning or its infra roots before any
+    # requested app container exists; probe the infra services in their own
+    # bounded calls so an infra exit stays attributable and visible.
+    infra_requested = tuple(name for name in INFRA_SERVICES if name not in requested)
+    if infra_requested:
+        infra_ps_bytes, infra_ps_result, _ = _bounded_command(
+            compose + ["ps", "--all", "--format", "json", *infra_requested],
+            COMMAND_TIMEOUT_SECONDS,
+            MAX_PS_BYTES,
+        )
+        infra_status, infra_failed = sanitize_status(infra_ps_bytes, infra_ps_result)
+        _merge_status_collection(record["status_collection"], infra_status)
+        if infra_failed:
+            infra_logs_bytes, infra_logs_result, _ = _bounded_command(
+                compose + ["logs", "--no-color", "--timestamps", *infra_failed],
+                COMMAND_TIMEOUT_SECONDS,
+                MAX_LOG_BYTES,
+            )
+            infra_summary, infra_error = sanitize_logs(infra_logs_bytes, infra_logs_result, infra_failed, infra_failed)
+            _merge_log_collection(record["log_collection"], infra_summary)
+            if record["first_error"]["result"] in {"unknown", "no_error_marker"}:
+                record["first_error"] = (infra_error
+                                         if infra_error["result"] == "observed_in_bounded_window"
+                                         else _infra_first_error(infra_failed[0]))
     return record
 
 
