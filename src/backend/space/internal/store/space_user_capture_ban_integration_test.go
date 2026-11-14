@@ -52,7 +52,7 @@ func TestNativeBanThroughUserProcessCapture(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 	defer cancel()
 	directory := filepath.Join(repoRoot(t), "src/backend/migrations/space_db")
-	db := integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, directory, "postgres:16-alpine")
+	db := integrationtest.NewSourceMigrationFixtureWithImage(t, ctx, directory, "postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139")
 	db.Run(true, "goto", "34")
 	db.Run(true, "goto", "45")
 	transition, err := (&SpaceStore{Pool: db.Pool}).TransitionNativeMembershipCatalog45(ctx)
