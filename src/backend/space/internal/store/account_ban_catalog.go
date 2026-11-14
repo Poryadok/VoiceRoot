@@ -60,8 +60,8 @@ var accountBanTables = []string{"space_account_ban_operations", "space_account_b
 
 // Compiled only from a fresh source-bound migration fixture, never enrolled
 // from a deployment's live catalog. Until qualified this cut fails closed.
-const accountBanStructure16SHA = "d5a5fd0e74da956772061c5f84c1ab0393373cfaff0ea6e1e8a8a94cafce2036"
-const accountBanStructure18SHA = "271034e23f93442d9126b0db8dbb5a57d7e781359af1de34318dfe960658c183"
+const accountBanStructure16SHA = "972518e6483d307c8f66f4fb1d8e8a672005ab3fb5ed26c6bc15dbe366e51c94"
+const accountBanStructure18SHA = "f5cff76a00614bca4761b0875d300954c7e1f70fb6d930abc93da3434ca332f4"
 
 func checkAccountBanCatalog(ctx context.Context, tx pgx.Tx) error {
 	for _, table := range accountBanTables {
