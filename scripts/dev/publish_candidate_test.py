@@ -16,8 +16,8 @@ import yaml
 import publish_candidate as publisher
 
 
-C = '31a04a471c604488bedd5b442039dfdf0434f9c3'
-PREVIOUS_C = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
+C = '62b6fca83b606c4f458f190d20a7e8e02610168c'
+PREVIOUS_C = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 P = 'a' * 40
 A = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
 FILE = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
