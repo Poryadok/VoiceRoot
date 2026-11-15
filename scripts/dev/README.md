@@ -357,11 +357,11 @@ selected product commit:
 
 ```sh
 gh workflow run dev-candidate-publish.yml --ref master \
-  -f product_sha=31a04a471c604488bedd5b442039dfdf0434f9c3
+  -f product_sha=62b6fca83b606c4f458f190d20a7e8e02610168c
 ```
 
 This bounded consumer accepts only the reviewed product selections below. The default
-`31a04a471c604488bedd5b442039dfdf0434f9c3` selection builds the eight
+`62b6fca83b606c4f458f190d20a7e8e02610168c` selection builds the eight
 required DEV variants in one serial lane: Web, Admin, Developer Portal, Auth,
 User, Notification, Realtime and the native Space installer. The source checkout
 and publisher checkout are separate, clean and byte-verified. Explicit source
@@ -387,9 +387,12 @@ pulled `/service` ELF hash. The OCI revision label binds the selected product;
 the File binary has no embedded source SHA. This publication is artifact evidence
 only; File schema migration, DEV checks and STAGING acceptance remain separate.
 
-This selection is a fresh candidate. Earlier `4e88e14e` image/package receipts
-remain historical; they do not qualify this commit or replace its new immutable
-image closure and canonical package checks.
+This selection moves the default DEV candidate to the current reviewed product
+`62b6fca83b606c4f458f190d20a7e8e02610168c`, a proper descendant of the live DEV
+baseline `086e232bb1fe7cbf9f2abaae96d0e8dd46f28493`. Earlier `31a04a471c604488bedd5b442039dfdf0434f9c3`
+is an ancestor of that baseline and the fence refuses it as a source rollback; its
+image/package receipts remain historical and do not qualify this commit or replace
+its new immutable image closure and canonical package checks.
 
 Tags include the product SHA, actual run ID and attempt; existing or unavailable
 tag state fails closed. No shared `latest`, master or full-SHA tag is overwritten.
