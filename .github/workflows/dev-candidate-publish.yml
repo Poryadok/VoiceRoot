@@ -182,7 +182,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -309,7 +309,7 @@ jobs:
     name: Publish exact DEV candidate
     if: github.event_name == 'workflow_dispatch' && github.repository == 'Poryadok/VoiceRoot' && github.ref == 'refs/heads/master'
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       actions: read
