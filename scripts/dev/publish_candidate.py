@@ -79,9 +79,11 @@ def build_plan(product, publisher, run_id, attempt, *, route='dev'):
         else:
             context = 'src/frontend' if name == 'web' else 'src/' + name
             dockerfile = context + '/Dockerfile'
-            args = ({'VOICE_API_BASE_URL': 'https://api-dev.comrade.click',
+            args = ({'VOICE_RUNTIME_CONFIG_REQUIRED': 'false',
+                     'VOICE_API_BASE_URL': 'https://api-dev.comrade.click',
                      'VOICE_LIVEKIT_URL': 'wss://livekit-dev.comrade.click'} if name == 'web' else
-                    {'VITE_VOICE_API_BASE': 'https://api-dev.comrade.click',
+                    {'VITE_RUNTIME_CONFIG_REQUIRED': 'false',
+                     'VITE_VOICE_API_BASE': 'https://api-dev.comrade.click',
                      'VITE_OAUTH_CLIENT_ID': 'voice-' + name, 'VITE_OAUTH_DISABLED': 'false'})
         component = name if name in MEDIA_SERVICES else 'dev-' + name
         components[component] = {'context': context, 'dockerfile': dockerfile,

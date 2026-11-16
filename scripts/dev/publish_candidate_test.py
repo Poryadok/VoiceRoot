@@ -411,7 +411,14 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(plan['components']['dev-space-native-migrate']['build_args'], {'SOURCE_REVISION': C})
         self.assertEqual(plan['components']['dev-web']['build_args'], {
             'VOICE_API_BASE_URL': 'https://api-dev.comrade.click',
-            'VOICE_LIVEKIT_URL': 'wss://livekit-dev.comrade.click'})
+            'VOICE_LIVEKIT_URL': 'wss://livekit-dev.comrade.click',
+            'VOICE_RUNTIME_CONFIG_REQUIRED': 'false'})
+        for name in ('admin', 'developer-portal'):
+            self.assertEqual(plan['components']['dev-' + name]['build_args'], {
+                'VITE_RUNTIME_CONFIG_REQUIRED': 'false',
+                'VITE_VOICE_API_BASE': 'https://api-dev.comrade.click',
+                'VITE_OAUTH_CLIENT_ID': 'voice-' + name,
+                'VITE_OAUTH_DISABLED': 'false'})
 
     def test_wrong_product_source_and_unvalidated_execution_identity_reject(self):
         for args in ((P, P, '1', '1'), (C + '~1', P, '1', '1'),
