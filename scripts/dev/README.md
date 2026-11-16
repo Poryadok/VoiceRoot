@@ -394,6 +394,17 @@ is an ancestor of that baseline and the fence refuses it as a source rollback; i
 image/package receipts remain historical and do not qualify this commit or replace
 its new immutable image closure and canonical package checks.
 
+The product `src/frontend/Dockerfile` now fails closed when endpoint build args
+are combined with its default runtime-required mode. The DEV route therefore opts
+explicitly into compile-time configuration: `VOICE_RUNTIME_CONFIG_REQUIRED=false`
+with both DEV endpoints for Web, and `VITE_RUNTIME_CONFIG_REQUIRED=false` with
+`VITE_VOICE_API_BASE` for Admin and Developer Portal. Runtime-required publication
+stays owned by the canonical `web` route; the DEV rollout remains an image-only
+update binding the DEV endpoints at compile time, exactly as the live DEV baseline
+images do, while first adoption of runtime-config templates on DEV is a separate
+authorized migration. The `verify_output` frontend DEV endpoint byte checks still
+pin that compiled DEV contract.
+
 Tags include the product SHA, actual run ID and attempt; existing or unavailable
 tag state fails closed. No shared `latest`, master or full-SHA tag is overwritten.
 The job independently resolves registry manifest bytes, selects exactly one
