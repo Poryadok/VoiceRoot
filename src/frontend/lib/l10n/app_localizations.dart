@@ -8179,6 +8179,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Selected spaces: {count}'**
   String privacyAudienceSelectedSpaces(int count);
+
+  /// No description provided for @chatInfoMembersTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 member} other{{count} members}}'**
+  String chatInfoMembersTotal(int count);
+
+  /// No description provided for @chatSharedMediaTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}'**
+  String chatSharedMediaTotal(int count);
+
+  /// No description provided for @chatInfoBotsConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 connected} other{{count} connected}}'**
+  String chatInfoBotsConnected(int count);
 }
 
 class _AppLocalizationsDelegate

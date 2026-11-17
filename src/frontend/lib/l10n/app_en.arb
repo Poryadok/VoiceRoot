@@ -1871,5 +1871,30 @@
   "storyLfpInactive": "This announcement is no longer active",
   "privacyApplyAudience": "Apply",
   "privacyAudienceSelectedSpaces": "Selected spaces: {count}",
-  "@privacyAudienceSelectedSpaces": {"placeholders": {"count": {"type": "int"}}}
+  "@privacyAudienceSelectedSpaces": {"placeholders": {"count": {"type": "int"}}},
+
+  "chatInfoMembersTotal": "{count, plural, =1{1 member} other{{count} members}}",
+  "@chatInfoMembersTotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatSharedMediaTotal": "{count, plural, =1{1 file} other{{count} files}}",
+  "@chatSharedMediaTotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatInfoBotsConnected": "{count, plural, =1{1 connected} other{{count} connected}}",
+  "@chatInfoBotsConnected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
