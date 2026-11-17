@@ -4507,4 +4507,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String privacyAudienceSelectedSpaces(int count) {
     return 'Selected spaces: $count';
   }
+
+  @override
+  String chatInfoMembersTotal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count members',
+      one: '1 member',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatSharedMediaTotal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatInfoBotsConnected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count connected',
+      one: '1 connected',
+    );
+    return '$_temp0';
+  }
 }

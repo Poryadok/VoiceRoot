@@ -4546,4 +4546,43 @@ class AppLocalizationsRu extends AppLocalizations {
   String privacyAudienceSelectedSpaces(int count) {
     return 'Выбранные спейсы: $count';
   }
+
+  @override
+  String chatInfoMembersTotal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count участники',
+      many: '$count участники',
+      few: '$count участники',
+      one: '$count участник',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatSharedMediaTotal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файлов',
+      many: '$count файлов',
+      few: '$count файлов',
+      one: '$count файлов',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chatInfoBotsConnected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bots подключено',
+      many: '$count bots подключено',
+      few: '$count bots подключено',
+      one: '$count bot подключено',
+    );
+    return '$_temp0';
+  }
 }

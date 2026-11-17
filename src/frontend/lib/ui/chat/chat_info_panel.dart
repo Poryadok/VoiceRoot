@@ -9,6 +9,7 @@ import '../../backend/messages_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/chat_providers.dart';
 import '../../state/e2e_providers.dart';
+import '../../state/group_members_management_providers.dart';
 import '../../state/shared_media_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -229,6 +230,11 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
             ref.read(shellNavigationProvider).closeSidePanel();
             if (context.mounted) Navigator.of(context).maybePop();
           },
+        ),
+        _ChatInfoSummarySection(
+          chatId: widget.chatId,
+          spaceId: spaceId,
+          isGroup: widget.isGroup,
         ),
         if (dmPeerProfileId != null && dmPeerProfileId.isNotEmpty)
           ListTile(
@@ -1059,6 +1065,176 @@ class _ChatOverrideBar extends ConsumerWidget {
         icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
         label: Text(l10n.spaceChatOverrideTitle),
       ),
+    );
+  }
+}
+
+/// Compact count rows for the Chat Info panel (mockup §10.1): member total
+/// resolved across every member page, and connected bots for group chats in a
+/// space. Shared-media totals are not shown because the shipped Messaging wire
+/// has no cross-kind total (see docs/todo/backend.md); the row is intentionally
+/// omitted there.
+class _ChatInfoSummarySection extends ConsumerWidget {
+  static const Key sectionKey = Key('chat_info_summary_section');
+  static const Key membersRowKey = Key('chat_info_summary_members_row');
+  static const Key botsRowKey = Key('chat_info_summary_bots_row');
+
+  const _ChatInfoSummarySection({
+    required this.chatId,
+    this.spaceId,
+    required this.isGroup,
+  });
+
+  final String chatId;
+  final String? spaceId;
+  final bool isGroup;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!isGroup) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final voice = VoiceColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
+
+    Widget membersRow;
+    final members = ref.watch(groupMembersManagementProvider(chatId));
+    if (members.isLoading) {
+      membersRow = const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: VoiceListSkeleton(rowCount: 1),
+      );
+    } else if (members.error != null) {
+      membersRow = Padding(
+        key: const Key('chat_info_summary_members_error'),
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                l10n.chatGroupMembersLoadError,
+                style: TextStyle(color: voice.textSecondary),
+              ),
+            ),
+            TextButton.icon(
+              key: const Key('chat_info_summary_members_retry'),
+              onPressed: () =>
+                  ref.invalidate(groupMembersManagementProvider(chatId)),
+              icon: const Icon(Icons.refresh),
+              label: Text(l10n.commonRetry),
+            ),
+          ],
+        ),
+      );
+    } else {
+      membersRow = ListTile(
+        key: membersRowKey,
+        leading: const Icon(Icons.groups_outlined),
+        title: Text(l10n.chatGroupMembersTitle),
+        subtitle: Text(
+          l10n.chatInfoMembersTotal(members.members.length),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        titleTextStyle: theme.textTheme.bodyMedium,
+        subtitleTextStyle: theme.textTheme.bodySmall,
+      );
+    }
+
+    Widget botsRow = const SizedBox.shrink();
+    final space = spaceId;
+    if (space != null) {
+      final botsAsync = ref.watch(
+        botsInChatProvider((chatId: chatId, spaceId: space)),
+      );
+      final installedAsync = ref.watch(installedBotsProvider(space));
+      botsRow = botsAsync.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: VoiceListSkeleton(rowCount: 1),
+        ),
+        error: (error, _) => Padding(
+          key: const Key('chat_info_summary_bots_error'),
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.chatBotsLoadError,
+                  style: TextStyle(color: voice.textSecondary),
+                ),
+              ),
+              TextButton.icon(
+                key: const Key('chat_info_summary_bots_retry'),
+                onPressed: () => ref.invalidate(
+                  botsInChatProvider((chatId: chatId, spaceId: space)),
+                ),
+                icon: const Icon(Icons.refresh),
+                label: Text(l10n.commonRetry),
+              ),
+            ],
+          ),
+        ),
+        data: (bots) {
+          if (bots.isEmpty) return const SizedBox.shrink();
+          return installedAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: VoiceListSkeleton(rowCount: 1),
+            ),
+            error: (error, _) => Padding(
+              key: const Key('chat_info_summary_bots_installed_error'),
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.chatBotsLoadError,
+                      style: TextStyle(color: voice.textSecondary),
+                    ),
+                  ),
+                  TextButton.icon(
+                    key: const Key('chat_info_summary_bots_installed_retry'),
+                    onPressed: () =>
+                        ref.invalidate(installedBotsProvider(space)),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(l10n.commonRetry),
+                  ),
+                ],
+              ),
+            ),
+            data: (installed) {
+              final installedById = {
+                for (final item in installed) item.bot.id: item,
+              };
+              final connected =
+                  bots.where(
+                    (entry) =>
+                        entry.enabled &&
+                        entry.whitelisted &&
+                        installedById[entry.bot.id]?.online != false,
+                  ).length;
+              return ListTile(
+                key: botsRowKey,
+                leading: const Icon(Icons.smart_toy_outlined),
+                title: Text(l10n.chatBotsSectionTitle),
+                subtitle: Text(
+                  l10n.chatInfoBotsConnected(connected),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                titleTextStyle: theme.textTheme.bodyMedium,
+                subtitleTextStyle: theme.textTheme.bodySmall,
+              );
+            },
+          );
+        },
+      );
+    }
+
+    return Column(
+      key: sectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [membersRow, botsRow],
     );
   }
 }

@@ -1773,5 +1773,30 @@
   "storyLfpInactive": "Объявление больше не актуально",
   "privacyApplyAudience": "Применить",
   "privacyAudienceSelectedSpaces": "Выбранные спейсы: {count}",
-  "@privacyAudienceSelectedSpaces": {"placeholders": {"count": {"type": "int"}}}
+  "@privacyAudienceSelectedSpaces": {"placeholders": {"count": {"type": "int"}}},
+
+  "chatInfoMembersTotal": "{count, plural, one{{count} участник} few{{count} участники} many{{count} участники} other{{count} участники}}",
+  "@chatInfoMembersTotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatSharedMediaTotal": "{count, plural, one{{count} файлов} few{{count} файлов} many{{count} файлов} other{{count} файлов}}",
+  "@chatSharedMediaTotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chatInfoBotsConnected": "{count, plural, one{{count} bot подключено} few{{count} bots подключено} many{{count} bots подключено} other{{count} bots подключено}}",
+  "@chatInfoBotsConnected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
