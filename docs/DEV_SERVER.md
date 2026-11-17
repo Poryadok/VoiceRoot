@@ -129,6 +129,21 @@ ConfigMap, PVC/PV и quota, затем только CAS-обновляет су�
 После server dry-run он делает graceful DELETE только pod с UID/RV preconditions;
 ConfigMap/StatefulSet/lock не изменяет. После появления нового pod немедленно
 сверить stdout и те же PVC/PV, сохраняя окно и lock при сомнительном результате.
+ConfigMap content edit alone никогда не reaches running service, and a ConfigMap
+volume mount NEVER flips to a new revision у существующ pods (observed 12-min NO_FLIP;
+recreated pods mounted OLD revision 4.5 min после edit). Adopted and live mechanism
+(2026-11-17): new-name ConfigMap `voice-clickhouse-memory-policy-v2` holding full
+drop-in `90-voice-dev-memory-v2.xml` (`max_server_memory_usage_to_ram_ratio=0.9`,
+console error logger, `metric_log merge_max_block_size=1024`) plus template
+`volumes/0/configMap/name` repoint — fresh pod mounts the 0.9 drop-in at creation
+(~22s, restartCount 0, readback 274B). Template 8Gi limits inadmissible на this
+k3s (4-min rollout stall); cgroup limit stays 6Gi. Discriminating repro query
+`SELECT range(toUInt64(1), toUInt64(335000001)) = range(toUInt64(335000001), toUInt64(670000001))`
+demands 5.36e9 bytes between old cap 0.8×6Gi=5.153960755e9 (OOM) и new cap
+0.9×6Gi=5.798205849e9 (pass); single range() element pre-check caps at 500 000 000
+per call (Code 69 ARGUMENT_OUT_OF_BOUND, memory не является причина). Repo artifact:
+`scripts/dev/clickhouse-memory-v2.xml`. Verification and release recorded under
+TT DEV claims; DEV resource map left free.
 
 Четыре независимых static PV имеют storage class `voice-dev-local` и reclaim
 policy `Retain`:
