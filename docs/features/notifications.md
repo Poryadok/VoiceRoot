@@ -155,3 +155,22 @@ are not replayed as delayed push spam; unread/in-app behavior is unchanged.
 Calls, system/security and subscription reminders do not use this ordinary
 budget. Retry decisions retain 192h; provider delivery remains at-least-once.
 See the Notification service ordinary chat quota contract for exact scope.
+
+## Infected-file security notification — recipient/attachment authority (BE-036, accepted)
+
+An upload that scans `infected` is blocked: Gateway returns `412 file_infected`
+(scanner failure `412 file_scan_failed`), Flutter discards the attachment and
+prevents `SendMessage`, so no message is created. File publishes
+`file.scan_infected` carrying `file_id`, `result` and `uploader_profile_id`
+(`src/backend/file/internal/fileevents/jetstream.go` `PublishFileScanInfected`).
+
+Recipient/attachment authority for the resulting `system` security notification is
+**profile-level**, bound to the upload's `uploader_profile_id` principal and gated
+by the same profile-keyed notification-consent used by the game/Discord integration
+consent route (`/notification-consents/chat/{profile_id}/...`) and Telegram
+per-profile privacy. The notification targets the uploader profile. Account-level
+fan-out and delivering the infected attachment beyond that profile authority are
+not allowed (download stays denied). Canonical contract:
+[file-service.md](../microservices/file-service.md) § `file.scan_infected`
+recipient/attachment authority. The concrete Notification/Realtime fan-out is not
+implemented yet — tracked in [todo/backend.md](../todo/backend.md).
