@@ -443,6 +443,39 @@ response before File emits it; old consumers fail closed during skew.
 | `file.expired`       | file_id, chat_id                          |
 | `file.downloaded`    | `file_id`, `downloader_profile_id`        |
 
+**`file.scan_infected` recipient/attachment authority (BE-036 — accepted):**
+The producer `file.scan_infected` (Jetstream subject `file.scan_infected`,
+`src/backend/file/internal/fileevents/jetstream.go` `PublishFileScanInfected`)
+carries only `file_id`, `result` and `uploader_profile_id`; `files.chat_id` is
+upload-only context, not a notification scope. Recipient/attachment authority is
+bound at **PROFILE** level, not account level, per the integration analogs
+already in this repo:
+
+- File-service attachment authority is already profile-keyed: the scan principal
+  is `uploader_profile_id`; access/download is `GetFileURL` for an authorized
+  profile (`file.downloaded` → `downloader_profile_id`). An infected row keeps
+  download denied (`412 file_infected`), so no profile outside this authority
+  may open the attachment.
+- Discord/game integration analog: Notification and Realtime resolve a third-party
+  recipient through the profile-keyed consent route
+  `GET /internal/v1/notification-consents/chat/{profile_id}/{chat_id}/...`
+  ([game-integration-service.md](game-integration-service.md) § Notification chat
+  scope and consent); the recipient principal is `profile_id`, and an unbound or
+  unopted profile returns `allowed:false`.
+- Telegram analog: notification/visibility authority is symmetric per profile
+  ([privacy.md](../features/privacy.md)); authority follows the profile, not the account.
+- Notification consumer analog: every Notification recipient/decision is keyed by
+  profile (`dispatch.EnrichDecisions` `RecipientProfileID`; device tokens per profile).
+
+Decision: the `file.scan_infected` Notification fan-out, when activated, is
+authorized to the uploader profile (`uploader_profile_id`, the event principal)
+under the same profile-level notification-consent/attachment-access gate.
+Account-level fan-out and exposing the infected attachment beyond that authority
+are not allowed. Chat-member fan-out is not asserted, because the blocked upload
+never becomes a message and `files.chat_id` is upload-only context. Recording the
+authority closes the contract gap; the concrete consumer/Realtime fan-out stays a
+dependent task.
+
 `file.downloaded` означает не подтверждённую передачу байтов, а успешное
 намерение скачать: авторизованный профиль запросил `GetFileURL` для доступного
 файла в статусе `ready`, и File Service успешно создал presigned GET URL. На
