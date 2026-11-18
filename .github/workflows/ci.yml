@@ -1690,6 +1690,8 @@ jobs:
     steps:
       - name: Publish tag must be an exact commit on this repository
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag='${{ inputs.publish_tag }}'
