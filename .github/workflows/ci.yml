@@ -20,6 +20,18 @@ on:
           - tier3-only
           - full
         default: auto
+      publish_tag:
+        description: >-
+          Exact 40-hex master commit to publish catalog images at; empty leaves the
+          dispatchable publish job inert
+        type: string
+        default: ''
+      publish_services:
+        description: >-
+          JSON array of scripts/ci/staging-image-catalog.json names to publish at publish_tag
+          (web excluded: its flutter job owns it)
+        type: string
+        default: ''
 
 concurrency:
   # Nightly/manual checks must not cancel the push run authorizing a release.
@@ -1654,6 +1666,80 @@ jobs:
           path: user-custody-image.json
           if-no-files-found: error
           retention-days: 14
+
+  # Explicit publication at an exact master commit. The push-event gates above publish only
+  # when a service's code lands, so a commit that reached master earlier (or a pin being
+  # reconciled later) can never get its catalog refs from them; this job publishes on demand
+  # for an exact commit that is really on master, with the same catalog build canon.
+  staging-images-dispatch-publish:
+    needs: changes
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish_tag != '' &&
+      inputs.publish_services != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(inputs.publish_services) }}
+    steps:
+      - name: Publish tag must be an exact commit on this repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.publish_tag }}'
+          [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || { echo "publish_tag must be a 40-hex commit SHA" >&2; exit 1; }
+          gh api "repos/{owner}/{repo}/commits/$tag" --jq '.sha' | grep -qx "^${tag}$"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.publish_tag }}
+      - name: Resolve build context and Dockerfile from the catalog
+        id: cat
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          name = os.environ['SERVICE']
+          catalog = json.load(open('scripts/ci/staging-image-catalog.json'))
+          hits = [i for i in catalog['images'] if i['name'] == name]
+          if len(hits) != 1:
+              raise SystemExit(f'catalog must contain exactly one image named {name}')
+          if hits[0]['language'] == 'flutter':
+              raise SystemExit('flutter web publishes from its own job, not this one')
+          print(f"context={hits[0]['build_context']}")
+          print(f"file={hits[0]['dockerfile']}")
+          PY
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image base (lowercase)
+        id: image
+        run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      - name: Build and publish ${{ matrix.service }} image at publish_tag
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.cat.outputs.context }}
+          file: ${{ steps.cat.outputs.file }}
+          push: true
+          build-args: >-
+            ${{ contains(fromJSON('["auth","user","realtime","notification"]'), matrix.service) && format('VOICE_SOURCE_SHA={0}', inputs.publish_tag) || '' }}
+          tags: ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ inputs.publish_tag }}
+          cache-from: type=gha,scope=backend-${{ matrix.service }}
+          cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
+      - name: Verify published manifest is readable at publish_tag
+        shell: bash
+        run: |
+          docker manifest inspect --verbose "${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ inputs.publish_tag }}" >/dev/null
 
   staging-images-promote:
     needs: [changes, staging-images-push, full-validation-aggregation]
