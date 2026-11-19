@@ -51,6 +51,26 @@ Current class:
 Source of pending fixes: auth test fixes exist only in the Anton merge-pool branch — dispatcher context commits `7b35903a`, `26674641`, `a0e28601`, `89196138` at `tmp/game-master-merge-pool-22/master/Voice`; SHAs are not in the local object store, this path is also absent locally (GitHub offline) — cited unverified, code was not copied.
 Remediation: auth test fixes to land via PR renew; while not landed, merges of PRs whose head reds include this class are admissible only under this record. Retire this entry when the class is green.
 
+### CI крас-класс реестр — `backend-go-integration (gameintegration)` класс (audit 2026-11-19)
+
+Class addition (nightly full-master gate audit at head `3c2a24e3…`,
+`docs/audits/2026-11-19-ci-gate-audit.md`): push run #6049 red job missing from the class registry.
+
+Current class:
+- `backend-go-integration (gameintegration)` (job 134889965907, step `go test -timeout 20m ./...`
+  over `src/backend/gameintegration`): `--- FAIL: TestGISAuthoritySourceActualMigratorProtectedFactory
+  (90.46s)`, assert site `src/backend/pkg/integrationtest/authority_migrator.go:75` ←
+  `src/backend/gameintegration/authority_source_server_test.go:28` (`Error: Should be true` после
+  `start and wait for pinned source migrator`; `http: TLS handshake error from 127.0.0.1:40272: EOF`);
+  остальные gameintegration packages green (`httpapi` 94s, `registry` 322s). Root cause **unresolved** —
+  in-test fixture TLS handshake EOF vs real product regression: owner decision to reproduce locally at
+  a fresh head before touching product code; no product-code guesses in CI.
+- Consumers `ci-gate`, `full-validation-aggregation` — уже documented propagators, не added twice.
+- Retry policy: no infinite CI retries; class re-proven only locally (fresh checkout) or called
+  a flake after independent greens at the same head.
+- TT card: `CI-GAMEINTEGRATION-AUTHORITY-TLS-20261119` (status `available`, evidence
+  `docs/audits/2026-11-19-ci-gate-audit.md`). Retire this entry when the class is green.
+
 ### Secrets & alerts (**Вы**)
 
 - [ ] **Секреты staging k8s** — `voice-app-secrets` по [`deploy/staging/secret.example.yaml`](../../deploy/staging/secret.example.yaml): JWT, Postgres URLs, R2 (`FILE_R2_*`, `USER_R2_*`), FCM/APNs для Notification, **Analytics** (`CLICKHOUSE_DSN`, `ANALYTICS_ID_HASH_KEY`) ([`DEPLOYMENT.md`](../DEPLOYMENT.md)).
