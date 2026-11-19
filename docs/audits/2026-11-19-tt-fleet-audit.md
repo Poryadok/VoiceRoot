@@ -4,6 +4,26 @@
 **Role**: routine fleet inventory audit of the `voice` project — TT tracker ↔ GitHub reality ↔ docs registries.
 This is not a re-audit of the full 16-epoch card inventory; deep epoch work belongs to epoch audits.
 
+## Summary (TL;DR, deltas vs previous passes)
+
+- **Baseline moved**: tip `44bd3c76` (11-17) → `d4af0992`-era (11-18 audits) → `3c2a24e3` (`#1169→#1170→#1171`
+  merged); `#1167` closed unmerged, superseded; 0 open PRs at read time.
+- **GHCR STG rollout gate resolved**: 2/24 in both 2026-11-18 docs (`ci-full-gate-audit`, reverify) → **24/24**
+  at package pin `:d4af0992` re-verified today (publish run `44329726561` finished the images late on 11-18).
+- **Tip CI not green, no new red class**: full run `44329501457` FAILURE with exactly the 7 documented debt
+  reds; `ci-script-tests` green at tip; `ci-gate` class unproven (not re-run), not disproven.
+- **Fences**: STG still HELD — new claim `b73c1c98` gen 14 rev 55 owner `Codex-PR-Merge` (reverify saw
+  `ccba8020` gen 12 rev 41), evidence independently corroborated by the 24/24 gate; sole stop = human LAN
+  gate `RESOURCE_FENCE_UPGRADE_REQUIRED`. DEV free (rev 302, gen 80).
+- **Epoch coherence**: A1-active and GAME-parallel conclusions of 11-17/11-18 still hold; **new**: A4 has live
+  TT WIP (`BE-019` in_progress, 8 review, 2 merging, 11 stg_rdd) while PLAN keeps `A3–A7` Queued — report-only.
+- **New actionable finding** (no prior pass covered it): branch-protection required-check lists under-declare the
+  live CI contract → one available card `CI-BRANCH-PROTECTION-CHECKLIST-ALIGN-1`.
+- **Tracker regressions noted**: 11-18 card `CI-OPS-STAGING-ROLLGATE-GHCR-IMAGE-VERIFICATION-1` now NOT FOUND
+  (gate moot at 24/24, not re-created); stale PR receipts on foreign-owned cards left to owners (report-only).
+- Net: TT fleet inventory **aligned**; one human stop pending (root-idle upgrade password on voice-staging node);
+  one durable work unit opened.
+
 ## Scope and method
 
 - TT CLI: `tt.exe --url http://192.168.0.109:30990 --project voice` (per `ttenrec` skill; exit code 1 with valid JSON output is CLI/banner noise).
