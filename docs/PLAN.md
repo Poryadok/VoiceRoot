@@ -30,6 +30,8 @@ Default admission для внешнего alpha — server-signed однораз
 
 `H`-задачи не занимают слот `A`: владелец и агенты могут параллельно готовить access, decisions и activation evidence. По отдельному решению владельца игровой спринт ниже выполняется параллельно `A1` в собственной ветке и integration queue. Это не меняет порядок `A2–A7`.
 
+> 2026-11-19 TT-fleet audit (`docs/audits/2026-11-19-tt-fleet-audit.md`, tracker rev 23202): WIP plan above holds — `A1` is the only Active, GAME is Parallel active (45/81 TT cards `done`), `A3–A7` Queued. Drift flag, owner decision: TT epoch `A4` already has `BE-019` in_progress (assignee astrie) plus 8 review / 2 merging / 11 `stg_ready_for_deploy` while PLAN keeps A4 Queued. Audit made no status transitions.
+
 Scope разделён явно:
 
 - `alpha scope` — `A1–A4` и перечисленный в `G1` функциональный slice `A5`;
