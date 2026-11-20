@@ -246,6 +246,17 @@ export VOICE_IMAGE_REGISTRY=ghcr.io/<owner>/<repo>
 
 ---
 
+## TT card statuses — `stg_deploying` (STAGING deploy ceremony; registry gap `DOC-STG-DEPLOYING-STATUS-SEMANTICS`)
+
+- A card enters `stg_deploying` only as part of a fenced `staging-deploy` ceremony, never per-card and never outside a ceremony. The owner first acquires the voice/STAGING exclusive resource and holds a fence claim (`resource acquire CODE --revision N --actor NAME --tasks <package> --candidate JSON` — current generation/window). At the moment the rollout is dispatched — `staging-deploy.yml` via `workflow_dispatch` carrying the current `resource_context` (claim/generation/window/revision/candidate) — the whole package moves `stg_ready_for_deploy → stg_deploying` together (`task status CODE stg_deploying --actor OWNER`).
+- Card evidence must carry, per task in the package: the current STAGING claim coordinates (`--resource-claim`, `--resource-revision`, generation/window), the full deployed commit SHA, immutable image digests, and the actual `staging-deploy` run receipt (workflow name, run/attempt id, `stack.lock.yaml` tag).
+- `deployment create STG-ID --environment stg --commit FULL_SHA --tasks <package> --actor NAME --resource STAGING --resource-claim …` records a completed rollout, not an intention: its guards require every linked task to already sit in `stg_deploying` under the same current resource authority and the exact package; it binds generation/window and records the actual observation; it emits no PASS.
+- Post-rollout staging receipts advance the cards per the existing server cycle: `stg_deploying → stg_ready_for_test → stg_test → acceptance`, driven by `task test`/`task accept` against the `STG-ID` deployment under the current claim. Staging `PASS` advances toward acceptance; `FAIL` returns to `in_progress`.
+- At ceremony end the owner must release the fence: `resource release CODE --revision N --actor NAME --claim ID --safety safe --outcome PASS|FAIL|NONE --evidence …`, which requires a known observation and an actual safe-operation completion. Leaving the claim held (report-only, as the 2026-11-17/2026-11-18 fleet audits did) keeps STAGING occupied, blocks a fresh claimant — and permits a package STG `deployment create` with zero cards in `stg_deploying`: that is exactly the orphan condition the card documents. `stg_deploying` is never a shortcut to done or acceptance without its evidence.
+
+Not defined in the repo (owner decision owed, not fabricated): the automated push-triggered rollout (`STAGING_DEPLOY_ENABLED=true`, `deploy-staging` job in `ci.yml`) passes no `resource_context`, while `deployment create` always requires a claim — whether an automated rollout may produce a task-bound deployment is an open policy question.
+
+
 ## GitHub Actions: registry, staging-кластер
 
 Имена — ориентир для настройки в GitHub (значения секретов в репозиторий не коммитить).
