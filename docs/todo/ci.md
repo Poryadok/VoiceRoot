@@ -80,9 +80,9 @@ Current class:
 - Twins GREEN in the same run (`backend-go (matchmaking)`, `backend-go-integration (matchmaking)`);
   the `-pr` matchmaking shard was GREEN in prior runs 44329501457, 44581878923, 44589215159; the
   test file is unchanged since `f7408b65979b708364cfaabad3b1e534d03d1e7f` (2026-10-16). Context:
-  the job is `runs-on: ubuntu-latest` (the PR #1149 docker-class pin did not cover it), and the Ubuntu
-  26.04 runner migration window closed 2026-11-19, so this shard ran its docker fixtures (`startDB`
-  postgres/redis/nats) on 26.04 for the first time here. Root cause **unresolved** — deadline-race
+  VERIFIED correction (2026-11-20 blob reads): the class job `backend-go-integration-pr` was ALREADY pinned
+  `runs-on: ubuntu-24.04` at the red head `aab06d19` (ci.yml blob line 1416) and at master tip — the PR #1149
+  pin covers it. The Ubuntu 26.04 alias-migration flake hypothesis does NOT apply to this class. Root cause **unresolved** — deadline-race
   contention flake vs real product regression: reproduction at a fresh head owed before any product-code
   touch, no product-code guesses in CI.
 - Consumers `ci-gate`, `full-validation-aggregation` — documented propagators, not added twice.
@@ -90,7 +90,13 @@ Current class:
   after independent greens at the same head.
 - TT card: `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` (status `available`, evidence
   `docs/audits/2026-11-20-ci-full-gate-verdict.md`). Retire this entry when the class is green.
-- Non-reproduction sample 2026-11-20 (authoritative full-profile dispatch, profile=full, publish inputs empty): head 6315070bac926dece67ac71159475b79cd871a08, run #6069 id 44675790539 = 133 jobs: 112 success / 12 skipped / 9 failure, class job `backend-go-integration-pr (matchmaking)` job 136087273358 CONCLUDED success (trio green). First full-graph sample after the aab06d19 red (run 44660093277, job 136036022408); all 9 reds here are the remaining documented classes, so the matchmaking delta is the only change. Class stays open: flip needs independent greens at the same head or a settled reproduction decision (deadline-race flake on the ubuntu-latest 26.04 runner vs product regression); card `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` carries receipts c1/c2.
+- Non-reproduction sample 2026-11-20 (authoritative full-profile dispatch, profile=full, publish inputs empty): head 6315070bac926dece67ac71159475b79cd871a08, run #6069 id 44675790539 = 133 jobs: 112 success / 12 skipped / 9 failure, class job `backend-go-integration-pr (matchmaking)` job 136087273358 CONCLUDED success (trio green). First full-graph sample after the aab06d19 red (run 44660093277, job 136036022408); all 9 reds here are the remaining documented classes, so the matchmaking delta is the only change. Class stays open: flip needs independent greens at the same head or a settled reproduction decision (docker/fixture I/O contention flake vs product regression; the 26.04-runner hypothesis is ruled out per correction above); card `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` carries receipts c1/c2/c3.
+- Non-reproduction sample #2 2026-11-20 (authoritative full-profile dispatch, publish inputs empty): head
+  `353656adda974050b69867a2b1b3efb1071aef79`, run #6076 id 44682932169 = 133 jobs: 111 success / 12 skipped /
+  10 failure; class trio GREEN (jobs 136110506438, 136110506548, 136110506977). The 10th red `a1-e2e` is a
+  documented debt class (A1 multi-account compose proof, flake-flip semantics registered). Two independent
+  green full-graph samples (heads `6315070b` + `353656add`) vs 1 red; retry policy holds and no code PR is
+  owed (the runner pin already exists); audit trail `docs/audits/2026-11-20-night-ci-dispatch-samples.md`.
 
 ### CI verdict reading rule — auto vs authoritative job graph (audit 2026-11-20)
 
