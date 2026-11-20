@@ -32,10 +32,20 @@ Debian + **k3s** на одной ноде: интеграционный стен
 |----------|----------|
 | Статус | Установлен, рабочий |
 | Kubeconfig на сервере | `/etc/rancher/k3s/k3s.yaml` |
-| kubectl | Обычно `sudo kubectl` |
+| kubectl | `sudo kubectl` у root; bare `kubectl` **без sudo** works у LAN user (`pmd`) — `/usr/local/bin/kubectl` is a symlink к `k3s`, `k3s.yaml` режим 0644 (verified 2026-11-20) |
 | Прослушивание kube-apiserver | `*:6443` (все интерфейсы; без sudo: `ss -lntp`, затем отбор `6443`) |
 | Типичное значение `server:` в k3s.yaml | `https://127.0.0.1:6443` — **в секрет `STAGING_KUBECONFIG` всегда** `https://127.0.0.1:6443` (self-hosted runner или SSH-туннель). Публичный `https://95.31.10.177:6443` — только для kubectl с вашей машины в LAN, **не** для github-hosted CI. |
 | Ответ API по публичному IP с ноды | `curl -sk https://95.31.10.177:6443/` → **401** без учётных данных (ожидаемо) |
+
+**Node kubectl route (verified 2026-11-20T03:07Z, read-only):**
+
+- `/usr/local/bin/kubectl` and `/usr/local/bin/crictl` are 3-byte symlinks to `/usr/local/bin/k3s`: one multi-call binary, k3s v1.34.3+k3s1 (same binary provides `helm`, `k3s-killall.sh`, `k3s-uninstall.sh`).
+- One k3s instance on the node: data dir `/var/lib/rancher/k3s`, systemd `k3s.service` with `User=root`, config `/etc/rancher/k3s/k3s.yaml` mode **0644** (root-owned, world-readable). The LAN user `pmd` and root resolve the **same** cluster and the same namespaces — there is no second cluster and no per-user kubeconfig.
+- `--config` is **not** a kubectl/k3s flag: `kubectl get … --config X.yaml` returns a usage error. Config discovery uses `/etc/rancher/k3s/k3s.yaml`; no env variable is required.
+- Always pass the namespace explicitly: a query without `-n` resolves in the k3s `default` namespace. The NATS marker `voice-nats-generation` lives in `voice-staging` — `kubectl get configmap voice-nats-generation -n voice-staging -o json`; without `-n` it is `NotFound` (same cluster, different namespace).
+- `k3s check-config` run by the LAN user prints `sudo: a password is required` internally (no terminal); this is harmless and does not affect read-only kubectl queries.
+- Namespace inventory on the node (read-back 2026-11-20): `voice-dev`, `voice-staging`, `voice-observability`, `dejavu-spike-dev`, `dejavu-spike-stg`, `penpot-staging`, `traefik`, `chinchilla`, `default`, `kube-*`.
+- Root-only paths remain: the rollout-preservation tree `/var/lib/voice-nats-preservation` (root, 0750) and its `rollout-*` directories (0700/0750) are unreadable to `pmd`.
 
 **Доступ к API из GitHub Actions:** для домашнего стенда **рекомендуется self-hosted runner** на этой ноде — исходящий polling GitHub, `kubectl` к `127.0.0.1:6443`, **без** открытия SSH/6443 в интернет. Установка: [`scripts/staging/setup-github-runner.sh`](../scripts/staging/setup-github-runner.sh); в Environment **staging** Variable **`STAGING_RUNNER_LABELS`** = `["self-hosted","Linux","X64","voice-staging"]`, **`STAGING_DEPLOY_VIA_SSH`** = `false`, **`STAGING_KUBECONFIG`** с `server: https://127.0.0.1:6443`.
 
