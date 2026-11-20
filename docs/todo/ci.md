@@ -91,6 +91,31 @@ Current class:
 - TT card: `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` (status `available`, evidence
   `docs/audits/2026-11-20-ci-full-gate-verdict.md`). Retire this entry when the class is green.
 
+### CI verdict reading rule — auto vs authoritative job graph (audit 2026-11-20)
+
+- A green CI run is NOT a gate verdict unless its job graph actually ran the class. Evidence from this
+  session's docs-only merges: the `push`/`pull_request` CI at documentation heads runs the path-filtered
+  **auto** subset — run `44673780295` (#6068, push at master `6315070b…`) = 66 jobs: 2 success / 64
+  skipped; run `44668783398` (#6066, push at master `7d699cfd…`) = 66 jobs: 2 success / 64 skipped;
+  run `44668336915` (#6065, pull_request at head `57a19a65…`) = 66 jobs: 5 success / 61 skipped. In all
+  three every Go-integration, compose, A1, t31 and gate job was SKIPPED, so their `conclusion: success`
+  proved nothing about the Space/Role ban-catalog + native50 chain, the chronic `voice-history-audit`
+  residual, the `backend-go-integration-pr (matchmaking)` deadline-`Internal` class, or the
+  aggregators/parity propagators. Never quote such a run's conclusion as debt state.
+- Authoritative verdict sources for this registry:
+  (a) `workflow_dispatch` on `ci.yml` with `inputs.profile: full` (all tiers, all services) and
+  `publish_tag`/`publish_services` left EMPTY — an empty tag "leaves the dispatchable publish job inert"
+  per ci.yml, and image publication belongs to the separate `staging-images-dispatch-publish` ceremony
+  under the STAGING fence claim, never to a CI verdict dispatch;
+  (b) a master `push`/`pull_request` run whose job list is the full graph (about 133–135 jobs, e.g.
+  run `44660093277` = 133 jobs at head `aab06d19…`).
+- Required receipt shape: head sha + job tally + explicit red names + job ids, never the bare run
+  conclusion (worked example: `aab06d19…`, 133 jobs = 111 success / 12 skipped / 10 failure, red
+  `backend-go-integration-pr (matchmaking)` job 136036022408). Authoritative record for today:
+  `docs/audits/2026-11-20-ci-full-gate-verdict.md`.
+- Retry policy unchanged: no blind re-dispatch; a class flips only on independent greens at the same
+  head or an explicit fresh-checkout reproduction.
+
 ### Secrets & alerts (**Вы**)
 
 - [ ] **Секреты staging k8s** — `voice-app-secrets` по [`deploy/staging/secret.example.yaml`](../../deploy/staging/secret.example.yaml): JWT, Postgres URLs, R2 (`FILE_R2_*`, `USER_R2_*`), FCM/APNs для Notification, **Analytics** (`CLICKHOUSE_DSN`, `ANALYTICS_ID_HASH_KEY`) ([`DEPLOYMENT.md`](../DEPLOYMENT.md)).
