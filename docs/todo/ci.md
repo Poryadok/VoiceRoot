@@ -90,6 +90,7 @@ Current class:
   after independent greens at the same head.
 - TT card: `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` (status `available`, evidence
   `docs/audits/2026-11-20-ci-full-gate-verdict.md`). Retire this entry when the class is green.
+- Non-reproduction sample 2026-11-20 (authoritative full-profile dispatch, profile=full, publish inputs empty): head 6315070bac926dece67ac71159475b79cd871a08, run #6069 id 44675790539 = 133 jobs: 112 success / 12 skipped / 9 failure, class job `backend-go-integration-pr (matchmaking)` job 136087273358 CONCLUDED success (trio green). First full-graph sample after the aab06d19 red (run 44660093277, job 136036022408); all 9 reds here are the remaining documented classes, so the matchmaking delta is the only change. Class stays open: flip needs independent greens at the same head or a settled reproduction decision (deadline-race flake on the ubuntu-latest 26.04 runner vs product regression); card `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` carries receipts c1/c2.
 
 ### CI verdict reading rule — auto vs authoritative job graph (audit 2026-11-20)
 
