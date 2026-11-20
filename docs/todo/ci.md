@@ -37,19 +37,10 @@ Carried residual, still open: class-3 consumer lease — `TestAccountBanOver100C
 
 **CI rollup diagnosis at master `f974b5016cab` — ci-gate / full-validation-aggregation / local-ci-parity (2026-11-15, branch `codex/ci-gate-scripts-2026-11-15`).** The three gate-class reds on the authoritative master run #5996 (43641582322, 135 jobs = 116 success / 9 skipped / 10 failure) were re-reproduced offline and are **debt propagation plus one inventory gap, not gate drift**: (1) **ci-gate** (exit 1, 9s): `.github/ci/verify-required-jobs.sh` short-circuits on the first non-success required job — the master-push step died with `ci-gate: job compose-e2e result=failure` (compose-e2e was red upstream); on PR heads the failing step is `scripts/ci/affected_check_plan.py … --verify-needs`, which printed `affected checks did not succeed: a1-attachment-restart-proof, a1-e2e, a1-flutter-profile-handoff, compose-e2e, t31-critical`. Local replay of the script with the captured master env: real env → rc=1 with the identical line; all-green counterfactual → rc=0. Both scripts only propagate GitHub's own job results; the gate-side inventories agree with ci.yml. (2) **full-validation-aggregation** (exit 1, 13s): `scripts/ci/full_validation_gate.py` `REQUIRED_JOBS` (n=53) set-equals the ci.yml `full-validation-aggregation` needs (n=53, set-diff empty both directions), so its rejection is (a) the same propagation (`jobs did not succeed: backend-go=failure, backend-go-integration-pr=failure, backend-go-integration-evidence=skipped, backend-go-integration=failure, role-space-receipt-integration=failure, space-native-installer-integration=failure, compose-e2e=failure, a1-flutter-profile-handoff=failure, local-ci-parity=failure`) plus (b) an **independent inventory gap**: `integration source inventory incomplete (unresolved=14)` — present in the real master log and reproduced locally even against synthetic all-green needs. The 14 are the `status:"unresolved"` entries in `scripts/ci/go_integration_exceptions.json`: 6 `requires tagged or opt-in fixture assessment` (role `TestNativeAssignmentNeedsQualifiedOperationPublication` in `native_space_integration_test.go`; space store `account_ban_large_integration_test.go` ×2, `native_catalog51_full_profile_integration_test.go` ×2, `realtime_participant_integration_test.go` ×1) and 8 `not executed in backend-go-integration-pr space matrix` (`space/internal/nativeinstaller` legacy24_*/legacy25 proofs). `scripts/ci/go_integration_source_audit.py` forbids blind relabeling — an entry may only become `dedicated` under its specifically mapped parent proof, so closure needs per-test execution evidence from the space matrix runs, which are themselves red (space store/go-test failures) and C/E-owned. Per-test closure is not honestly reachable at f974b50; no inventory or ci.yml bytes were touched, so the blob pins (`WORKFLOW_SHA256`/`SAFETY_SURFACE` against `d273f884…`) remain valid. (3) **local-ci-parity** (exit 2 after a full 59m57s mirror): `make build-all` died at `Makefile:217: go-test-space Error 1`; the mirror package scan is green for every module **except** `voice/backend/space/internal/grpcsvc` (FAIL 459.05s — `TestSpaceModeration_BanMember_*` deletion/recover-lifecycle proof assertion failures ~6.3s each) and `voice/backend/space/internal/store` (`panic: test timed out after 10m0s`, FAIL 600.045s, goroutines hung in net/http readLoop); `go-test-role` and `space/internal/nativeinstaller` (0.562s) mirror green. So the mirror's disagreeing class is the **Space Go test reds** (boundary C), consistent with the space-side GitHub reds (`backend-go-integration-pr` space shard, `backend-go-integration` space, `space-native-installer-integration`); E's M50 ban pins (bc458449) did not flip them. Asymmetry worth recording: `backend-go` (role) is red on GitHub while its mirror is fully green at f974b50 — that red is runner-environment debt, not a local code regression. `ci-script-tests` shards are green authoritatively; host-side shard members that need docker/infra env cannot run validly on the Windows host and were not treated as local red (4/9 pure-python members green locally). This PR records the diagnosis and changes no gate, inventory, or workflow file. Residual at f974b50 stays red — 10 jobs: compose-e2e, role-space-receipt-integration, local-ci-parity, a1-flutter-profile-handoff, backend-go-integration-pr (space), space-native-installer-integration, backend-go (role), backend-go-integration (space), ci-gate, full-validation-aggregation — each owned by upstream classes (compose infra, A1 proofs/handoff, role/space Go, unresolved-inventory closure), which must go green before the aggregators flip.
 
-### CI крас-класс реестр — `auth-java` класс (audit 2026-11-17)
-
-Class addition (merge-audit acceptance: PR-head reds ⊆ documented debt): `auth-java` class reds at every push to `master` and was missing from the class registry of audit 2026-11-16.
-
-Current class:
-- `auth-java` — Auth/Java jobs red on current `master` sources at each master push (~6 observed reds per push; GitHub offline 2026-11-17 — not re-verified locally, recorded per dispatcher context):
-  - `chat-auth-java-integration` (job in `.github/workflows/ci.yml`; artifact `chat-auth-java-<github.run_attempt>`) — interop proof Auth↔Chat: `mvn -Dtest=AuthChatFloorInteropFixtureTest` in `src/backend/auth` + Go `TestChatAuthActualJavaInteroperability` in `src/backend/chat`, owned Postgres/Redis, inventory `scripts/ci/chat_auth_java_required.json`, skips rejected;
-  - `backend-auth` — Maven/Testcontainers gate `make auth-test-ci` + Auth image build/smoke/push on master push;
-  - `backend-auth-image` — Auth image build.
-- Consumers `ci-gate` and `full-validation-aggregation` list `chat-auth-java-integration` among required jobs — these classes are already documented separately, not added twice.
-
-Source of pending fixes: auth test fixes exist only in the Anton merge-pool branch — dispatcher context commits `7b35903a`, `26674641`, `a0e28601`, `89196138` at `tmp/game-master-merge-pool-22/master/Voice`; SHAs are not in the local object store, this path is also absent locally (GitHub offline) — cited unverified, code was not copied.
-Remediation: auth test fixes to land via PR renew; while not landed, merges of PRs whose head reds include this class are admissible only under this record. Retire this entry when the class is green.
+### CI крас-класс реестр — `auth-java` класс (audit 2026-11-17) — RETIRED 2026-11-20
+- Class ran GREEN at head `aab06d19…` (authoritative full-profile run 44660093277: `backend-auth`,
+  `backend-auth-image`, `chat-auth-java-integration` all success). Entry retired per its own policy
+  ("Retire this entry when the class is green"); evidence `docs/audits/2026-11-20-ci-full-gate-verdict.md`.
 
 ### CI крас-класс реестр — `backend-go-integration (gameintegration)` класс (audit 2026-11-19)
 
@@ -70,6 +61,35 @@ Current class:
   a flake after independent greens at the same head.
 - TT card: `CI-GAMEINTEGRATION-AUTHORITY-TLS-20261119` (status `available`, evidence
   `docs/audits/2026-11-19-ci-gate-audit.md`). Retire this entry when the class is green.
+
+### CI крас-класс реестр — `backend-go-integration-pr (matchmaking)` класс (audit 2026-11-20)
+
+- Class addition (authoritative full-profile master dispatch run 44660093277 at head
+  `aab06d19098ebc0f381f991751205fa44b771092`, `docs/audits/2026-11-20-ci-full-gate-verdict.md`):
+  red job `backend-go-integration-pr (matchmaking)` (job 136036022408, step `go test -json
+  -count=1 -timeout 20m ./...` over `src/backend/matchmaking`, package
+  `voice/backend/matchmaking/internal/grpcsvc`) missing from the class registry. The only FAIL
+  of 381 tests — `TestMatchDeadline_ConcurrentAcceptDeclineAndSweeperConverge` (1.13s), assert
+  site `src/backend/matchmaking/internal/grpcsvc/match_test.go:488`:
+  `require.Equal(t, codes.FailedPrecondition, status.Code(result.err))` on the concurrent-accept
+  branch — `expected: 0x9` (FailedPrecondition), `actual: 0xd` (gRPC status 13 = Internal). The
+  accept/decline/sweeper deadline arbitration converges to a server `Internal` on accept instead
+  of `FailedPrecondition`. Evidence: artifact `go-integration-matchmaking-1`
+  (`go-integration-events.jsonl`, `event_sha256 1b3cbda8ca0522cf4d507f6cb7809872f40da021ad15d9455b8c3f743b5f95f7`,
+  counts fail=1 pass=380 skip=0).
+- Twins GREEN in the same run (`backend-go (matchmaking)`, `backend-go-integration (matchmaking)`);
+  the `-pr` matchmaking shard was GREEN in prior runs 44329501457, 44581878923, 44589215159; the
+  test file is unchanged since `f7408b65979b708364cfaabad3b1e534d03d1e7f` (2026-10-16). Context:
+  the job is `runs-on: ubuntu-latest` (the PR #1149 docker-class pin did not cover it), and the Ubuntu
+  26.04 runner migration window closed 2026-11-19, so this shard ran its docker fixtures (`startDB`
+  postgres/redis/nats) on 26.04 for the first time here. Root cause **unresolved** — deadline-race
+  contention flake vs real product regression: reproduction at a fresh head owed before any product-code
+  touch, no product-code guesses in CI.
+- Consumers `ci-gate`, `full-validation-aggregation` — documented propagators, not added twice.
+- Retry policy: no blind CI retries; class re-proven only at a fresh checkout or called a flake
+  after independent greens at the same head.
+- TT card: `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` (status `available`, evidence
+  `docs/audits/2026-11-20-ci-full-gate-verdict.md`). Retire this entry when the class is green.
 
 ### Secrets & alerts (**Вы**)
 
