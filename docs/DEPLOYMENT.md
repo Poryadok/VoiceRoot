@@ -1334,6 +1334,15 @@ For permission failures with existing credentials, use the runbook's
 [grant drift and prepare-failure diagnosis](../scripts/staging/nats-rollout-preservation/README.md#grant-drift-and-prepare-failure-diagnosis)
 before retrying or changing enrollment.
 
+For `controller.Blocked: operator_retirement_binding_invalid` on idle installer transitions,
+see [LAN retirement authority drift 2026-11-20](audits/2026-11-20-lan-retirement-authority-drift.md):
+the captured media-target authority for media-abort operation `0e2be62a3326` (Oct-15 era) predates
+`gameintegration` entering `source_authority.py IMAGE_NAMES` (commit `1f6e775148e7`, 2026-10-17),
+so the full-history audit fails closed at the `operator_retirement.py:1228` image-set equality
+(23 captured vs 24 live). Historical evidence is never repaired or adopted, and rerunning such a
+route only creates another fail-closed capture; a blocked idle route needs a separately reviewed
+new baseline authority from a current-master capture, never reuse of expired authority.
+
 The reviewed grants and issuer contract are in
 [`deploy/nats/README.md`](../deploy/nats/README.md) and
 [`deploy/nats/acl-intent.yaml`](../deploy/nats/acl-intent.yaml). Issue on a
