@@ -607,6 +607,25 @@ class VoiceChatsClient {
     );
   }
 
+  /// Chat Service SetGroupMemberRole (docs/microservices/chat-service.md):
+  /// owner/admin promotes a member to admin, or an owner demotes an admin to
+  /// member. Route identifiers override body identifiers, so only the target
+  /// role is sent; the client only exposes controls the rights canon allows.
+  Future<ChatsApiResult<void>> setGroupMemberRole({
+    required String authorization,
+    required String chatId,
+    required String profileId,
+    required String role,
+  }) async {
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/chats/$chatId/members/$profileId/role'),
+      authorization: authorization,
+      body: chat_pb.SetGroupMemberRoleRequest(role: role),
+      createEmpty: chat_pb.SetGroupMemberRoleResponse.create,
+    );
+    return _mapEmpty(result);
+  }
+
   Future<ChatsApiResult<QuickAccessListData>> listQuickAccess({
     required String authorization,
   }) async {

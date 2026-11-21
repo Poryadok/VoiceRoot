@@ -6350,6 +6350,48 @@ abstract class AppLocalizations {
   /// **'Allow member posts'**
   String get channelSettingsMemberPosts;
 
+  /// No description provided for @groupSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Group settings'**
+  String get groupSettingsTitle;
+
+  /// No description provided for @groupSettingsIdentityHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Change name and avatar'**
+  String get groupSettingsIdentityHint;
+
+  /// No description provided for @groupSettingsSectionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get groupSettingsSectionLabel;
+
+  /// No description provided for @groupSettingsAdminsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrators'**
+  String get groupSettingsAdminsSection;
+
+  /// No description provided for @groupSettingsAdditionsEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get groupSettingsAdditionsEnabled;
+
+  /// No description provided for @groupSettingsAdditionsAdminsOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Admins only'**
+  String get groupSettingsAdditionsAdminsOnly;
+
+  /// No description provided for @groupSettingsNameField.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get groupSettingsNameField;
+
   /// No description provided for @privacyShowOnlineIncludeGuests.
   ///
   /// In en, this message translates to:

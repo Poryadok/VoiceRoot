@@ -3526,6 +3526,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get channelSettingsMemberPosts => 'Разрешить публикации участников';
 
   @override
+  String get groupSettingsTitle => 'Настройки группы';
+
+  @override
+  String get groupSettingsIdentityHint => 'Изменить имя и аватар';
+
+  @override
+  String get groupSettingsSectionLabel => 'Разрешения';
+
+  @override
+  String get groupSettingsAdminsSection => 'Administrators';
+
+  @override
+  String get groupSettingsAdditionsEnabled => 'Включено';
+
+  @override
+  String get groupSettingsAdditionsAdminsOnly => 'Только администраторы';
+
+  @override
+  String get groupSettingsNameField => 'Group name';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Гостевые аккаунты видят мой онлайн-статус';
 
