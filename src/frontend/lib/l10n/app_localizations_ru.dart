@@ -4100,6 +4100,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyHighlightStoriesSection => 'Сторис';
 
   @override
+  String get storyHighlightCover => 'Обложка';
+
+  @override
+  String get storyHighlightCoverChange => 'Изменить обложку';
+
+  @override
+  String get storyHighlightSelectStory => 'Выбрать Сторис';
+
+  @override
+  String get storyHighlightUnselectStory => 'Удалить Сторис';
+
+  @override
+  String get storyHighlightNeedsStories =>
+      'Выберите Сторис — сохранить избранное';
+
+  @override
   String storyHighlightStoryCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

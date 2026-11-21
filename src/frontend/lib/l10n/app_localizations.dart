@@ -7406,6 +7406,36 @@ abstract class AppLocalizations {
   /// **'Stories'**
   String get storyHighlightStoriesSection;
 
+  /// No description provided for @storyHighlightCover.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover'**
+  String get storyHighlightCover;
+
+  /// No description provided for @storyHighlightCoverChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change cover'**
+  String get storyHighlightCoverChange;
+
+  /// No description provided for @storyHighlightSelectStory.
+  ///
+  /// In en, this message translates to:
+  /// **'Select story'**
+  String get storyHighlightSelectStory;
+
+  /// No description provided for @storyHighlightUnselectStory.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove story'**
+  String get storyHighlightUnselectStory;
+
+  /// No description provided for @storyHighlightNeedsStories.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one story to save'**
+  String get storyHighlightNeedsStories;
+
   /// No description provided for @storyHighlightStoryCount.
   ///
   /// In en, this message translates to:

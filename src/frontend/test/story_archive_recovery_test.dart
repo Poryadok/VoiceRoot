@@ -291,8 +291,6 @@ void main() {
         }),
       );
       await _newHighlight(tester);
-      await tester.tap(find.byKey(const Key('highlight_edit_add_stories')));
-      await tester.pumpAndSettle();
       expect(
         find.ancestor(
           of: find.text('Private A story'),
