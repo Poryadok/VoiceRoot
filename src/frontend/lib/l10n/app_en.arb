@@ -1730,6 +1730,11 @@
   "storyHighlightSelectHighlight": "Choose a highlight",
   "storyHighlightAddStories": "Add stories",
   "storyHighlightStoriesSection": "Stories",
+  "storyHighlightCover": "Cover",
+  "storyHighlightCoverChange": "Change cover",
+  "storyHighlightSelectStory": "Select story",
+  "storyHighlightUnselectStory": "Remove story",
+  "storyHighlightNeedsStories": "Select at least one story to save",
   "storyHighlightStoryCount": "{count, plural, =1{1 story} other{{count} stories}}",
   "@storyHighlightStoryCount": {
     "placeholders": {

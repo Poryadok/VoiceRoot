@@ -4066,6 +4066,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storyHighlightStoriesSection => 'Stories';
 
   @override
+  String get storyHighlightCover => 'Cover';
+
+  @override
+  String get storyHighlightCoverChange => 'Change cover';
+
+  @override
+  String get storyHighlightSelectStory => 'Select story';
+
+  @override
+  String get storyHighlightUnselectStory => 'Remove story';
+
+  @override
+  String get storyHighlightNeedsStories => 'Select at least one story to save';
+
+  @override
   String storyHighlightStoryCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
