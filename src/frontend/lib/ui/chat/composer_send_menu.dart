@@ -70,6 +70,10 @@ class ComposerSendMenu extends StatelessWidget {
   });
 
   static const menuKey = Key('composer_send_menu');
+  static const sheetRadius = 8.0;
+  static const rowHeight = 40.0;
+  static const rowIconSize = 18.0;
+  static const rowVerticalPadding = 10.0;
   final bool isDm;
   final bool scheduledMessagesEnabled;
   final bool mobile;
@@ -84,72 +88,125 @@ class ComposerSendMenu extends StatelessWidget {
       color: colors.canvas,
       elevation: mobile ? 0 : 8,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: mobile
+            ? BorderRadius.only(
+                topLeft: const Radius.circular(sheetRadius),
+                topRight: const Radius.circular(sheetRadius),
+              )
+            : BorderRadius.circular(sheetRadius),
         side: BorderSide(color: colors.borderDefault),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (mobile) ...[
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colors.borderDefault,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  l10n.composerSendOptions,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-            ],
-            ListTile(
-              key: const Key('composer_send_silent'),
-              autofocus: true,
-              leading: const Icon(Icons.dark_mode_outlined, size: 20),
-              title: Text(l10n.composerSendSilent),
-              onTap: () => onSelected(ComposerSendAction.silent),
-            ),
-            if (scheduledMessagesEnabled) ...[
-              ListTile(
-                key: const Key('composer_send_schedule'),
-                leading: const Icon(Icons.schedule, size: 20),
-                title: Text(l10n.composerSendSchedule),
-                onTap: () => onSelected(ComposerSendAction.schedule),
-              ),
-              if (isDm)
-                ListTile(
-                  key: const Key('composer_send_online'),
-                  leading: const Icon(Icons.online_prediction, size: 20),
-                  title: Text(l10n.composerSendOnline),
-                  onTap: () => onSelected(ComposerSendAction.online),
-                ),
-              if (mobile && !isDm)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Text(
-                    l10n.composerSendOnlineDmOnly,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.textSecondary,
+        child: ListTileTheme(
+          data: ListTileThemeData(
+            minTileHeight: rowHeight,
+            minVerticalPadding: rowVerticalPadding,
+            iconColor: colors.textSecondary,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (mobile) ...[
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.borderStrong,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Text(
+                    l10n.composerSendOptions,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+              ],
+              ListTile(
+                key: const Key('composer_send_silent'),
+                autofocus: true,
+                leading: const Icon(
+                  Icons.dark_mode_outlined,
+                  size: rowIconSize,
+                ),
+                title: Text(
+                  l10n.composerSendSilent,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => onSelected(ComposerSendAction.silent),
+              ),
+              if (scheduledMessagesEnabled) ...[
+                _sendMenuRowDivider(colors.borderDefault.withAlpha(0x8C)),
+                ListTile(
+                  key: const Key('composer_send_schedule'),
+                  leading: const Icon(Icons.schedule, size: rowIconSize),
+                  title: Text(
+                    l10n.composerSendSchedule,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => onSelected(ComposerSendAction.schedule),
+                ),
+                if (isDm) ...[
+                  _sendMenuRowDivider(colors.borderDefault.withAlpha(0x8C)),
+                  ListTile(
+                    key: const Key('composer_send_online'),
+                    leading: const Icon(
+                      Icons.online_prediction,
+                      size: rowIconSize,
+                    ),
+                    title: Text(
+                      l10n.composerSendOnline,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => onSelected(ComposerSendAction.online),
+                  ),
+                ],
+                if (mobile && !isDm)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Container(
+                      key: const Key('composer_send_online_dm_only_notice'),
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        border: Border.all(color: colors.borderDefault),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
+                      child: Text(
+                        l10n.composerSendOnlineDmOnly,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
+
+/// Hairline separator between adjacent menu rows, per the v3 Penpot sheet
+/// (`menu-row+menu-row:before`: 1px at 55% of the default border, inset
+/// past the icon column).
+Widget _sendMenuRowDivider(Color hairline) => Padding(
+  padding: const EdgeInsets.only(left: 42, right: 10),
+  child: Container(height: 1, color: hairline),
+);
 
 class _SendMenuLayout extends SingleChildLayoutDelegate {
   const _SendMenuLayout(this.anchor, this.padding);
