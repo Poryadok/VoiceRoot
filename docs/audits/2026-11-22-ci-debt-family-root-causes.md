@@ -151,3 +151,10 @@ in-flight artifact, verdict report-only here.
   fix PR must record, per job verdict, which leaf flipped. Card grouping was not rewritten this pass.
 - An earlier migrations-404 artifact in the investigation was a wrong-path artifact, corrected to real names
   `000050_account_ban_coverage`, `000051_native_catalog_rowjson`.
+
+## Коррекция 2026-11-22 — class-A empirical matrix (TT `CI-SPACE-BAN-AUTHORITY-FIXTURE-DRIFT` c2) supersedes the F1 claim
+- Runner-image bump (20261101.186→20261111.196) is NOT visible in the boundary job logs: `go_integration_matrix` logs the same image 20261101.186 at BOTH jobs 131140328215/131765529570 — the F1 green→red boundary mechanism claim is invalidated.
+- Product constants were NOT byte-identical across refs: ban-catalog pins were re-recorded in the 2026-11-19 era — old {16: `271034e2…`, 18: `d5a5fd0e…`} at green pushes 547509ef9cee/ca73150643fa → current {16: `972518e6…`, 18: `f5cff76a…`} on master (`src/backend/space/internal/store/account_ban_catalog.go`).
+- Real mechanism = Postgres float + fixture POSITION drift: compose-db-init position yields structure digest `972518e6` = pin-16 (audit/db-init jobs green); testcontainer position (`NewSourceMigrationFixtureWithImage`, `audit_native_fixture_test.go:104`) matches NO available image — probes at 18-alpine@`0115267a`, 18.1/18.2/18.3/18.6, 16.15@`4c712e86`, 16.14@`676ffc6d` ALL RED at `lifecycle_deletion_auth_test.go:164`, leaf `complete account ban authority unavailable`.
+- Corroboration `pg_attver`: M50 seed `230166B84BC8` resolves 96 at compose-db-init position vs 102 at testcontainer position (seed rule fires 6 extra times) — same position drift as documented in `docs/todo/ci.md` 2026-11-14 entry.
+- Consequence: pin-only fixture fix PR is INSUFFICIENT — class-A fix lane delivered NO PR (empirical disproof, worktree pristine). Class A closure = OWNER policy decision in `account_ban_catalog.go`: (a) per-position pins by fixture position, (b) attver-aware digest normalization, (c) exclude volatile `att_options` from catalog-side digest. After the decision the class-A pins follow mechanically and the 5 jobs flip green in one pass.
