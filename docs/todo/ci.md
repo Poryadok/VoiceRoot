@@ -272,5 +272,6 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 - Verdict: CLEAN, no new red class at tip `7d7808a7`. Live `.github/workflows/ci.yml` graph = 66 jobs; branch-protection checklist (rebuilt `bc9e4909`, PR #1174) covers 66/66 (Tier1 4 + Tier1b 45 + Tier2 4 + Tier2b 1 + Tier3 12); `verify-required-jobs.sh` enforces 66/66 names all live; no `ci.yml` job renames since rebuild. `docs/CI.md`/`.github/BRANCH_PROTECTION.md` remain absent (real registries `.github/ci/*` — F9 precedent, docs-only rule).
 - Full-profile red-class families still open: `CI-MATCHMAKING-DEADLINE-INTERNAL-20261120` (available) + the documented debt-red merge-path precedent (`--merge --admin`). No new class registered this audit.
+- [ ] **LAN baseline capture satisfiability** — нуль зелёных full-graph master pushes в 24-image catalog era: scan 2026-10-17..2026-11-21 (42 push runs, 0 green; full-graph только от 2026-11-07). `capture_source` + `capture_equivalent_master_source` fail closed while `ci-gate`/`full-validation-aggregation`/`local-ci-parity` + Space/Role debt red. Prerequisite: debt fixes (audit `2026-11-21-lan-capture-source-green-push-satisfiability.md`, TT `OPS-STG-LAN-CAPTURE-GREEN-PUSH-V1`).
 
 **Промпт-якорь:** `CI/CD + deploy from docs/todo/ci.md` + приоритет/подсекция.
