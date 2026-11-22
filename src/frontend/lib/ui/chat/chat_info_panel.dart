@@ -25,6 +25,7 @@ import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'channel_settings_panel.dart';
+import 'chat_bots_panel.dart';
 import 'pinned_messages_panel.dart';
 import 'create_group_sheet.dart';
 import '../settings/notification_settings_screen.dart';
@@ -73,6 +74,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   bool _standalonePinsFailed = false;
   int? _standalonePinsStatusCode;
   bool _showChannelSettings = false;
+  bool _showBotsPanel = false;
   bool _leavingChannel = false;
 
   @override
@@ -99,6 +101,13 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
     }
     final voice = VoiceColors.of(context);
     final spaceId = _spaceIdForChat(ref, widget.chatId);
+    if (_showBotsPanel && spaceId != null) {
+      return ChatBotsPanel(
+        chatId: widget.chatId,
+        spaceId: spaceId,
+        onClose: () => setState(() => _showBotsPanel = false),
+      );
+    }
     final roomProvider = chatRoomControllerProvider(widget.chatId);
     final roomExists = ref.exists(roomProvider);
     final auth = ref.watch(authControllerProvider);
@@ -235,6 +244,21 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
           chatId: widget.chatId,
           spaceId: spaceId,
           isGroup: widget.isGroup,
+          onBotsRowOpen: () {
+            final space = spaceId;
+            if (space == null) return;
+            if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+              unawaited(
+                ChatBotsPanel.show(
+                  context,
+                  chatId: widget.chatId,
+                  spaceId: space,
+                ),
+              );
+            } else {
+              setState(() => _showBotsPanel = true);
+            }
+          },
         ),
         if (dmPeerProfileId != null && dmPeerProfileId.isNotEmpty)
           ListTile(
@@ -316,8 +340,6 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
         ),
         if (spaceId != null)
           _ChatOverrideBar(spaceId: spaceId, chatId: widget.chatId),
-        if (spaceId != null && widget.isGroup)
-          ChatBotsSettingsSection(chatId: widget.chatId, spaceId: spaceId),
         if (!widget.isGroup) DmE2eSettingsSection(chatId: widget.chatId),
         ChatNotificationOverridesSection(chatId: widget.chatId),
       ],
@@ -1083,11 +1105,13 @@ class _ChatInfoSummarySection extends ConsumerWidget {
     required this.chatId,
     this.spaceId,
     required this.isGroup,
+    this.onBotsRowOpen,
   });
 
   final String chatId;
   final String? spaceId;
   final bool isGroup;
+  final VoidCallback? onBotsRowOpen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1143,6 +1167,18 @@ class _ChatInfoSummarySection extends ConsumerWidget {
     Widget botsRow = const SizedBox.shrink();
     final space = spaceId;
     if (space != null) {
+      final canManageBots =
+          ref
+              .watch(
+                spacePermissionProvider((
+                  spaceId: space,
+                  permission: SpacePermissions.spaceManageBots,
+                  chatId: null,
+                  voiceRoomId: null,
+                )),
+              )
+              .valueOrNull ??
+          false;
       final botsAsync = ref.watch(
         botsInChatProvider((chatId: chatId, spaceId: space)),
       );
@@ -1206,13 +1242,14 @@ class _ChatInfoSummarySection extends ConsumerWidget {
               final installedById = {
                 for (final item in installed) item.bot.id: item,
               };
-              final connected =
-                  bots.where(
+              final connected = bots
+                  .where(
                     (entry) =>
                         entry.enabled &&
                         entry.whitelisted &&
                         installedById[entry.bot.id]?.online != false,
-                  ).length;
+                  )
+                  .length;
               return ListTile(
                 key: botsRowKey,
                 leading: const Icon(Icons.smart_toy_outlined),
@@ -1224,6 +1261,7 @@ class _ChatInfoSummarySection extends ConsumerWidget {
                 ),
                 titleTextStyle: theme.textTheme.bodyMedium,
                 subtitleTextStyle: theme.textTheme.bodySmall,
+                onTap: canManageBots ? onBotsRowOpen : null,
               );
             },
           );
