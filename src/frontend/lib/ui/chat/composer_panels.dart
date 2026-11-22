@@ -251,6 +251,9 @@ class ComposerEmojiPanelBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final columns = VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)
+        ? 6
+        : 8;
     return Semantics(
       label: title,
       child: Material(
@@ -273,11 +276,19 @@ class ComposerEmojiPanelBody extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (recentEmoji.isNotEmpty) ...[
-                        Text(AppLocalizations.of(context)!.composerEmojiRecent),
-                        _grid(recentEmoji.toSet().toList(), recent: true),
-                        const Divider(),
+                        Text(
+                          AppLocalizations.of(context)!.composerEmojiRecent,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        _grid(
+                          context,
+                          recentEmoji.toSet().toList(),
+                          columns: columns,
+                          recent: true,
+                        ),
+                        const SizedBox(height: 8),
                       ],
-                      _grid(choices),
+                      _grid(context, choices, columns: columns),
                     ],
                   ),
                 ),
@@ -289,23 +300,46 @@ class ComposerEmojiPanelBody extends StatelessWidget {
     );
   }
 
-  Widget _grid(List<String> emoji, {bool recent = false}) => GridView.count(
-    crossAxisCount: 6,
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    children: [
-      for (final value in emoji)
-        IconButton(
-          autofocus: recent
-              ? value == emoji.first
-              : recentEmoji.isEmpty && value == emoji.first,
-          key: Key(recent ? 'composer_recent_$value' : 'composer_emoji_$value'),
-          tooltip: value,
-          onPressed: () => onSelected(value),
-          icon: Text(value, style: VoiceEmojiStyle.textStyle(fontSize: 28)),
-        ),
-    ],
-  );
+  Widget _grid(
+    BuildContext context,
+    List<String> emoji, {
+    required int columns,
+    bool recent = false,
+  }) {
+    if (emoji.isEmpty) {
+      return const SizedBox(height: 8);
+    }
+    return GridView.count(
+      crossAxisCount: columns,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        for (final value in emoji)
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: IconButton(
+              autofocus: recent
+                  ? value == emoji.first
+                  : recentEmoji.isEmpty && value == emoji.first,
+              key: Key(
+                recent ? 'composer_recent_$value' : 'composer_emoji_$value',
+              ),
+              tooltip: value,
+              onPressed: () => onSelected(value),
+              iconSize: 22,
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(),
+              icon: Text(value, style: VoiceEmojiStyle.textStyle(fontSize: 22)),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class ComposerAttachMenuBody extends StatelessWidget {
