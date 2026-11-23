@@ -13,6 +13,11 @@ final guestSaveAccountReminderProvider =
       );
     });
 
+/// Explicit dismiss control from the banner (§2.3 #2 "Hide banner for today").
+/// The day-suppression itself is owned by the Auth claim in [showAndMark];
+/// this only hides the banner already rendered in the current session shell.
+final guestSaveAccountDismissedProvider = StateProvider<bool>((ref) => false);
+
 /// Whether the save-account banner should show for a returning guest (max 1×/day).
 final guestSaveAccountReminderVisibleProvider = FutureProvider<bool>((
   ref,
