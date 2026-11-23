@@ -2095,6 +2095,51 @@ class AppLocalizationsRu extends AppLocalizations {
   String get spaceMembersLoadError => 'Не удалось загрузить участников';
 
   @override
+  String get spaceMembersBansTab => 'Блокировки';
+
+  @override
+  String spaceMembersBanCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Блокировки',
+      one: '$count Блокировки',
+      zero: 'Нет Блокировки',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceMembersSearchHint => 'Поиск участников';
+
+  @override
+  String get spaceMembersBansSearchHint => 'Поиск в блокировках';
+
+  @override
+  String get spaceMembersSearchNoMatches => 'Участники не найдены';
+
+  @override
+  String get spaceMembersBansSearchNoMatches => 'Блокировки не найдены';
+
+  @override
+  String get spaceMembersBansEmpty => 'Нет Блокировки';
+
+  @override
+  String get spaceMembersBansLoadError => 'Не удалось загрузить Блокировки';
+
+  @override
+  String get spaceMembersUnban => 'Разблокировать';
+
+  @override
+  String get spaceMembersUnbanNotice =>
+      'Разблокированный участник сможет снова вступить по приглашению.';
+
+  @override
+  String spaceMembersUnbanError(String message) {
+    return 'Не удалось Разблокировать участников: $message';
+  }
+
+  @override
   String spaceMemberYou(String name) {
     return '$name (вы)';
   }
@@ -2130,6 +2175,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String spaceBanError(String message) {
     return 'Не удалось забанить участника: $message';
   }
+
+  @override
+  String get spaceBanReasonHint => 'Причина (optional)';
 
   @override
   String get spaceTimeout => 'Таймаут';

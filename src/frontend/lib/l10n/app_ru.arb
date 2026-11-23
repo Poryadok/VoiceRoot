@@ -889,6 +889,19 @@
   "spaceMembersTitle": "Участники",
   "spaceMembersSubtitle": "Владелец и администраторы могут назначать роли и удалять участников.",
   "spaceMembersLoadError": "Не удалось загрузить участников",
+  "spaceMembersBansTab": "Блокировки",
+  "spaceMembersBanCount": "{count, plural, =0{Нет Блокировки} one{{count} Блокировки} other{{count} Блокировки}}",
+  "@spaceMembersBanCount": {"placeholders": {"count": {"type": "int"}}},
+  "spaceMembersSearchHint": "Поиск участников",
+  "spaceMembersBansSearchHint": "Поиск в блокировках",
+  "spaceMembersSearchNoMatches": "Участники не найдены",
+  "spaceMembersBansSearchNoMatches": "Блокировки не найдены",
+  "spaceMembersBansEmpty": "Нет Блокировки",
+  "spaceMembersBansLoadError": "Не удалось загрузить Блокировки",
+  "spaceMembersUnban": "Разблокировать",
+  "spaceMembersUnbanNotice": "Разблокированный участник сможет снова вступить по приглашению.",
+  "spaceMembersUnbanError": "Не удалось Разблокировать участников: {message}",
+  "@spaceMembersUnbanError": {"placeholders": {"message": {"type": "String"}}},
   "spaceMemberYou": "{name} (вы)",
   "@spaceMemberYou": {
     "placeholders": {
@@ -923,6 +936,7 @@
       "message": { "type": "String" }
     }
   },
+  "spaceBanReasonHint": "Причина (optional)",
   "spaceTimeout": "Таймаут",
   "spaceTimeoutConfirmTitle": "Выдать таймаут?",
   "spaceTimeoutConfirmMessage": "Запретить {name} писать сообщения на 10 минут?",

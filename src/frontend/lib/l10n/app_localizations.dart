@@ -3770,6 +3770,72 @@ abstract class AppLocalizations {
   /// **'Could not load members'**
   String get spaceMembersLoadError;
 
+  /// No description provided for @spaceMembersBansTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Bans'**
+  String get spaceMembersBansTab;
+
+  /// No description provided for @spaceMembersBanCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No bans} one{{count} ban} other{{count} bans}}'**
+  String spaceMembersBanCount(int count);
+
+  /// No description provided for @spaceMembersSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search members'**
+  String get spaceMembersSearchHint;
+
+  /// No description provided for @spaceMembersBansSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search bans'**
+  String get spaceMembersBansSearchHint;
+
+  /// No description provided for @spaceMembersSearchNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No members match the search'**
+  String get spaceMembersSearchNoMatches;
+
+  /// No description provided for @spaceMembersBansSearchNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No bans match the search'**
+  String get spaceMembersBansSearchNoMatches;
+
+  /// No description provided for @spaceMembersBansEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No bans'**
+  String get spaceMembersBansEmpty;
+
+  /// No description provided for @spaceMembersBansLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load bans'**
+  String get spaceMembersBansLoadError;
+
+  /// No description provided for @spaceMembersUnban.
+  ///
+  /// In en, this message translates to:
+  /// **'Unban'**
+  String get spaceMembersUnban;
+
+  /// No description provided for @spaceMembersUnbanNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Unbanned members can rejoin this space by invitation.'**
+  String get spaceMembersUnbanNotice;
+
+  /// No description provided for @spaceMembersUnbanError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not unban member: {message}'**
+  String spaceMembersUnbanError(String message);
+
   /// No description provided for @spaceMemberYou.
   ///
   /// In en, this message translates to:
@@ -3823,6 +3889,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not ban member: {message}'**
   String spaceBanError(String message);
+
+  /// No description provided for @spaceBanReasonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason (optional)'**
+  String get spaceBanReasonHint;
 
   /// No description provided for @spaceTimeout.
   ///

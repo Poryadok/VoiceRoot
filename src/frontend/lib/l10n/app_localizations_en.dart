@@ -2077,6 +2077,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceMembersLoadError => 'Could not load members';
 
   @override
+  String get spaceMembersBansTab => 'Bans';
+
+  @override
+  String spaceMembersBanCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bans',
+      one: '$count ban',
+      zero: 'No bans',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceMembersSearchHint => 'Search members';
+
+  @override
+  String get spaceMembersBansSearchHint => 'Search bans';
+
+  @override
+  String get spaceMembersSearchNoMatches => 'No members match the search';
+
+  @override
+  String get spaceMembersBansSearchNoMatches => 'No bans match the search';
+
+  @override
+  String get spaceMembersBansEmpty => 'No bans';
+
+  @override
+  String get spaceMembersBansLoadError => 'Could not load bans';
+
+  @override
+  String get spaceMembersUnban => 'Unban';
+
+  @override
+  String get spaceMembersUnbanNotice =>
+      'Unbanned members can rejoin this space by invitation.';
+
+  @override
+  String spaceMembersUnbanError(String message) {
+    return 'Could not unban member: $message';
+  }
+
+  @override
   String spaceMemberYou(String name) {
     return '$name (you)';
   }
@@ -2112,6 +2157,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String spaceBanError(String message) {
     return 'Could not ban member: $message';
   }
+
+  @override
+  String get spaceBanReasonHint => 'Reason (optional)';
 
   @override
   String get spaceTimeout => 'Timeout';
