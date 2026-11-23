@@ -1418,6 +1418,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'When someone you do not know messages you, their chat appears here.';
 
   @override
+  String get chatContactRequestsFolder => 'Contact requests';
+
+  @override
+  String get chatContactRequestsNoticeTitle => 'Why this matters';
+
+  @override
+  String get chatContactRequestsNoticeBody =>
+      'Until this person is added to your contacts, their messages are marked as coming from an unknown user. Do not open links, and do not share personal data.';
+
+  @override
   String get chatTyping => 'Typing…';
 
   @override

@@ -45,6 +45,9 @@ class ChatListBody extends ConsumerStatefulWidget {
 
   static const Key listKey = Key('chat_list_view');
   static Key tileKey(String chatId) => Key('chat_list_tile_$chatId');
+  static const Key contactRequestsNoticeKey = Key(
+    'chat_list_contact_requests_notice',
+  );
   static Key presenceIndicatorKey(String chatId) =>
       Key('chat_list_presence_$chatId');
   static const Key loadMoreKey = Key('chat_list_load_more');
@@ -344,7 +347,7 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                   return scrollableState(
                     VoiceStatePanel(
                       title: inbox == 'requests'
-                          ? l10n.chatInboxRequests
+                          ? l10n.chatContactRequestsFolder
                           : l10n.chatListEmpty,
                       message: inbox == 'requests'
                           ? l10n.chatMessageRequestsEmptyHint
@@ -561,9 +564,31 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                     if (hasRequestIntro && index == 0) {
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                        child: Text(
-                          l10n.chatMessageRequestsEmptyHint,
-                          style: Theme.of(context).textTheme.bodyMedium,
+                        child: KeyedSubtree(
+                          key: ChatListBody.contactRequestsNoticeKey,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: VoiceColors.of(
+                                context,
+                              ).warning.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  l10n.chatContactRequestsNoticeTitle,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                Text(
+                                  l10n.chatContactRequestsNoticeBody,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       );
                     }

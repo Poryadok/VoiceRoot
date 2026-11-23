@@ -1428,6 +1428,16 @@ class AppLocalizationsRu extends AppLocalizations {
       'Сообщения от незнакомцев появятся здесь.';
 
   @override
+  String get chatContactRequestsFolder => 'Запросы';
+
+  @override
+  String get chatContactRequestsNoticeTitle => 'Почему это важно';
+
+  @override
+  String get chatContactRequestsNoticeBody =>
+      'Сообщения от незнакомцев появятся здесь.';
+
+  @override
   String get chatTyping => 'Печатает…';
 
   @override
