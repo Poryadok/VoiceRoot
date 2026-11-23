@@ -1273,6 +1273,18 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get profileEditPhoneBadgeComingSoon => 'без телефона';
+
+  @override
+  String get profileEditBannerComingSoon => 'Баннер';
+
+  @override
+  String get profileEditCleanUsernameComingSoon => 'Чистый @username';
+
+  @override
+  String get profileEditSetPrimaryComingSoon => 'Основной профиль';
+
+  @override
   String get createProfileTitle => 'Добавить профиль';
 
   @override

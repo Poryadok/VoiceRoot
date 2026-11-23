@@ -2294,6 +2294,30 @@ abstract class AppLocalizations {
   /// **'Could not save profile: {message}'**
   String profileEditSaveError(String message);
 
+  /// No description provided for @profileEditPhoneBadgeComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Without phone'**
+  String get profileEditPhoneBadgeComingSoon;
+
+  /// No description provided for @profileEditBannerComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile banner'**
+  String get profileEditBannerComingSoon;
+
+  /// No description provided for @profileEditCleanUsernameComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean @username'**
+  String get profileEditCleanUsernameComingSoon;
+
+  /// No description provided for @profileEditSetPrimaryComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as primary'**
+  String get profileEditSetPrimaryComingSoon;
+
   /// No description provided for @createProfileTitle.
   ///
   /// In en, this message translates to:

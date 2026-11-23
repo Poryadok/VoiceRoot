@@ -14,6 +14,7 @@ import '../../theme/voice_theme_providers.dart';
 import '../../backend/user_privacy_client.dart';
 import '../../state/trust_providers.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import '../api_error_messages.dart';
 import '../settings/privacy_presets.dart';
 import '../matchmaking/player_profile_sheet.dart';
 
@@ -39,6 +40,7 @@ class ProfileEditSheet extends ConsumerStatefulWidget {
   static const Key bioFieldKey = Key('profile_edit_bio');
   static const Key avatarButtonKey = Key('profile_edit_avatar');
   static const Key saveButtonKey = Key('profile_edit_save');
+  static const Key deleteButtonKey = Key('profile_edit_delete');
 
   final VoiceProfile profile;
   final ProfileAvatarPicker? avatarPicker;
@@ -66,6 +68,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
   ProfileAvatarFile? _avatar;
   ProfileAvatarFile? _savedAvatarPreview;
   var _saving = false;
+  bool _deleting = false;
   String? _error;
 
   @override
@@ -151,6 +154,9 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
     final voice = VoiceColors.of(context);
     ref.watch(authControllerProvider);
     final catalog = ref.watch(voiceTokenCatalogProvider).valueOrNull;
+    final myProfiles =
+        ref.watch(myProfilesProvider).valueOrNull ?? const <VoiceProfile>[];
+    final canDelete = myProfiles.length > 1;
     final avatarPreview = _avatar ?? _savedAvatarPreview;
     return Shortcuts(
       shortcuts: const {
@@ -184,6 +190,13 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                               child: Text(
                                 l10n.profileEditTitle,
                                 style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                l10n.profileEditPhoneBadgeComingSoon,
+                                style: TextStyle(color: voice.textSecondary),
                               ),
                             ),
                             IconButton(
@@ -226,6 +239,12 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                             ),
                           ],
                         ),
+                        Flexible(
+                          child: OutlinedButton(
+                            onPressed: null,
+                            child: Text(l10n.profileEditBannerComingSoon),
+                          ),
+                        ),
                         if (_avatar != null) ...[
                           const SizedBox(height: 8),
                           Text(
@@ -251,6 +270,11 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                             labelText: l10n.profileCreateUsernameLabel,
                           ),
                           child: SelectableText(widget.profile.handle),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton(
+                          onPressed: null,
+                          child: Text(l10n.profileEditCleanUsernameComingSoon),
                         ),
                         const SizedBox(height: 12),
                         TextField(
@@ -358,6 +382,11 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                                 ),
                             ],
                           ),
+                        const SizedBox(height: 8),
+                        OutlinedButton(
+                          onPressed: null,
+                          child: Text(l10n.profileEditSetPrimaryComingSoon),
+                        ),
                         if (_error != null) ...[
                           const SizedBox(height: 12),
                           Semantics(
@@ -387,6 +416,21 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                         const SizedBox(height: 20),
                         Row(
                           children: [
+                            if (canDelete) ...[
+                              Expanded(
+                                child: OutlinedButton(
+                                  key: ProfileEditSheet.deleteButtonKey,
+                                  onPressed: _saving || _deleting
+                                      ? null
+                                      : () => _confirmDelete(l10n),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: voice.error,
+                                  ),
+                                  child: Text(l10n.manageProfilesDeleteAction),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                            ],
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: _saving
@@ -580,6 +624,77 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
         _saving = false;
         _error = l10n.commonActionFailed;
       });
+    }
+  }
+
+  // §15 #13 Delete profile: backed by the existing DELETE /users/profiles/{id}
+  // route (same flow as ManageProfilesSheet). Visible only while the profile
+  // list proves more than one profile; primary and active profiles keep the
+  // documented blocked messages instead of a request.
+  Future<void> _confirmDelete(AppLocalizations l10n) async {
+    if (_deleting || _saving) return;
+    setState(() => _deleting = true);
+    final isPrimary =
+        widget.profile.isPrimary ||
+        (ref.read(myProfilesProvider).valueOrNull ?? const <VoiceProfile>[])
+            .any((entry) => entry.id == widget.profile.id && entry.isPrimary);
+    if (isPrimary) {
+      setState(() {
+        _deleting = false;
+        _error = l10n.manageProfilesDeletePrimaryBlocked;
+      });
+      return;
+    }
+    if (ref.read(authControllerProvider).activeProfileId == widget.profile.id) {
+      setState(() {
+        _deleting = false;
+        _error = l10n.manageProfilesDeleteActiveBlocked;
+      });
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.manageProfilesDeleteConfirmTitle),
+        content: Text(l10n.manageProfilesDeleteConfirmMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.commonDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      if (mounted) setState(() => _deleting = false);
+      return;
+    }
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null) {
+      setState(() {
+        _deleting = false;
+        _error = l10n.profileEditSaveError('not_authenticated');
+      });
+      return;
+    }
+    final result = await ref
+        .read(voiceUsersClientProvider)
+        .deleteProfile(authorization: auth, profileId: widget.profile.id);
+    if (!mounted) return;
+    switch (result) {
+      case UsersApiOk():
+        ref.invalidate(myProfilesProvider);
+        setState(() => _deleting = false);
+        Navigator.of(context).pop();
+      case UsersApiFailure(:final statusCode):
+        setState(() {
+          _deleting = false;
+          _error = commonActionErrorMessage(l10n, statusCode: statusCode);
+        });
     }
   }
 
