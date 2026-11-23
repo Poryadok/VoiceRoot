@@ -94,7 +94,106 @@ void main() {
         (await SharedPreferences.getInstance()).getBool('voice_reduced_motion'),
         isTrue,
       );
+      expect(find.text('Animations and GIFs show statically'), findsOneWidget);
+
+      expect(
+        find.byKey(AccessibilitySettingsScreen.textScaleKey),
+        findsOneWidget,
+      );
+      expect(find.text('Text scale'), findsOneWidget);
+      expect(find.text('100%'), findsNWidgets(2));
+      expect(find.text('200%'), findsOneWidget);
+      expect(
+        find.text(
+          'All controls are reachable by keyboard and keep a visible focus '
+          'outline.',
+        ),
+        findsOneWidget,
+      );
       semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'Accessibility settings show v3 text-scale band, pills and keyboard notice',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: voiceAppTestOverrides(
+          client: MockClient((_) async => http.Response('{}', 200)),
+        ),
+      );
+      addTearDown(container.dispose);
+
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) {
+              final media = MediaQuery.of(context);
+              return MediaQuery(
+                data: media.copyWith(
+                  size: const Size(1280, 800),
+                  textScaler: const TextScaler.linear(1.5),
+                ),
+                child: child!,
+              );
+            },
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    key: const Key('open_settings'),
+                    onPressed: () => showVoiceBottomSheet<void>(
+                      context: context,
+                      child: const SettingsSheet(),
+                    ),
+                    child: const Text('Open settings'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('open_settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_accessibility')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(AccessibilitySettingsScreen.textScaleKey),
+        findsOneWidget,
+      );
+      expect(find.text('Text scale'), findsOneWidget);
+      expect(find.text('150%'), findsOneWidget);
+      expect(find.text('100%'), findsAtLeastNWidgets(1));
+      expect(find.text('200%'), findsAtLeastNWidgets(1));
+      expect(
+        find.byKey(AccessibilitySettingsScreen.pttKeybindKey),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(AccessibilitySettingsScreen.pttModeKey),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(AccessibilitySettingsScreen.vadModeKey),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'All controls are reachable by keyboard and keep a visible focus '
+          'outline.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -153,6 +252,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(AccessibilitySettingsScreen.screenKey), findsOneWidget);
+      expect(
+        find.byKey(AccessibilitySettingsScreen.textScaleKey),
+        findsOneWidget,
+      );
+      expect(find.text('150%'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     }

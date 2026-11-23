@@ -2581,6 +2581,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPttKeybindDesktopHint => 'Configurable on desktop';
 
   @override
+  String get settingsAccessibilityTextScale => 'Text scale';
+
+  @override
+  String get settingsAccessibilityTextScaleMin => '100%';
+
+  @override
+  String get settingsAccessibilityTextScaleMax => '200%';
+
+  @override
+  String get settingsReducedMotionSubtitle =>
+      'Animations and GIFs show statically';
+
+  @override
+  String get settingsAccessibilityKeyboardNotice =>
+      'All controls are reachable by keyboard and keep a visible focus '
+      'outline.';
+
+  @override
   String get trayQuit => 'Quit';
 
   @override
