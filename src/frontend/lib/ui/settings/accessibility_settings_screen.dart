@@ -18,6 +18,7 @@ class AccessibilitySettingsScreen extends ConsumerWidget {
   static const Key pttModeKey = Key('accessibility_ptt_mode_ptt');
   static const Key vadModeKey = Key('accessibility_ptt_mode_vad');
   static const Key pttKeybindKey = Key('accessibility_ptt_keybind');
+  static const Key textScaleKey = Key('accessibility_text_scale');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,11 +62,15 @@ class AccessibilitySettingsScreen extends ConsumerWidget {
                     key: reducedMotionKey,
                     contentPadding: EdgeInsets.zero,
                     title: Text(l10n.settingsReducedMotion),
+                    subtitle: Text(l10n.settingsReducedMotionSubtitle),
+                    isThreeLine: true,
                     value: reducedMotion,
                     onChanged: (value) => ref
                         .read(reducedMotionEnabledProvider.notifier)
                         .setEnabled(value),
                   ),
+                  const SizedBox(height: 12),
+                  _TextScaleRow(key: textScaleKey),
                   const SizedBox(height: 24),
                   Semantics(
                     header: true,
@@ -75,6 +80,8 @@ class AccessibilitySettingsScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  _PttKeybindTile(key: pttKeybindKey),
+                  const SizedBox(height: 12),
                   Text(
                     l10n.settingsAccessibilityDefaultVoiceMode,
                     style: Theme.of(context).textTheme.bodyLarge,
@@ -102,8 +109,16 @@ class AccessibilitySettingsScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _PttKeybindTile(key: pttKeybindKey),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: colors.borderDefault),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Text(l10n.settingsAccessibilityKeyboardNotice),
+                  ),
                 ],
               ),
             ),
@@ -195,6 +210,111 @@ class _PttKeybindTileState extends ConsumerState<_PttKeybindTile> {
         onTap: () {
           setState(() => _capturing = true);
           _focusNode.requestFocus();
+        },
+      ),
+    );
+  }
+}
+
+/// Text scale in the 100–200% band (docs/features/accessibility.md).
+/// Display-only: reflects the platform's MediaQuery text scale. Persisting an
+/// in-app font-scale slider is an unresolved canon gap (screen-controls §30 #3)
+/// and is intentionally not invented here.
+class _TextScaleRow extends StatelessWidget {
+  const _TextScaleRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final colors = VoiceColors.of(context);
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(minScaleFactor: 1.0, maxScaleFactor: 2.0);
+    final effectiveScale = scaler.scale(100) / 100;
+    final percent = scaler.scale(100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.settingsAccessibilityTextScale),
+        Text('$percent%', style: TextStyle(color: colors.textSecondary)),
+        _TextScaleSlider(
+          fraction: (effectiveScale - 1.0).clamp(0.0, 1.0).toDouble(),
+          colors: colors,
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              l10n.settingsAccessibilityTextScaleMin,
+              style: TextStyle(color: colors.textSecondary),
+            ),
+            Text(
+              l10n.settingsAccessibilityTextScaleMax,
+              style: TextStyle(color: colors.textSecondary),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Decorative slider track for the text-scale readout; semantics come from the
+/// surrounding labels, so the visuals are excluded from semantics.
+class _TextScaleSlider extends StatelessWidget {
+  const _TextScaleSlider({required this.fraction, required this.colors});
+
+  final double fraction;
+  final VoiceColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const thumb = 16.0;
+          final trackWidth = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : 320.0;
+          final travel = trackWidth - thumb;
+          final clamped = (fraction).clamp(0.0, 1.0).toDouble();
+
+          return Stack(
+            children: [
+              SizedBox(width: trackWidth, height: 20),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 6,
+                bottom: 6,
+                child: Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: colors.elevated,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: colors.borderDefault),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: travel * clamped,
+                top: 2,
+                width: thumb,
+                height: thumb,
+                child: Container(
+                  width: thumb,
+                  height: thumb,
+                  decoration: BoxDecoration(
+                    color: colors.textPrimary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          );
         },
       ),
     );

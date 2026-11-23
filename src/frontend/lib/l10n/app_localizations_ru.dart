@@ -2577,6 +2577,23 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsPttKeybindDesktopHint => 'Настраивается на desktop';
 
   @override
+  String get settingsAccessibilityTextScale => 'Масштаб текста';
+
+  @override
+  String get settingsAccessibilityTextScaleMin => '100%';
+
+  @override
+  String get settingsAccessibilityTextScaleMax => '200%';
+
+  @override
+  String get settingsReducedMotionSubtitle =>
+      'Анимации и GIF показывает статично';
+
+  @override
+  String get settingsAccessibilityKeyboardNotice =>
+      'Все элементы доступны с клавиатуры; видимый focus outline включено.';
+
+  @override
   String get trayQuit => 'Выйти';
 
   @override

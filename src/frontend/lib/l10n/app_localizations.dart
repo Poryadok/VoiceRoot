@@ -4598,6 +4598,36 @@ abstract class AppLocalizations {
   /// **'Configurable on desktop'**
   String get settingsPttKeybindDesktopHint;
 
+  /// No description provided for @settingsAccessibilityTextScale.
+  ///
+  /// In en, this message translates to:
+  /// **'Text scale'**
+  String get settingsAccessibilityTextScale;
+
+  /// No description provided for @settingsAccessibilityTextScaleMin.
+  ///
+  /// In en, this message translates to:
+  /// **'100%'**
+  String get settingsAccessibilityTextScaleMin;
+
+  /// No description provided for @settingsAccessibilityTextScaleMax.
+  ///
+  /// In en, this message translates to:
+  /// **'200%'**
+  String get settingsAccessibilityTextScaleMax;
+
+  /// No description provided for @settingsReducedMotionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Animations and GIFs show statically'**
+  String get settingsReducedMotionSubtitle;
+
+  /// No description provided for @settingsAccessibilityKeyboardNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'All controls are reachable by keyboard and keep a visible focus outline.'**
+  String get settingsAccessibilityKeyboardNotice;
+
   /// No description provided for @trayQuit.
   ///
   /// In en, this message translates to:
