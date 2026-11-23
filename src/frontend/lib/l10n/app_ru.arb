@@ -522,6 +522,10 @@
       }
     }
   },
+  "profileEditPhoneBadgeComingSoon": "без телефона",
+  "profileEditBannerComingSoon": "Баннер",
+  "profileEditCleanUsernameComingSoon": "Чистый @username",
+  "profileEditSetPrimaryComingSoon": "Основной профиль",
   "createProfileTitle": "Добавить профиль",
   "profileCreateUsernameLabel": "Тег профиля",
   "profileCreateSessionChanged": "Аккаунт или активный профиль изменился. Откройте создание профиля снова.",

@@ -1263,6 +1263,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get profileEditPhoneBadgeComingSoon => 'Without phone';
+
+  @override
+  String get profileEditBannerComingSoon => 'Profile banner';
+
+  @override
+  String get profileEditCleanUsernameComingSoon => 'Clean @username';
+
+  @override
+  String get profileEditSetPrimaryComingSoon => 'Set as primary';
+
+  @override
   String get createProfileTitle => 'Add profile';
 
   @override

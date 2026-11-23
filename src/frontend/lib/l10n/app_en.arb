@@ -559,6 +559,10 @@
       }
     }
   },
+  "profileEditPhoneBadgeComingSoon": "Without phone",
+  "profileEditBannerComingSoon": "Profile banner",
+  "profileEditCleanUsernameComingSoon": "Clean @username",
+  "profileEditSetPrimaryComingSoon": "Set as primary",
   "createProfileTitle": "Add profile",
   "profileCreateUsernameLabel": "Profile tag",
   "profileCreateSessionChanged": "The signed-in account or active profile changed. Reopen profile creation to continue.",
