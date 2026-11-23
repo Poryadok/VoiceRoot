@@ -28,10 +28,11 @@ class MessageRequestsFolderRailButton extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     return Tooltip(
-      message: '${l10n.chatInboxRequests} · '
+      message:
+          '${l10n.chatContactRequestsFolder} · '
           '${l10n.chatListUnreadCount(summary.unreadCount)}',
       child: Semantics(
-        label: l10n.chatInboxRequests,
+        label: l10n.chatContactRequestsFolder,
         button: true,
         selected: selected,
         child: Material(
@@ -88,7 +89,7 @@ class MessageRequestsFolderDrawerTile extends ConsumerWidget {
     return ListTile(
       key: keyId,
       leading: const Icon(Icons.mark_email_unread_outlined),
-      title: Text(l10n.chatInboxRequests),
+      title: Text(l10n.chatContactRequestsFolder),
       selected: selected,
       trailing: summary.unreadCount > 0
           ? VoiceBadge(count: summary.unreadCount)

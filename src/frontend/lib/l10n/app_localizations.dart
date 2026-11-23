@@ -2576,6 +2576,24 @@ abstract class AppLocalizations {
   /// **'When someone you do not know messages you, their chat appears here.'**
   String get chatMessageRequestsEmptyHint;
 
+  /// No description provided for @chatContactRequestsFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact requests'**
+  String get chatContactRequestsFolder;
+
+  /// No description provided for @chatContactRequestsNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Why this matters'**
+  String get chatContactRequestsNoticeTitle;
+
+  /// No description provided for @chatContactRequestsNoticeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Until this person is added to your contacts, their messages are marked as coming from an unknown user. Do not open links, and do not share personal data.'**
+  String get chatContactRequestsNoticeBody;
+
   /// No description provided for @chatTyping.
   ///
   /// In en, this message translates to:
