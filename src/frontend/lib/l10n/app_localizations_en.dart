@@ -1418,6 +1418,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'When someone you do not know messages you, their chat appears here.';
 
   @override
+  String get chatContactRequestsFolder => 'Contact requests';
+
+  @override
+  String get chatContactRequestsNoticeTitle => 'Why this matters';
+
+  @override
+  String get chatContactRequestsNoticeBody =>
+      'Until this person is added to your contacts, their messages are marked as coming from an unknown user. Do not open links, and do not share personal data.';
+
+  @override
   String get chatTyping => 'Typing…';
 
   @override
@@ -2077,6 +2087,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spaceMembersLoadError => 'Could not load members';
 
   @override
+  String get spaceMembersBansTab => 'Bans';
+
+  @override
+  String spaceMembersBanCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bans',
+      one: '$count ban',
+      zero: 'No bans',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get spaceMembersSearchHint => 'Search members';
+
+  @override
+  String get spaceMembersBansSearchHint => 'Search bans';
+
+  @override
+  String get spaceMembersSearchNoMatches => 'No members match the search';
+
+  @override
+  String get spaceMembersBansSearchNoMatches => 'No bans match the search';
+
+  @override
+  String get spaceMembersBansEmpty => 'No bans';
+
+  @override
+  String get spaceMembersBansLoadError => 'Could not load bans';
+
+  @override
+  String get spaceMembersUnban => 'Unban';
+
+  @override
+  String get spaceMembersUnbanNotice =>
+      'Unbanned members can rejoin this space by invitation.';
+
+  @override
+  String spaceMembersUnbanError(String message) {
+    return 'Could not unban member: $message';
+  }
+
+  @override
   String spaceMemberYou(String name) {
     return '$name (you)';
   }
@@ -2112,6 +2167,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String spaceBanError(String message) {
     return 'Could not ban member: $message';
   }
+
+  @override
+  String get spaceBanReasonHint => 'Reason (optional)';
 
   @override
   String get spaceTimeout => 'Timeout';
@@ -4085,6 +4143,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get storyHighlightStoriesSection => 'Stories';
+
+  @override
+  String get storyHighlightCover => 'Cover';
+
+  @override
+  String get storyHighlightCoverChange => 'Change cover';
+
+  @override
+  String get storyHighlightSelectStory => 'Select story';
+
+  @override
+  String get storyHighlightUnselectStory => 'Remove story';
+
+  @override
+  String get storyHighlightNeedsStories => 'Select at least one story to save';
 
   @override
   String storyHighlightStoryCount(int count) {

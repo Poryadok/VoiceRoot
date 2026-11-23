@@ -26,6 +26,8 @@ class GuestConvertSheet extends ConsumerStatefulWidget {
   static const Key refreshPromotionButtonKey = Key(
     'guest_convert_refresh_promotion',
   );
+  static const Key convertButtonKey = Key('guest_convert_submit');
+  static const Key sheetHandleKey = Key('guest_convert_sheet_handle');
 
   static Future<void> show(BuildContext context) {
     final container = ProviderScope.containerOf(context, listen: false);
@@ -216,6 +218,21 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // V mockup sheet chrome: grab handle above the heading.
+              if (narrow) ...[
+                Center(
+                  key: GuestConvertSheet.sheetHandleKey,
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               Text(
                 l10n.guestConvertTitle,
                 style: Theme.of(context).textTheme.titleLarge,
@@ -256,11 +273,45 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
                   validator: (v) => _passwordValidator(v, l10n),
                 ),
                 const SizedBox(height: 20),
-                VoicePrimaryButton(
-                  onPressed: _submitting ? null : _submit,
-                  isLoading: _submitting,
-                  child: Text(l10n.guestConvertSubmit),
-                ),
+                if (narrow) ...[
+                  // V mockup: stacked full-width primary, then ghost cancel.
+                  VoicePrimaryButton(
+                    key: GuestConvertSheet.convertButtonKey,
+                    onPressed: _submitting ? null : _submit,
+                    isLoading: _submitting,
+                    child: Text(l10n.guestConvertSubmit),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    key: GuestConvertSheet.cancelButtonKey,
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(l10n.commonCancel),
+                  ),
+                ] else ...[
+                  // H mockup modal-foot: right-aligned row with cancel to
+                  // the left of the primary convert CTA (§2.4 #4, #3).
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          key: GuestConvertSheet.cancelButtonKey,
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text(l10n.commonCancel),
+                        ),
+                        const SizedBox(width: 8),
+                        VoicePrimaryButton(
+                          key: GuestConvertSheet.convertButtonKey,
+                          onPressed: _submitting ? null : _submit,
+                          isLoading: _submitting,
+                          child: Text(l10n.guestConvertSubmit),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ] else if (promotionPending) ...[
                 Text(l10n.guestConvertPromotionPending),
                 const SizedBox(height: 20),
@@ -294,15 +345,19 @@ class _GuestConvertSheetState extends ConsumerState<GuestConvertSheet> {
                   child: Text(l10n.guestConvertResend),
                 ),
               ],
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  key: GuestConvertSheet.cancelButtonKey,
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(l10n.commonCancel),
+              // Verification/promotion pending states keep the bottom cancel
+              // (the initial form renders its mockup modal-foot inline above).
+              if (pendingEmail != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: narrow ? Alignment.center : Alignment.centerRight,
+                  child: TextButton(
+                    key: GuestConvertSheet.cancelButtonKey,
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(l10n.commonCancel),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

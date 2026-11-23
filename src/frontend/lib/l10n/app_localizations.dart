@@ -2576,6 +2576,24 @@ abstract class AppLocalizations {
   /// **'When someone you do not know messages you, their chat appears here.'**
   String get chatMessageRequestsEmptyHint;
 
+  /// No description provided for @chatContactRequestsFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact requests'**
+  String get chatContactRequestsFolder;
+
+  /// No description provided for @chatContactRequestsNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Why this matters'**
+  String get chatContactRequestsNoticeTitle;
+
+  /// No description provided for @chatContactRequestsNoticeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Until this person is added to your contacts, their messages are marked as coming from an unknown user. Do not open links, and do not share personal data.'**
+  String get chatContactRequestsNoticeBody;
+
   /// No description provided for @chatTyping.
   ///
   /// In en, this message translates to:
@@ -3770,6 +3788,72 @@ abstract class AppLocalizations {
   /// **'Could not load members'**
   String get spaceMembersLoadError;
 
+  /// No description provided for @spaceMembersBansTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Bans'**
+  String get spaceMembersBansTab;
+
+  /// No description provided for @spaceMembersBanCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No bans} one{{count} ban} other{{count} bans}}'**
+  String spaceMembersBanCount(int count);
+
+  /// No description provided for @spaceMembersSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search members'**
+  String get spaceMembersSearchHint;
+
+  /// No description provided for @spaceMembersBansSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search bans'**
+  String get spaceMembersBansSearchHint;
+
+  /// No description provided for @spaceMembersSearchNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No members match the search'**
+  String get spaceMembersSearchNoMatches;
+
+  /// No description provided for @spaceMembersBansSearchNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No bans match the search'**
+  String get spaceMembersBansSearchNoMatches;
+
+  /// No description provided for @spaceMembersBansEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No bans'**
+  String get spaceMembersBansEmpty;
+
+  /// No description provided for @spaceMembersBansLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load bans'**
+  String get spaceMembersBansLoadError;
+
+  /// No description provided for @spaceMembersUnban.
+  ///
+  /// In en, this message translates to:
+  /// **'Unban'**
+  String get spaceMembersUnban;
+
+  /// No description provided for @spaceMembersUnbanNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Unbanned members can rejoin this space by invitation.'**
+  String get spaceMembersUnbanNotice;
+
+  /// No description provided for @spaceMembersUnbanError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not unban member: {message}'**
+  String spaceMembersUnbanError(String message);
+
   /// No description provided for @spaceMemberYou.
   ///
   /// In en, this message translates to:
@@ -3823,6 +3907,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not ban member: {message}'**
   String spaceBanError(String message);
+
+  /// No description provided for @spaceBanReasonHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason (optional)'**
+  String get spaceBanReasonHint;
 
   /// No description provided for @spaceTimeout.
   ///
@@ -7447,6 +7537,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stories'**
   String get storyHighlightStoriesSection;
+
+  /// No description provided for @storyHighlightCover.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover'**
+  String get storyHighlightCover;
+
+  /// No description provided for @storyHighlightCoverChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change cover'**
+  String get storyHighlightCoverChange;
+
+  /// No description provided for @storyHighlightSelectStory.
+  ///
+  /// In en, this message translates to:
+  /// **'Select story'**
+  String get storyHighlightSelectStory;
+
+  /// No description provided for @storyHighlightUnselectStory.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove story'**
+  String get storyHighlightUnselectStory;
+
+  /// No description provided for @storyHighlightNeedsStories.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one story to save'**
+  String get storyHighlightNeedsStories;
 
   /// No description provided for @storyHighlightStoryCount.
   ///

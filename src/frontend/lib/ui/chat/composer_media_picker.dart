@@ -222,21 +222,39 @@ class _ComposerMediaPickerBodyState
                 Expanded(
                   child: Semantics(
                     selected: _tab == tab,
-                    child: TextButton(
-                      autofocus: tab == _PickerTab.emoji,
-                      style: TextButton.styleFrom(
-                        foregroundColor: _tab == tab
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                        textStyle: Theme.of(context).textTheme.labelLarge
-                            ?.copyWith(
-                              fontWeight: _tab == tab
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                      ),
-                      onPressed: () => _selectTab(tab),
-                      child: Text(labels[tab.index]),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(
+                          autofocus: tab == _PickerTab.emoji,
+                          style: TextButton.styleFrom(
+                            foregroundColor: _tab == tab
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                            textStyle: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  fontWeight: _tab == tab
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                          ),
+                          onPressed: () => _selectTab(tab),
+                          child: Text(labels[tab.index]),
+                        ),
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Container(
+                            height: 2,
+                            color: _tab == tab
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.transparent,
+                            child: const SizedBox(width: double.infinity),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

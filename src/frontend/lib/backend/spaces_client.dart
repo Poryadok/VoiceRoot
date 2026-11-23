@@ -196,6 +196,26 @@ class SpaceMemberListData {
   final String? nextCursor;
 }
 
+class SpaceBanData {
+  const SpaceBanData({
+    required this.accountId,
+    required this.bannedAt,
+    this.bannedByProfileId,
+    this.reason,
+  });
+
+  final String accountId;
+  final DateTime bannedAt;
+  final String? bannedByProfileId;
+  final String? reason;
+}
+
+class SpaceBanListData {
+  const SpaceBanListData({required this.bans});
+
+  final List<SpaceBanData> bans;
+}
+
 class SpaceTreeData {
   const SpaceTreeData({
     required this.categories,
@@ -453,6 +473,24 @@ class VoiceSpacesClient {
     );
     final result = await _gateway.getJson(uri, authorization: authorization);
     return _mapJson(result, spaceMemberListFromJson);
+  }
+
+  /// Ban audit list from `GET /api/v1/spaces/{spaceId}/bans` (`ban_list` envelope).
+  Future<SpacesApiResult<SpaceBanListData>> listBans({
+    required String authorization,
+    required String spaceId,
+    String? cursor,
+    int? pageSize,
+  }) async {
+    final params = <String, String>{};
+    if (cursor != null && cursor.isNotEmpty) params['cursor'] = cursor;
+    if (pageSize != null) params['page_size'] = '$pageSize';
+    final uri = _gateway.replace(
+      path: '/api/v1/spaces/$spaceId/bans',
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final result = await _gateway.getJson(uri, authorization: authorization);
+    return _mapJson(result, spaceBanListFromJson);
   }
 
   /// Uses the shipped empty-body contract; owner and membership checks are server-owned.
@@ -735,6 +773,31 @@ SpaceMemberListData spaceMemberListFromJson(Map<String, dynamic> data) {
     members: members,
     nextCursor: nextCursor == null || nextCursor.isEmpty ? null : nextCursor,
   );
+}
+
+SpaceBanListData spaceBanListFromJson(Map<String, dynamic> data) {
+  final list = data['ban_list'];
+  if (list is! Map<String, dynamic>) {
+    return const SpaceBanListData(bans: []);
+  }
+  final rawBans = list['bans'];
+  final bans = <SpaceBanData>[];
+  if (rawBans is List) {
+    for (final item in rawBans) {
+      if (item is! Map<String, dynamic>) continue;
+      bans.add(
+        SpaceBanData(
+          accountId: item['account_id'] as String? ?? '',
+          bannedAt:
+              _spaceMemberJoinedAtFromJson(item['banned_at']) ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+          bannedByProfileId: item['banned_by_profile_id'] as String?,
+          reason: item['reason'] as String?,
+        ),
+      );
+    }
+  }
+  return SpaceBanListData(bans: bans);
 }
 
 DateTime? _spaceMemberJoinedAtFromJson(dynamic raw) {

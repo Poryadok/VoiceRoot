@@ -1618,7 +1618,9 @@ void main() {
     expect(find.byTooltip('Back to chats'), findsOneWidget);
     expect(
       find.text(
-        'When someone you do not know messages you, their chat appears here.',
+        'Until this person is added to your contacts, their messages are '
+        'marked as coming from an unknown user. Do not open links, and do not '
+        'share personal data.',
       ),
       findsOneWidget,
     );
