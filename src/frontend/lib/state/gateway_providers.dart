@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 
 import '../backend/gateway_client.dart';
 import '../backend/gateway_config.dart';
+
 final gatewayConfigProvider = Provider<GatewayConfig>((ref) {
   return GatewayConfig.fromEnvironment();
 });

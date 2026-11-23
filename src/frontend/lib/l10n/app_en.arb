@@ -940,6 +940,19 @@
   "spaceMembersTitle": "Members",
   "spaceMembersSubtitle": "Owners and admins can assign roles and remove members.",
   "spaceMembersLoadError": "Could not load members",
+  "spaceMembersBansTab": "Bans",
+  "spaceMembersBanCount": "{count, plural, =0{No bans} one{{count} ban} other{{count} bans}}",
+  "@spaceMembersBanCount": {"placeholders": {"count": {"type": "int"}}},
+  "spaceMembersSearchHint": "Search members",
+  "spaceMembersBansSearchHint": "Search bans",
+  "spaceMembersSearchNoMatches": "No members match the search",
+  "spaceMembersBansSearchNoMatches": "No bans match the search",
+  "spaceMembersBansEmpty": "No bans",
+  "spaceMembersBansLoadError": "Could not load bans",
+  "spaceMembersUnban": "Unban",
+  "spaceMembersUnbanNotice": "Unbanned members can rejoin this space by invitation.",
+  "spaceMembersUnbanError": "Could not unban member: {message}",
+  "@spaceMembersUnbanError": {"placeholders": {"message": {"type": "String"}}},
   "spaceMemberYou": "{name} (you)",
   "@spaceMemberYou": {
     "placeholders": {
@@ -974,6 +987,7 @@
       "message": { "type": "String" }
     }
   },
+  "spaceBanReasonHint": "Reason (optional)",
   "spaceTimeout": "Timeout",
   "spaceTimeoutConfirmTitle": "Timeout member?",
   "spaceTimeoutConfirmMessage": "Prevent {name} from sending messages for 10 minutes?",

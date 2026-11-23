@@ -453,6 +453,26 @@ final spaceMembersProvider =
       };
     });
 
+/// Ban audit list from `GET /api/v1/spaces/{id}/bans` (`ban_list` envelope).
+final spaceBansProvider = FutureProvider.family<List<SpaceBanData>, String>((
+  ref,
+  spaceId,
+) async {
+  final auth = ref.watch(authorizationHeaderProvider);
+  if (auth == null) {
+    throw StateError('not_authenticated');
+  }
+  final result = await ref
+      .read(voiceSpacesClientProvider)
+      .listBans(authorization: auth, spaceId: spaceId);
+  return switch (result) {
+    SpacesApiOk(:final data) => data.bans,
+    SpacesApiFailure(:final statusCode) when isBackendUnavailable(statusCode) =>
+      throw const BackendUnavailableException(),
+    SpacesApiFailure(:final message) => throw Exception(message),
+  };
+});
+
 /// Role hierarchy for a space from `GET /api/v1/roles?space_id=`.
 final spaceRolesProvider = FutureProvider.family<List<SpaceRole>, String>((
   ref,
@@ -500,6 +520,30 @@ class SpaceMemberActions {
       SpacesApiFailure(:final message) => message,
       SpacesApiOk() => () {
         _ref.invalidate(spaceMembersProvider(spaceId));
+        _ref.invalidate(spaceBansProvider(spaceId));
+        return null;
+      }(),
+    };
+  }
+
+  Future<String?> unbanMember({
+    required String spaceId,
+    required String accountId,
+  }) async {
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (auth == null) return 'not_authenticated';
+
+    final result = await _ref
+        .read(voiceSpacesClientProvider)
+        .unbanMember(
+          authorization: auth,
+          spaceId: spaceId,
+          accountId: accountId,
+        );
+    return switch (result) {
+      SpacesApiFailure(:final message) => message,
+      SpacesApiOk() => () {
+        _ref.invalidate(spaceBansProvider(spaceId));
         return null;
       }(),
     };
