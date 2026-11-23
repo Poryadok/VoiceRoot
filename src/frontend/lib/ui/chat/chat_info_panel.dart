@@ -25,6 +25,7 @@ import '../../state/space_providers.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'channel_settings_panel.dart';
+import 'group_settings_panel.dart';
 import 'chat_bots_panel.dart';
 import 'pinned_messages_panel.dart';
 import 'create_group_sheet.dart';
@@ -33,6 +34,7 @@ import '../settings/chat_themes_settings_screen.dart';
 import '../api_error_messages.dart';
 import '../core/voice_skeleton.dart';
 import '../../state/channel_settings_provider.dart';
+import '../../state/group_settings_provider.dart';
 
 /// Chat info with shared media tabs (roles/threads (docs/features/roles.md)).
 class ChatInfoPanel extends ConsumerStatefulWidget {
@@ -74,6 +76,7 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
   bool _standalonePinsFailed = false;
   int? _standalonePinsStatusCode;
   bool _showChannelSettings = false;
+  bool _showGroupSettings = false;
   bool _showBotsPanel = false;
   bool _leavingChannel = false;
 
@@ -97,6 +100,12 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
       return ChannelSettingsPanel(
         chatId: widget.chatId,
         onClose: () => setState(() => _showChannelSettings = false),
+      );
+    }
+    if (_showGroupSettings) {
+      return GroupSettingsPanel(
+        chatId: widget.chatId,
+        onClose: () => setState(() => _showGroupSettings = false),
       );
     }
     final voice = VoiceColors.of(context);
@@ -324,6 +333,18 @@ class _ChatInfoPanelState extends ConsumerState<ChatInfoPanel>
               );
             } else {
               setState(() => _showChannelSettings = true);
+            }
+          },
+        ),
+        StandaloneGroupSettingsEntry(
+          chatId: widget.chatId,
+          onOpen: () {
+            if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+              unawaited(
+                GroupSettingsPanel.show(context, chatId: widget.chatId),
+              );
+            } else {
+              setState(() => _showGroupSettings = true);
             }
           },
         ),
@@ -1312,6 +1333,50 @@ class StandaloneChannelSettingsEntry extends ConsumerWidget {
           key: StandaloneChannelSettingsEntry.entryKey,
           leading: const Icon(Icons.tune_outlined),
           title: Text(l10n.channelSettingsTitle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onOpen,
+        ),
+      ],
+    );
+  }
+}
+
+/// Chat Info "Group settings" entry - docs/design/screen-controls.md §10.1c
+/// (#21, group chats, owner/admin only). Mirrors the channel entry; opens the
+/// v3 destination panel inline in the wide side panel or as a bottom sheet on
+/// narrow screens.
+class StandaloneGroupSettingsEntry extends ConsumerWidget {
+  const StandaloneGroupSettingsEntry({
+    super.key,
+    required this.chatId,
+    required this.onOpen,
+  });
+
+  static const Key entryKey = Key('chat_info_group_settings');
+
+  final String chatId;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chat = chatMetadataForId(
+      ref.watch(chatListControllerProvider).items,
+      chatId,
+    );
+    if (chat == null || !chat.isGroup || chat.isSpaceChannel) {
+      return const SizedBox.shrink();
+    }
+    final authority = ref.watch(groupSettingsAuthorityProvider(chatId));
+    if (authority.valueOrNull != true) return const SizedBox.shrink();
+
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      children: [
+        Divider(height: 1, color: VoiceColors.of(context).borderDefault),
+        ListTile(
+          key: StandaloneGroupSettingsEntry.entryKey,
+          leading: const Icon(Icons.groups_outlined),
+          title: Text(l10n.groupSettingsTitle),
           trailing: const Icon(Icons.chevron_right),
           onTap: onOpen,
         ),

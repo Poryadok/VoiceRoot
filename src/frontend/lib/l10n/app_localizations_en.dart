@@ -3554,6 +3554,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelSettingsMemberPosts => 'Allow member posts';
 
   @override
+  String get groupSettingsTitle => 'Group settings';
+
+  @override
+  String get groupSettingsIdentityHint => 'Change name and avatar';
+
+  @override
+  String get groupSettingsSectionLabel => 'Settings';
+
+  @override
+  String get groupSettingsAdminsSection => 'Administrators';
+
+  @override
+  String get groupSettingsAdditionsEnabled => 'Enabled';
+
+  @override
+  String get groupSettingsAdditionsAdminsOnly => 'Admins only';
+
+  @override
+  String get groupSettingsNameField => 'Group name';
+
+  @override
   String get privacyShowOnlineIncludeGuests =>
       'Guest accounts can see my online status';
 
