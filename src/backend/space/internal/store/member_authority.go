@@ -1,22 +1,17 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"math"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	rolev1 "voice.app/voice/role/v1"
 	spacev1 "voice.app/voice/space/v1"
-	userv1 "voice.app/voice/user/v1"
-	"voice/backend/pkg/memberadmission"
 )
 
 var ErrMemberAuthorityUnavailable = errors.New("member authority unavailable")
@@ -247,192 +242,28 @@ func ordinaryMembershipBinding(g uint64, operation uuid.UUID, legacy bool) *role
 }
 
 func readOrdinaryMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile uuid.UUID) (*spacev1.MemberAdmissionOrdinaryAuthority, error) {
-	r := &spacev1.MemberAdmissionOrdinaryAuthority{State: spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_NONE}
-	var operation uuid.UUID
-	var state string
-	var receipt, binding, native []byte
-	var kind int32
-	var account *uuid.UUID
+	var row ordinaryAuthorityRow
 	err := tx.QueryRow(ctx, `SELECT generation,retired_through,publication_id,state,legacy,role_receipt_sha256,admission_binding_sha256,publication_kind,native_publication_sha256,account_id
-	 FROM space_ordinary_member_heads WHERE space_id=$1 AND profile_id=$2`, space, profile).Scan(&r.HeadGeneration, &r.RetiredThrough, &operation, &state, &r.ExplicitLegacy, &receipt, &binding, &kind, &native, &account)
+	 FROM space_ordinary_member_heads WHERE space_id=$1 AND profile_id=$2`, space, profile).Scan(&row.generation, &row.retiredThrough, &row.operation, &row.state, &row.legacy, &row.receipt, &row.binding, &row.kind, &row.native, &row.account)
 	if errors.Is(err, pgx.ErrNoRows) {
-		var exists bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND profile_id=$2)`, space, profile).Scan(&exists); err != nil || exists {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		return r, nil
+		return ordinaryAuthorityFromRow(ctx, tx, space, profile, row, nil)
 	}
-	if err != nil || operation == uuid.Nil || r.HeadGeneration > math.MaxInt64 || r.RetiredThrough > r.HeadGeneration {
-		return nil, ErrMemberAuthorityUnavailable
-	}
-	if state == "ACTIVE" || state == "PREPARING" {
-		entry := &userv1.SpaceAccountCaptureEntry{ProfileId: profile.String(), Source: &userv1.SpaceAccountCaptureEntry_Ordinary{Ordinary: &userv1.SpaceOrdinaryPublicationIdentity{Generation: r.HeadGeneration, PublicationId: operation.String()}}}
-		account, err = readQualifiedSourceAccount(ctx, tx, space, entry, account)
-		if err != nil {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-	}
-	if account != nil {
-		var banned bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_bans WHERE space_id=$1 AND account_id=$2)`, space, *account).Scan(&banned); err != nil {
-			return nil, err
-		}
-		if banned {
-			r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_RETIRED
-			return r, nil
-		}
-	}
-	switch state {
-	case "RETIRED":
-		r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_RETIRED
-		return r, nil
-	case "PREPARING":
-		if r.HeadGeneration == 0 || r.ExplicitLegacy || len(binding) != 32 || len(receipt) != 0 || len(native) != 0 {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_PREPARING
-		r.PreparingBinding = ordinaryMembershipBinding(r.HeadGeneration, operation, false)
-		r.PreparingAdmissionBindingSha256 = binding
-		return r, nil
-	case "ACTIVE":
-		var published bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND profile_id=$2 AND membership_generation=$3 AND admission_operation_id=$4)`, space, profile, r.HeadGeneration, operation).Scan(&published); err != nil || !published {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE
-		r.PublicationKind = spacev1.MemberAdmissionPublicationKind(kind)
-		r.PublishedBinding = ordinaryMembershipBinding(r.HeadGeneration, operation, r.ExplicitLegacy)
-		if r.ExplicitLegacy {
-			if r.HeadGeneration != 0 || kind != 2 || len(receipt) != 0 || len(native) != 0 {
-				return nil, ErrMemberAuthorityUnavailable
-			}
-			return r, nil
-		}
-		if r.HeadGeneration == 0 {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		if kind == 1 {
-			if len(receipt) != 32 || len(native) != 0 || len(binding) != 32 {
-				return nil, ErrMemberAuthorityUnavailable
-			}
-			var role uuid.UUID
-			var saved []byte
-			var savedState string
-			if err = tx.QueryRow(ctx, `SELECT role_id,role_receipt_sha256,state FROM space_member_admission_intents WHERE operation_id=$1 AND space_id=$2 AND profile_id=$3 AND generation=$4 AND binding_sha256=$5`, operation, space, profile, r.HeadGeneration, binding).Scan(&role, &saved, &savedState); err != nil || savedState != "PUBLISHED" || !bytes.Equal(saved, receipt) {
-				return nil, ErrMemberAuthorityUnavailable
-			}
-			expected, err := memberadmission.EnsureReceiptFingerprint(memberadmission.EnsureBinding{ProtocolVersion: 1, SpaceID: space.String(), ProfileID: profile.String(), AdmissionOperationID: operation.String(), MembershipGeneration: r.HeadGeneration, AdmissionBindingSHA256: binding}, role.String())
-			if err != nil || !bytes.Equal(expected[:], receipt) {
-				return nil, ErrMemberAuthorityUnavailable
-			}
-			r.RoleReceiptSha256 = receipt
-			return r, nil
-		}
-		if kind < 3 || kind > 6 || len(receipt) != 0 || len(native) != 32 {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		var raw, digest []byte
-		var nativeState string
-		var nativePublishedAt time.Time
-		if err = tx.QueryRow(ctx, `SELECT binding_bytes,binding_sha256,state,published_at FROM space_native_member_publications WHERE operation_id=$1 AND space_id=$2 AND profile_id=$3 AND generation=$4 AND kind=$5`, operation, space, profile, r.HeadGeneration, kind).Scan(&raw, &digest, &nativeState, &nativePublishedAt); err != nil || nativeState != "PUBLISHED" || !bytes.Equal(digest, native) {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		message := &spacev1.NativeMembershipPublicationBinding{}
-		if err = proto.Unmarshal(raw, message); err != nil || len(message.ProtoReflect().GetUnknown()) != 0 {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		canonical, err := proto.MarshalOptions{Deterministic: true}.Marshal(message)
-		if err != nil || !bytes.Equal(canonical, raw) {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		expected := sha256.Sum256(append([]byte(nativeMemberPublicationDomain), raw...))
-		if !bytes.Equal(expected[:], native) || message.GetProtocolVersion() != 1 || message.GetSpaceId() != space.String() || message.GetProfileId() != profile.String() || message.GetPublicationOperationId() != operation.String() || message.GetOrdinaryGeneration() != r.HeadGeneration || int32(message.GetKind()) != kind {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		// Native producer paths are activated individually with their own durable
-		// witness. Unimplemented creator/recovery/Bot evidence is not a proof.
-		switch kind {
-		case 3:
-			if err := validateCreatorNativeProof(ctx, tx, message); err != nil {
-				return nil, err
-			}
-		case 4:
-			if err := validateCommunityBootstrapNativeProof(ctx, tx, message); err != nil {
-				return nil, err
-			}
-		case 5:
-			if err := validateCommunityRecoveryNativeProof(ctx, tx, message); err != nil {
-				return nil, err
-			}
-		case 6:
-			if err := validateBotNativeProof(ctx, tx, message); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		if !message.PublishedAt.AsTime().Equal(nativePublishedAt) {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		r.NativePublication = &spacev1.MemberAdmissionNativePublicationProof{Kind: r.PublicationKind, OperationId: operation.String(), BindingSha256: native}
-		return r, nil
-	default:
-		return nil, ErrMemberAuthorityUnavailable
-	}
-}
-
-func readCommunityMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile uuid.UUID, sampled time.Time) (*spacev1.MemberAdmissionCommunityAuthority, error) {
-	r := &spacev1.MemberAdmissionCommunityAuthority{State: spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_NONE}
-	var generation, owner uint64
-	var episode uuid.UUID
-	var state string
-	err := tx.QueryRow(ctx, `SELECT generation,retired_through,owner_generation,episode_id,state FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2`, space, profile).Scan(&generation, &r.RetiredThrough, &owner, &episode, &state)
-	if errors.Is(err, pgx.ErrNoRows) {
-		var exists bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM community_roster_members m JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation WHERE m.space_id=$1 AND m.profile_id=$2 AND a.status='active' AND m.revoked_at IS NULL AND m.lease_expires_at>$3 AND a.roster_lease_expires_at>$3)`, space, profile, sampled).Scan(&exists); err != nil || exists {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		return r, nil
-	}
-	if err != nil || generation == 0 || generation > math.MaxInt64 || owner == 0 || owner > math.MaxInt64 || r.RetiredThrough > generation || episode == uuid.Nil {
-		return nil, ErrMemberAuthorityUnavailable
-	}
-	if state == "RETIRED" {
-		r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_RETIRED
-		return r, nil
-	}
-	if state != "ACTIVE" {
-		return nil, ErrMemberAuthorityUnavailable
-	}
-	entry := &userv1.SpaceAccountCaptureEntry{ProfileId: profile.String(), Source: &userv1.SpaceAccountCaptureEntry_Community{Community: &userv1.SpaceCommunityPublicationIdentity{OwnerGeneration: owner, MemberGeneration: generation, EpisodeId: episode.String()}}}
-	account, err := readQualifiedSourceAccount(ctx, tx, space, entry, nil)
 	if err != nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
-	if account != nil {
-		var banned bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_bans WHERE space_id=$1 AND account_id=$2)`, space, *account).Scan(&banned); err != nil {
-			return nil, ErrMemberAuthorityUnavailable
-		}
-		if banned {
-			r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_RETIRED
-			return r, nil
-		}
-	}
-	var remaining time.Duration
-	err = tx.QueryRow(ctx, `SELECT m.source_revision,(EXTRACT(EPOCH FROM (LEAST(m.lease_expires_at,a.roster_lease_expires_at)-$4::timestamptz))*1000000000)::bigint
-	 FROM community_roster_members m JOIN community_owner_authority a ON a.space_id=m.space_id AND a.owner_generation=m.owner_generation
-	 WHERE m.space_id=$1 AND m.profile_id=$2 AND m.owner_generation=$3 AND a.status='active' AND m.revoked_at IS NULL
-	 AND m.lease_expires_at>$4 AND a.roster_lease_expires_at>$4`, space, profile, owner, sampled).Scan(&r.RosterSourceRevision, &remaining)
+	row.found = true
+	return ordinaryAuthorityFromRow(ctx, tx, space, profile, row, nil)
+}
+
+func readCommunityMemberAuthority(ctx context.Context, tx pgx.Tx, space, profile uuid.UUID, sampled time.Time) (*spacev1.MemberAdmissionCommunityAuthority, error) {
+	var row communityAuthorityRow
+	err := tx.QueryRow(ctx, `SELECT generation,retired_through,owner_generation,episode_id,state FROM space_community_member_heads WHERE space_id=$1 AND profile_id=$2`, space, profile).Scan(&row.generation, &row.retiredThrough, &row.ownerGeneration, &row.episode, &row.state)
 	if errors.Is(err, pgx.ErrNoRows) {
-		r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_RETIRED
-		return r, nil
+		return communityAuthorityFromRow(ctx, tx, space, profile, sampled, row, nil)
 	}
-	if err != nil || remaining <= 0 || r.RosterSourceRevision == 0 {
+	if err != nil {
 		return nil, ErrMemberAuthorityUnavailable
 	}
-	r.State = spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE
-	r.Binding = &rolev1.MembershipBinding{Source: &rolev1.MembershipBinding_Community{Community: &rolev1.CommunityMembershipBinding{OwnerGeneration: owner, MembershipGeneration: generation, MembershipEpisodeId: episode.String()}}}
-	r.ValidityRemaining = durationpb.New(remaining)
-	return r, nil
+	row.found = true
+	return communityAuthorityFromRow(ctx, tx, space, profile, sampled, row, nil)
 }

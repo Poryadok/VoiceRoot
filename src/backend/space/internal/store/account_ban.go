@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sort"
@@ -137,6 +138,132 @@ func (s *SpaceStore) requireRetiredUnbanSources(ctx context.Context, space, targ
 	return nil
 }
 
+// applyBanQualification is the shared per-entry validation core for Ban
+// qualification facts: the batched cohort loader and the snapshot application
+// loop run exactly this logic per entry, so batching changes no decision.
+func applyBanQualification(source *accountBanSource, association string, revision uint64, qualifiedAccount uuid.UUID) error {
+	if source.nativeAccount != uuid.Nil && source.nativeAccount != qualifiedAccount {
+		return ErrAccountBanUnavailable
+	}
+	source.nativeAccount = qualifiedAccount
+	source.entry.ExpectedAssociationId = association
+	source.entry.ExpectedAssociationRevision = revision
+	return nil
+}
+
+// banQualificationRow is one row of a batched Ban-internal qualification read:
+// a single consistent snapshot query over the whole cohort replaces one QueryRow
+// per entry. Per-entry validation still runs in applyBanQualification, so batching
+// changes no decision. Duplicate source_bytes rows are recorded as duplicate so the
+// caller can fail closed with pgx.ErrTooManyRows, exactly like a single QueryRow.
+type banQualificationRow struct {
+	association string
+	revision    uint64
+	account     uuid.UUID
+	found       bool
+	duplicate   bool
+}
+
+// loadBanQualificationBatch performs the batched Ban-internal qualification read:
+// one consistent snapshot query per whole cohort instead of one QueryRow per entry.
+// Per-entry validation stays in applyBanQualification so no decision changes, and
+// duplicate source_bytes rows are recorded as duplicate so the caller can fail closed
+// with pgx.ErrTooManyRows exactly like a single QueryRow would.
+func loadBanQualificationBatch(ctx context.Context, tx pgx.Tx, space uuid.UUID, sources []accountBanSource) (map[string]banQualificationRow, error) {
+	keys := [][]byte{}
+	seen := map[string]bool{}
+	for _, source := range sources {
+		key := deterministicBanBytes(source.entry)
+		encoded := hex.EncodeToString(key)
+		if seen[encoded] {
+			continue
+		}
+		seen[encoded] = true
+		keys = append(keys, key)
+	}
+	batch := map[string]banQualificationRow{}
+	if len(keys) == 0 {
+		return batch, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT source_bytes,association_id::text,association_revision,account_id FROM space_account_qualifications WHERE space_id=$1 AND source_bytes = ANY($2)`, space, keys)
+	if err != nil {
+		return map[string]banQualificationRow{}, err
+	}
+	for rows.Next() {
+		var raw []byte
+		var association string
+		var revision uint64
+		var account uuid.UUID
+		if err = rows.Scan(&raw, &association, &revision, &account); err != nil {
+			rows.Close()
+			return map[string]banQualificationRow{}, err
+		}
+		key := hex.EncodeToString(raw)
+		if prior, ok := batch[key]; ok && prior.found {
+			prior.duplicate = true
+			batch[key] = prior
+		} else {
+			batch[key] = banQualificationRow{association: association, revision: revision, account: account, found: true}
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return map[string]banQualificationRow{}, err
+	}
+	return batch, nil
+}
+
+// banPendingAdmissionRow is one row of the batched Ban-internal pending-admission
+// read: one consistent snapshot query over the whole profile set replaces one
+// FindCurrent QueryRow per profile. FindCurrent's exact obstruction shape is
+// preserved so batching changes no decision, and duplicate PREPARING rows are
+// recorded as duplicate so the caller can fail closed with pgx.ErrTooManyRows
+// exactly like a single QueryRow.
+type banPendingAdmissionRow struct {
+	intent    *MemberAdmissionIntent
+	duplicate bool
+}
+
+// loadBanPendingAdmissions performs the batched Ban-internal pending-admission
+// read: one consistent snapshot query per whole profile set instead of FindCurrent
+// per profile. The per-entry writes stay in invalidateMemberAdmission so no
+// decision changes, and duplicate PREPARING rows for one profile are recorded as
+// duplicate so the caller can fail closed with pgx.ErrTooManyRows exactly like a
+// single QueryRow would.
+func loadBanPendingAdmissions(ctx context.Context, tx pgx.Tx, space uuid.UUID, profiles []uuid.UUID) (map[uuid.UUID]banPendingAdmissionRow, error) {
+	batch := map[uuid.UUID]banPendingAdmissionRow{}
+	if len(profiles) == 0 {
+		return batch, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT `+memberAdmissionColumns+` FROM space_member_admission_intents i
+ WHERE i.space_id=$1 AND i.profile_id=ANY($2::uuid[]) AND i.state='PREPARING' AND EXISTS(
+ SELECT 1 FROM space_ordinary_member_heads h WHERE h.space_id=i.space_id AND h.profile_id=i.profile_id
+ AND h.generation=i.generation AND h.publication_id=i.operation_id AND h.state='PREPARING')`, space, profiles)
+	if err != nil {
+		return map[uuid.UUID]banPendingAdmissionRow{}, err
+	}
+	for rows.Next() {
+		intent, _, err := scanMemberAdmission(rows)
+		if err != nil {
+			rows.Close()
+			return map[uuid.UUID]banPendingAdmissionRow{}, err
+		}
+		if prior, ok := batch[intent.Input.ProfileID]; ok {
+			prior.duplicate = true
+			batch[intent.Input.ProfileID] = prior
+		} else {
+			batch[intent.Input.ProfileID] = banPendingAdmissionRow{intent: intent}
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return map[uuid.UUID]banPendingAdmissionRow{}, err
+	}
+	return batch, nil
+}
+
 // Snapshot is short and local. ALL current/potential sources, including retired
 // community heads retained by a roster, are included without a page limit.
 func (s *SpaceStore) accountBanSnapshot(ctx context.Context, space, operation uuid.UUID) (*accountBanSnapshot, error) {
@@ -202,26 +329,25 @@ func (s *SpaceStore) accountBanSnapshot(ctx context.Context, space, operation uu
 	if err != nil {
 		return nil, err
 	}
+	qualifications, loadErr := loadBanQualificationBatch(ctx, s.tx, space, b.sources)
+	if loadErr != nil {
+		return nil, loadErr
+	}
 	ownerPresent := false
 	for i := range b.sources {
 		source := &b.sources[i]
 		if source.entry.ProfileId == b.owner.String() {
 			ownerPresent = true
 		}
-		key := deterministicBanBytes(source.entry)
-		var association string
-		var revision uint64
-		var qualifiedAccount uuid.UUID
-		err = s.tx.QueryRow(ctx, `SELECT association_id::text,association_revision,account_id FROM space_account_qualifications WHERE space_id=$1 AND source_bytes=$2`, space, key).Scan(&association, &revision, &qualifiedAccount)
-		if err == nil {
-			if source.nativeAccount != uuid.Nil && source.nativeAccount != qualifiedAccount {
-				return nil, ErrAccountBanUnavailable
+		qualification := qualifications[hex.EncodeToString(deterministicBanBytes(source.entry))]
+		if qualification.duplicate {
+			return nil, pgx.ErrTooManyRows
+		}
+		if qualification.found {
+			applyErr := applyBanQualification(source, qualification.association, qualification.revision, qualification.account)
+			if applyErr != nil {
+				return nil, applyErr
 			}
-			source.nativeAccount = qualifiedAccount
-			source.entry.ExpectedAssociationId = association
-			source.entry.ExpectedAssociationRevision = revision
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
 		}
 	}
 	if !ownerPresent || b.revision <= 0 {
@@ -446,6 +572,7 @@ func (s *SpaceStore) BanAccount(ctx context.Context, in AccountBanInput) error {
 			if err != nil {
 				return err
 			}
+			var qualSources []accountBanSource
 			for _, result := range response.Results {
 				entry := proto.Clone(result.Entry).(*userv1.SpaceAccountCaptureEntry)
 				entry.ExpectedAssociationId = ""
@@ -455,13 +582,49 @@ func (s *SpaceStore) BanAccount(ctx context.Context, in AccountBanInput) error {
 				if err != nil {
 					return err
 				}
-				var equal bool
-				if err = scoped.tx.QueryRow(ctx, `SELECT account_id=$3 AND association_id=$4 AND association_revision=$5 FROM space_account_qualifications WHERE space_id=$1 AND source_bytes=$2`, in.SpaceID, deterministicBanBytes(entry), result.AccountId, result.AssociationId, result.AssociationRevision).Scan(&equal); err != nil || !equal {
+				qualSources = append(qualSources, accountBanSource{entry: entry})
+			}
+			verifications, qualErr := loadBanQualificationBatch(ctx, scoped.tx, in.SpaceID, qualSources)
+			if qualErr != nil {
+				// loadBanQualificationBatch returns the raw query error; the per-entry verify
+				// mapped any read failure to ErrAccountBanUnavailable, so keep that mapping.
+				return ErrAccountBanUnavailable
+			}
+			// The batched SELECT revalidates each written row against its expected identity;
+			// an absent row, a duplicate row or any field mismatch is the same
+			// ErrAccountBanUnavailable the per-entry QueryRow returned.
+			for i := range response.Results {
+				qualification := verifications[hex.EncodeToString(deterministicBanBytes(qualSources[i].entry))]
+				expected := response.Results[i]
+				accountExpected, accountErr := uuid.Parse(expected.AccountId)
+				if accountErr != nil || qualification.duplicate || !qualification.found || qualification.account != accountExpected || qualification.association != expected.AssociationId || qualification.revision != expected.AssociationRevision {
 					return ErrAccountBanUnavailable
 				}
 			}
+			// One batched pending-admission read replaces the FindCurrent QueryRow per
+			// profile; the per-entry invalidate writes stay exactly as before, so no
+			// decision changes. A duplicate PREPARING row for one profile fails closed
+			// with pgx.ErrTooManyRows just like a single QueryRow did.
+			pendingAdmissions, pendingErr := loadBanPendingAdmissions(ctx, scoped.tx, in.SpaceID, profiles)
+			if pendingErr != nil {
+				// loadBanPendingAdmissions passes the raw query error through, matching
+				// the FindCurrent per-profile passthrough.
+				return pendingErr
+			}
 			for _, profile := range profiles {
-				if _, err = scoped.retirePendingMemberAdmission(ctx, in.SpaceID, profile); err != nil {
+				admission := pendingAdmissions[profile]
+				if admission.duplicate {
+					// More than one PREPARING obstruction for one profile: a single
+					// FindCurrent QueryRow returned pgx.ErrTooManyRows.
+					return pgx.ErrTooManyRows
+				}
+				if admission.intent == nil {
+					// No PREPARING obstruction: FindCurrent returned pgx.ErrNoRows and
+					// retirePendingMemberAdmission skipped the writes.
+					continue
+				}
+				if err = scoped.invalidateMemberAdmission(ctx, admission.intent); err != nil {
+					// The raw write error passes through unchanged.
 					return err
 				}
 			}
@@ -470,20 +633,24 @@ func (s *SpaceStore) BanAccount(ctx context.Context, in AccountBanInput) error {
 			if _, err = scoped.tx.Exec(ctx, `DELETE FROM space_members WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, in.SpaceID, profiles); err != nil {
 				return err
 			}
-			for _, profile := range profiles {
-				_, err = scoped.tx.Exec(ctx, `INSERT INTO space_account_ban_suppressions(space_id,profile_id,account_id,owner_generation,source_revision,episode_id,member_generation)
+			// The suppression INSERT, the roster revocation UPDATE and the timeouts
+			// DELETE now address the whole qualified cohort through one statement
+			// each (profile_id=ANY(...)) instead of three statements per profile.
+			// The three statements only touch rows owned by their own profile and
+			// keep their original per-profile relative order, every guard/observer
+			// trigger still runs for every affected row, and all three tags were
+			// discarded, so whole-cohort batching changes no decision.
+			if _, err = scoped.tx.Exec(ctx, `INSERT INTO space_account_ban_suppressions(space_id,profile_id,account_id,owner_generation,source_revision,episode_id,member_generation)
  SELECT h.space_id,h.profile_id,$3,h.owner_generation,COALESCE(a.roster_source_revision,0),h.episode_id,h.generation FROM space_community_member_heads h
- LEFT JOIN community_owner_authority a ON a.space_id=h.space_id WHERE h.space_id=$1 AND h.profile_id=$2
- ON CONFLICT(space_id,profile_id) DO UPDATE SET owner_generation=EXCLUDED.owner_generation,source_revision=CASE WHEN EXCLUDED.owner_generation>space_account_ban_suppressions.owner_generation THEN EXCLUDED.source_revision ELSE GREATEST(space_account_ban_suppressions.source_revision,EXCLUDED.source_revision) END,episode_id=EXCLUDED.episode_id,member_generation=EXCLUDED.member_generation`, in.SpaceID, profile, in.AccountID)
-				if err != nil {
-					return err
-				}
-				if _, err = scoped.tx.Exec(ctx, `UPDATE community_roster_members SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, profile); err != nil {
-					return err
-				}
-				if _, err = scoped.tx.Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id=$1 AND profile_id=$2`, in.SpaceID, profile); err != nil {
-					return err
-				}
+ LEFT JOIN community_owner_authority a ON a.space_id=h.space_id WHERE h.space_id=$1 AND h.profile_id=ANY($2::uuid[])
+ ON CONFLICT(space_id,profile_id) DO UPDATE SET owner_generation=EXCLUDED.owner_generation,source_revision=CASE WHEN EXCLUDED.owner_generation>space_account_ban_suppressions.owner_generation THEN EXCLUDED.source_revision ELSE GREATEST(space_account_ban_suppressions.source_revision,EXCLUDED.source_revision) END,episode_id=EXCLUDED.episode_id,member_generation=EXCLUDED.member_generation`, in.SpaceID, profiles, in.AccountID); err != nil {
+				return err
+			}
+			if _, err = scoped.tx.Exec(ctx, `UPDATE community_roster_members SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, in.SpaceID, profiles); err != nil {
+				return err
+			}
+			if _, err = scoped.tx.Exec(ctx, `DELETE FROM space_member_timeouts WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, in.SpaceID, profiles); err != nil {
+				return err
 			}
 			if _, err = scoped.tx.Exec(ctx, `INSERT INTO space_bans(space_id,account_id,banned_by_profile_id,reason) VALUES($1,$2,$3,$4) ON CONFLICT(space_id,account_id) DO UPDATE SET banned_by_profile_id=EXCLUDED.banned_by_profile_id,reason=EXCLUDED.reason,banned_at=clock_timestamp()`, in.SpaceID, in.AccountID, in.ActorProfileID, in.Reason); err != nil {
 				return err

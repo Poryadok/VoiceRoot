@@ -137,23 +137,3 @@ func (s *SpaceStore) proveMemberAdmissionRetirement(ctx context.Context, i *Memb
 		return false, ErrMemberAdmissionConflict
 	}
 }
-
-// retirePendingMemberAdmission runs inside an already held Space mutation
-// fence. Administrative removal is itself the proven invalidation; there need
-// not yet be a space_members row or a successful Role preparation.
-func (s *SpaceStore) retirePendingMemberAdmission(ctx context.Context, space, profile uuid.UUID) (bool, error) {
-	if s.tx == nil {
-		return false, ErrMemberAdmissionConflict
-	}
-	i, err := s.FindCurrent(ctx, space, profile)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if err = s.invalidateMemberAdmission(ctx, i); err != nil {
-		return false, err
-	}
-	return true, nil
-}

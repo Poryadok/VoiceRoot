@@ -26,7 +26,7 @@ const accountBanDMLGranteesSQL = `SELECT oid FROM pg_roles WHERE rolname=session
  AND NOT has_schema_privilege(r.oid,'native_membership_guard','CREATE')`
 
 const accountBanStructureSQL = `SELECT jsonb_build_object(
- 'columns',(SELECT jsonb_agg(jsonb_build_array(c.relname,to_jsonb(a)-'attrelid',format_type(a.atttypid,a.atttypmod),pg_get_expr(d.adbin,d.adrelid)) ORDER BY c.relname,a.attnum)
+ 'columns',(SELECT jsonb_agg(jsonb_build_array(c.relname,to_jsonb(a)-'attrelid'-'attoptions',format_type(a.atttypid,a.atttypmod),pg_get_expr(d.adbin,d.adrelid)) ORDER BY c.relname,a.attnum)
  FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
  WHERE a.attnum>0 AND NOT a.attisdropped AND n.nspname='public' AND c.relname=ANY($1)),
  'constraints',(SELECT jsonb_agg(jsonb_build_array(c.relname,k.conname,k.contype,k.condeferrable,k.condeferred,k.convalidated,to_jsonb(k)->>'conenforced',pg_get_constraintdef(k.oid)) ORDER BY c.relname,k.conname)
@@ -59,9 +59,13 @@ const accountBanStructureSQL = `SELECT jsonb_build_object(
 var accountBanTables = []string{"space_account_ban_operations", "space_account_ban_captures", "space_account_ban_reconciliation", "space_account_qualifications", "space_account_ban_suppressions", "space_account_roster_projections"}
 
 // Compiled only from a fresh source-bound migration fixture, never enrolled
-// from a deployment's live catalog. Until qualified this cut fails closed.
-const accountBanStructure16SHA = "972518e6483d307c8f66f4fb1d8e8a672005ab3fb5ed26c6bc15dbe366e51c94"
-const accountBanStructure18SHA = "f5cff76a00614bca4761b0875d300954c7e1f70fb6d930abc93da3434ca332f4"
+// from a deployment's live catalog. The structure digest projects strictly
+// historical per-attribute attver counters (attoptions) out of its input while
+// every semantic field stays pinned; pins are recorded at the source-bound
+// compose-db-init position, so provisioning guards, serving identity and
+// testcontainer fixtures hash the same text. Until qualified this cut fails closed.
+const accountBanStructure16SHA = "178743ba429c368bb1690d53162689b943fc8c095d9f73a7d24f02376d7ed34c"
+const accountBanStructure18SHA = "685105e033283665f440de9cb4bc149c630163c4074b8be5a521e53b418a63a8"
 
 func checkAccountBanCatalog(ctx context.Context, tx pgx.Tx) error {
 	for _, table := range accountBanTables {
