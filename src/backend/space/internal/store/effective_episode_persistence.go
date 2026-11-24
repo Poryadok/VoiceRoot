@@ -10,27 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// loadEffectiveHead never inserts or reconstructs a missing head. Its caller
-// owns the native sorted Space fence and must use READ COMMITTED. Source facts
-// are separately validated in the same transaction before this private helper.
-func loadEffectiveHead(ctx context.Context, tx pgx.Tx, space, profile uuid.UUID) (effectiveHead, uuid.UUID, error) {
-	var raw []byte
-	var cutover uuid.UUID
-	err := tx.QueryRow(ctx, `SELECT jsonb_build_object(
- 'Generation',generation,'RetiredThrough',retired_through,'Revision',ledger_revision,
- 'EpisodeID',COALESCE(episode_id,'00000000-0000-0000-0000-000000000000'::uuid),
- 'Active',state='ACTIVE','Known',boundary_state='KNOWN',
- 'Since',COALESCE(history_visible_since,'0001-01-01 00:00:00+00'::timestamptz),
- 'ObservedAt',observed_at,'Sources',jsonb_build_object('Ordinary',COALESCE(ordinary_witness,''),
- 'Legacy',ordinary_legacy,'Community',COALESCE(community_witness,''),
- 'CommunityUntil',COALESCE(community_until,'0001-01-01 00:00:00+00'::timestamptz))),cutover_id
- FROM space_effective_member_heads WHERE space_id=$1 AND profile_id=$2 FOR UPDATE`, space, profile).Scan(&raw, &cutover)
-	if err != nil {
-		return effectiveHead{}, uuid.Nil, ErrEffectiveEpisodeUnavailable
-	}
-	return effectiveHeadFromPayload(raw, cutover)
-}
-
 func effectiveHeadFromPayload(raw []byte, cutover uuid.UUID) (effectiveHead, uuid.UUID, error) {
 	var h effectiveHead
 	if json.Unmarshal(raw, &h) != nil || !h.valid() || cutover == uuid.Nil {

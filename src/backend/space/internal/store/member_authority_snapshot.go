@@ -18,7 +18,9 @@ import (
 	"voice.app/voice/space/v1"
 	"voice.app/voice/user/v1"
 	"voice/backend/pkg/memberadmission"
-) // MemberAuthoritySnapshot is one consistent snapshot read per relation for a
+)
+
+// MemberAuthoritySnapshot is one consistent snapshot read per relation for a
 // whole profile set inside the owner transaction. It only replaces the Ban
 // capture/begin/finish loop round-trips; the batch and single-profile routes
 // share the per-entry validation cores below, so no decision changes. The
@@ -657,7 +659,9 @@ func newMemberAuthoritySnapshot(ctx context.Context, tx pgx.Tx, space uuid.UUID,
 		}
 	}
 	if len(intentProfiles) > 0 {
-		rows, err := tx.Query(ctx, `SELECT operation_id,profile_id,membership_generation,binding_sha256,role_id,role_receipt_sha256,state FROM space_member_admission_intents WHERE space_id=$1 AND profile_id = ANY($2) AND operation_id = ANY($3)`, space, intentProfiles, intentOperations)
+		// The intents relation stores the admission generation as generation,
+		// matching the single witness read filter generation=$4.
+		rows, err := tx.Query(ctx, `SELECT operation_id,profile_id,generation,binding_sha256,role_id,role_receipt_sha256,state FROM space_member_admission_intents WHERE space_id=$1 AND profile_id = ANY($2) AND operation_id = ANY($3)`, space, intentProfiles, intentOperations)
 		if err != nil {
 			return nil, ErrMemberAuthorityUnavailable
 		}
