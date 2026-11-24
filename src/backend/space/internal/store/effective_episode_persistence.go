@@ -25,11 +25,73 @@ func loadEffectiveHead(ctx context.Context, tx pgx.Tx, space, profile uuid.UUID)
  'Legacy',ordinary_legacy,'Community',COALESCE(community_witness,''),
  'CommunityUntil',COALESCE(community_until,'0001-01-01 00:00:00+00'::timestamptz))),cutover_id
  FROM space_effective_member_heads WHERE space_id=$1 AND profile_id=$2 FOR UPDATE`, space, profile).Scan(&raw, &cutover)
+	if err != nil {
+		return effectiveHead{}, uuid.Nil, ErrEffectiveEpisodeUnavailable
+	}
+	return effectiveHeadFromPayload(raw, cutover)
+}
+
+func effectiveHeadFromPayload(raw []byte, cutover uuid.UUID) (effectiveHead, uuid.UUID, error) {
 	var h effectiveHead
-	if err != nil || json.Unmarshal(raw, &h) != nil || !h.valid() || cutover == uuid.Nil {
+	if json.Unmarshal(raw, &h) != nil || !h.valid() || cutover == uuid.Nil {
 		return effectiveHead{}, uuid.Nil, ErrEffectiveEpisodeUnavailable
 	}
 	return h, cutover, nil
+}
+
+type batchedEffectiveHead struct {
+	head    effectiveHead
+	cutover uuid.UUID
+}
+
+func loadEffectiveHeads(ctx context.Context, tx pgx.Tx, space uuid.UUID, profiles []uuid.UUID) (map[uuid.UUID]batchedEffectiveHead, error) {
+	var ids []uuid.UUID
+	for _, profile := range profiles {
+		if profile != uuid.Nil {
+			ids = append(ids, profile)
+		}
+	}
+	result := map[uuid.UUID]batchedEffectiveHead{}
+	if len(ids) == 0 {
+		return result, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT profile_id,jsonb_build_object(
+ 'Generation',generation,'RetiredThrough',retired_through,'Revision',ledger_revision,
+ 'EpisodeID',COALESCE(episode_id,'00000000-0000-0000-0000-000000000000'::uuid),
+ 'Active',state='ACTIVE','Known',boundary_state='KNOWN',
+ 'Since',COALESCE(history_visible_since,'0001-01-01 00:00:00+00'::timestamptz),
+ 'ObservedAt',observed_at,'Sources',jsonb_build_object('Ordinary',COALESCE(ordinary_witness,''),
+ 'Legacy',ordinary_legacy,'Community',COALESCE(community_witness,''),
+ 'CommunityUntil',COALESCE(community_until,'0001-01-01 00:00:00+00'::timestamptz))),cutover_id
+ FROM space_effective_member_heads WHERE space_id=$1 AND profile_id = ANY($2) ORDER BY profile_id FOR UPDATE`, space, ids)
+	if err != nil {
+		return result, err
+	}
+	for rows.Next() {
+		var profile uuid.UUID
+		var raw []byte
+		var cutover uuid.UUID
+		if err = rows.Scan(&profile, &raw, &cutover); err != nil {
+			rows.Close()
+			return result, err
+		}
+		head, found, e := effectiveHeadFromPayload(raw, cutover)
+		if e != nil {
+			rows.Close()
+			return result, e
+		}
+		if result[profile].cutover != uuid.Nil {
+			rows.Close()
+			return result, ErrEffectiveEpisodeUnavailable
+		}
+		result[profile] = batchedEffectiveHead{head: head, cutover: found}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 // saveEffectiveHead is only a CAS persistence primitive. It neither admits a

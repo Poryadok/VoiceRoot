@@ -192,13 +192,18 @@ func (s *SpaceStore) captureLifecyclePurgeMutation(ctx context.Context, space uu
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
 	sources := make([]effectiveSources, 0, len(token.profiles))
-	for _, profile := range token.profiles {
-		source, e := s.readEffectiveMemberSources(ctx, space, profile, started)
-		if e != nil {
-			return nil, e
-		}
-		head, _, e := loadEffectiveHead(ctx, s.tx, space, profile)
-		if e != nil || !head.Sources.at(started).equal(source) {
+	batchSources, err := s.readEffectiveMemberSourcesBatch(ctx, space, token.profiles, started)
+	if err != nil {
+		return nil, err
+	}
+	headBatch, err := loadEffectiveHeads(ctx, s.tx, space, token.profiles)
+	if err != nil {
+		return nil, ErrEffectiveEpisodeUnavailable
+	}
+	for index, profile := range token.profiles {
+		source := batchSources[index]
+		found, ok := headBatch[profile]
+		if !ok || !found.head.Sources.at(started).equal(source) {
 			return nil, ErrEffectiveEpisodeUnavailable
 		}
 		sources = append(sources, source)
@@ -228,6 +233,10 @@ func (s *SpaceStore) readEffectiveMemberSources(ctx context.Context, space, prof
 	if err != nil {
 		return effectiveSources{}, ErrEffectiveEpisodeUnavailable
 	}
+	return effectiveSourcesFromAuthorities(sampled, ordinary, community)
+}
+
+func effectiveSourcesFromAuthorities(sampled time.Time, ordinary *spacev1.MemberAdmissionOrdinaryAuthority, community *spacev1.MemberAdmissionCommunityAuthority) (effectiveSources, error) {
 	var sources effectiveSources
 	if ordinary.GetState() == spacev1.MemberAdmissionSourceState_MEMBER_ADMISSION_SOURCE_STATE_ACTIVE {
 		b := ordinary.GetPublishedBinding().GetOrdinary()
@@ -246,6 +255,30 @@ func (s *SpaceStore) readEffectiveMemberSources(ctx context.Context, space, prof
 		sources.CommunityUntil = sampled.Add(community.GetValidityRemaining().AsDuration())
 	}
 	return sources, nil
+}
+
+func (s *SpaceStore) readEffectiveMemberSourcesBatch(ctx context.Context, space uuid.UUID, profiles []uuid.UUID, sampled time.Time) ([]effectiveSources, error) {
+	snapshot, err := newMemberAuthoritySnapshot(ctx, s.tx, space, profiles, sampled)
+	if err != nil {
+		return []effectiveSources{}, ErrEffectiveEpisodeUnavailable
+	}
+	result := make([]effectiveSources, 0, len(profiles))
+	for _, profile := range profiles {
+		ordinary, err := ordinaryAuthorityFromRow(ctx, s.tx, space, profile, snapshot.ordinary[profile], snapshot)
+		if err != nil {
+			return []effectiveSources{}, ErrEffectiveEpisodeUnavailable
+		}
+		community, err := communityAuthorityFromRow(ctx, s.tx, space, profile, sampled, snapshot.community[profile], snapshot)
+		if err != nil {
+			return []effectiveSources{}, ErrEffectiveEpisodeUnavailable
+		}
+		sources, err := effectiveSourcesFromAuthorities(sampled, ordinary, community)
+		if err != nil {
+			return []effectiveSources{}, err
+		}
+		result = append(result, sources)
+	}
+	return result, nil
 }
 
 func (s *SpaceStore) captureEffectiveMemberMutations(ctx context.Context, space uuid.UUID, profiles []uuid.UUID) (*effectiveMemberMutations, error) {
@@ -288,21 +321,20 @@ func (s *SpaceStore) captureEffectiveMemberMutationFacts(ctx context.Context, sp
 	if err != nil {
 		return nil, ErrEffectiveEpisodeUnavailable
 	}
-	for _, profile := range profiles {
-		sources, err := s.readEffectiveMemberSources(ctx, space, profile, capture.started)
-		if err != nil {
-			return nil, err
-		}
-		var exists bool
-		if err := s.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM space_effective_member_heads WHERE space_id=$1 AND profile_id=$2)`, space, profile).Scan(&exists); err != nil {
-			return nil, ErrEffectiveEpisodeUnavailable
-		}
+	batchSources, err := s.readEffectiveMemberSourcesBatch(ctx, space, profiles, capture.started)
+	if err != nil {
+		return nil, err
+	}
+	headBatch, err := loadEffectiveHeads(ctx, s.tx, space, profiles)
+	if err != nil {
+		return nil, err
+	}
+	for index, profile := range profiles {
+		sources := batchSources[index]
 		item := effectiveMemberMutation{profile: profile, cutover: uuid.New(), before: sources}
-		if exists {
-			item.head, item.cutover, err = loadEffectiveHead(ctx, s.tx, space, profile)
-			if err != nil {
-				return nil, err
-			}
+		found, ok := headBatch[profile]
+		if ok {
+			item.head, item.cutover = found.head, found.cutover
 		} else if sources.active() {
 			// A missing old head is not an implicit UNKNOWN cutover or entry.
 			return nil, fmt.Errorf("active source without effective head: %w", ErrEffectiveEpisodeUnavailable)
@@ -358,12 +390,16 @@ func (s *SpaceStore) finishEffectiveMemberMutations(ctx context.Context, capture
 		return ErrEffectiveEpisodeUnavailable
 	}
 	next := make([]effectiveHead, len(capture.profiles))
+	captureProfiles := make([]uuid.UUID, len(capture.profiles))
 	for index, item := range capture.profiles {
-		after, err := s.readEffectiveMemberSources(ctx, capture.space, item.profile, sampled)
-		if err != nil {
-			return fmt.Errorf("effective final source: %w", err)
-		}
-		next[index], err = advanceEffectiveEpisode(item.head, item.before, after, capture.started, sampled, uuid.New())
+		captureProfiles[index] = item.profile
+	}
+	afterBatch, err := s.readEffectiveMemberSourcesBatch(ctx, capture.space, captureProfiles, sampled)
+	if err != nil {
+		return fmt.Errorf("effective final source: %w", err)
+	}
+	for index, item := range capture.profiles {
+		next[index], err = advanceEffectiveEpisode(item.head, item.before, afterBatch[index], capture.started, sampled, uuid.New())
 		if err != nil {
 			return fmt.Errorf("effective episode transition: %w", err)
 		}
