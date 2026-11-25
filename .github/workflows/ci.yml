@@ -3507,6 +3507,27 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ github.sha }}
         run: bash scripts/ci/space_native_clock_proof.sh
+      - name: Run Space legacy24 populated installer proofs
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
+          NATIVE_INSTALLER_TEST_CLI_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
+          NATIVE_INSTALLER_TEST_PG_DUMP: /usr/bin/pg_dump
+          NATIVE_INSTALLER_TEST_PG_RESTORE: /usr/bin/pg_restore
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_legacy24_proofs.sh
+      - name: Run Space legacy25 populated installer proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
+          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_legacy25_proof.sh
       - name: Run Space account-ban capture guard
         working-directory: src/backend/space
         env:
@@ -3547,27 +3568,6 @@ jobs:
           SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_over100?sslmode=disable
           CANDIDATE_SHA: ${{ github.sha }}
         run: bash ../../../scripts/ci/space_over100_proof.sh
-      - name: Run Space legacy24 populated installer proofs
-        working-directory: src/backend/space
-        env:
-          CGO_ENABLED: '0'
-          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
-          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
-          NATIVE_INSTALLER_TEST_CLI_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
-          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
-          NATIVE_INSTALLER_TEST_PG_DUMP: /usr/bin/pg_dump
-          NATIVE_INSTALLER_TEST_PG_RESTORE: /usr/bin/pg_restore
-          CANDIDATE_SHA: ${{ github.sha }}
-        run: bash ../../../scripts/ci/space_legacy24_proofs.sh
-      - name: Run Space legacy25 populated installer proof
-        working-directory: src/backend/space
-        env:
-          CGO_ENABLED: '0'
-          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
-          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
-          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
-          CANDIDATE_SHA: ${{ github.sha }}
-        run: bash ../../../scripts/ci/space_legacy25_proof.sh
       - name: Run Space native51 failed-capture retry pair proof
         working-directory: src/backend/space
         env:
