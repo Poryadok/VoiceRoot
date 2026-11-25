@@ -3,7 +3,7 @@
 - Date: `2026-11-25`
 - TT CLI: `C:\Users\Sergey\AppData\Local\TTenrec\bin\tt.exe --url http://192.168.0.109:30990 --project voice`
 - Scope: full routine inventory audit on a fresh `origin/master` worktree at tip `5f401034df99a5c732a7075321e63ff2912a857e` (PR #1213 merge landed). This is the second pass of the day; the first pass (`2026-11-25-tt-fleet-inventory-audit.md`, PR #1212) already carries the full TT outage payload; the TT axis is re-probed here and remains blocked.
-- Previous: [`2026-11-25-tt-fleet-inventory-audit.md`](./2026-11-25-tt-fleet-inventory-audit.md), [`2026-11-24-openchamber-fleet-inventory-audit-v2.md`](./2026-11-24-openchamber-fleet-inventory-audit-v2.md), [`2026-11-23-openchamber-fleet-inventory-audit.md`](./2026-11-23-openchamber-fleet-inventory-audit.md), [`2026-11-22-tt-fleet-inventory-audit.md`](./2026-11-22-tt-fleet-inventory-audit.md)
+- Previous: [`2026-11-25-tt-fleet-inventory-audit.md`](./2026-11-25-tt-fleet-inventory-audit.md), PR #1208 (`codex/tt-fleet-inventory-audit-20261124`, its 2026-11-24 inventory-audit file is still pending on master — not linkable from master), [`2026-11-23-openchamber-fleet-inventory-audit.md`](./2026-11-23-openchamber-fleet-inventory-audit.md), [`2026-11-22-tt-fleet-inventory-audit.md`](./2026-11-22-tt-fleet-inventory-audit.md)
 
 ## Verdict — 2026-11-25 -v2 inventory pass, zero-product, zero actionable gaps
 
