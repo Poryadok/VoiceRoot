@@ -109,6 +109,28 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51FreezeRequiresBoundProofAndPreservesMembership'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanOver100Retry50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNative51FixtureFailedOver100Capture'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNative51Over100BanOnlyCatalogCalls'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionLegacy24InspectReadOnlyWithActiveClient'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestLegacy24LogicalRestoreCanonicalEquivalence'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionLegacy24OriginalVerifyAndNoAdoption'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionLegacy24FixedSearchPath'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionLegacy24LostEventNeverReplaysCommittedPrefix'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestLegacy24Exact25TransitionPreservesSourceRows'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionLegacy24PopulatedChain'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionLegacy25PopulatedChainAndRetainedVerify'):
+        'space-native-installer-integration',
 }
 
 # This entrypoint is deliberately invoked in child processes by the required

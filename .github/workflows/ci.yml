@@ -3206,7 +3206,7 @@ jobs:
       needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:16-bookworm
@@ -3547,6 +3547,61 @@ jobs:
           SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_over100?sslmode=disable
           CANDIDATE_SHA: ${{ github.sha }}
         run: bash ../../../scripts/ci/space_over100_proof.sh
+      - name: Run Space legacy24 populated installer proofs
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
+          NATIVE_INSTALLER_TEST_CLI_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
+          NATIVE_INSTALLER_TEST_PG_DUMP: /usr/bin/pg_dump
+          NATIVE_INSTALLER_TEST_PG_RESTORE: /usr/bin/pg_restore
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_legacy24_proofs.sh
+      - name: Run Space legacy25 populated installer proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
+          NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_legacy25_proof.sh
+      - name: Run Space native51 failed-capture retry pair proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_retry51?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_native51_retry_proof.sh
+      - name: Enable Space catalog-call accounting
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql_owned() { docker exec "$PG_CONTAINER" psql -X -qAt -v ON_ERROR_STOP=1 -U voice -d postgres "$@"; }
+          psql_owned -c "ALTER SYSTEM SET track_functions = 'all'"
+          [[ "$(psql_owned -c 'SELECT pg_reload_conf()')" == t ]]
+          for attempt in {1..10}; do
+            if [[ "$(psql_owned -c 'SHOW track_functions')" == all ]]; then
+              printf 'track_functions=all\n' > "$RUNNER_TEMP/space-track-functions.txt"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'owned PostgreSQL track_functions setting did not reload' >&2
+          exit 1
+      - name: Run Space native51 Ban catalog-call accounting proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_catalog51?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_native51_catalog_calls_proof.sh
       - name: Upload Space native installer evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -3597,6 +3652,19 @@ jobs:
             ${{ runner.temp }}/space-account-ban-provision.jsonl
             ${{ runner.temp }}/space-account-ban-events.jsonl
             ${{ runner.temp }}/space-account-ban-receipt.json
+            ${{ runner.temp }}/space-legacy24-events.jsonl
+            ${{ runner.temp }}/space-legacy24-receipt.json
+            ${{ runner.temp }}/space-legacy24-cleanup.txt
+            ${{ runner.temp }}/space-legacy25-events.jsonl
+            ${{ runner.temp }}/space-legacy25-receipt.json
+            ${{ runner.temp }}/space-legacy25-cleanup.txt
+            ${{ runner.temp }}/space-retry51-*-events.jsonl
+            ${{ runner.temp }}/space-retry51-*-receipt.json
+            ${{ runner.temp }}/space-retry51-cleanup.txt
+            ${{ runner.temp }}/space-catalog51-*-events.jsonl
+            ${{ runner.temp }}/space-catalog51-*-receipt.json
+            ${{ runner.temp }}/space-catalog51-cleanup.txt
+            ${{ runner.temp }}/space-track-functions.txt
           if-no-files-found: warn
           retention-days: 14
 

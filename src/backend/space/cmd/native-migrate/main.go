@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "provision", "provision, verify, inspect-legacy24, upgrade-legacy24, or verify-legacy24")
+	mode := flag.String("mode", "provision", "provision, verify, inspect-legacy24, upgrade-legacy24, verify-legacy24, or upgrade-legacy25")
 	dir := flag.String("migrations-dir", "/migrations", "selected immutable Space SQL directory")
 	driver := flag.String("migrate", "/usr/local/bin/migrate", "pinned migrate executable")
 	prior := flag.String("prior-evidence", "", "actual completed JSON-lines deployment evidence (verify only)")
@@ -31,6 +31,7 @@ func main() {
 	legacy := *mode == "upgrade-legacy24" || *mode == "verify-legacy24" || *mode == "inspect-legacy24"
 	if (!legacy && (*origin != "" || *operation != "" || *snapshot != "")) ||
 		(*mode == "upgrade-legacy24" && *prior != "") ||
+		(*mode == "upgrade-legacy25" && (*prior != "" || *origin != "" || *operation != "" || *snapshot != "")) ||
 		(*mode == "inspect-legacy24" && (*origin != "" || *operation != "" || *snapshot != "" || *prior != "")) ||
 		(*mode == "verify-legacy24" && (*operation != "" || *snapshot != "" || *prior == "")) {
 		fmt.Fprintln(os.Stderr, "evidence arguments do not match the explicit installer mode")
@@ -65,6 +66,9 @@ func main() {
 	case "upgrade-legacy24":
 		c.Mode = ""
 		err = nativeinstaller.RunLegacy24Upgrade(ctx, nativeinstaller.Legacy24Config{Config: c, OperationID: *operation, SnapshotID: *snapshot, OriginEvidencePath: *origin})
+	case "upgrade-legacy25":
+		c.Mode = ""
+		err = nativeinstaller.RunLegacy25Upgrade(ctx, nativeinstaller.Legacy25Config{Config: c})
 	case "verify-legacy24":
 		c.Mode = ""
 		err = nativeinstaller.VerifyLegacy24Upgrade(ctx, nativeinstaller.Legacy24VerifyConfig{Config: c, PriorLegacy24: legacyPrior, OriginEvidencePath: *origin})
