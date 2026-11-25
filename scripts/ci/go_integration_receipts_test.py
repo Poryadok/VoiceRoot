@@ -111,6 +111,83 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         for filename, name in cases:
             self.assertIn(filename + ' ' + name, script)
 
+    def test_space_legacy_and_cohort_gap_proofs_require_executed_receipts(self):
+        import yaml
+        import importlib.util
+        store = 'voice/backend/space/internal/store'
+        installer = 'voice/backend/space/internal/nativeinstaller'
+        dedicated = ('dedicated', 'space-native-installer-integration')
+        gap_cases = (
+            ('space_retry50_required.json', store, 'TestAccountBanOver100Retry50'),
+            ('space_native51_failed_capture_required.json', store, 'TestNative51FixtureFailedOver100Capture'),
+            ('space_catalog51_calls_required.json', store, 'TestNative51Over100BanOnlyCatalogCalls'),
+            ('space_legacy25_required.json', installer, 'TestProductionLegacy25PopulatedChainAndRetainedVerify'),
+        )
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for filename, package, name in gap_cases:
+            inventory = json.loads((ROOT / 'scripts/ci' / filename).read_text(encoding='utf-8'))['space']
+            self.assertEqual(inventory, [[package, name]])
+            entry = next(item for item in exceptions if item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), dedicated)
+            events = [{'Package': package, 'Test': name, 'Action': 'run'},
+                      {'Package': package, 'Test': name, 'Action': 'pass'}, {'Package': package, 'Action': 'pass'}]
+            self.assertFalse(receipts.verify_required(events, inventory, 0))
+            for mutation in ('skip', 'missing'):
+                broken = [event for event in events if mutation != 'missing' or event.get('Action') != 'pass' or event.get('Test') != name]
+                if mutation == 'skip':
+                    broken = [dict(event, Action='skip') if event.get('Test') == name and event['Action'] == 'pass' else event for event in broken]
+                self.assertIn((package, name), receipts.verify_required(broken, inventory, 0))
+        legacy24 = ('TestProductionLegacy24InspectReadOnlyWithActiveClient', 'TestLegacy24LogicalRestoreCanonicalEquivalence',
+                    'TestProductionLegacy24OriginalVerifyAndNoAdoption', 'TestProductionLegacy24FixedSearchPath',
+                    'TestProductionLegacy24LostEventNeverReplaysCommittedPrefix', 'TestLegacy24Exact25TransitionPreservesSourceRows',
+                    'TestProductionLegacy24PopulatedChain')
+        legacy_inventory = json.loads((ROOT / 'scripts/ci/space_legacy24_proofs_required.json').read_text(encoding='utf-8'))['space']
+        self.assertEqual(legacy_inventory, [[installer, name] for name in legacy24])
+        for name in legacy24:
+            entry = next(item for item in exceptions if item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), dedicated)
+        audit_spec = importlib.util.spec_from_file_location('source_audit', ROOT / 'scripts/ci/go_integration_source_audit.py')
+        audit_module = importlib.util.module_from_spec(audit_spec)
+        audit_spec.loader.exec_module(audit_module)
+        required = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(audit_module.audit(ROOT, required, exceptions)['unresolved'], 3)
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        job = jobs['space-native-installer-integration']
+        self.assertGreaterEqual(job['timeout-minutes'], 60)
+        steps = {item.get('name'): item for item in job['steps']}
+        legacy24_step = steps['Run Space legacy24 populated installer proofs']
+        self.assertIn('space_legacy24_proofs.sh', legacy24_step['run'])
+        for key in ('NATIVE_INSTALLER_TEST_PG_DUMP', 'NATIVE_INSTALLER_TEST_PG_RESTORE', 'NATIVE_INSTALLER_TEST_CLI_ADMIN_URL'):
+            self.assertIn(key, legacy24_step['env'])
+        legacy25_step = steps['Run Space legacy25 populated installer proof']
+        self.assertIn('space_legacy25_proof.sh', legacy25_step['run'])
+        self.assertIn('/postgres?sslmode=disable', legacy25_step['env']['NATIVE_INSTALLER_TEST_ADMIN_URL'])
+        cohort_steps = (
+            ('Run Space native51 failed-capture retry pair proof', 'space_native51_retry_proof.sh', '/space_retry51?', 'space_retry51'),
+            ('Run Space native51 Ban catalog-call accounting proof', 'space_native51_catalog_calls_proof.sh', '/space_catalog51?', 'space_catalog51'),
+        )
+        for name, script_name, db_marker, prefix in cohort_steps:
+            step = steps[name]
+            self.assertIn(script_name, step['run'])
+            self.assertIn(db_marker, step['env']['SPACE_BAN_TEST_DATABASE_URL'])
+            self.assertEqual(step['env']['CGO_ENABLED'], '0')
+            script = (ROOT / 'scripts/ci' / script_name).read_text(encoding='utf-8')
+            self.assertIn('"$actual" != "$owned_oid"', script)
+            self.assertIn('trap cleanup EXIT', script)
+            self.assertLess(script.index('trap cleanup EXIT'), script.index("-c 'CREATE DATABASE " + prefix))
+            self.assertLess(script.index('goto 34'), script.index('receipt fixture'))
+            self.assertIn('--reject-skips', script)
+        accounting = steps['Enable Space catalog-call accounting']
+        self.assertIn('ALTER SYSTEM SET track_functions = \'all\'', accounting['run'])
+        self.assertIn("SHOW track_functions", accounting['run'])
+        self.assertIn('space-track-functions.txt', accounting['run'])
+        self.assertIn('docker exec "$PG_CONTAINER"', accounting['run'])
+        self.assertIn('job.services.postgres.id', accounting['env']['PG_CONTAINER'])
+        upload = steps['Upload Space native installer evidence']
+        for artifact in ('space-legacy24-receipt.json', 'space-legacy25-receipt.json',
+                        'space-retry51-*-receipt.json', 'space-catalog51-*-receipt.json', 'space-track-functions.txt'):
+            self.assertIn(artifact, upload['with']['path'])
+
     def test_no_test_package_requires_discovery_and_real_no_test_marker(self):
         events = [{'Package': 'example/p', 'Action': 'start'},
                   {'Package': 'example/p', 'Action': 'output', 'Output': '?  \texample/p\t[no test files]\n'},

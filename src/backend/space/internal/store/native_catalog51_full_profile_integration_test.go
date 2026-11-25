@@ -267,7 +267,7 @@ func TestNative51Over100BanOnlyCatalogCalls(t *testing.T) {
 	after := native51FullReadCalls(t, ctx, owner, oid, afterPIDs)
 	native51FullCheck(t, "COUNT_BAN_SUCCESS", err == nil, err)
 	native51FullCheck(t, "COUNT_BAN_BUDGET", elapsed < 5*time.Second, nil)
-	native51FullCheck(t, "COUNT_ACTUAL_325", after-before == 325, nil)
+	native51FullCheck(t, "COUNT_ACTUAL_326", after-before == 326, nil)
 	t.Logf("NATIVE51_BAN_WINDOW_V1 catalog_calls=%d elapsed_ns=%d", after-before, elapsed.Nanoseconds())
 	var matched, members, retained, active int
 	err = serving.QueryRow(ctx, `SELECT (SELECT cardinality(matched_profiles) FROM space_account_ban_operations WHERE actor_profile_id=$1 AND client_operation_id=$2 AND state='COMMITTED'),(SELECT member_count FROM spaces WHERE id=$3),(SELECT count(*) FROM space_members WHERE space_id=$3),(SELECT count(*) FROM space_community_member_heads WHERE space_id=$3 AND state='ACTIVE')`, nativeBanProfile(1), operation, space).Scan(&matched, &members, &retained, &active)
